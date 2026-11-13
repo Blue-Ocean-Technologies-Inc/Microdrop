@@ -53,7 +53,7 @@ from examples.tutorials.new_tutorial import (
     _add_imports,
     scaffold_tutorial,
 )
-from image_viewer.consts import ANALYSIS_HELP_HTML_PATH
+from image_viewer.consts import ANALYSIS_HELP_HTML_PATH, IMAGE_VIEWER_TUTORIAL_HTML_PATH
 from image_viewer.plugin import ImageViewerPlugin
 from microdrop_application.consts import (
     PREFERENCES_TUTORIAL_HTML_PATH,
@@ -91,6 +91,7 @@ IMAGE_ANALYSIS_SOURCE = ANALYSIS_HELP_HTML_PATH.with_name("analysis_help.src.htm
 HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
     "help_logs_storage.src.html"
 )
+IMAGE_VIEWER_SOURCE = IMAGE_VIEWER_TUTORIAL_HTML_PATH.with_name("image_viewer.src.html")
 PROTOCOL_FILES_SOURCE = PROTOCOL_FILES_TUTORIAL_HTML_PATH.with_name(
     "protocol_files.src.html"
 )
@@ -343,6 +344,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Protocol Tree Tutorial",
         "Protocol Files & Experiments Tutorial",
         "Dropbot Status & Controls Tutorial",
+        "Image Viewer Tutorial",
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
         "Preferences Tutorial",
@@ -375,6 +377,10 @@ def test_image_analysis_tutorial_rebuilds_identically():
 
 def test_help_logs_storage_tutorial_rebuilds_identically():
     assert is_up_to_date(HELP_LOGS_STORAGE_SOURCE)
+
+
+def test_image_viewer_tutorial_rebuilds_identically():
+    assert is_up_to_date(IMAGE_VIEWER_SOURCE)
 
 
 def test_protocol_files_tutorial_rebuilds_identically():
