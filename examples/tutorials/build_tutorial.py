@@ -344,7 +344,10 @@ class _SourceRewriter(HTMLParser):
                 "inline scripts"
             )
 
-        if tag in ("title", "style", "script"):
+        # An SVG's own <title> names the drawing, not the page.
+        in_svg = any(frame.tag == "svg" for frame in self.stack)
+
+        if tag in ("style", "script") or (tag == "title" and not in_svg):
             self.stack.append(_Frame(tag, tag, text=[], attrs=attrs))
 
             return

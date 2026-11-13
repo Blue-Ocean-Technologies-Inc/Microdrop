@@ -683,6 +683,14 @@ def test_term_facts_become_a_definition_list(tmp_path):
     assert "<dt>Typical value</dt><dd>y</dd></dl></article>" in page
 
 
+def test_an_svg_title_stays_in_its_svg(tmp_path):
+    source = "<title>T</title><svg><title>Drawing</title></svg>"
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert "<title>T</title>" in page
+    assert "<svg><title>Drawing</title></svg>" in page
+
+
 def test_glyph_tracer_outlines_an_icon_constant():
     glyph = trace_glyphs(["ICON_DROP_EC"])["drop_ec"]
 
