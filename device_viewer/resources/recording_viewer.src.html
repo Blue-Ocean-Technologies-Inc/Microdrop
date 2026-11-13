@@ -1,0 +1,789 @@
+<!--
+  (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>Recording Viewer Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+kbd { white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+table.small td { overflow-wrap: anywhere; }
+ol.legend { padding-left: 1.6em; margin: 4px 0; font-size: .88rem; color: var(--muted); }
+svg.sch { display: block; width: 100%; height: auto; }
+svg.sch text { font-size: 10px; fill: var(--ink); }
+svg.sch .muted { fill: var(--muted); }
+svg.sch .box { fill: var(--surface-2); stroke: var(--line); }
+svg.sch .frame { fill: var(--surface); stroke: var(--line); }
+svg.sch .ic-use { fill: var(--ink); }
+svg.sch .on { fill: var(--icon-on); stroke: var(--icon-on); }
+svg.sch .on-ic { fill: #ffffff; }
+svg.sch .n { fill: var(--accent); }
+svg.sch .nt { fill: #ffffff; font-size: 9px; font-weight: 700; text-anchor: middle; }
+svg.sch .screen { fill: #000000; }
+svg.sch .roi { fill: none; stroke: #FFD60A; stroke-width: 1.4; stroke-dasharray: 4 3; }
+.side-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 640px) { .side-grid { grid-template-columns: minmax(0, 1fr); } }
+.pane-title { font-weight: 700; font-size: .88rem; margin: 0 0 4px; color: var(--ink); }
+.rv-tools button { display: inline-flex; align-items: center; gap: 4px; }
+.rv-tools button svg.ic { width: 18px; height: 18px; }
+.rv-tools button[aria-pressed="true"] { background: var(--icon-on); border-color: var(--icon-on); color: #ffffff; }
+.rv-tools button:disabled, .rv-tools input:disabled { opacity: .45; cursor: default; }
+.rv-tools input[type="number"] { width: 4.2em; }
+svg.rv-screen { display: block; width: 100%; max-width: 560px; margin: 0 auto; height: auto; background: #000000; border-radius: 6px; touch-action: none; user-select: none; }
+svg.rv-screen.edit { cursor: crosshair; }
+.rv-play { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.rv-play input[type="range"] { flex: 1 1 auto; min-width: 0; }
+.rv-play output { font-variant-numeric: tabular-nums; min-width: 6.5em; }
+.rv-out { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 640px) { .rv-out { grid-template-columns: minmax(0, 1fr); } }
+.rv-preview { background: #000000; border-radius: 6px; padding: 6px; min-height: 60px; display: flex; align-items: center; justify-content: center; }
+figure.demo .rv-preview svg { display: block; width: auto; max-width: 100%; height: auto; }
+p.rv-msg { font-family: Consolas, "Courier New", monospace; font-size: .82rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; overflow-wrap: anywhere; margin: 6px 0 0; }
+</style>
+
+<header data-hero>
+  <h1>Recording Viewer</h1>
+  <p>The Recording Viewer plays back the camera videos MicroDrop recorded during an experiment. It can show them the way
+  the Device Viewer showed them at the time: lined up with the chip drawing, with the electrode outlines and the switched-on
+  electrodes drawn on top. You can also mark the part of the picture you care about and save a new, cropped video.</p>
+  <p>This tutorial covers the <strong>Recording Viewer</strong> pane. Making a recording is covered in the
+  <span class="ui">Camera &amp; Alignment Tutorial</span>. There is no real footage of this pane yet: the pictures are
+  schematics, and the interactive player below is a mock-up that follows the same rules as the real one.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">Open it with <span class="ui">View ▸ Recording Viewer</span>. It is not part of the default layout, so it
+stays hidden until you tick it there.</p>
+
+<figure class="step-panel"><svg class="sch" viewBox="0 0 560 300" role="img" aria-label="Schematic of the Recording Viewer pane: a row of toolbar buttons, a Recording drop-down list, a black video area showing a chip, and a play button, a position slider and a time read-out at the bottom">
+<rect class="frame" x="0.5" y="0.5" width="559" height="299" rx="6"/>
+<rect class="box" x="10" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-folder_open" x="13" y="13" width="20" height="20"/>
+<rect class="box" x="40" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-home" x="43" y="13" width="20" height="20"/>
+<rect class="box" x="70" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-refresh" x="73" y="13" width="20" height="20"/>
+<rect class="box" x="100" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-fit_screen" x="103" y="13" width="20" height="20"/>
+<rect class="on" x="134" y="10" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-transform" x="137" y="13" width="20" height="20"/>
+<rect class="on" x="164" y="10" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-contour" x="167" y="13" width="20" height="20"/>
+<rect class="box" x="193" y="13" width="34" height="20" rx="2"/><text x="198" y="27">100</text>
+<rect class="on" x="232" y="10" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-drop_ec" x="235" y="13" width="20" height="20"/>
+<rect class="box" x="261" y="13" width="34" height="20" rx="2"/><text x="266" y="27">100</text>
+<rect class="box" x="302" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-crop" x="305" y="13" width="20" height="20"/>
+<rect class="box" x="332" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-delete" x="335" y="13" width="20" height="20"/>
+<rect class="box" x="362" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-save" x="365" y="13" width="20" height="20"/>
+<text x="396" y="27" class="muted">Saved free_mode_…_aligned.mkv</text>
+<text x="10" y="58">Recording</text>
+<rect class="box" x="66" y="45" width="300" height="20" rx="2"/><text x="72" y="59">free_mode_2026_11_11-16_20_02.mp4</text><text x="354" y="59">▾</text>
+<rect class="screen" x="10" y="72" width="540" height="182" rx="3"/>
+<rect x="150" y="96" width="260" height="134" fill="#8d9296"/>
+<g fill="none" stroke="#cfd2d4" stroke-width="1">
+<rect x="166" y="110" width="28" height="28"/><rect x="198" y="110" width="28" height="28"/><rect x="230" y="110" width="28" height="28"/><rect x="262" y="110" width="28" height="28"/><rect x="294" y="110" width="28" height="28"/><rect x="326" y="110" width="28" height="28"/><rect x="358" y="110" width="28" height="28"/>
+<rect x="166" y="142" width="28" height="28"/><rect x="198" y="142" width="28" height="28"/><rect x="230" y="142" width="28" height="28"/><rect x="262" y="142" width="28" height="28"/><rect x="294" y="142" width="28" height="28"/><rect x="326" y="142" width="28" height="28"/><rect x="358" y="142" width="28" height="28"/>
+<rect x="166" y="174" width="28" height="28"/><rect x="198" y="174" width="28" height="28"/><rect x="230" y="174" width="28" height="28"/><rect x="262" y="174" width="28" height="28"/><rect x="294" y="174" width="28" height="28"/><rect x="326" y="174" width="28" height="28"/><rect x="358" y="174" width="28" height="28"/>
+</g>
+<rect x="232" y="144" width="24" height="24" fill="#546692"/>
+<circle cx="244" cy="156" r="12" fill="#4e9a63" fill-opacity=".85"/>
+<rect class="roi" x="190" y="104" width="110" height="74"/>
+<rect class="box" x="10" y="264" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-play" x="13" y="267" width="20" height="20"/>
+<rect x="46" y="275" width="380" height="4" rx="2" fill="var(--line)"/><rect x="46" y="275" width="133" height="4" rx="2" fill="var(--accent)"/><circle cx="179" cy="277" r="6" fill="var(--accent)"/>
+<text x="440" y="281">0:07 / 0:20</text>
+</svg>
+<figcaption>The Recording Viewer, device-aligned, with Device Outline and Actuations on and a region (dashed yellow box)
+drawn. Top row,
+left to right: choose folder, back to the experiment, re-scan, fit, Device-Aligned, Device Outline and its opacity,
+Actuations and its opacity, Edit Region, clear the regions, save, and the save status. Then the
+<span class="ui">Recording</span> list, the video, and the play controls.</figcaption>
+</figure>
+
+<ul class="uses">
+  <li><strong>What it plays.</strong> The <code>.mp4</code> and <code>.mkv</code> files in one folder, by default the
+  <code>recordings</code> folder of the current experiment.</li>
+  <li><strong>What it adds.</strong> A <a href="#aligned">device-aligned view</a> rebuilt from the alignment saved beside each
+  recording, and an optional <a href="#overlay">device overlay</a>: electrode outlines and the electrodes that were on at
+  each moment.</li>
+  <li><strong>What it saves.</strong> A <a href="#rendition">rendition</a>: a new video next to the recording, lined up and/or
+  cropped to your <a href="#roi-keyframe">regions</a>. The original recording is never changed.</li>
+</ul>
+<div class="callout">The pane is deliberately small: play, pause and a position slider. It has no speed control, frame
+stepping, looping, markers or keyboard shortcuts; see <a href="#part-not">What it does not do</a>.</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<ol class="steps">
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="Two ways to record: the Start Recording Video button in the camera controls, and a ticked Record column in the protocol tree">
+    <rect class="frame" x="0.5" y="0.5" width="299" height="169" rx="6"/>
+    <text x="14" y="24">Camera controls</text>
+    <rect class="on" x="14" y="32" width="30" height="30" rx="4"/><use class="on-ic" href="#ic-album" x="18" y="36" width="22" height="22"/>
+    <text x="52" y="52" class="muted">Start Recording Video</text>
+    <text x="14" y="88">Protocol tree</text>
+    <rect class="box" x="14" y="96" width="272" height="20"/><text x="20" y="110">Step</text><text x="200" y="110">Record</text>
+    <rect class="frame" x="14" y="116" width="272" height="20"/><text x="20" y="130">1 Load</text><rect x="214" y="120" width="12" height="12" fill="var(--accent)"/>
+    <rect class="frame" x="14" y="136" width="272" height="20"/><text x="20" y="150">2 Mix</text><rect x="214" y="140" width="12" height="12" fill="var(--accent)"/>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">1</span>Make a recording</h4>
+    <p>Click <i data-glyph="album" data-inline data-label="Start Recording Video"></i> <em>Start Recording Video</em> in the
+    camera controls, and click it again to stop. Or tick <span class="ui">Record</span> on protocol steps: a run of ticked
+    steps becomes one video.</p>
+    <p>Either way the file lands in the experiment's <code>recordings</code> folder, with the alignment and (when a device is
+    loaded) the electrode timeline saved beside it (see <a href="#part-files">Where files go</a>). The <span class="ui">Camera &amp; Alignment
+    Tutorial</span> covers the camera, the recording settings and the alignment.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="The View menu open, with Recording Viewer ticked">
+    <rect class="frame" x="0.5" y="0.5" width="299" height="169" rx="6"/>
+    <text x="14" y="22">File  Edit  Tools</text><rect x="94" y="9" width="34" height="18" rx="2" fill="var(--accent-soft)"/><text x="98" y="22">View</text><text x="136" y="22">Help</text>
+    <rect class="box" x="94" y="30" width="190" height="124" rx="3"/>
+    <text x="104" y="48" class="muted">✓ Device Viewer</text>
+    <text x="104" y="66" class="muted">✓ Dropbot Status And Controls</text>
+    <text x="104" y="84" class="muted">✓ Pluggable Protocol Tree</text>
+    <rect x="96" y="90" width="186" height="20" fill="var(--accent-soft)"/><text x="104" y="104">✓ Recording Viewer</text>
+    <text x="104" y="124" class="muted">…</text>
+    <text x="104" y="144" class="muted">Reset Layout</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">2</span>Open the pane</h4>
+    <p>Click <span class="ui">View ▸ Recording Viewer</span>. The pane looks in the current experiment's
+    <code>recordings</code> folder, picks the newest recording and shows its first frame, paused.</p>
+    <p>If the folder is empty or does not exist yet, the <span class="ui">Recording</span> list is empty, the video area
+    stays black and the play controls are greyed out.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="The Recording list, and below the video the Play button, the position slider and the time read-out 0:07 / 0:20">
+    <rect class="frame" x="0.5" y="0.5" width="299" height="169" rx="6"/>
+    <text x="14" y="28">Recording</text>
+    <rect class="box" x="70" y="15" width="216" height="20" rx="2"/><text x="76" y="29">free_mode_…16_20_02.mp4</text><text x="274" y="29">▾</text>
+    <rect class="screen" x="14" y="44" width="272" height="80" rx="3"/>
+    <rect class="box" x="14" y="134" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-play" x="17" y="137" width="20" height="20"/>
+    <rect x="48" y="145" width="160" height="4" rx="2" fill="var(--line)"/><rect x="48" y="145" width="56" height="4" rx="2" fill="var(--accent)"/><circle cx="104" cy="147" r="6" fill="var(--accent)"/>
+    <text x="218" y="151">0:07 / 0:20</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">3</span>Pick a recording and play it</h4>
+    <p>Choose a file in the <span class="ui">Recording</span> list. Click <i data-glyph="ICON_PLAY" data-inline
+    data-label="Play / pause"></i> to play; it turns into <i data-glyph="ICON_PAUSE" data-inline data-label="Play /
+    pause"></i> while playing. Drag the slider to jump to another moment. The read-out shows
+    <em>position / length</em> in minutes and seconds.</p>
+    <p>Scroll the mouse wheel over the video to zoom, and drag to move the picture.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="Left: the raw camera frame with a slanted chip. Right: the device-aligned view with the chip straight and electrode outlines on top">
+    <rect class="frame" x="0.5" y="0.5" width="299" height="169" rx="6"/>
+    <text x="14" y="20">Raw</text><text x="156" y="20">Device-Aligned</text>
+    <rect class="screen" x="14" y="28" width="130" height="96" rx="3"/>
+    <polygon points="40,42 128,50 122,112 28,104" fill="#8d9296"/>
+    <circle cx="70" cy="76" r="9" fill="#4e9a63"/>
+    <rect class="screen" x="156" y="28" width="130" height="96" rx="3"/>
+    <rect x="168" y="40" width="106" height="72" fill="#8d9296"/>
+    <g fill="none" stroke="#cfd2d4"><rect x="176" y="50" width="22" height="22"/><rect x="200" y="50" width="22" height="22"/><rect x="224" y="50" width="22" height="22"/><rect x="248" y="50" width="22" height="22"/><rect x="176" y="80" width="22" height="22"/><rect x="200" y="80" width="22" height="22"/><rect x="224" y="80" width="22" height="22"/><rect x="248" y="80" width="22" height="22"/></g>
+    <rect x="202" y="52" width="18" height="18" fill="#546692"/>
+    <circle cx="211" cy="61" r="9" fill="#4e9a63" fill-opacity=".85"/>
+    <rect class="on" x="156" y="134" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-transform" x="159" y="137" width="20" height="20"/>
+    <rect class="on" x="186" y="134" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-contour" x="189" y="137" width="20" height="20"/>
+    <rect class="on" x="216" y="134" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-drop_ec" x="219" y="137" width="20" height="20"/>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">4</span>Line it up with the chip</h4>
+    <p>Click <i data-glyph="ICON_TRANSFORM" data-inline data-label="Device-Aligned"></i> to switch to the
+    <a href="#aligned">device-aligned view</a>: the picture is turned and straightened the way the Device Viewer showed it
+    while recording.</p>
+    <p>In that view, <i data-glyph="ICON_CONTOUR" data-inline data-label="Device Outline"></i> draws the electrode outlines
+    and <i data-glyph="ICON_DROP_EC" data-inline data-label="Actuations"></i> fills the electrodes that were on at the
+    current moment. The number box after each sets its opacity in percent.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="Edit Region switched on and a dashed yellow box dragged around the droplet on the video">
+    <rect class="frame" x="0.5" y="0.5" width="299" height="169" rx="6"/>
+    <rect class="on" x="14" y="12" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-crop" x="17" y="15" width="20" height="20"/>
+    <text x="48" y="30" class="muted">Edit Region on</text>
+    <rect class="screen" x="14" y="46" width="272" height="110" rx="3"/>
+    <rect x="44" y="60" width="212" height="84" fill="#8d9296"/>
+    <circle cx="130" cy="100" r="13" fill="#4e9a63"/>
+    <rect class="roi" x="96" y="70" width="80" height="62"/>
+    <path d="M176 132 l18 14" stroke="var(--ink)" stroke-width="1.5"/><path d="M194 146 l-8 -1 l5 -5 z" fill="var(--ink)"/>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">5</span>Mark the region you care about</h4>
+    <p>Pause where the action starts. Switch on <i data-glyph="ICON_CROP" data-inline data-label="Edit Region"></i>
+    <em>Edit Region</em> and drag a box on the video. That box is a <a href="#roi-keyframe">region keyframe</a> at the
+    current time. Move to a later moment and drag again to make the crop follow the droplet.</p>
+    <p><i data-glyph="ICON_DELETE" data-inline data-label="Clear region keyframes"></i> clears all the regions. Switch
+    Edit Region off to pan with the mouse again.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="The Save button and the status text Saved free_mode_2026_11_11-16_20_02_aligned.mkv, with the new file listed next to the recording">
+    <rect class="frame" x="0.5" y="0.5" width="299" height="169" rx="6"/>
+    <rect class="box" x="14" y="14" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-save" x="17" y="17" width="20" height="20"/>
+    <text x="48" y="32">Exporting… 12s processed</text>
+    <text x="48" y="52" class="muted">then: Saved free_mode_…_aligned.mkv</text>
+    <text x="14" y="84">recordings/</text>
+    <text x="28" y="102" class="muted">free_mode_2026_11_11-16_20_02.mp4</text>
+    <text x="28" y="118" class="muted">free_mode_2026_11_11-16_20_02.transform.json</text>
+    <text x="28" y="134" class="muted">free_mode_2026_11_11-16_20_02.roi.json</text>
+    <text x="28" y="150">free_mode_2026_11_11-16_20_02_aligned.mkv</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">6</span>Save the rendition</h4>
+    <p>Click <i data-glyph="ICON_SAVE" data-inline data-label="Save the current rendition"></i>. The text beside the
+    toolbar reads <span class="ui">Exporting…</span>, then counts the seconds processed, then
+    <span class="ui">Saved <em>name</em></span>. You can keep working while it runs.</p>
+    <p>The new file sits next to the recording. Click <i data-glyph="ICON_REFRESH" data-inline data-label="Re-scan"></i>
+    to see it in the <span class="ui">Recording</span> list.</p></div>
+  </li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-try">
+<h2>Try it: a mock player</h2>
+<p class="intro">A pretend 20-second recording of a droplet moving along a row of electrodes. The buttons follow the real
+pane's rules: what is greyed out when, which view a region belongs to, and what the saved video looks like.</p>
+<figure data-demo="player" aria-label="Interactive mock of the Recording Viewer: toggle the device-aligned view and the overlay, draw region keyframes and see what the saved video would show">
+  <div class="controls rv-tools">
+    <button type="button" id="rv-aligned" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#ic-transform"/></svg>Device-Aligned</button>
+    <button type="button" id="rv-outline" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#ic-contour"/></svg>Device Outline</button>
+    <input type="number" id="rv-outline-a" min="0" max="100" value="100" aria-label="Device outline opacity (%)">
+    <button type="button" id="rv-act" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#ic-drop_ec"/></svg>Actuations</button>
+    <input type="number" id="rv-act-a" min="0" max="100" value="100" aria-label="Actuated electrodes opacity (%)">
+    <button type="button" id="rv-edit" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#ic-crop"/></svg>Edit Region</button>
+    <button type="button" id="rv-clear"><svg class="ic" aria-hidden="true"><use href="#ic-delete"/></svg>Clear</button>
+    <button type="button" id="rv-save"><svg class="ic" aria-hidden="true"><use href="#ic-save"/></svg>Save</button>
+  </div>
+  <svg class="rv-screen" id="rv-screen" viewBox="0 0 320 200" role="img" aria-label="The mock video"></svg>
+  <div class="rv-play">
+    <button type="button" id="rv-play" aria-label="Play / pause"><svg class="ic" aria-hidden="true"><use href="#ic-play"/></svg></button>
+    <input type="range" id="rv-pos" min="0" max="20000" step="100" value="0" aria-label="Position">
+    <output id="rv-time" for="rv-pos">0:00 / 0:20</output>
+  </div>
+  <div class="rv-out">
+    <div><p class="pane-title">Regions saved for this recording</p><p class="status" id="rv-status" aria-live="polite"></p>
+    <p class="rv-msg" id="rv-export"></p></div>
+    <div><p class="pane-title">What the saved video shows now</p><div class="rv-preview" id="rv-preview"></div></div>
+  </div>
+  <figcaption>Try: switch on Edit Region, pause near 0:02 and drag a box around the droplet; move to 0:12 and drag a wider
+  box. Play it and watch the yellow box jump at 0:12 (it does not glide). The preview of the saved video is squeezed to the
+  first box's shape, as the real export is. Then switch Device-Aligned and draw again: the old regions are dropped. The list
+  of regions under the player is only in this mock-up; MicroDrop shows just the box in use.</figcaption>
+</figure>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-toolbar">
+<h2>Buttons and controls</h2>
+<p class="intro">The toolbar shows icons only; hover over one in MicroDrop to read its tooltip. Greyed-out buttons wait for
+the condition in the last column.</p>
+<section data-term id="tb-main" data-where="Top of the Recording Viewer">
+  <h3>Toolbar</h3>
+  <div class="table-wrap">
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Button</th><th>What it does</th><th>Available when</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_FOLDER_OPEN"></i></td><td class="lbl">Choose the recordings folder</td><td>Opens a
+      folder picker. The list then shows that folder's recordings, newest selected.</td><td>Always</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_HOME"></i></td><td class="lbl">Back to the current experiment's recordings</td><td>Goes
+      back to the current experiment's <code>recordings</code> folder and picks its newest recording.</td><td>Always</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_REFRESH"></i></td><td class="lbl">Re-scan</td><td>Reads the folder again, to pick up
+      new files such as a saved rendition. Selects the newest file.</td><td>Always</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_FIT_SCREEN"></i></td><td class="lbl">Fit</td><td>Fits the video to the pane and
+      forgets the saved zoom and pan (<a href="#fit">Fit vs saved zoom</a>).</td><td>Always</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_TRANSFORM"></i><i data-glyph="ICON_TRANSFORM" data-on></i></td><td class="lbl">Device-Aligned</td><td>Switches
+      between the raw camera picture and the <a href="#aligned">device-aligned view</a>. Refits the picture each time.</td><td>The
+      recording has a <code>.transform.json</code> beside it</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_CONTOUR"></i><i data-glyph="ICON_CONTOUR" data-on></i></td><td class="lbl">Device Outline, and its opacity (%)</td><td>Draws
+      the electrode outlines over the video (<a href="#overlay">device overlay</a>).</td><td>Device-aligned view, and an
+      <code>.overlay.json</code> beside the recording</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_DROP_EC"></i><i data-glyph="ICON_DROP_EC" data-on></i></td><td class="lbl">Actuations, and its opacity (%)</td><td>Fills
+      the electrodes that were on at the current moment.</td><td>As Device Outline</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_CROP"></i><i data-glyph="ICON_CROP" data-on></i></td><td class="lbl">Edit Region</td><td>While
+      on, dragging on the video draws a <a href="#roi-keyframe">region keyframe</a> at the current time instead of moving the
+      picture.</td><td>A recording is loaded</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_DELETE"></i></td><td class="lbl">Clear all region-of-interest keyframes</td><td>Removes
+      every region of this recording, and its <code>.roi.json</code> file. There is no undo.</td><td>At least one region</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_SAVE"></i></td><td class="lbl">Save the current rendition</td><td>Writes a
+      <a href="#rendition">rendition</a> next to the recording, in the background.</td><td>A recording is loaded, no save is
+      running, and the view is device-aligned or there is at least one region</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>The text at the end of the toolbar is the save status: <span class="ui">Exporting…</span>,
+  <span class="ui">Exporting… 12s processed</span>, <span class="ui">Saved <em>name</em></span> or
+  <span class="ui">Export failed: <em>reason</em></span>.</p>
+</section>
+<section data-term id="tb-play" data-where="Under the video">
+  <h3>Play controls</h3>
+  <table class="small icons-table">
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_PLAY"></i><i data-glyph="ICON_PAUSE"></i></td><td class="lbl">Play / pause</td><td>Starts
+      or pauses playback; shows Pause while playing.</td></tr>
+      <tr><td class="icons"></td><td class="lbl">Position slider</td><td>Shows where you are, and moves there when you drag it. It
+      runs from 0 to the recording's length.</td></tr>
+      <tr><td class="icons"></td><td class="lbl"><code>m:ss / m:ss</code></td><td>Position and length, in minutes and whole seconds.</td></tr>
+    </tbody>
+  </table>
+  <p>On the video: the mouse wheel zooms in or out under the pointer (1.2 times per notch), and dragging moves the picture.
+  With Edit Region on, dragging draws a region instead.</p>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-terms">
+<h2>Terms</h2>
+<p class="intro">The words the pane and its tooltips use.</p>
+
+<section data-term id="recording" data-where="Recording list">
+  <h3>Recording</h3>
+  <p>One camera video file made by MicroDrop.</p>
+  <div data-what><p>An <code>.mp4</code> or <code>.mkv</code> file holding the camera's own, unaligned frames. MicroDrop
+  writes two small files beside it: <code>.transform.json</code> (the alignment) and, when a device was loaded,
+  <code>.overlay.json</code> (the electrode outlines and which electrodes were on, over time).</p></div>
+  <div data-when><p>Any time you want to look again at what happened on the chip.</p></div>
+  <div data-read><p>The list shows file names, oldest first. Free recordings are named
+  <code>free_mode_<em>date-time</em></code>; recordings from the protocol's Record column are named after the first recorded
+  step: <code><em>description</em>_<em>step id</em>_<em>date-time</em></code>. The date-time is in UTC, such as
+  <code>2026_11_11-16_20_02</code>.</p></div>
+  <div data-typical><p>The newest recording of the current experiment, shown paused on its first frame.</p></div>
+</section>
+
+<section data-term id="folder" data-where="Choose folder, Back to experiment and Re-scan buttons">
+  <h3>Recordings folder</h3>
+  <p>The one folder the list is read from.</p>
+  <div data-what><p>By default, the <code>recordings</code> folder inside the current experiment folder. Only the files
+  directly in it are listed (no sub-folders), and only <code>.mp4</code> and <code>.mkv</code> files.</p></div>
+  <div data-when><p>Use <i data-glyph="ICON_FOLDER_OPEN" data-inline data-label="Choose the recordings folder"></i> to look
+  at an older experiment's videos, and <i data-glyph="ICON_HOME" data-inline data-label="Back to the current experiment"></i>
+  to come back. After you start a new experiment, click Home to follow it.</p></div>
+  <div data-read><p>The list updates by itself when a recording finishes: the pane jumps back to the current experiment's
+  folder and selects the new file, even if you were browsing another folder. Files added in other ways appear after
+  <i data-glyph="ICON_REFRESH" data-inline data-label="Re-scan"></i>.</p></div>
+  <div data-typical><p><code><em>experiment folder</em>/recordings</code>; see the <span class="ui">Help, Logs &amp; Saved
+  Files Tutorial</span> for where experiment folders live.</p></div>
+</section>
+
+<section data-term id="aligned" data-where="Device-Aligned toggle">
+  <h3>Device-aligned view</h3>
+  <p>The recording shown as the Device Viewer showed it: straightened and placed under the chip drawing.</p>
+  <div data-what><p>A recording keeps the camera's raw frames. The <code>.transform.json</code> beside it holds the camera
+  alignment in use when the recording stopped. The viewer applies it to every frame, so the electrodes in the video sit where
+  the drawing's electrodes are.</p></div>
+  <div data-when><p>To compare the video with the electrode layout, to use the <a href="#overlay">device overlay</a>, or to
+  save a lined-up video.</p></div>
+  <div data-read><p>The button is greyed out when the recording has no <code>.transform.json</code> (for example a file copied
+  in from elsewhere, or a saved rendition). The result is only as good as the alignment was: set it up first with the
+  <span class="ui">Camera &amp; Alignment Tutorial</span>. Switching the view refits the picture.</p></div>
+  <div data-typical><p>Off: each recording opens in the raw view.</p></div>
+  <figure>
+  <div class="side-grid">
+    <div><p class="pane-title">Raw (as recorded)</p><svg class="sch" viewBox="0 0 160 110" role="img" aria-label="Raw camera frame: the chip appears slanted and turned"><rect class="screen" x="0" y="0" width="160" height="110" rx="4"/><polygon points="30,14 142,26 132,98 16,84" fill="#8d9296"/><g fill="none" stroke="#a9adb0"><polygon points="44,28 64,30 62,50 42,48"/><polygon points="68,31 88,33 86,53 66,51"/><polygon points="92,34 112,36 110,56 90,54"/><polygon points="40,54 60,56 58,76 38,74"/><polygon points="64,57 84,59 82,79 62,77"/><polygon points="88,60 108,62 106,82 86,80"/></g><circle cx="76" cy="43" r="8" fill="#4e9a63"/></svg></div>
+    <div><p class="pane-title">Device-aligned</p><svg class="sch" viewBox="0 0 160 110" role="img" aria-label="Device-aligned view: the chip is straight, with crisp electrode outlines on top"><rect class="screen" x="0" y="0" width="160" height="110" rx="4"/><rect x="20" y="15" width="120" height="80" fill="#8d9296"/><g fill="none" stroke="#cfd2d4"><rect x="34" y="24" width="24" height="24"/><rect x="62" y="24" width="24" height="24"/><rect x="90" y="24" width="24" height="24"/><rect x="34" y="56" width="24" height="24"/><rect x="62" y="56" width="24" height="24"/><rect x="90" y="56" width="24" height="24"/></g><rect x="64" y="26" width="20" height="20" fill="#546692"/><circle cx="74" cy="36" r="9" fill="#4e9a63" fill-opacity=".85"/></svg></div>
+  </div>
+  <figcaption>The same frame, raw and device-aligned with the Device Outline and Actuations on.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="overlay" data-where="Device Outline and Actuations toggles, with their opacity boxes">
+  <h3>Device overlay: Device Outline and Actuations</h3>
+  <p>The chip drawing, redrawn on top of the video.</p>
+  <div data-what><p><span class="ui">Device Outline</span> draws every electrode's outline. <span class="ui">Actuations</span>
+  fills the electrodes that were switched on in the Device Viewer at the current playback time. Both come from the
+  recording's <code>.overlay.json</code>, which MicroDrop writes while recording when a device is loaded.</p></div>
+  <div data-when><p>To check that a droplet was where the protocol switched electrodes on, or to make a saved video easier to
+  follow.</p></div>
+  <div data-read><p>Only in the device-aligned view. Actuations show what the Device Viewer displayed as on, not a reading
+  from the hardware. They change in steps, at the moments the display changed. The number boxes set each layer's opacity from
+  0 to 100 %. The toggles and opacities are remembered between sessions, and a saved device-aligned rendition includes the
+  layers that are on.</p></div>
+  <div data-typical><p>Both off; opacity 100 % each. At 100 % the Actuations fill hides what is under it: lower it to see
+  the droplet through the fill (try it in the <a href="#part-try">mock player</a>).</p></div>
+</section>
+
+<section data-term id="roi-keyframe" data-where="Edit Region toggle; drag on the video">
+  <h3>Region keyframe</h3>
+  <p>A box drawn at one moment of the recording, saying "crop to here from now on".</p>
+  <div data-what><p>Each region is a rectangle plus the playback time at which you drew it. A region holds until the next
+  one; before the first region, the first region applies. So one region means "crop the whole video here", and more
+  regions at later times make the crop follow the action.</p></div>
+  <div data-when><p>When only part of the chip matters, or a droplet travels and you want the saved video to follow it.</p></div>
+  <div data-read><p>The dashed yellow box on the video is the region in use at the current time. The crop <strong>jumps</strong>
+  from one region to the next; it does not glide between them. Drawing again at exactly the same time replaces that region.
+  A tiny box (a stray click) is ignored. Regions belong to the view they were drawn in: draw in the other view (raw or
+  device-aligned) and all existing regions are dropped, and the box is only shown while that view is on.</p></div>
+  <div data-typical><p>None. Regions are saved in <code><em>recording</em>.roi.json</code> and come back when you open the
+  recording again; <i data-glyph="ICON_DELETE" data-inline data-label="Clear region keyframes"></i> deletes them all
+  (there is no way to delete just one).</p></div>
+</section>
+
+<section data-term id="rendition" data-where="Save button">
+  <h3>Rendition</h3>
+  <p>A new video made from the recording: lined up, cropped, or both.</p>
+  <div data-what><p>MicroDrop decodes the recording with FFmpeg, straightens each frame if the rendition is device-aligned,
+  draws the overlay layers that are on, crops to the region of that moment, and encodes an H.264 <code>.mkv</code> file next to
+  the recording. The original recording is untouched.</p></div>
+  <div data-when><p>To share or analyse just the part that matters, or to keep a lined-up copy that plays in any video
+  player.</p></div>
+  <div data-read><p>With regions, the rendition is made in the view the regions were drawn in, whatever the pane shows. Without
+  regions, it is the view on screen; Save stays greyed out in the raw view with no regions, since there would be nothing to
+  change. A device-aligned rendition is named <code><em>recording</em>_aligned.mkv</code>, a raw cropped one
+  <code><em>recording</em>_cropped.mkv</code>; saving again overwrites it. A video cannot change size, so every frame comes
+  out at the size of the <strong>first</strong> region, and later regions of another shape are stretched to fit.</p></div>
+  <div data-typical><p>Same length and average frame rate as the recording. Large recordings take a while; the status counts
+  the seconds processed.</p></div>
+</section>
+
+<section data-term id="fit" data-where="Fit button; mouse wheel and drag on the video">
+  <h3>Fit vs saved zoom and centre</h3>
+  <p>How the video is framed in the pane.</p>
+  <div data-what><p>Once you zoom or pan, MicroDrop remembers the zoom and the centre point and reuses them, also for the next
+  recording and after a restart. <span class="ui">Fit</span> means the whole frame fills the pane.</p></div>
+  <div data-when><p>Click <i data-glyph="ICON_FIT_SCREEN" data-inline data-label="Fit"></i> when the picture has drifted out of
+  sight or is zoomed too far. The device-aligned picture can land partly outside the pane, so a saved framing is often what
+  you want while you work on one chip.</p></div>
+  <div data-read><p>While no framing is saved, the picture refits whenever the pane is resized. Switching Device-Aligned on or
+  off also clears the saved framing and refits.</p></div>
+  <div data-typical><p>Fit (nothing saved).</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-files">
+<h2>Where files go</h2>
+<p class="intro">Everything lives side by side in the recordings folder. The name of each extra file is the recording's name
+with another ending.</p>
+<div class="table-wrap">
+<table class="small">
+  <thead><tr><th>File</th><th>What it is</th><th>Written by</th></tr></thead>
+  <tbody>
+    <tr><td><code><em>name</em>.mp4</code> or <code>.mkv</code></td><td>The recording: raw camera frames</td><td>The recorder;
+    the format follows <span class="ui">Edit ▸ Preferences ▸ Video Settings ▸ Video Recording</span></td></tr>
+    <tr><td><code><em>name</em>.transform.json</code></td><td>The camera alignment, for the device-aligned view</td><td>The
+    recorder, when the recording stops</td></tr>
+    <tr><td><code><em>name</em>.overlay.json</code></td><td>Electrode outlines and which electrodes were on, over time</td><td>The
+    recorder, when a device was loaded</td></tr>
+    <tr><td><code><em>name</em>.roi.json</code></td><td>Your region keyframes</td><td>The Recording Viewer, as you draw;
+    removed by Clear</td></tr>
+    <tr><td><code><em>name</em>_aligned.mkv</code> / <code><em>name</em>_cropped.mkv</code></td><td>A saved rendition</td><td>The
+    Recording Viewer's Save</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Keep the <code>.json</code> files with the video when you copy or move a recording: without
+<code>.transform.json</code> there is no device-aligned view, and without <code>.overlay.json</code> no overlay. A saved
+rendition is itself listed as a recording after a re-scan, without either file.</p>
+<p>Pictures from <span class="ui">Capture Image</span> and the protocol's Capture column go to the <code>captures</code>
+folder and are not shown here.</p>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-not">
+<h2>What it does not do</h2>
+<ul class="uses">
+  <li>No playback speed, frame-by-frame stepping, looping or keyboard shortcuts. Very small slider moves (under about a third
+  of a second) are ignored.</li>
+  <li>No markers for protocol steps or phases on the timeline; the only thing drawn from the run is the device overlay.</li>
+  <li>No still-frame export, no clip trimming by time, no deleting or renaming files. Use the file browser for those.</li>
+  <li>No list of region keyframes and no deleting a single region; Clear removes them all.</li>
+  <li>No sound: MicroDrop records video only.</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>The alignment is the one at the end.</strong> The <code>.transform.json</code> is written when the recording
+    stops. If you re-aligned the camera during the recording, the whole video uses the last alignment.</li>
+    <li><strong>A finished recording takes over the pane.</strong> When any recording ends, the viewer jumps to the current
+    experiment's folder and selects the newest file.</li>
+    <li><strong>Re-scan selects the newest file.</strong> After saving a rendition, Re-scan shows it and selects it; pick the
+    original again from the list to keep working on it.</li>
+    <li><strong>The first region sets the size.</strong> Draw later regions with roughly the same shape, or the saved video is
+    stretched.</li>
+    <li><strong>Saving needs FFmpeg.</strong> It runs in the background; long or high-resolution recordings take a while.
+    Saving again overwrites the earlier rendition of the same kind.</li>
+    <li><strong>Playback uses the computer's own video support.</strong> The viewer plays files through Qt Multimedia, so a
+    file whose codec this computer cannot decode does not play here.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-trouble">
+<h2>When something goes wrong</h2>
+<div class="table-wrap">
+<table class="small">
+  <thead><tr><th>You see</th><th>Why</th><th>What to do</th></tr></thead>
+  <tbody>
+    <tr><td>The list is empty</td><td>The current experiment has no recordings yet, or the folder you picked holds no
+    <code>.mp4</code> / <code>.mkv</code> files directly inside it.</td><td>Record something, or pick the folder that holds the
+    videos with <i data-glyph="ICON_FOLDER_OPEN" data-inline></i>.</td></tr>
+    <tr><td>A recording you just made is missing</td><td>The pane is showing another folder, or a new experiment was
+    started.</td><td><i data-glyph="ICON_HOME" data-inline></i> Back to the experiment, then
+    <i data-glyph="ICON_REFRESH" data-inline></i> Re-scan.</td></tr>
+    <tr><td>Device-Aligned is greyed out</td><td>No <code>.transform.json</code> beside the file.</td><td>Copy it along with
+    the video; renditions never have one.</td></tr>
+    <tr><td>Device Outline and Actuations are greyed out</td><td>The raw view is on, or there is no
+    <code>.overlay.json</code> (no device was loaded while recording, or the file came from an older MicroDrop).</td><td>Switch
+    on Device-Aligned. Without the file, the overlay is not available.</td></tr>
+    <tr><td>The picture is gone or tiny</td><td>The saved zoom and centre do not suit this recording.</td><td>Click
+    <i data-glyph="ICON_FIT_SCREEN" data-inline></i> Fit.</td></tr>
+    <tr><td>Dragging moves the picture instead of drawing</td><td>Edit Region is off.</td><td>Switch on
+    <i data-glyph="ICON_CROP" data-inline></i> Edit Region.</td></tr>
+    <tr><td>The yellow box disappeared</td><td>The regions were drawn in the other view.</td><td>Switch Device-Aligned back,
+    or clear them and draw again.</td></tr>
+    <tr><td class="msg"><span class="ui">No usable transform sidecar: …</span></td><td>A device-aligned save, but the
+    <code>.transform.json</code> is missing or unreadable.</td><td>Save in the raw view (draw the regions there), or restore
+    the file.</td></tr>
+    <tr><td class="msg"><span class="ui">Export failed: FFmpeg binary not found.</span></td><td>FFmpeg is not available to
+    MicroDrop.</td><td>Run MicroDrop from its normal environment, which includes FFmpeg.</td></tr>
+    <tr><td class="msg"><span class="ui">Export failed: Region of interest … lies outside the aligned frame — redraw it in the
+    viewer</span></td><td>A region was drawn outside the picture.</td><td>Clear the regions and draw them on the video.</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Alignment</dt><dd>How the camera picture is turned and straightened to sit under the chip drawing; set in the
+  Camera Alignment window.</dd>
+  <dt>Actuated electrode</dt><dd>An electrode switched on, so it pulls a droplet towards it.</dd>
+  <dt>Codec</dt><dd>The way a video is compressed, such as H.264.</dd>
+  <dt>Experiment folder</dt><dd>The folder where MicroDrop keeps one experiment's files: recordings, captures, logs.</dd>
+  <dt>FFmpeg</dt><dd>A video tool MicroDrop uses to save renditions.</dd>
+  <dt>Keyframe</dt><dd>A setting stored at one moment of a video, used from there on.</dd>
+  <dt>Region of interest (ROI)</dt><dd>The part of the picture you want to keep.</dd>
+  <dt>Rendition</dt><dd>A new video made from a recording, lined up and/or cropped.</dd>
+  <dt>Sidecar</dt><dd>A small file stored beside a video, with the same name and a different ending.</dd>
+  <dt>UTC</dt><dd>Coordinated Universal Time; file names use it so they sort the same everywhere.</dd>
+</dl>
+</section>
+
+<script>
+Tutorial.demo("player", function (figure, T) {
+  var screen = figure.querySelector("#rv-screen"), preview = figure.querySelector("#rv-preview");
+  var pos = figure.querySelector("#rv-pos"), timeOut = figure.querySelector("#rv-time");
+  var statusLine = figure.querySelector("#rv-status"), exportLine = figure.querySelector("#rv-export");
+  var buttons = {};
+  ["aligned", "outline", "outline-a", "act", "act-a", "edit", "clear", "save", "play"].forEach(function (key) {
+    buttons[key] = figure.querySelector("#rv-" + key);
+  });
+
+  var DURATION = 20000, EVENT_MS = 2000, MOVE_MS = 600, MIN_ROI = 4;
+  /* Aligned scene: a 280 x 150 plate, 8 x 4 electrodes of 30 from (40, 40). */
+  var PLATE = { x: 20, y: 25, w: 280, h: 150 };
+  var RAW_QUAD = [[78, 30], [262, 44], [250, 186], [52, 160]];
+  var PATH = [[0, 1], [1, 1], [2, 1], [3, 1], [4, 1], [4, 2], [5, 2], [6, 2], [7, 2]];
+  var state = { aligned: false, outline: false, act: false, edit: false, playing: false, t: 0,
+                keyframes: [], roiAligned: true, exporting: false, exportText: "" };
+  var drag = null, lastFrame = null, exportTimer = null;
+
+  function cellCentre(cell) { return [40 + cell[0] * 30 + 15, 40 + cell[1] * 30 + 15]; }
+
+  function toRaw(p) {
+    var u = (p[0] - PLATE.x) / PLATE.w, v = (p[1] - PLATE.y) / PLATE.h, q = RAW_QUAD;
+    return [(1 - u) * (1 - v) * q[0][0] + u * (1 - v) * q[1][0] + u * v * q[2][0] + (1 - u) * v * q[3][0],
+            (1 - u) * (1 - v) * q[0][1] + u * (1 - v) * q[1][1] + u * v * q[2][1] + (1 - u) * v * q[3][1]];
+  }
+
+  function eventIndex(t) { return Math.min(PATH.length - 1, Math.floor(t / EVENT_MS)); }
+
+  function dropletAt(t) {
+    var i = eventIndex(t), here = cellCentre(PATH[i]);
+    if (i === 0) { return here; }
+    var from = cellCentre(PATH[i - 1]), f = Math.min(1, (t - i * EVENT_MS) / MOVE_MS);
+    f = f * f * (3 - 2 * f);
+    return [from[0] + (here[0] - from[0]) * f, from[1] + (here[1] - from[1]) * f];
+  }
+
+  function poly(points, attrs, parent) {
+    return T.el("polygon", Object.assign({ points: points.map(function (p) { return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join(" ") }, attrs), parent);
+  }
+
+  function cellCorners(c, r, inset) {
+    var x = 40 + c * 30 + inset, y = 40 + r * 30 + inset, s = 30 - 2 * inset;
+    return [[x, y], [x + s, y], [x + s, y + s], [x, y + s]];
+  }
+
+  /* Draw the frame at time t in one view; overlay layers only in the aligned view. */
+  function drawScene(svg, aligned, t, withOverlay) {
+    var map = aligned ? function (p) { return p; } : toRaw;
+    var plate = [[PLATE.x, PLATE.y], [PLATE.x + PLATE.w, PLATE.y], [PLATE.x + PLATE.w, PLATE.y + PLATE.h], [PLATE.x, PLATE.y + PLATE.h]];
+    T.el("rect", { x: 0, y: 0, width: 320, height: 200, fill: "#000000" }, svg);
+    poly(plate.map(map), { fill: "#8d9296" }, svg);
+    for (var r = 0; r < 4; r++) {
+      for (var c = 0; c < 8; c++) {
+        poly(cellCorners(c, r, 2).map(map), { fill: "#9da1a5", stroke: "#b5b8bb", "stroke-width": 0.8 }, svg);
+      }
+    }
+    var drop = map(dropletAt(t));
+    T.el("circle", { cx: drop[0].toFixed(1), cy: drop[1].toFixed(1), r: aligned ? 12 : 11, fill: "#4e9a63" }, svg);
+    if (!(aligned && withOverlay)) { return; }
+    if (state.act) {
+      var on = PATH[eventIndex(t)];
+      poly(cellCorners(on[0], on[1], 5), { fill: "var(--electrode-on)", "fill-opacity": opacity("act-a") }, svg);
+    }
+    if (state.outline) {
+      for (var rr = 0; rr < 4; rr++) {
+        for (var cc = 0; cc < 8; cc++) {
+          poly(cellCorners(cc, rr, 1), { fill: "none", stroke: "#e6ebef", "stroke-width": 1, "stroke-opacity": opacity("outline-a") }, svg);
+        }
+      }
+    }
+  }
+
+  function opacity(key) {
+    var value = Number(buttons[key].value);
+    return isNaN(value) ? 1 : Math.max(0, Math.min(100, value)) / 100;
+  }
+
+  function roiAt(t) {
+    if (!state.keyframes.length) { return null; }
+    var active = state.keyframes[0].r;
+    state.keyframes.forEach(function (k) { if (k.t <= t) { active = k.r; } });
+    return active;
+  }
+
+  function clock(ms) { var s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+
+  function exportAligned() { return state.keyframes.length ? state.roiAligned : state.aligned; }
+  function canSave() { return !state.exporting && (state.aligned || state.keyframes.length > 0); }
+
+  function render() {
+    T.clear(screen);
+    drawScene(screen, state.aligned, state.t, true);
+    var region = roiAt(state.t);
+    if (drag) { region = drag.rect; }
+    if (region && (drag || state.roiAligned === state.aligned)) {
+      T.el("rect", { x: region[0], y: region[1], width: region[2], height: region[3], fill: "none", stroke: "#FFD60A", "stroke-width": 1.4, "stroke-dasharray": "4 3" }, screen);
+    }
+    screen.classList.toggle("edit", state.edit);
+
+    pos.value = state.t;
+    timeOut.textContent = clock(state.t) + " / " + clock(DURATION);
+    buttons.play.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#ic-' + (state.playing ? "pause" : "play") + '"/></svg>';
+    buttons.aligned.setAttribute("aria-pressed", state.aligned);
+    buttons.outline.setAttribute("aria-pressed", state.outline);
+    buttons.act.setAttribute("aria-pressed", state.act);
+    buttons.edit.setAttribute("aria-pressed", state.edit);
+    buttons.outline.disabled = !state.aligned;
+    buttons.act.disabled = !state.aligned;
+    buttons["outline-a"].disabled = !(state.aligned && state.outline);
+    buttons["act-a"].disabled = !(state.aligned && state.act);
+    buttons.clear.disabled = state.keyframes.length === 0;
+    buttons.save.disabled = !canSave();
+
+    if (!state.keyframes.length) {
+      statusLine.textContent = "No regions: the whole frame is kept.";
+    } else {
+      var inUse = state.keyframes[0];
+      state.keyframes.forEach(function (k) { if (k.t <= state.t) { inUse = k; } });
+      statusLine.textContent = state.keyframes.length + " region" + (state.keyframes.length > 1 ? "s" : "") + " in the " +
+        (state.roiAligned ? "device-aligned" : "raw") + " view, drawn at " +
+        state.keyframes.map(function (k) { return clock(k.t); }).join(", ") +
+        ". In use now: the one from " + clock(inUse.t) + ".";
+    }
+    exportLine.textContent = state.exportText || (canSave()
+      ? "Save would write free_mode_…" + (exportAligned() ? "_aligned.mkv" : "_cropped.mkv")
+      : "Save is greyed out: raw view and no regions, nothing to change.");
+    renderPreview();
+  }
+
+  function renderPreview() {
+    T.clear(preview);
+    if (!canSave() && !state.exporting) { preview.textContent = "—"; return; }
+    var aligned = exportAligned(), first = state.keyframes.length ? state.keyframes[0].r : [0, 0, 320, 200];
+    var region = roiAt(state.t) || first, scale = Math.min(220 / first[2], 130 / first[3]);
+    var svg = T.el("svg", { viewBox: region.join(" "), preserveAspectRatio: "none", width: Math.round(first[2] * scale), height: Math.round(first[3] * scale), role: "img", "aria-label": "Preview of the saved video at the current time" });
+    drawScene(svg, aligned, state.t, true);
+    preview.appendChild(svg);
+  }
+
+  function svgPoint(event) {
+    var m = screen.getScreenCTM().inverse(), p = screen.createSVGPoint();
+    p.x = event.clientX; p.y = event.clientY;
+    p = p.matrixTransform(m);
+    return [Math.max(0, Math.min(320, p.x)), Math.max(0, Math.min(200, p.y))];
+  }
+
+  screen.addEventListener("pointerdown", function (event) {
+    if (!state.edit) {
+      exportLine.textContent = "In MicroDrop this drag would move the picture. Switch on Edit Region to draw.";
+      return;
+    }
+    var p = svgPoint(event);
+    drag = { origin: p, rect: [p[0], p[1], 0, 0] };
+    screen.setPointerCapture(event.pointerId);
+    render();
+  });
+  screen.addEventListener("pointermove", function (event) {
+    if (!drag) { return; }
+    var p = svgPoint(event), o = drag.origin;
+    drag.rect = [Math.min(o[0], p[0]), Math.min(o[1], p[1]), Math.abs(p[0] - o[0]), Math.abs(p[1] - o[1])];
+    render();
+  });
+  function endDrag() {
+    if (!drag) { return; }
+    var r = drag.rect.map(function (v) { return Math.round(v); });
+    drag = null;
+    if (r[2] >= MIN_ROI && r[3] >= MIN_ROI) {
+      var t = Math.round(state.t), kept = [];
+      if (state.aligned === state.roiAligned) { kept = state.keyframes.filter(function (k) { return k.t !== t; }); }
+      state.roiAligned = state.aligned;
+      kept.push({ t: t, r: r });
+      kept.sort(function (a, b) { return a.t - b.t; });
+      state.keyframes = kept;
+      state.exportText = "";
+    }
+    render();
+  }
+  screen.addEventListener("pointerup", endDrag);
+  screen.addEventListener("pointercancel", endDrag);
+
+  function tick(now) {
+    if (!state.playing) { lastFrame = null; return; }
+    if (lastFrame !== null) { state.t = Math.min(DURATION, state.t + (now - lastFrame)); }
+    lastFrame = now;
+    if (state.t >= DURATION) { state.playing = false; }
+    render();
+    if (state.playing) { window.requestAnimationFrame(tick); } else { lastFrame = null; }
+  }
+
+  buttons.play.addEventListener("click", function () {
+    state.playing = !state.playing;
+    if (state.playing) {
+      if (state.t >= DURATION) { state.t = 0; }
+      window.requestAnimationFrame(tick);
+    }
+    render();
+  });
+  pos.addEventListener("input", function () { state.t = Number(pos.value); render(); });
+  buttons.aligned.addEventListener("click", function () { state.aligned = !state.aligned; render(); });
+  buttons.outline.addEventListener("click", function () { state.outline = !state.outline; render(); });
+  buttons.act.addEventListener("click", function () { state.act = !state.act; render(); });
+  buttons["outline-a"].addEventListener("input", render);
+  buttons["act-a"].addEventListener("input", render);
+  buttons.edit.addEventListener("click", function () { state.edit = !state.edit; render(); });
+  buttons.clear.addEventListener("click", function () { state.keyframes = []; state.exportText = ""; render(); });
+  buttons.save.addEventListener("click", function () {
+    var name = "free_mode_2026_11_11-16_20_02" + (exportAligned() ? "_aligned.mkv" : "_cropped.mkv");
+    state.exporting = true;
+    state.exportText = "Exporting…";
+    render();
+    window.clearTimeout(exportTimer);
+    exportTimer = window.setTimeout(function () {
+      state.exporting = false;
+      state.exportText = "Saved " + name;
+      render();
+    }, 900);
+  });
+
+  render();
+});
+</script>
