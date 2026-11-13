@@ -9,16 +9,23 @@
 # Thanks for using Microdrop open source!
 
 """The camera-alignment presets library: one JSON file under
-ETSConfig.application_home holding every saved alignment and the default
-per device.
+ETSConfig.application_home holding every saved alignment, the defaults,
+and the alignment last used with each camera on each device.
 
-The file is ``{"schema_version": 1, "presets": [...], "defaults": [...]}``;
-each default slot is ``{"scope", "device_key", "camera_label",
-"preset_id"}``, at most one per slot. Every mutation rereads the file,
-changes it and writes it back atomically, keeping records and keys this
-version does not understand.
+The file is ``{"schema_version": 2, "presets": [...], "defaults": [...]}``.
+``presets`` holds the named presets and one automatically kept
+``last_used`` record per (camera, device). Each default slot is
+``{"scope", "device_key", "camera_id", "camera_label", "preset_id"}``, at
+most one per slot: a camera + device slot, a device slot, or a camera
+slot, after the preset's scope. Every mutation rereads the file, changes
+it and writes it back atomically, keeping records and keys this version
+does not understand.
 
-Every device with a saved endpoint but no preset at all gets one on each
+A version-1 file is upgraded on first read (a copy of it is kept beside
+it): every record and slot gains an unknown camera id, and every preset
+keeps its device scope — none is narrowed to a camera.
+
+Every device with a saved endpoint but no named preset gets one on each
 refresh: its endpoint becomes an endpoint-only preset that is its default,
 so devices aligned before presets existed (or after an unreadable file was
 set aside) are covered. The endpoint cache itself is left alone — it stays
@@ -32,6 +39,7 @@ its shape. A file that cannot be parsed is kept aside under a fresh
 # Standard library imports.
 import json
 import os
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -45,7 +53,10 @@ from microdrop_utils.file_handler import next_free_numbered_path, write_atomical
 # Local imports.
 from ..consts import (
     ALIGNMENT_PRESET_DEFAULT_STEM,
+    ALIGNMENT_PRESET_KIND_LAST_USED,
     ALIGNMENT_PRESET_KIND_NAMED,
+    ALIGNMENT_PRESET_SCOPE_CAMERA,
+    ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE,
     ALIGNMENT_PRESET_SCOPE_DEVICE,
     ALIGNMENT_PRESETS_FILENAME,
     ALIGNMENT_PRESETS_SCHEMA_VERSION,
@@ -60,8 +71,10 @@ from ..utils.camera_endpoints import CameraEndpointStore
 from .alignment_preset import (
     AlignmentPreset,
     alignment_preset_name_error,
+    alignment_scope_error,
     utc_now_iso,
 )
+from .camera_identity import CameraIdentity
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -98,7 +111,7 @@ def _is_newer_schema(data):
     )
 
 
-def _has_current_shape(data):
+def _has_known_shape(data):
     return (
         isinstance(data, dict)
         and isinstance(data.get("schema_version"), int)
@@ -107,21 +120,128 @@ def _has_current_shape(data):
     )
 
 
-def _device_slot(device_key, preset_id):
-    """The device-scoped default slot of ``device_key`` naming ``preset_id``."""
+def upgrade_to_current_schema(data):
+    """Bring parsed version-1 data up to this schema in place and return it.
+
+    Records and default slots gain an unknown (empty) camera id; a record
+    without a scope gets the device scope, the only one version 1 wrote.
+    Labels, scopes and every field this version does not know are kept.
+    """
+
+    for record in data["presets"]:
+        if isinstance(record, dict):
+            record.setdefault("scope", ALIGNMENT_PRESET_SCOPE_DEVICE)
+            record.setdefault("camera_id", "")
+
+    for slot in data["defaults"]:
+        if isinstance(slot, dict):
+            slot.setdefault("camera_id", "")
+            slot.setdefault("camera_label", "")
+
+    data["schema_version"] = ALIGNMENT_PRESETS_SCHEMA_VERSION
+
+    return data
+
+
+def _record_camera(record):
+    """The camera a raw record or default slot names."""
+    return CameraIdentity(
+        camera_id=str(record.get("camera_id", "")),
+        label=str(record.get("camera_label", "")),
+    )
+
+
+def _slot_for(record):
+    """The default slot the raw preset ``record`` fills, after its scope:
+    a camera scope keys on the camera, a device scope on the device."""
+    scope = record.get("scope", ALIGNMENT_PRESET_SCOPE_DEVICE)
+    keyed_on_device = scope != ALIGNMENT_PRESET_SCOPE_CAMERA
+    keyed_on_camera = scope != ALIGNMENT_PRESET_SCOPE_DEVICE
+
     return {
-        "scope": ALIGNMENT_PRESET_SCOPE_DEVICE,
-        "device_key": device_key,
-        "camera_label": "",
-        "preset_id": preset_id,
+        "scope": scope,
+        "device_key": record.get("device_key", "") if keyed_on_device else "",
+        "camera_id": record.get("camera_id", "") if keyed_on_camera else "",
+        "camera_label": record.get("camera_label", "") if keyed_on_camera else "",
+        "preset_id": record.get("id"),
     }
 
 
-def _is_device_slot(slot, device_key):
+def _same_slot(slot, other):
+    """Whether two default slots are the same slot (whatever they name)."""
+    scope = slot.get("scope", ALIGNMENT_PRESET_SCOPE_DEVICE)
+
+    if other.get("scope", ALIGNMENT_PRESET_SCOPE_DEVICE) != scope:
+        return False
+
+    if scope != ALIGNMENT_PRESET_SCOPE_CAMERA and (
+        slot.get("device_key") != other.get("device_key")
+    ):
+        return False
+
+    if scope != ALIGNMENT_PRESET_SCOPE_DEVICE:
+        return _record_camera(slot).matches(_record_camera(other))
+
+    return True
+
+
+def _slot_covers(slot, scope, device_key, camera):
+    """Whether ``slot`` is the ``scope`` slot of ``camera`` on
+    ``device_key``."""
+
+    if slot.get("scope", ALIGNMENT_PRESET_SCOPE_DEVICE) != scope:
+        return False
+
+    if scope != ALIGNMENT_PRESET_SCOPE_CAMERA and slot.get("device_key") != device_key:
+        return False
+
+    if scope != ALIGNMENT_PRESET_SCOPE_DEVICE:
+        return _record_camera(slot).matches(camera)
+
+    return True
+
+
+def _put_default(data, record):
+    """Make the raw preset ``record`` the default of its slot, replacing
+    whatever that slot named and any other slot naming it."""
+    slot = _slot_for(record)
+    data["defaults"] = [
+        other
+        for other in data["defaults"]
+        if not (
+            isinstance(other, dict)
+            and (other.get("preset_id") == record.get("id") or _same_slot(other, slot))
+        )
+    ]
+    data["defaults"].append(slot)
+
+
+def _drop_defaults_naming(data, preset_id):
+    """Remove every default slot naming ``preset_id``; return whether there
+    was one."""
+    kept = [
+        slot
+        for slot in data["defaults"]
+        if not (isinstance(slot, dict) and slot.get("preset_id") == preset_id)
+    ]
+    dropped = len(kept) != len(data["defaults"])
+    data["defaults"] = kept
+
+    return dropped
+
+
+def _is_own_last_used_of(record, device_key, camera):
+    """Whether ``record`` is the last-used record ``camera`` itself wrote on
+    ``device_key``: the same id, or — for a camera without one — an id-less
+    record with its label. A label-only record is never taken over by a
+    camera with an id: it stays the fallback of every camera of that
+    label."""
     return (
-        slot.get("scope") == ALIGNMENT_PRESET_SCOPE_DEVICE
-        and slot.get("device_key") == device_key
-        and not slot.get("camera_label")
+        isinstance(record, dict)
+        and record.get("kind") == ALIGNMENT_PRESET_KIND_LAST_USED
+        and record.get("device_key") == device_key
+        and record.get("camera_id", "") == camera.camera_id
+        and (bool(camera.camera_id) or record.get("camera_label") == camera.label)
     )
 
 
@@ -164,7 +284,8 @@ def _name_clash(data, device_key, name, preset_id=""):
 
 
 class AlignmentPresetStore(HasTraits):
-    """The saved camera-alignment presets and their per-device defaults."""
+    """The saved camera-alignment presets, their defaults, and the
+    alignment last used with each camera on each device."""
 
     #: The presets file; the default under ETSConfig.application_home is
     #: resolved on first use.
@@ -191,6 +312,10 @@ class AlignmentPresetStore(HasTraits):
     #: Where the latest unreadable file was kept, until the owner has told
     #: the user (it then clears it); "" for none.
     unreadable_copy = Str()
+
+    #: Where the file was copied before an upgrade from an older schema;
+    #: "" when it was not upgraded.
+    upgraded_copy = Str()
 
     def _path_default(self):
         return default_presets_file()
@@ -220,6 +345,7 @@ class AlignmentPresetStore(HasTraits):
         else:
             self.read_only = False
             self.read_only_reason = ""
+            self._upgrade(data)
             self._migrate_endpoints(data)
 
         self._list(data)
@@ -301,34 +427,89 @@ class AlignmentPresetStore(HasTraits):
         """Return whether some default slot names ``preset_id``."""
         return any(slot.get("preset_id") == preset_id for slot in self.defaults)
 
-    def resolve_default(self, device_key, camera_label=""):
-        """Return the default preset for ``device_key`` seen through camera
-        ``camera_label``, or None. A slot naming the camera outranks the
-        device-wide one."""
-        slots = [
-            slot
-            for slot in self.defaults
-            if slot.get("device_key") == device_key
-            and slot.get("camera_label", "") in ("", camera_label)
-        ]
-        slots.sort(key=lambda slot: slot.get("camera_label", "") != camera_label)
+    def resolve_default(self, device_key, camera=None):
+        """Return the default preset for ``camera`` (a CameraIdentity; None
+        for no camera) on ``device_key``, or None: the camera + device slot,
+        else the device slot, else the camera's any-device slot."""
+        defaults = self.defaults_for(device_key, camera)
 
-        if not slots:
+        return defaults[0] if defaults else None
+
+    def defaults_for(self, device_key, camera=None):
+        """Return every default preset covering ``camera`` on
+        ``device_key``, in the order ``resolve_default`` ranks them."""
+        camera = camera if camera is not None else CameraIdentity()
+        defaults = []
+
+        for scope in (
+            ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE,
+            ALIGNMENT_PRESET_SCOPE_DEVICE,
+            ALIGNMENT_PRESET_SCOPE_CAMERA,
+        ):
+            for slot in self.defaults:
+                preset = self.get(slot.get("preset_id"))
+
+                if preset is not None and _slot_covers(slot, scope, device_key, camera):
+                    defaults.append(preset)
+
+        return defaults
+
+    def default_in_slot_of(self, scope, device_key, camera):
+        """Return the default preset of the ``scope`` slot a preset of
+        ``camera`` on ``device_key`` would fill, or None."""
+        record = AlignmentPreset(
+            scope=scope,
+            device_key=device_key,
+            camera_id=camera.camera_id,
+            camera_label=camera.label,
+        ).to_dict()
+        slot = _slot_for(record)
+
+        return next(
+            (
+                self.get(other.get("preset_id"))
+                for other in self.defaults
+                if _same_slot(other, slot)
+            ),
+            None,
+        )
+
+    def last_used_for(self, camera, device_key):
+        """Return the alignment last used with ``camera`` on ``device_key``,
+        or None. A record of the camera's own id outranks one matched by
+        label."""
+
+        if camera is None or not camera.is_known:
             return None
 
-        return self.get(slots[0]["preset_id"])
+        records = [
+            preset
+            for preset in self.presets
+            if preset.kind == ALIGNMENT_PRESET_KIND_LAST_USED
+            and preset.device_key == device_key
+            and preset.camera.matches(camera)
+        ]
+        records.sort(key=lambda preset: preset.camera_id != camera.camera_id)
+
+        return records[0] if records else None
 
     # ------------------------------------------------------------------ #
     def save_named(self, name, snapshot, replace=False):
-        """Save ``snapshot`` (an AlignmentPreset's geometry) as ``name`` for
-        its device and return the saved preset. ``replace`` overwrites a
-        same-named preset of that device in place, keeping its identity,
-        default and any fields this version does not know.
+        """Save ``snapshot`` (an AlignmentPreset's geometry, camera and
+        scope) as ``name`` for its device and return the saved preset.
+        ``replace`` overwrites a same-named preset of that device in place,
+        keeping its identity, default (moved to the new scope's slot) and
+        any fields this version does not know.
 
-        Raises ``ValueError`` for a bad name, a clash without ``replace``,
-        no device, or a read-only file.
+        Raises ``ValueError`` for a bad name or scope, a clash without
+        ``replace``, no device, or a read-only file.
         """
-        error = alignment_preset_name_error(name)
+        error = alignment_preset_name_error(name) or alignment_scope_error(
+            snapshot.scope,
+            snapshot.camera_label,
+            snapshot.camera_id,
+            not snapshot.is_endpoint_only,
+        )
 
         if error:
             raise ValueError(error)
@@ -343,7 +524,6 @@ class AlignmentPresetStore(HasTraits):
         record.update(
             name=name,
             kind=ALIGNMENT_PRESET_KIND_NAMED,
-            scope=ALIGNMENT_PRESET_SCOPE_DEVICE,
             saved_at=utc_now_iso(),
         )
 
@@ -363,6 +543,9 @@ class AlignmentPresetStore(HasTraits):
 
             record["id"] = existing.get("id")
             existing.update(record)
+
+            if _drop_defaults_naming(data, existing["id"]):
+                _put_default(data, existing)
 
         self._mutate(change)
         logger.info(f"Saved camera-alignment preset '{name}' for {device_key}")
@@ -423,7 +606,8 @@ class AlignmentPresetStore(HasTraits):
         self._mutate(change)
 
     def set_default(self, preset_id):
-        """Make preset ``preset_id`` its device's default.
+        """Make preset ``preset_id`` the default of its scope's slot: its
+        camera on its device, its device, or its camera.
 
         Raises ``ValueError`` for an unknown preset.
         """
@@ -434,27 +618,114 @@ class AlignmentPresetStore(HasTraits):
             if record is None:
                 raise ValueError(PRESET_UNKNOWN_MESSAGE)
 
-            device_key = record.get("device_key", "")
-            data["defaults"] = [
-                slot
-                for slot in data["defaults"]
-                if not (isinstance(slot, dict) and _is_device_slot(slot, device_key))
-            ]
-            data["defaults"].append(_device_slot(device_key, preset_id))
+            _put_default(data, record)
 
         self._mutate(change)
 
-    def clear_default(self, device_key):
-        """Leave ``device_key`` without a device-wide default."""
+    def clear_default(self, preset_id):
+        """Leave the slot preset ``preset_id`` is the default of empty."""
+        self._mutate(lambda data: _drop_defaults_naming(data, preset_id))
+
+    def set_scope(self, preset_id, scope, moved_to=None):
+        """Change which setups preset ``preset_id`` applies to; a default
+        moves to the new scope's slot. ``moved_to`` (a dict of
+        ``device_key``, ``device_scene_rect``, ``scene_quad`` and
+        ``endpoint_quad``) binds it to another device at the same time.
+
+        Raises ``ValueError`` for an unknown preset, a scope its camera
+        and geometry cannot have, or a name the new device already uses.
+        """
 
         def change(data):
-            data["defaults"] = [
-                slot
-                for slot in data["defaults"]
-                if not (isinstance(slot, dict) and _is_device_slot(slot, device_key))
-            ]
+            record = _record_with_id(data, preset_id)
+
+            if record is None:
+                raise ValueError(PRESET_UNKNOWN_MESSAGE)
+
+            error = alignment_scope_error(
+                scope,
+                record.get("camera_label", ""),
+                record.get("camera_id", ""),
+                record.get("camera_quad") is not None,
+            )
+
+            if error:
+                raise ValueError(error)
+
+            if moved_to is not None:
+                device_key = moved_to["device_key"]
+                name = str(record.get("name", ""))
+
+                if _name_clash(data, device_key, name, preset_id) is not None:
+                    raise ValueError(
+                        PRESET_NAME_TAKEN_TEMPLATE.format(
+                            device_key=device_key, name=name
+                        )
+                    )
+
+                record.update(moved_to)
+
+            record["scope"] = scope
+
+            if _drop_defaults_naming(data, preset_id):
+                _put_default(data, record)
 
         self._mutate(change)
+
+    def remember_last_used(self, snapshot):
+        """Keep ``snapshot`` as the alignment last used with its camera on
+        its device, in place of the previous one.
+
+        Raises ``ValueError`` without a device or camera, or while
+        read-only, and ``OSError`` when the file cannot be written.
+        """
+        device_key, camera = snapshot.device_key, snapshot.camera
+
+        if not device_key or not camera.is_known:
+            raise ValueError("a last-used alignment needs its camera and device")
+
+        record = snapshot.to_dict()
+        record.update(
+            name="",
+            kind=ALIGNMENT_PRESET_KIND_LAST_USED,
+            scope=ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE,
+            saved_at=utc_now_iso(),
+        )
+
+        def change(data):
+            existing = next(
+                (
+                    other
+                    for other in data["presets"]
+                    if _is_own_last_used_of(other, device_key, camera)
+                ),
+                None,
+            )
+
+            if existing is None:
+                record["id"] = str(uuid4())
+                data["presets"].append(record)
+
+                return
+
+            record["id"] = existing.get("id")
+            existing.update(record)
+
+        self._mutate(change)
+
+    def forget_last_used(self, camera, device_key):
+        """Drop the alignment last used with ``camera`` itself on
+        ``device_key`` — not a record it only matches by label."""
+
+        def change(data):
+            data["presets"] = [
+                record
+                for record in data["presets"]
+                if not _is_own_last_used_of(record, device_key, camera)
+            ]
+
+        if self.last_used_for(camera, device_key) is not None:
+            self._mutate(change)
 
     # ------------------------------------------------------------------ #
     def _mutate(self, change):
@@ -527,12 +798,36 @@ class AlignmentPresetStore(HasTraits):
         if _is_newer_schema(data):
             return data
 
-        if not _has_current_shape(data):
+        if not _has_known_shape(data):
             logger.error(f"Camera-alignment presets malformed ({self.path})")
 
             return None
 
         return data
+
+    def _upgrade(self, data):
+        """Upgrade the file's older-schema ``data`` in place and write it
+        back, first copying the file under a name no earlier copy uses."""
+
+        if data["schema_version"] >= ALIGNMENT_PRESETS_SCHEMA_VERSION:
+            return
+
+        old_version = data["schema_version"]
+        upgrade_to_current_schema(data)
+
+        if self.path.exists():
+            copy = next_free_numbered_path(
+                self.path.with_name(f"{self.path.name}.v{old_version}")
+            )
+            shutil.copy2(self.path, copy)
+            self.upgraded_copy = str(copy)
+
+        self._write_data(data)
+        logger.info(
+            f"Upgraded the camera-alignment presets at {self.path} to schema "
+            f"{ALIGNMENT_PRESETS_SCHEMA_VERSION} (version {old_version} kept as "
+            f"{self.upgraded_copy})"
+        )
 
     def _write_data(self, data):
         data["schema_version"] = ALIGNMENT_PRESETS_SCHEMA_VERSION
@@ -549,13 +844,15 @@ class AlignmentPresetStore(HasTraits):
         logger.warning(f"Kept the unreadable alignment presets file as {aside}")
 
     def _migrate_endpoints(self, data):
-        """Give every device with a saved endpoint but no preset at all its
+        """Give every device with a saved endpoint but no named preset its
         endpoint as a preset, made its default; write only when one was
         added."""
         devices_with_presets = {
             record.get("device_key")
             for record in data["presets"]
             if isinstance(record, dict)
+            and record.get("kind", ALIGNMENT_PRESET_KIND_NAMED)
+            == ALIGNMENT_PRESET_KIND_NAMED
         }
         migrated = []
 
@@ -572,13 +869,9 @@ class AlignmentPresetStore(HasTraits):
                 endpoint_quad=endpoint,
                 saved_at=self.endpoint_store.saved_at(device_key) or utc_now_iso(),
             )
-            data["presets"].append(preset.to_dict())
-            data["defaults"] = [
-                slot
-                for slot in data["defaults"]
-                if not (isinstance(slot, dict) and _is_device_slot(slot, device_key))
-            ]
-            data["defaults"].append(_device_slot(device_key, preset.id))
+            record = preset.to_dict()
+            data["presets"].append(record)
+            _put_default(data, record)
             migrated.append(device_key)
 
         if not migrated:

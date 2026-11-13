@@ -46,8 +46,10 @@ from microdrop_style.icons.icons import ICON_VIEW_3D
 # Microdrop utils imports.
 from microdrop_utils.pyside_helpers import MarqueeComboBox
 from microdrop_utils.v4l2_fps_getter import (
+    LIBCAMERA_ID_PREFIX,
     LinuxCameraDeviceContainer,
     get_video_inputs,
+    libcamera_camera_id,
 )
 
 # Local imports.
@@ -64,6 +66,7 @@ from ...consts import (
 from ...controllers.camera_controller import CameraController
 from ...default_settings import video_key
 from ...models.camera import CameraModel
+from ...models.camera_identity import v4l2_stable_camera_id
 from ...models.media import MediaType
 from ...models.recording_overlay import RecordingOverlayTimeline
 from ...utils.capture import ImageSaver, get_transformed_frame
@@ -558,6 +561,28 @@ class CameraControlWidget(QWidget):
 
         return selected_device.description()
 
+    @staticmethod
+    def _stable_camera_id(camera_device, container):
+        """The camera's most stable id for alignment memory, "" for none.
+
+        A V4L2 camera (Linux) is named by its udev by-path link — Qt's
+        GStreamer backend only gives an enumeration index; a libcamera
+        camera by its device-tree path; any other QCameraDevice by Qt's id
+        (on Windows the USB device-interface path, stable per port).
+        """
+
+        if container is not None and container.device_path:
+            return v4l2_stable_camera_id(
+                container.device_path, expected_name=camera_device.description()
+            )
+
+        if container is not None:
+            camera_id = libcamera_camera_id(camera_device)
+
+            return camera_id if camera_id.startswith(LIBCAMERA_ID_PREFIX) else ""
+
+        return bytes(camera_device.id()).decode(errors="replace")
+
     def _get_camera_resolution_max_framerate(self, w=0, h=0, fmt=None):
         """Return the max framerate for a given resolution, or 0.0 if unknown.
 
@@ -690,6 +715,7 @@ class CameraControlWidget(QWidget):
                     container.focus_device_path if container else None
                 ),
                 v4l2_focus_lens_map=container.focus_lens_map if container else (),
+                camera_id=self._stable_camera_id(camera, container),
             )
             self.video_item.setVisible(True)
             self._disable_camera_buttons(False)

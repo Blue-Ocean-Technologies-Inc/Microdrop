@@ -11,15 +11,19 @@
 """The Camera Alignment window's Presets strip and the Save Alignment
 Preset naming dialog.
 
-The strip is the table of saved presets — the name editable in place, the
-default toggled by clicking its glyph, any problem shown beside it — over
-the action buttons. The naming dialog keeps OK disabled while the name
-breaks the naming rule; a name the device already uses asks to replace
-the preset or rename the new one."""
+The strip names the selected camera and its default here (and warns when
+the shown alignment was not made with it) above the table of saved
+presets — the name editable in place, the scope and camera of each, the
+default toggled by clicking its glyph, any problem shown beside it — and
+the action buttons, with a Scope picker for the selected preset. The
+naming dialog keeps OK disabled while the name breaks the naming rule; a
+name the device already uses asks to replace the preset or rename the
+new one."""
 
 # Enthought library imports.
 from traitsui.api import (
     Action,
+    EnumEditor,
     Group,
     HGroup,
     Item,
@@ -55,44 +59,70 @@ NOTICE_TEMPLATE = (
     f'<span style="color: {WARNING_COLOR}; font-weight: bold;">{{}}</span>'
 )
 
+
+class CameraColumn(ActiveRowObjectColumn):
+    """The Camera column: each row's tooltip names its camera's id, or
+    says it has none."""
+
+    def get_tooltip(self, object):
+        return object.camera_tooltip
+
+
 alignment_presets_table_editor = TableEditor(
     columns=[
         ActiveRowObjectColumn(
             name="name",
             label="Name",
             active_trait="highlighted",
-            width=0.28,
+            width=0.2,
             tooltip="Double-click to rename the preset",
+        ),
+        ActiveRowObjectColumn(
+            name="scope_text",
+            label="Applies to",
+            active_trait="highlighted",
+            editable=False,
+            width=0.14,
+            tooltip="Which setups the preset applies to; change it with the "
+            "Scope picker above",
+        ),
+        CameraColumn(
+            name="camera_text",
+            label="Camera",
+            active_trait="highlighted",
+            editable=False,
+            width=0.14,
         ),
         ActiveRowObjectColumn(
             name="device_key",
             label="Device",
             active_trait="highlighted",
             editable=False,
-            width=0.2,
+            width=0.12,
         ),
         ActiveRowObjectColumn(
             name="saved_at_text",
             label="Saved",
             active_trait="highlighted",
             editable=False,
-            width=0.16,
+            width=0.12,
         ),
         ActiveRowCheckboxColumn(
             name="is_default",
             label="Default",
             active_trait="highlighted",
             horizontal_alignment="center",
-            width=0.08,
-            tooltip="Click to make this preset its device's default; "
-            "click again to clear it",
+            width=0.06,
+            tooltip="Click to make this preset the default of its scope (its "
+            "camera on its device, its device, or its camera); click again "
+            "to clear it",
         ),
         ActiveRowObjectColumn(
             name="warning",
             label="Warning",
             active_trait="highlighted",
             editable=False,
-            width=0.28,
+            width=0.22,
         ),
     ],
     selected="selected",
@@ -112,9 +142,17 @@ alignment_presets_view = View(
             Item(
                 "this_device_only",
                 label="This device only",
-                tooltip="List only the loaded device's presets",
+                tooltip="List only the loaded device's presets (and the "
+                "selected camera's any-device presets)",
             ),
             spring,
+            Item(
+                "selected_scope",
+                label="Scope",
+                editor=EnumEditor(name="selected_scope_choices"),
+                enabled_when="writable and selected is not None",
+                tooltip="Which setups the selected preset applies to",
+            ),
             UItem(
                 "save_as_button",
                 enabled_when="can_save",
@@ -130,18 +168,29 @@ alignment_presets_view = View(
                 "set_default_button",
                 enabled_when="writable and selected is not None "
                 "and not selected_is_default",
-                tooltip="Make the selected preset its device's default",
+                tooltip="Make the selected preset the default of its scope",
             ),
             UItem(
                 "clear_default_button",
                 enabled_when="writable and selected_is_default",
-                tooltip="Leave the selected preset's device without a default",
+                tooltip="Leave the selected preset's scope without a default",
             ),
             UItem(
                 "delete_button",
                 enabled_when="writable and selected is not None",
                 tooltip="Delete the selected preset",
             ),
+        ),
+        UItem("setup_text", style="readonly"),
+        UItem(
+            "setup_notice",
+            editor=HtmlLabelEditor(template=NOTICE_TEMPLATE),
+            visible_when="setup_notice",
+        ),
+        UItem(
+            "scope_notice",
+            editor=HtmlLabelEditor(template=NOTICE_TEMPLATE),
+            visible_when="scope_notice",
         ),
         UItem(
             "notice",
@@ -158,8 +207,16 @@ alignment_preset_name_view = View(
         Item("name", label="Preset name"),
         Item("name_error", style="readonly", show_label=False),
         Item("device_key", style="readonly", label="Device"),
+        Item("camera_text", style="readonly", label="Camera"),
+        Item(
+            "scope_label",
+            label="Applies to",
+            editor=EnumEditor(name="scope_choices"),
+            tooltip="This camera on this device, this device through any "
+            "camera, or this camera on any device",
+        ),
         Item("note", style="readonly", show_label=False, visible_when="note"),
-        Item("make_default", label="Make it this device's default"),
+        Item("make_default", label="Make it the default for these setups"),
     ),
     title=SAVE_ALIGNMENT_PRESET_DIALOG_TITLE,
     buttons=[Action(name="OK", enabled_when="is_name_valid"), "Cancel"],
@@ -217,14 +274,24 @@ if __name__ == "__main__":
     from device_viewer.models.alignment_preset_table import (
         AlignmentPresetName,
         AlignmentPresetTable,
+        scope_labels_for,
     )
+    from device_viewer.models.camera_identity import CameraIdentity
     from device_viewer.utils.camera_endpoints import CameraEndpointStore
 
     QUAD = [[0.0, 0.0], [100.0, 0.0], [100.0, 80.0], [0.0, 80.0]]
+    CAMERA = CameraIdentity(camera_id="usb#demo", label="Demo Camera")
 
-    def demo_snapshot(device_key):
+    def demo_snapshot(device_key, scope="device", camera=CAMERA):
         return AlignmentPreset(
-            device_key=device_key, scene_quad=QUAD, endpoint_quad=QUAD
+            device_key=device_key,
+            scope=scope,
+            camera_id=camera.camera_id,
+            camera_label=camera.label,
+            frame_size=[640.0, 480.0],
+            camera_quad=QUAD,
+            scene_quad=QUAD,
+            endpoint_quad=QUAD,
         )
 
     class PresetsDemo(HasTraits):
@@ -235,8 +302,13 @@ if __name__ == "__main__":
         @observe("table:save_as_button")
         def _save_as(self, event):
             store, device_key = self.table.store, self.table.current_device_key
+            choices = scope_labels_for(CAMERA.label, CAMERA.camera_id, True)
             naming = AlignmentPresetName(
-                name=store.next_default_name(device_key), device_key=device_key
+                name=store.next_default_name(device_key),
+                device_key=device_key,
+                camera_text=CAMERA.display_text,
+                scope_label=choices[0],
+                scope_choices=choices,
             )
             replace = ask_alignment_preset_name(
                 naming, lambda name: store.find_named(device_key, name)
@@ -244,7 +316,9 @@ if __name__ == "__main__":
 
             if replace is not None:
                 store.save_named(
-                    naming.name, demo_snapshot(device_key), replace=replace
+                    naming.name,
+                    demo_snapshot(device_key, naming.scope),
+                    replace=replace,
                 )
 
         @observe("table:apply_requested")
@@ -258,14 +332,20 @@ if __name__ == "__main__":
         )
         store.refresh()
 
-        for device_key, name in [
-            ("demo-device", "bench"),
-            ("demo-device", "after cleaning"),
-            ("other-device", "bench"),
+        twin = CameraIdentity(camera_id="usb#twin", label="Demo Camera")
+
+        for device_key, name, scope, camera in [
+            ("demo-device", "bench", "camera_device", CAMERA),
+            ("demo-device", "twin camera", "camera_device", twin),
+            ("demo-device", "after cleaning", "device", CAMERA),
+            ("other-device", "mount", "camera", CAMERA),
+            ("other-device", "bench", "device", CAMERA),
         ]:
-            store.save_named(name, demo_snapshot(device_key))
+            store.save_named(name, demo_snapshot(device_key, scope, camera))
 
         demo = PresetsDemo(
-            table=AlignmentPresetTable(store=store, current_device_key="demo-device")
+            table=AlignmentPresetTable(
+                store=store, current_device_key="demo-device", current_camera=CAMERA
+            )
         )
         demo.table.configure_traits(view=alignment_presets_view)

@@ -40,7 +40,9 @@ from device_viewer.models.alignment_preset_store import AlignmentPresetStore
 from device_viewer.models.alignment_preset_table import (
     AlignmentPresetName,
     AlignmentPresetTable,
+    scope_labels_for,
 )
+from device_viewer.models.camera_identity import CameraIdentity
 from device_viewer.preferences import DeviceViewerPreferences
 from device_viewer.utils.camera_endpoints import CameraEndpointStore
 from device_viewer.views.camera_alignment_view.alignment_dialog import (
@@ -68,6 +70,7 @@ GRID_RECTS = [
     (60 + col * 120, 80 + row * 120, 90, 90) for row in range(4) for col in range(6)
 ]
 DEVICE_KEY = "demo-device"
+CAMERA = CameraIdentity(camera_id="usb#demo", label="Demo Camera")
 
 
 def _grid_image(background, pen, brush, offset=(0, 0)) -> QImage:
@@ -99,8 +102,13 @@ class PresetsDemoController(HasTraits):
     def _save_panes_as_preset(self, event):
         store = self.model.preset_table.store
         endpoint = self.model.endpoint_pane.scene_quad()
+        choices = scope_labels_for(CAMERA.label, CAMERA.camera_id, True)
         naming = AlignmentPresetName(
-            name=store.next_default_name(DEVICE_KEY), device_key=DEVICE_KEY
+            name=store.next_default_name(DEVICE_KEY),
+            device_key=DEVICE_KEY,
+            camera_text=CAMERA.display_text,
+            scope_label=choices[0],
+            scope_choices=choices,
         )
         replace = ask_alignment_preset_name(
             naming, lambda name: store.find_named(DEVICE_KEY, name)
@@ -113,6 +121,9 @@ class PresetsDemoController(HasTraits):
             naming.name,
             AlignmentPreset(
                 device_key=DEVICE_KEY,
+                scope=naming.scope,
+                camera_id=CAMERA.camera_id,
+                camera_label=CAMERA.label,
                 camera_quad=self.model.outline_pane.raw_quad(),
                 scene_quad=endpoint,
                 endpoint_quad=endpoint,
@@ -177,6 +188,9 @@ def build_demo_window(directory):
         "bench",
         AlignmentPreset(
             device_key=DEVICE_KEY,
+            scope="camera_device",
+            camera_id=CAMERA.camera_id,
+            camera_label=CAMERA.label,
             camera_quad=[[100, 105], [780, 105], [780, 555], [100, 555]],
             scene_quad=bench_quad,
             endpoint_quad=bench_quad,
@@ -194,7 +208,9 @@ def build_demo_window(directory):
         endpoint_pane=endpoint_pane,
         outline_pane=outline_pane,
         settings=AlignmentSettingsModel(preferences=preferences),
-        preset_table=AlignmentPresetTable(store=store, current_device_key=DEVICE_KEY),
+        preset_table=AlignmentPresetTable(
+            store=store, current_device_key=DEVICE_KEY, current_camera=CAMERA
+        ),
     )
     presets_controller = PresetsDemoController(model=model)
     ui = CameraAlignmentController(model=model).edit_traits(
