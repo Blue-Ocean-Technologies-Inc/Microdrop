@@ -31,6 +31,7 @@ from envisage.api import Application
 from device_viewer.consts import (
     CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
+    ZONES_TUTORIAL_HTML_PATH,
 )
 from device_viewer.plugin import DeviceViewerPlugin
 from dropbot_status_and_controls.consts import DROPBOT_STATUS_TUTORIAL_HTML_PATH
@@ -86,6 +87,7 @@ SHORTCUTS_SOURCE = SHORTCUTS_TUTORIAL_HTML_PATH.with_name("shortcuts.src.html")
 PLUGIN_MANAGEMENT_SOURCE = PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH.with_name(
     "plugin_management.src.html"
 )
+ZONES_SOURCE = ZONES_TUTORIAL_HTML_PATH.with_name("zones.src.html")
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
 #: A plugin.py with no tutorials yet, as new_tutorial.py first meets it.
@@ -300,6 +302,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Plugin Management Tutorial",
         "Protocol Tree Tutorial",
         "Shortcuts, Gamepad & Touch Assist Tutorial",
+        "Zones Tutorial",
     ]
 
     for entry in entries:
@@ -339,6 +342,10 @@ def test_plugin_management_tutorial_rebuilds_identically():
 
 def test_device_viewer_tutorial_rebuilds_identically():
     assert is_up_to_date(DEVICE_VIEWER_SOURCE)
+
+
+def test_zones_tutorial_rebuilds_identically():
+    assert is_up_to_date(ZONES_SOURCE)
 
 
 def _clip_page(clip="t_media/a.webm", poster=""):

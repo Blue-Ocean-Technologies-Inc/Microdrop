@@ -928,3 +928,6 @@ CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH = (
 DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH = (
     Path(__file__).parent / "resources" / "device_viewer_basics.html"
 )
+
+#: Help > Tutorials page, built from resources/zones.src.html.
+ZONES_TUTORIAL_HTML_PATH = Path(__file__).parent / "resources" / "zones.html"
