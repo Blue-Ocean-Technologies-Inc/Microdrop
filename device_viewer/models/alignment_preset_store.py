@@ -230,12 +230,18 @@ def _drop_defaults_naming(data, preset_id):
     return dropped
 
 
-def _is_last_used_of(record, device_key, camera):
+def _is_own_last_used_of(record, device_key, camera):
+    """Whether ``record`` is the last-used record ``camera`` itself wrote on
+    ``device_key``: the same id, or — for a camera without one — an id-less
+    record with its label. A label-only record is never taken over by a
+    camera with an id: it stays the fallback of every camera of that
+    label."""
     return (
         isinstance(record, dict)
         and record.get("kind") == ALIGNMENT_PRESET_KIND_LAST_USED
         and record.get("device_key") == device_key
-        and _record_camera(record).matches(camera)
+        and record.get("camera_id", "") == camera.camera_id
+        and (bool(camera.camera_id) or record.get("camera_label") == camera.label)
     )
 
 
@@ -672,34 +678,35 @@ class AlignmentPresetStore(HasTraits):
         )
 
         def change(data):
-            matching = [
-                existing
-                for existing in data["presets"]
-                if _is_last_used_of(existing, device_key, camera)
-            ]
-            matching.sort(
-                key=lambda existing: existing.get("camera_id") != camera.camera_id
+            existing = next(
+                (
+                    other
+                    for other in data["presets"]
+                    if _is_own_last_used_of(other, device_key, camera)
+                ),
+                None,
             )
 
-            if not matching:
+            if existing is None:
                 record["id"] = str(uuid4())
                 data["presets"].append(record)
 
                 return
 
-            record["id"] = matching[0].get("id")
-            matching[0].update(record)
+            record["id"] = existing.get("id")
+            existing.update(record)
 
         self._mutate(change)
 
     def forget_last_used(self, camera, device_key):
-        """Drop the alignment last used with ``camera`` on ``device_key``."""
+        """Drop the alignment last used with ``camera`` itself on
+        ``device_key`` — not a record it only matches by label."""
 
         def change(data):
             data["presets"] = [
                 record
                 for record in data["presets"]
-                if not _is_last_used_of(record, device_key, camera)
+                if not _is_own_last_used_of(record, device_key, camera)
             ]
 
         if self.last_used_for(camera, device_key) is not None:

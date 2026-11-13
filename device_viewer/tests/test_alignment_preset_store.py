@@ -672,3 +672,23 @@ def test_last_used_records_do_not_stop_the_endpoint_migration(store):
     store.refresh()
 
     assert [preset.name for preset in store.named_for("chip-a")] == ["chip-a endpoint"]
+
+
+def test_a_camera_with_an_id_never_takes_over_a_label_only_record(store):
+    by_label = CameraIdentity(label="USB Camera")
+    store.remember_last_used(_camera_snapshot(by_label, "camera_device"))
+
+    own = _camera_snapshot(CAM_A, "camera_device")
+    own.scene_quad = ENDPOINT
+    store.remember_last_used(own)
+
+    # Camera A has its own record; the label-only one is still the
+    # fallback of its identical twin.
+    assert store.last_used_for(CAM_A, "chip-a").scene_quad == ENDPOINT
+    assert store.last_used_for(CAM_B, "chip-a").camera_id == ""
+    assert store.last_used_for(CAM_B, "chip-a").scene_quad == SCENE_QUAD
+    assert len(store.presets) == 2
+
+    store.forget_last_used(CAM_A, "chip-a")
+
+    assert store.last_used_for(CAM_B, "chip-a") is not None
