@@ -76,7 +76,7 @@ sections:
 | Section | Constant | Bundled tutorials |
 |---|---|---|
 | Start here | `TUTORIAL_ORDER_START` (0) | Getting Started with MicroDrop |
-| Device | `TUTORIAL_ORDER_DEVICE` (100) | Device Viewer, Camera & Alignment, Zones |
+| Device | `TUTORIAL_ORDER_DEVICE` (100) | Device Viewer; Device Files, Channels & Connections; Camera & Alignment; Zones |
 | Protocols | `TUTORIAL_ORDER_PROTOCOLS` (200) | Protocol Tree |
 | Hardware | `TUTORIAL_ORDER_HARDWARE` (300) | Dropbot Status & Controls |
 | Analysis | `TUTORIAL_ORDER_ANALYSIS` (400) | Image Analysis |
@@ -84,7 +84,7 @@ sections:
 | Reference | `TUTORIAL_ORDER_REFERENCE` (600) | Shortcuts, Gamepad & Touch Assist; Help, Logs & Saved Files |
 
 Add an offset to slot an entry within its section (the Device section uses
-+0, +10, +20); entries with the same order are sorted by title. An entry
++0, +5, +10, +20); entries with the same order are sorted by title. An entry
 that sets no `order` gets `TUTORIAL_ORDER_DEFAULT` (1000): a section of its
 own after all of these, sorted by title, so older plugins need no change.
 
