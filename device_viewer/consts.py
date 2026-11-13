@@ -684,12 +684,39 @@ CAMERA_ALIGNMENT_DIRNAME = "camera_alignment"
 ALIGNMENT_PRESETS_FILENAME = "alignment_presets.json"
 
 #: The file's schema; a file written by a newer schema opens read-only.
-ALIGNMENT_PRESETS_SCHEMA_VERSION = 1
+#: Version 2 added camera ids, camera scopes and the last-used records.
+ALIGNMENT_PRESETS_SCHEMA_VERSION = 2
 
-#: Record kinds and scopes. Stage 1 writes only named, device-scoped
-#: presets; later stages add history snapshots and camera/any scopes.
+#: Record kinds: a user-saved preset, and the alignment last used with one
+#: camera on one device (kept automatically, never listed as a preset).
 ALIGNMENT_PRESET_KIND_NAMED = "named"
+ALIGNMENT_PRESET_KIND_LAST_USED = "last_used"
+
+#: Scopes — which setups a preset applies to: its camera on its device,
+#: its device through any camera, or its camera on any device.
+ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE = "camera_device"
 ALIGNMENT_PRESET_SCOPE_DEVICE = "device"
+ALIGNMENT_PRESET_SCOPE_CAMERA = "camera"
+
+#: How each scope reads in the window, in the order the choices list them.
+ALIGNMENT_PRESET_SCOPE_LABELS = {
+    ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE: "This camera + device",
+    ALIGNMENT_PRESET_SCOPE_DEVICE: "This device, any camera",
+    ALIGNMENT_PRESET_SCOPE_CAMERA: "This camera, any device",
+}
+
+#: Where udev links each V4L2 node under a name fixed by its USB port.
+V4L2_BY_PATH_DIR = "/dev/v4l/by-path"
+
+#: Follows a camera's label when its backend gives no stable id.
+CAMERA_MATCHED_BY_NAME_NOTE = "(matched by name — no stable camera id)"
+
+#: The preference naming the camera and device the live alignment (the
+#: camera.reference_rect preferences) was made for, as JSON.
+LIVE_ALIGNMENT_SETUP_PREFERENCE = "camera.alignment_setup"
+
+#: The undo-stack entry of a restored alignment.
+RESTORE_ALIGNMENT_UNDO_NAME = "Restore Camera Alignment"
 
 #: Suggested names are ``<stem>-N``; migrated endpoints are named
 #: ``<device> <suffix>``.
@@ -745,6 +772,14 @@ PRESET_NAME_CONTROL_CHARACTERS_MESSAGE = (
 PRESET_NAME_TAKEN_TEMPLATE = "{device_key} already has a preset named '{name}'."
 PRESET_UNKNOWN_MESSAGE = "There is no such camera-alignment preset."
 PRESET_NEEDS_DEVICE_MESSAGE = "A preset needs the device it was saved for."
+PRESET_SCOPE_UNKNOWN_TEMPLATE = "'{scope}' is not a preset scope."
+PRESET_SCOPE_NEEDS_CAMERA_MESSAGE = (
+    "The preset was saved without a camera, so it can only apply to its "
+    "device through any camera."
+)
+PRESET_SCOPE_NEEDS_CAMERA_QUAD_MESSAGE = (
+    "An endpoint-only preset has no camera alignment to carry to other devices."
+)
 
 #: Why presets are read-only, shown above the table.
 PRESETS_NEWER_SCHEMA_MESSAGE = (
@@ -766,6 +801,41 @@ PRESETS_UNREADABLE_TEMPLATE = (
 #: the status bar after Apply.
 PRESET_OTHER_DEVICE_WARNING_TEMPLATE = (
     "Saved for {device_key} — load that device to apply it"
+)
+PRESET_OTHER_CAMERA_WARNING_TEMPLATE = (
+    "Saved for camera {camera} — select that camera to apply it"
+)
+
+#: The Camera column and the strip's setup line.
+ANY_CAMERA_TEXT = "Any camera"
+NO_CAMERA_TEXT = "none selected"
+NO_DEFAULT_PRESET_TEXT = "none"
+CAMERA_ID_TOOLTIP_TEMPLATE = "Camera id: {camera_id}"
+CAMERA_WITHOUT_ID_TOOLTIP = (
+    "This camera's backend gives no stable id: it is matched by its name, "
+    "so an identical camera with the same name counts as the same one."
+)
+ANY_CAMERA_TOOLTIP_TEMPLATE = "Applies through any camera (saved with {camera})"
+ALIGNMENT_SETUP_TEMPLATE = (
+    "Camera: {camera}   ·   Default for this camera and device: {default}"
+)
+
+#: The setup line's warning when the shown alignment was not made with the
+#: selected camera (nothing saved for this camera on this device).
+NO_SAVED_ALIGNMENT_TEMPLATE = (
+    "No saved alignment for camera {camera} on {device_key}: the feed keeps "
+    "the previous alignment. Align and confirm, or apply a preset."
+)
+
+#: Status-bar messages of a restore on camera switch or device load.
+RESTORED_LAST_USED_TEMPLATE = (
+    "Restored the camera alignment last used with {camera} on {device_key}"
+)
+RESTORED_DEFAULT_TEMPLATE = (
+    "Applied the default alignment preset '{name}' for {camera} on {device_key}"
+)
+RESTORE_DEFERRED_MESSAGE = (
+    "Camera alignment for the new camera will be restored when the protocol stops"
 )
 PRESET_SHAPE_MISMATCH_NOTE = (
     "camera picture shape differs from when this preset was saved — endpoint only"
