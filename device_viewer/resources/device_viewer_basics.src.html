@@ -285,7 +285,7 @@ width and the minimum heights of its tables (<span class="ui">Device Viewer Side
 <figcaption>Real example, 1.5× speed. Each tap on a <span class="ui">D-pad</span> arrow steps the switched-on electrodes one place; the droplet goes up, right and back, then down.</figcaption>
 </figure>
   <figure class="clip">
-<div class="clip-box" style="max-width:420px"><video data-clip muted loop playsinline controls preload="metadata" width="420" height="472" poster="device_viewer_basics_media/split-merge.webp" aria-label="A droplet stretched along a column of electrodes until it splits in two; the top half is then stepped down onto the bottom half and they merge">
+<div class="clip-box" style="max-width:420px"><video data-clip muted loop playsinline controls preload="metadata" width="420" height="472" poster="device_viewer_basics_media/split-merge.webp" aria-label="A droplet stretched until it splits, then the halves merged again">
 <source src="device_viewer_basics_media/split-merge.webm" type="video/webm">
 </video></div>
 <figcaption>Real example, 2× speed. Splitting and merging by clicking: the droplet is stretched along a column until the middle thins and it splits; the top half is then brought back down and the two merge.</figcaption>
@@ -352,7 +352,7 @@ width and the minimum heights of its tables (<span class="ui">Device Viewer Side
   <h3>Find Liquid</h3>
   <p>Asks the DropBot where there is liquid and switches those electrodes on.</p>
   <figure class="clip">
-<div class="clip-box" style="max-width:323px"><video data-clip muted loop playsinline controls preload="metadata" width="323" height="578" poster="device_viewer_basics_media/find-liquid.webp" aria-label="Right-click menu, Find Liquid: a few seconds later the electrodes under both droplets turn blue">
+<div class="clip-box" style="max-width:323px"><video data-clip muted loop playsinline controls preload="metadata" width="323" height="578" poster="device_viewer_basics_media/find-liquid.webp" aria-label="Right-click, Find Liquid: the electrodes under both droplets turn blue">
 <source src="device_viewer_basics_media/find-liquid.webm" type="video/webm">
 </video></div>
 <figcaption>Real example. Right-click ▸ <span class="ui">Find Liquid</span>; after a few seconds the electrodes where liquid was found are switched on (blue). Here the top droplet's set runs one electrode past its right end.</figcaption>
@@ -488,7 +488,7 @@ turn, and the droplet rides along.</p>
   <strong>Step ▸</strong>.</p>
   <figure class="demo" data-demo="route"><svg class="chip"></svg></figure>
   <figure class="clip">
-<div class="clip-box" style="max-width:809px"><video data-clip muted loop playsinline controls preload="metadata" width="809" height="380" poster="device_viewer_basics_media/route-run.webp" aria-label="Run selected routes on a loop round a droplet: the status line counts Phase 1/15 to 15/15 while the droplet goes once round the loop">
+<div class="clip-box" style="max-width:809px"><video data-clip muted loop playsinline controls preload="metadata" width="809" height="380" poster="device_viewer_basics_media/route-run.webp" aria-label="A loop run once: Phase 1/15 to 15/15 while the droplet goes round">
 <source src="device_viewer_basics_media/route-run.webm" type="video/webm">
 </video></div>
 <figcaption>Real example, 2× speed. A loop drawn round a droplet, run once with <em>Run selected routes</em>: the status line counts
@@ -675,7 +675,7 @@ change any value; the chip replays the phases MicroDrop would switch.</p>
   <h3>Overlay</h3>
   <p>Tooltip: <em>electrodes actuated from one step to overlay onto next step</em>. Also called the trail overlay.</p>
   <figure class="clip">
-<div class="clip-box" style="max-width:675px"><video data-clip muted loop playsinline controls preload="metadata" width="675" height="410" poster="device_viewer_basics_media/overlay-fix.webp" aria-label="With Length 2 and Overlay 0 the droplet sits in a corner while the phase count climbs; the run is stopped, Overlay set to 1, the droplet clicked back to the start, and the new run carries it round the loop">
+<div class="clip-box" style="max-width:675px"><video data-clip muted loop playsinline controls preload="metadata" width="675" height="410" poster="device_viewer_basics_media/overlay-fix.webp" aria-label="Overlay 0: the droplet stalls in a corner while the phases count; Overlay 1: it follows the loop">
 <source src="device_viewer_basics_media/overlay-fix.webm" type="video/webm">
 </video></div>
 <figcaption>Real example, sped up 2–3×. With Length 2 and Overlay 0 the droplet stalls in a corner while the phases count on.
@@ -693,7 +693,7 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
   <h3>Reps</h3>
   <p>Tooltip: <em>Times to repeat loops execution</em>.</p>
   <figure class="clip">
-<div class="clip-box" style="max-width:675px"><video data-clip muted loop playsinline controls preload="metadata" width="675" height="410" poster="device_viewer_basics_media/loop-reps.webp" aria-label="A loop run with Reps 6: the droplet goes round and round while the status line counts Rep 1/6 up to Rep 4/6">
+<div class="clip-box" style="max-width:675px"><video data-clip muted loop playsinline controls preload="metadata" width="675" height="410" poster="device_viewer_basics_media/loop-reps.webp" aria-label="A loop with Reps 6: Rep counts 1/6 to 4/6 as the droplet laps">
 <source src="device_viewer_basics_media/loop-reps.webm" type="video/webm">
 </video></div>
 <figcaption>Real example, 3× speed. Reps 6: each lap of the droplet adds one to <span class="ui">Rep</span>, here from 1/6 to
@@ -965,6 +965,14 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 <section data-term id="t-freemode" data-where="status bar">
   <h3>Free Mode or a step?</h3>
   <p>Where your clicks go depends on whether a protocol step is selected. The status bar says which.</p>
+  <figure class="clip">
+<div class="clip-box" style="max-width:562px"><video data-clip muted loop playsinline controls preload="metadata" width="562" height="399" poster="device_viewer_basics_media/free-mode-prompt.webp" aria-label="The Unsaved Free Mode Changes dialog, Discard Changes, then Editing: Step 1">
+<source src="device_viewer_basics_media/free-mode-prompt.webm" type="video/webm">
+</video></div>
+<figcaption>Real example. Step 1 is clicked after electrodes were switched in Free Mode; here <strong>Discard
+Changes</strong> is chosen. The status bar turns to <span class="ui">Editing: Step 1</span>, and Execution Settings show
+the step's own values.</figcaption>
+</figure>
   <div data-what><p><span class="ui">Editing: Step 1</span>: every electrode you switch and every route you draw is written
   into that step (and into every other selected step). <span class="ui">Free Mode</span>: nothing is selected, and your
   changes are kept aside. The next time you select a step, MicroDrop asks <span class="ui">Unsaved Free Mode Changes</span>:
@@ -979,7 +987,7 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
   <h3>Realtime mode</h3>
   <p>Whether the DropBot follows the Device Viewer as you click.</p>
   <figure class="clip">
-<div class="clip-box" style="max-width:712px"><video data-clip muted loop playsinline controls preload="metadata" width="712" height="360" poster="device_viewer_basics_media/realtime-on.webp" aria-label="A loop run with Realtime Off: the phases count but the droplet stays still. Realtime On is clicked and the loop run again: the droplet follows">
+<div class="clip-box" style="max-width:712px"><video data-clip muted loop playsinline controls preload="metadata" width="712" height="360" poster="device_viewer_basics_media/realtime-on.webp" aria-label="Realtime Off: the droplet stays still during the run; Realtime On: it follows the loop">
 <source src="device_viewer_basics_media/realtime-on.webm" type="video/webm">
 </video></div>
 <figcaption>Real example, 1.5× speed. With <span class="ui">Realtime Off</span> the run counts its phases but the droplet does
