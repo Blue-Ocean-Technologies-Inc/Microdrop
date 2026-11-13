@@ -52,6 +52,7 @@ from examples.tutorials.new_tutorial import (
     _add_imports,
     scaffold_tutorial,
 )
+from image_viewer.consts import ANALYSIS_HELP_HTML_PATH
 from image_viewer.plugin import ImageViewerPlugin
 from microdrop_application.consts import SHORTCUTS_TUTORIAL_HTML_PATH
 from microdrop_application.plugin import MicrodropPlugin
@@ -79,6 +80,7 @@ DEVICE_VIEWER_SOURCE = DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH.with_name(
 GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
     "getting_started.src.html"
 )
+IMAGE_ANALYSIS_SOURCE = ANALYSIS_HELP_HTML_PATH.with_name("analysis_help.src.html")
 HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
     "help_logs_storage.src.html"
 )
@@ -347,6 +349,10 @@ def test_dropbot_tutorial_rebuilds_identically():
 
 def test_getting_started_tutorial_rebuilds_identically():
     assert is_up_to_date(GETTING_STARTED_SOURCE)
+
+
+def test_image_analysis_tutorial_rebuilds_identically():
+    assert is_up_to_date(IMAGE_ANALYSIS_SOURCE)
 
 
 def test_help_logs_storage_tutorial_rebuilds_identically():
