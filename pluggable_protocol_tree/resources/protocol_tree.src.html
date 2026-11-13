@@ -284,7 +284,7 @@ moved, copied and repeated together.</p>
       <tr><td class="lbl">Copy / Cut / Paste</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd></td><td>Copy puts the selected rows (with groups' children) on the clipboard; Cut also removes them. Paste inserts them after the last selected row, inside a selected group at its end, or at the end of the protocol when nothing is selected. Pasted rows are new rows.</td></tr>
       <tr><td class="lbl">Bulk Set Values…</td><td></td><td>One value into one or more columns of every selected step: <a href="#bulk-set">Bulk Set Values</a>.</td></tr>
       <tr><td class="lbl">Fill Pattern…</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td>A ramp or alternating values down a column: <a href="#fill-pattern">Fill Pattern</a>.</td></tr>
-      <tr><td class="lbl">Delete Selected Row(s)</td><td><kbd>Delete</kbd></td><td>Removes the selected rows, groups with everything in them. There is no confirmation, and no undo in the tree.</td></tr>
+      <tr><td class="lbl">Delete Selected Row(s)</td><td><kbd>Delete</kbd></td><td>Removes the selected rows, groups with everything in them. There is no confirmation; <a href="#quick-actions">Undo</a> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) brings them back.</td></tr>
     </tbody>
   </table>
   </div>
@@ -890,6 +890,8 @@ protocol pane has focus.</p>
       <tr><td class="icons"><i data-glyph="ICON_DELETE"></i></td><td class="lbl">Delete last step</td><td><kbd>Ctrl</kbd>+<kbd>Backspace</kbd>. Removes the protocol's last step (the deepest, last one), or a trailing empty group. To delete particular rows, select them and press <kbd>Delete</kbd>.</td></tr>
       <tr><td class="icons"><i data-glyph="playlist_add"></i></td><td class="lbl">Add group</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd>. A new empty group, placed like Add step.</td></tr>
       <tr><td class="icons"><i data-glyph="ICON_STACKED_LINE_CHART"></i></td><td class="lbl">Fill a column with a ramp or alternating pattern (Ctrl+Shift+F)</td><td><a href="#fill-pattern">Fill Pattern</a>; the key works in the tree.</td></tr>
+      <tr><td class="icons"><i data-glyph="undo"></i></td><td class="lbl">Undo &lt;edit&gt; (Ctrl+Z)</td><td>Takes back the last protocol edit the tooltip names: a cell value, added, deleted, moved or pasted rows, a bulk set, a fill pattern, electrodes or parameters committed from the device viewer. Greyed when there is nothing to undo.</td></tr>
+      <tr><td class="icons"><i data-glyph="redo"></i></td><td class="lbl">Redo &lt;edit&gt; (Ctrl+Y / Ctrl+Shift+Z)</td><td>Puts back the last undone edit. A new edit clears what is left to redo.</td></tr>
       <tr><td class="icons"><i data-glyph="unarchive"></i></td><td class="lbl">Import protocol into selected group</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>. Adds the top-level rows of a saved protocol into the one selected group. Greyed unless exactly one group is selected.</td></tr>
       <tr><td class="icons"><i data-glyph="file_open"></i></td><td class="lbl">Open Protocol</td><td><kbd>Ctrl</kbd>+<kbd>O</kbd>. Asks first if there are unsaved changes.</td></tr>
       <tr><td class="icons"><i data-glyph="save"></i></td><td class="lbl">Save Protocol</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd>. Asks for a name the first time.</td></tr>
@@ -1051,7 +1053,9 @@ electrodes off, then shows its dialogs.</p>
     show it with a header right-click.</li>
     <li><strong>Hardware columns come with their plugin.</strong> Voltage, Frequency, Force, Check Droplets, Volume Threshold,
     Video, Record, Capture, heater, magnet and fluorescence columns appear only when their plugin is loaded.</li>
-    <li><strong>No undo in the tree.</strong> Delete and Cut cannot be taken back; save first, or copy the rows elsewhere.</li>
+    <li><strong>Undo covers protocol edits only.</strong> It remembers the last 100 edits until you open or start a new
+    protocol, and does nothing while a protocol runs; edits made during a run are not recorded. While a cell is being edited,
+    <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes typing in that cell instead.</li>
     <li><strong>Next Step on the last step adds a step.</strong> Use Last Step to just go to the end.</li>
     <li><strong>Preview runs skip the hardware columns</strong>, so they say nothing about whether voltages or droplet checks
     will work.</li>

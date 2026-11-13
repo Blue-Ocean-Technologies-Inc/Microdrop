@@ -16,30 +16,52 @@ until PPT-9 deletes ``protocol_grid``; this module is the canonical
 location going forward.
 """
 
-import time
-
+# Enthought library imports.
 from pyface.qt.QtCore import Qt, QTimer
 from pyface.qt.QtGui import QAction
 from pyface.qt.QtWidgets import (
-    QApplication, QFrame, QHBoxLayout, QLabel, QMenu, QPushButton,
-    QScrollArea, QSizePolicy, QSpinBox, QToolButton, QVBoxLayout, QWidget,
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QSpinBox,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
+# Microdrop style imports.
 from microdrop_style.button_styles import (
-    BUTTON_SPACING, ICON_FONT_FAMILY, get_button_style,
+    BUTTON_SPACING,
+    ICON_FONT_FAMILY,
+    get_button_style,
 )
 from microdrop_style.colors import BLACK, GREY, SECONDARY_SHADE, WHITE
 from microdrop_style.helpers import get_complete_stylesheet, is_dark_mode
 from microdrop_style.icons.icons import (
-    ICON_FIRST, ICON_LAST, ICON_NEXT, ICON_NEXT_PHASE, ICON_PAUSE,
-    ICON_PLAY, ICON_PREVIOUS, ICON_PREVIOUS_PHASE, ICON_RESUME, ICON_STOP,
+    ICON_FIRST,
+    ICON_LAST,
+    ICON_NEXT,
+    ICON_NEXT_PHASE,
+    ICON_PAUSE,
+    ICON_PLAY,
+    ICON_PREVIOUS,
+    ICON_PREVIOUS_PHASE,
+    ICON_RESUME,
+    ICON_STOP,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.pyside_helpers import MarqueeLabel
 
 # Material Symbols ligature used while Preview Mode is armed —
 # replaces the play-arrow glyph so the button reads as a "preview"
 # action at a glance.
 ICON_PREVIEW = "video_search"
-from microdrop_utils.pyside_helpers import MarqueeLabel
 
 # 10 Hz refresh for the live (continuously-changing) time readouts in the
 # status bar. Discrete fields (counters, names) update via Traits observers
@@ -151,14 +173,21 @@ class NavigationBar(QWidget):
             self.play_phase_layout.addWidget(btn)
 
         all_buttons = [
-            self.btn_first, self.btn_prev, self.btn_play, self.btn_stop,
-            self.btn_next, self.btn_last,
-            self.btn_prev_phase, self.btn_resume, self.btn_next_phase,
+            self.btn_first,
+            self.btn_prev,
+            self.btn_play,
+            self.btn_stop,
+            self.btn_next,
+            self.btn_last,
+            self.btn_prev_phase,
+            self.btn_resume,
+            self.btn_next_phase,
         ]
         for btn in all_buttons:
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.play_phase_container.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed,
+            QSizePolicy.Expanding,
+            QSizePolicy.Fixed,
         )
 
         nav_layout.addWidget(self.btn_first)
@@ -231,34 +260,38 @@ class NavigationBar(QWidget):
         visually with the main play face.
         """
         if theme == "dark":
-            bg, fg, border = GREY['dark'], WHITE, GREY['lighter']
+            bg, fg, border = GREY["dark"], WHITE, GREY["lighter"]
             bg_disabled = BLACK
-            fg_disabled = GREY['light']
-            border_disabled = GREY['dark']
+            fg_disabled = GREY["light"]
+            border_disabled = GREY["dark"]
             preview_bg, preview_border, preview_fg = "#a68f00", "#ffd54f", BLACK
             preview_hover_bg, preview_hover_border = "#bfa200", "#ffe082"
-            normal_hover_bg = GREY['light']
+            normal_hover_bg = GREY["light"]
             normal_hover_border = SECONDARY_SHADE[300]
             normal_hover_fg = SECONDARY_SHADE[700]
         else:
-            bg, fg, border = WHITE, BLACK, GREY['light']
-            bg_disabled = GREY['light']
-            fg_disabled = GREY['dark']
-            border_disabled = GREY['lighter']
+            bg, fg, border = WHITE, BLACK, GREY["light"]
+            bg_disabled = GREY["light"]
+            fg_disabled = GREY["dark"]
+            border_disabled = GREY["lighter"]
             preview_bg, preview_border, preview_fg = "#fff59d", "#fbc02d", BLACK
             preview_hover_bg, preview_hover_border = "#ffe082", "#fb8c00"
-            normal_hover_bg = GREY['light']
+            normal_hover_bg = GREY["light"]
             normal_hover_border = SECONDARY_SHADE[300]
             normal_hover_fg = SECONDARY_SHADE[700]
 
         if self.action_preview.isChecked():
             bg, fg, border = preview_bg, preview_fg, preview_border
             hover_bg, hover_border, hover_fg = (
-                preview_hover_bg, preview_hover_border, preview_fg,
+                preview_hover_bg,
+                preview_hover_border,
+                preview_fg,
             )
         else:
             hover_bg, hover_border, hover_fg = (
-                normal_hover_bg, normal_hover_border, normal_hover_fg,
+                normal_hover_bg,
+                normal_hover_border,
+                normal_hover_fg,
             )
         return f"""
             QToolButton {{
@@ -278,7 +311,7 @@ class NavigationBar(QWidget):
                 border-color: {hover_border};
             }}
             QToolButton:pressed {{
-                background-color: {GREY['dark']};
+                background-color: {GREY["dark"]};
             }}
             QToolButton:disabled {{
                 color: {fg_disabled};
@@ -501,9 +534,13 @@ class StatusBar(QScrollArea):
         self.lbl_next_step.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         for w in (
-            self.lbl_total_time, self.lbl_step_time, self.lbl_phase_time,
-            self.lbl_step_progress, self.lbl_step_repetition,
-            self.lbl_recent_step, self.lbl_next_step,
+            self.lbl_total_time,
+            self.lbl_step_time,
+            self.lbl_phase_time,
+            self.lbl_step_progress,
+            self.lbl_step_repetition,
+            self.lbl_recent_step,
+            self.lbl_next_step,
         ):
             w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             w.setFixedHeight(20)
@@ -526,6 +563,7 @@ class StatusBar(QScrollArea):
 
         self._apply_styling()
         QApplication.styleHints().colorSchemeChanged.connect(self._apply_styling)
+
     # --- refreshers ---
 
     def _refresh_counts(self, current, total):
@@ -544,14 +582,18 @@ class StatusBar(QScrollArea):
             self.lbl_step_repetition.setText("")
             self.lbl_step_repetition.setVisible(False)
 
-    def update_phase_status(self, elapsed, active, target, current_phase_idx, total_phases):
+    def update_phase_status(
+        self, elapsed, active, target, current_phase_idx, total_phases
+    ):
         if total_phases:
             head = f"Phase {current_phase_idx}/{total_phases}"
         elif current_phase_idx:
             head = f"Phase {current_phase_idx}"
         else:
             head = "Phase"
-        self.lbl_phase_time.setText(f"{head}  {active:.1f}s/{target:.1f}s ({elapsed:.1f}s)")
+        self.lbl_phase_time.setText(
+            f"{head}  {active:.1f}s/{target:.1f}s ({elapsed:.1f}s)"
+        )
 
     def update_step_time(self, elapsed, active):
         self.lbl_step_time.setText(f"Step {active:.1f}s ({elapsed:.1f}s)")
@@ -585,10 +627,15 @@ class StatusBar(QScrollArea):
 
         label_style = f"QLabel {{ color: {text_color}; }}"
         for label in (
-            self.lbl_total_time, self.lbl_step_time, self.lbl_phase_time,
-            self.lbl_repeat_protocol, self.lbl_repeat_protocol_status,
-            self.lbl_step_progress, self.lbl_step_repetition,
-            self.lbl_recent_step, self.lbl_next_step,
+            self.lbl_total_time,
+            self.lbl_step_time,
+            self.lbl_phase_time,
+            self.lbl_repeat_protocol,
+            self.lbl_repeat_protocol_status,
+            self.lbl_step_progress,
+            self.lbl_step_repetition,
+            self.lbl_recent_step,
+            self.lbl_next_step,
         ):
             label.setStyleSheet(label_style)
         self.edit_repeat_protocol.setStyleSheet(input_style)

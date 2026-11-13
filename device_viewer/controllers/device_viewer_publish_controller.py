@@ -45,6 +45,7 @@ from ..consts import (
     FILLER_CAPACITANCE_KEY,
     LIQUID_CAPACITANCE_KEY,
     PHASE_NAVIGATION_MODE,
+    STEP_PARAM_NAMES,
     volume_estimate_publisher,
 )
 from ..models.alpha import AlphaValue
@@ -202,12 +203,7 @@ class DeviceViewerPublishController(HasTraits):
         except Exception as e:
             logger.error(e, exc_info=True)
 
-    @observe(
-        "model:routes:[duration, repetitions, repeat_duration, "
-        "trail_length, trail_overlay, soft_start, soft_terminate, "
-        "linear_repeats, lane_left, lane_right, lanes_in_out, rotation_lock, "
-        "recentre]"
-    )
+    @observe(f"model:routes:[{', '.join(STEP_PARAM_NAMES)}]")
     def execution_params_change_handler(self, event=None):
         """Free-mode state messages carry the sidebar execution params so
         the protocol widget can seed them into an inserted step — republish

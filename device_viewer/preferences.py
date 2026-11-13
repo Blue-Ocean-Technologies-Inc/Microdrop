@@ -187,6 +187,10 @@ class DeviceViewerPreferences(PreferencesHelper):
     # included.
     max_slug_width = Range(value=MAX_SLUG_WIDTH, low=1, high=21, mode="spinner")
 
+    #: The route sidebar's Auto-commit toggle: edits to the execution
+    #: settings go to the selected protocol step without a click.
+    auto_commit_to_step = Bool(True)
+
     #: Plate gap the live volume readout multiplies the covered area by, µm.
     gap_height_um = Range(
         value=DEFAULT_GAP_HEIGHT_UM,

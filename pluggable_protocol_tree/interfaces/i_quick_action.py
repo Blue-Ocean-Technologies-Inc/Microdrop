@@ -23,22 +23,28 @@ selection, and is_running flag. Contributions stay Qt-free where they
 can by delegating Qt work to pane helper methods.
 """
 
+# Enthought library imports.
 from traits.api import Int, Interface, Str
 
 
 class IQuickAction(Interface):
     action_id = Str(
         desc="Stable identifier (e.g. 'add_step'). Used in logging, "
-             "tests, and shortcut-conflict messages.")
+        "tests, and shortcut-conflict messages."
+    )
     icon_text = Str(
         desc="Material-symbol name rendered as the button's text under "
-             "ICON_FONT_FAMILY (e.g. 'add', 'delete', 'playlist_add').")
+        "ICON_FONT_FAMILY (e.g. 'add', 'delete', 'playlist_add')."
+    )
     tooltip = Str(desc="Button tooltip.")
-    priority = Int(50,
-        desc="Lower runs first; controls left-to-right order in the bar.")
-    shortcut = Str(default_value="",
+    priority = Int(
+        50, desc="Lower runs first; controls left-to-right order in the bar."
+    )
+    shortcut = Str(
+        default_value="",
         desc="QKeySequence string ('R', 'Ctrl+S', ...). Empty = no "
-             "shortcut. Registered widget-scoped to the pane.")
+        "shortcut. Registered widget-scoped to the pane.",
+    )
 
     def traits_init(self):
         # Advertise the shortcut in the tooltip; actions with no shortcut
@@ -55,3 +61,8 @@ class IQuickAction(Interface):
         the controller on selection / protocol-running changes.
         Default: always True."""
         return True
+
+    def tooltip_for(self, ctx) -> str:
+        """Return the button's tooltip, refreshed alongside ``is_enabled``
+        (e.g. "Undo Delete Step"). Default: the static ``tooltip``."""
+        return self.tooltip

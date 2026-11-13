@@ -48,6 +48,7 @@ from video_protocol_controls.plugin import VideoProtocolControlsPlugin
 from volume_threshold_protocol_controls.plugin import (
     VolumeThresholdProtocolControlsPlugin,
 )
+from zone_protocol_controls.plugin import ZoneProtocolControlsPlugin
 
 # Microdrop utils imports.
 from microdrop_utils.broker_server_helpers import (
@@ -111,6 +112,7 @@ FRONTEND_PLUGINS = [
     ProtocolQuickActionToolsPlugin,
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
+    ZoneProtocolControlsPlugin,
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [

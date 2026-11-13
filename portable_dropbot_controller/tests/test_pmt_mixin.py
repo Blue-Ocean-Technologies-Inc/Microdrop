@@ -36,6 +36,7 @@ from portable_dropbot_controller.consts import (
     PMT_RF_OHMS,
     PMT_SPOT_SLOTS,
     PMT_STREAM_AVG,
+    PMT_STREAM_DATA_CMD,
     PMT_STREAM_OSR,
     PmtAcquireDone,
     PmtAdcUpdated,
@@ -156,10 +157,10 @@ class _Sig:
                 self.fail_starts -= 1
                 return None
             # Deliver two frames the way the RX thread would, then reply.
-            cb = self.uart.subscribers.get(mod.DroSIGCmd.CMD_PMT_STREAM_DATA)
+            cb = self.uart.subscribers.get(PMT_STREAM_DATA_CMD)
             if cb is not None:
-                cb(mod.DroSIGCmd.CMD_PMT_STREAM_DATA, _frame(0, [10, 20]))
-                cb(mod.DroSIGCmd.CMD_PMT_STREAM_DATA, _frame(1, [30, 40]))
+                cb(PMT_STREAM_DATA_CMD, _frame(0, [10, 20]))
+                cb(PMT_STREAM_DATA_CMD, _frame(1, [30, 40]))
             return self.stream_start_reply
         return object()
 

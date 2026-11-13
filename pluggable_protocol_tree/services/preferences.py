@@ -94,6 +94,10 @@ class ProtocolPreferences(PreferencesHelper):
     #: notice's "Do not show again" checkbox.
     suppress_unused_column_hooks_information = Bool(False)
 
+    #: Programmatic preference (no Settings-dialog item): the AutoSave
+    #: glyph in the app status bar (#966). On by default.
+    protocol_autosave_enabled = Bool(True)
+
     PROTOCOL_REPO_DIR = Directory()
 
     # Programmatic preference (no Settings-dialog item, like

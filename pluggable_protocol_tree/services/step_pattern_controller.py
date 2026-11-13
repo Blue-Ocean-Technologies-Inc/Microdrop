@@ -72,7 +72,8 @@ class StepPatternController(HasTraits):
             return []
 
         try:
-            return self._apply(model, step_paths)
+            with self.manager.named_edit("Fill Pattern"):
+                return self._apply(model, step_paths)
         except Exception as exc:
             logger.exception(f"Fill Pattern failed: {exc}")
             error(parent=parent, title="Fill Pattern", message=f"{exc}")

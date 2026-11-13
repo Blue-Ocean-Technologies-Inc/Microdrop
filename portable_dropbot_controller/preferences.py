@@ -10,7 +10,7 @@
 
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
-from traits.api import Dict, Enum, Int, Property, Str
+from traits.api import Dict, Enum, Float, Int, Property, Str
 
 # Microdrop package imports.
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
@@ -29,6 +29,8 @@ from .consts import (
     DEFAULT_LIGHT_INTENSITY_KEY,
     DEFAULT_VOLTAGE,
     DEFAULT_VOLTAGE_KEY,
+    DROPLET_DETECTION_THRESHOLD_PF,
+    DROPLET_DETECTION_THRESHOLD_PF_KEY,
     FAN_BOARD_KEY,
     FAN_BOARDS,
     PORT_HINT_KEY,
@@ -66,6 +68,9 @@ class PortableDropbotPreferences(PreferencesHelper):
         *CHIP_DETECT_RULES,
         desc="Which chip_on_pad contact masks count as a chip on the pad.",
     )
+    droplet_detection_threshold_pf = Float(
+        desc="Default capacitance (pF) a channel must read to count as liquid."
+    )
 
     preferences_name_map = Property(Dict)
 
@@ -91,6 +96,13 @@ class PortableDropbotPreferences(PreferencesHelper):
 
     def _chip_detect_rule_default(self):
         return str(app_globals.get(CHIP_DETECT_RULE_KEY, DEFAULT_CHIP_DETECT_RULE))
+
+    def _droplet_detection_threshold_pf_default(self):
+        return float(
+            app_globals.get(
+                DROPLET_DETECTION_THRESHOLD_PF_KEY, DROPLET_DETECTION_THRESHOLD_PF
+            )
+        )
 
     def _get_preferences_name_map(self):
         return {pref: getattr(self, pref) for pref in preferences_names}
