@@ -27,7 +27,7 @@ from traits.api import List, observe
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
-from user_help_plugin.consts import TUTORIALS, TutorialEntry
+from user_help_plugin.consts import TUTORIAL_ORDER_REFERENCE, TUTORIALS, TutorialEntry
 
 # Local imports.
 from .consts import ACTOR_TOPIC_DICT, PKG, SHORTCUTS_TUTORIAL_HTML_PATH, PKG_name
@@ -112,6 +112,7 @@ class MicrodropPlugin(Plugin):
             TutorialEntry(
                 title="Shortcuts, Gamepad & Touch Assist Tutorial",
                 path=SHORTCUTS_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_REFERENCE,
             )
         ]
 
