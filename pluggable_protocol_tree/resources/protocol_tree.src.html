@@ -58,15 +58,6 @@ table.mini td.in { padding-left: 22px; }
 .nb-confirm { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 6px 0; background: var(--surface); max-width: 46ch; }
 .nb-confirm[hidden] { display: none; }
 .nb-status { font-family: "Cascadia Mono", Consolas, monospace; font-size: .8rem; color: var(--muted); margin: 4px 0; }
-.dlg { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 10px 12px; max-width: 420px; font-size: .86rem; }
-.dlg .dlg-title { font-weight: 700; margin-bottom: 6px; }
-.dlg .dlg-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
-.dlg .dlg-row .box { width: 13px; height: 13px; border: 1px solid var(--muted); border-radius: 2px; display: inline-block; }
-.dlg .dlg-row .box.on { background: var(--accent); border-color: var(--accent); }
-.dlg .dlg-row .val { margin-left: auto; min-width: 7em; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); }
-.dlg .dlg-row .val.on { color: var(--ink); }
-.dlg .dlg-btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
-.dlg .dlg-btns span { border: 1px solid var(--line); border-radius: 4px; padding: 2px 12px; }
 </style>
 
 <header data-hero>
@@ -75,8 +66,7 @@ table.mini td.in { padding-left: 22px; }
   repeat them, set what each step does, and then run it: play, pause, step through, stop and recover when something goes
   wrong.</p>
   <p>Start with the short walkthrough. The rest is a reference: every button, column, timer and dialog, with what it is,
-  when to use it, how to read it and the value MicroDrop starts with. The short clips are real recordings and loop while
-  they are on screen; the three demos are live, change their settings and watch.</p>
+  when to use it, how to read it and the value MicroDrop starts with. The short clips loop while they are on screen. The three demos are live: change their settings and watch.</p>
 </header>
 
 <!-- ============================================================ -->
@@ -226,6 +216,15 @@ moved, copied and repeated together.</p>
   <div data-read><p>Its children are indented under it and numbered <em>1.1</em>, <em>1.2</em>… On the timeline, the steps
   of each group share a tint.</p></div>
   <div data-typical><p>A new group is called <em>Group</em>, Reps 1, and is empty until you add or fold steps into it.</p></div>
+  <figure class="clip">
+  <video data-clip data-simulated="Fold into Group, rename, Reps 3, Unfold Group (sim_toolkit shots/pt_fold_rename_unfold.py)" muted loop playsinline controls preload="metadata" width="548" height="384" poster="protocol_tree_media/fold-rename-unfold.webp" aria-label="Simulated clip: steps 2 and 3 are selected and folded into a group, the group is opened, renamed Wash and given Reps 3, then unfolded so the two steps are back where they were">
+  <source src="protocol_tree_media/fold-rename-unfold.webm" type="video/webm">
+  </video>
+  <figcaption>Steps 2 and 3 selected,
+  <kbd>Ctrl</kbd>+<kbd>G</kbd>: they become 2.1 and 2.2 of a new, folded group. Its arrow opens it; a double-click on its
+  Name lets you type <em>Wash</em>, one on its <span class="ui">Reps</span> 3 (the Reps column is shown here). Then
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> unfolds it: the two steps are back, selected.</figcaption>
+  </figure>
 </section>
 
 <section data-term id="id-type" data-where="ID and Type columns">
@@ -259,11 +258,16 @@ moved, copied and repeated together.</p>
   <div data-read><p>While the dialog is up, the step and phase timers are frozen. A step left parked can only be ended with
   <i data-glyph="ICON_STOP" data-inline></i> Stop.</p></div>
   <div data-typical><p>Empty: no pause.</p></div>
+  <figure class="still">
+  <div class="still-wrap"><img data-media data-simulated="Message Prompt dialog (sim_toolkit shots/pt_dialog_stills.py)" src="protocol_tree_media/message-prompt.webp" width="416" height="357" alt="Simulated still of the Message Prompt dialog: the step's message, Pipette 2 µL of buffer onto the left reservoir, then click Continue, with the buttons Stay Paused and Continue"></div>
+  <figcaption>The dialog a step with a
+  Message opens; the text is the step's own.</figcaption>
+  </figure>
 </section>
 
 <section data-term id="tree-edit" data-where="tree right-click menu and keys">
   <h3>Add, insert, copy, move and delete rows</h3>
-  <p>Everything the tree's right-click menu does, and its keys.</p>
+  <p>Everything the tree's right-click menu does, its keys, and moving rows by dragging them.</p>
   <figure class="clip">
   <video data-clip muted loop playsinline controls preload="metadata" width="548" height="370" poster="protocol_tree_media/menu-add-insert.webp" aria-label="Screen recording: Add Step from the tree's right-click menu adds a step at the end; Insert Step Above adds one above the right-clicked row">
   <source src="protocol_tree_media/menu-add-insert.webm" type="video/webm">
@@ -271,6 +275,14 @@ moved, copied and repeated together.</p>
   <figcaption><strong>Real clip (two moments joined).</strong> The menu, top to bottom as in the table. <span class="ui">Add
   Step</span> puts an empty step 4 at the end. Later, right-clicking step 3 ▸ <span class="ui">Insert Step Above</span>
   puts an empty step above it, and the step with two routes becomes step 4.</figcaption>
+  </figure>
+  <figure class="clip">
+  <video data-clip data-simulated="Add Group and Insert Group Above from the tree menu (sim_toolkit shots/pt_menu_add_group.py)" muted loop playsinline controls preload="metadata" width="548" height="384" poster="protocol_tree_media/menu-add-group.webp" aria-label="Simulated clip: right-click on step 2, Add Group adds an empty group at the end; right-click on step 3, Insert Group Above puts an empty group above it and selects it">
+  <source src="protocol_tree_media/menu-add-group.webm" type="video/webm">
+  </video>
+  <figcaption>The same menu for groups.
+  Right-click step 2 ▸ <span class="ui">Add Group</span>: an empty group 5 at the end of the protocol. Right-click step 3
+  ▸ <span class="ui">Insert Group Above</span>: a new group 3 right above it, selected; the steps below renumber.</figcaption>
   </figure>
   <div class="table-wrap">
   <table class="small">
@@ -283,6 +295,7 @@ moved, copied and repeated together.</p>
       <tr><td class="lbl">Insert Group Above</td><td></td><td>A new group directly above that row.</td></tr>
       <tr><td class="lbl">Fold into Group</td><td><kbd>Ctrl</kbd>+<kbd>G</kbd></td><td>Wraps the selected rows in a new group called <em>Group</em>, where the first of them was, and selects the group. The rows must share one parent; otherwise it is greyed.</td></tr>
       <tr><td class="lbl">Unfold Group</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td><td>Dissolves the selected group (or the group of the selected step) and puts its rows where it was. Greyed for top-level steps or when the selection spans two groups.</td></tr>
+      <tr><td class="lbl">(drag the rows)</td><td></td><td>Moves the selected rows onto a group (at its end) or between two rows: see below the table.</td></tr>
       <tr><td class="lbl">Copy / Cut / Paste</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd></td><td>Copy puts the selected rows (with groups' children) on the clipboard; Cut also removes them. Paste inserts them after the last selected row, inside a selected group at its end, or at the end of the protocol when nothing is selected. Pasted rows are new rows.</td></tr>
       <tr><td class="lbl">Bulk Set Values…</td><td></td><td>One value into one or more columns of every selected step: <a href="#bulk-set">Bulk Set Values</a>.</td></tr>
       <tr><td class="lbl">Fill Pattern…</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td>A ramp or alternating values down a column: <a href="#fill-pattern">Fill Pattern</a>.</td></tr>
@@ -290,8 +303,35 @@ moved, copied and repeated together.</p>
     </tbody>
   </table>
   </div>
-  <p>The menu does not open while a protocol runs, and the keys above do nothing then: the tree's structure is locked
-  during a run.</p>
+  <figure class="clip">
+  <video data-clip data-simulated="Copy, paste below a step, cut, paste into a group (sim_toolkit shots/pt_copy_cut_paste.py)" muted loop playsinline controls preload="metadata" width="548" height="384" poster="protocol_tree_media/copy-cut-paste.webp" aria-label="Simulated clip: step 1 is copied and pasted below step 3; then the step with two routes is cut and pasted into the group at the end">
+  <source src="protocol_tree_media/copy-cut-paste.webm" type="video/webm">
+  </video>
+  <figcaption>Step 1 clicked,
+  <kbd>Ctrl</kbd>+<kbd>C</kbd>; step 3 clicked, <kbd>Ctrl</kbd>+<kbd>V</kbd>: the copy (6 electrodes) lands below it as step 4.
+  The step with two routes clicked, <kbd>Ctrl</kbd>+<kbd>X</kbd>: it is gone. The group clicked, <kbd>Ctrl</kbd>+<kbd>V</kbd>:
+  it comes back as the group's last step, 5.2.</figcaption>
+  </figure>
+  <p><strong>Drag rows to move them.</strong> Select one or more rows and drag them with the mouse:</p>
+  <ul class="uses">
+    <li>Onto a group: they become its last rows. The cell under the pointer gets a frame in the highlight colour.</li>
+    <li>Between two rows, at any level: they are inserted there. A line in the highlight colour shows the spot.</li>
+    <li>Hold them over a folded group for a moment and it opens, so you can drop between its rows.</li>
+    <li>Where they cannot go (a group into itself, or rows back where they already are), the pointer shows the forbidden
+    sign and the drop does nothing.</li>
+  </ul>
+  <p>The moved rows stay selected and the IDs renumber. One drop is one edit: <a href="#quick-actions">Undo</a> names it
+  <em>Move Step</em>, <em>Move Steps</em>, <em>Move Group</em> or <em>Move Rows</em>.</p>
+  <figure class="clip">
+  <video data-clip data-simulated="Drag a step into a group and out again (sim_toolkit shots/pt_drag_into_group.py)" muted loop playsinline controls preload="metadata" width="548" height="384" poster="protocol_tree_media/drag-into-group.webp" aria-label="Simulated clip: step 2 is dragged onto the group row and becomes its last step, 2.3; then it is dragged back to just below step 1 and is step 2 again">
+  <source src="protocol_tree_media/drag-into-group.webm" type="video/webm">
+  </video>
+  <figcaption>Step 2 dragged onto the
+  group: a frame marks the drop, and it becomes the group's last step, 2.3. Dragged back to the lower edge of step 1: a
+  line marks the gap, and it is step 2 again. (In the app a picture of the dragged row also follows the pointer.)</figcaption>
+  </figure>
+  <p>The menu does not open while a protocol runs, and the keys and dragging do nothing then: the tree's structure is
+  locked during a run.</p>
 </section>
 
 <section data-term id="build-by-next" data-where="Next Step on the last step">
@@ -543,20 +583,14 @@ loaded, and several are hidden until you show them.</p>
   <p>Read-only columns (ID, Type, Electrodes, Routes, Force) are not offered. Changing Route Reps Dur this way asks the
   switch question once for all the rows.</p>
   </div>
-  <figure class="demo" aria-label="Schematic of the Bulk Set Values window">
-    <div class="dlg" role="img" aria-label="Bulk Set Values window: Voltage ticked with 120, Duration not ticked, Apply to all nested groups not ticked">
-      <div class="dlg-title">Bulk Set Values</div>
-      <div>Tick the parameters to set and choose their values. They are applied to every selected step.</div>
-      <div class="dlg-row"><span class="box"></span>Name<span class="val">Step</span></div>
-      <div class="dlg-row"><span class="box"></span>Reps<span class="val">1</span></div>
-      <div class="dlg-row"><span class="box"></span>Duration (s)<span class="val">1.00</span></div>
-      <div class="dlg-row"><span class="box on"></span>Voltage (V)<span class="val on">120</span></div>
-      <div class="dlg-row"><span class="box"></span>Video<span class="val">Off</span></div>
-      <div class="dlg-row" style="margin-top:8px"><span class="box"></span>Apply to all nested groups</div>
-      <div class="dlg-btns"><span>OK</span><span>Cancel</span></div>
-    </div>
-    <figcaption>Schematic (a few of the rows; the real list has one per settable column). No recording of this window
-    exists yet.</figcaption>
+  <figure class="clip">
+  <video data-clip data-simulated="Bulk Set Values with Apply to all nested groups (sim_toolkit shots/pt_bulk_set_nested.py)" muted loop playsinline controls preload="metadata" width="700" height="580" poster="protocol_tree_media/bulk-set-nested.webp" aria-label="Simulated clip: a group holding a step and a nested group, and a step after it, are selected; Bulk Set Values is opened from the right-click menu, Voltage is ticked and set to 120, Apply to all nested groups is ticked, OK; every step in both groups and the selected step now read 120">
+  <source src="protocol_tree_media/bulk-set-nested.webm" type="video/webm">
+  </video>
+  <figcaption>Group 2 (with group 2.2
+  inside it) and step 3 selected, right-click ▸ <span class="ui">Bulk Set Values…</span>. Scrolled down to
+  <span class="ui">Voltage (V)</span>, ticked, 140 replaced by 120, <span class="ui">Apply to all nested groups</span>
+  ticked, OK: 2.1, 2.2.1, 2.2.2 and 3 now read 120; step 1, not selected, keeps 140.</figcaption>
   </figure>
   </div>
 </section>
@@ -932,6 +966,18 @@ electrodes off, then shows its dialogs.</p>
   <div data-read><p>Expand the details for the column ids, or the electrodes and the step IDs that use them.</p></div>
   <div data-when><p>Errors: load the missing plugin (Manage Plugins) and open again, unless you mean to drop those values.
   Warnings: load the device the protocol was written for, or check the steps listed before running.</p></div>
+  <div class="two">
+  <figure class="still">
+  <div class="still-wrap"><img data-media data-simulated="Protocol has errors, details open (sim_toolkit shots/pt_dialog_stills.py)" src="protocol_tree_media/load-errors.webp" width="416" height="611" alt="Simulated still of the Protocol has errors dialog: 8 columns in this protocol have no matching plugin and their values will be dropped on load; the details list the column ids; Cancel and OK"></div>
+  <figcaption>A protocol saved on a
+  Portable DropBot rig, opened where its plugin is not loaded: eight column ids, details open.</figcaption>
+  </figure>
+  <figure class="still">
+  <div class="still-wrap"><img data-media data-simulated="Protocol warnings, details open (sim_toolkit shots/pt_dialog_stills.py)" src="protocol_tree_media/load-warnings.webp" width="416" height="665" alt="Simulated still of the Protocol warnings dialog: two electrodes do not exist on the current device and three map to a different channel; the details list the electrodes with their steps and channels; Cancel and Proceed anyway"></div>
+  <figcaption>A protocol written for
+  another chip: electrodes the 90-pin array lacks (with the steps that use them) and electrodes on other channels.</figcaption>
+  </figure>
+  </div>
 </section>
 
 <section data-term id="run-error" data-where="during a run">
@@ -971,6 +1017,11 @@ electrodes off, then shows its dialogs.</p>
     </tbody>
   </table>
   </div>
+  <figure class="still">
+  <div class="still-wrap"><img data-media data-simulated="Route-rep time expired dialog (sim_toolkit shots/pt_dialog_stills.py)" src="protocol_tree_media/route-rep-expired.webp" width="584" height="512" alt="Simulated still of the Route-rep time expired dialog explaining that the route-rep duration has expired before the step finished, with the buttons Pause, Skip and Complete"></div>
+  <figcaption><em>Route-rep time
+  expired</em>: Pause, Skip or Complete.</figcaption>
+  </figure>
 </section>
 
 <section data-term id="other-dialogs" data-where="before and after runs">
@@ -984,7 +1035,23 @@ electrodes off, then shows its dialogs.</p>
     <li><em>Switch to Repeat Duration Control</em> / <em>Switch to Route Reps Control</em>: see
     <a href="#route-reps-dur">Route Reps Dur</a>.</li>
     <li><em>Run Summary Failed</em>: the report could not be built; the run's data files were still saved.</li>
+    <li><em>Protocol Columns Not Used</em>: at Play, the columns no step uses, whose start and end actions are skipped (see
+    <a href="#play">Starting a run</a>).</li>
+    <li><em>Video Recording In Progress</em>: at Play, while a recording is going (see <a href="#video-record">Video and
+    Record</a>).</li>
   </ul>
+  <div class="two">
+  <figure class="still">
+  <div class="still-wrap"><img data-media data-simulated="Protocol Columns Not Used notice (sim_toolkit shots/pt_dialog_stills.py)" src="protocol_tree_media/columns-not-used.webp" width="474" height="428" alt="Simulated still of the Protocol Columns Not Used notice listing Video, Record and Capture, with a Do not show again box and OK"></div>
+  <figcaption><em>Protocol Columns Not
+  Used</em> for a protocol whose steps use none of Video, Record and Capture.</figcaption>
+  </figure>
+  <figure class="still">
+  <div class="still-wrap"><img data-media data-simulated="Video Recording In Progress question (sim_toolkit shots/pt_dialog_stills.py)" src="protocol_tree_media/video-recording.webp" width="416" height="399" alt="Simulated still of the Video Recording In Progress question: starting the protocol will end the current recording; Cancel and Continue"></div>
+  <figcaption><em>Video Recording In
+  Progress</em>.</figcaption>
+  </figure>
+  </div>
 </section>
 </section>
 
