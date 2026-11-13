@@ -48,6 +48,8 @@ from examples.tutorials.new_tutorial import (
     scaffold_tutorial,
 )
 from image_viewer.plugin import ImageViewerPlugin
+from microdrop_application.consts import SHORTCUTS_TUTORIAL_HTML_PATH
+from microdrop_application.plugin import MicrodropPlugin
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from user_help_plugin.consts import GETTING_STARTED_TUTORIAL_HTML_PATH
@@ -66,6 +68,7 @@ GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
 )
+SHORTCUTS_SOURCE = SHORTCUTS_TUTORIAL_HTML_PATH.with_name("shortcuts.src.html")
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
 #: A plugin.py with no tutorials yet, as new_tutorial.py first meets it.
@@ -255,6 +258,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         DropbotStatusAndControlsPlugin(),
         PluggableProtocolTreePlugin(),
         DeviceViewerPlugin(),
+        MicrodropPlugin(),
     ]
 
     # Added, not started: contributions resolve without the plugins running.
@@ -274,6 +278,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Getting Started with MicroDrop",
         "Image Analysis Tutorial",
         "Protocol Tree Tutorial",
+        "Shortcuts, Gamepad & Touch Assist Tutorial",
     ]
 
     for entry in entries:
@@ -297,6 +302,10 @@ def test_getting_started_tutorial_rebuilds_identically():
 
 def test_protocol_tree_tutorial_rebuilds_identically():
     assert is_up_to_date(PROTOCOL_TREE_SOURCE)
+
+
+def test_shortcuts_tutorial_rebuilds_identically():
+    assert is_up_to_date(SHORTCUTS_SOURCE)
 
 
 def _clip_page(clip="t_media/a.webm", poster=""):
