@@ -12,7 +12,7 @@
 from pathlib import Path
 
 # Enthought library imports.
-from traits.api import HasTraits, Instance, Str
+from traits.api import HasTraits, Instance, Int, Str
 
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
@@ -47,6 +47,24 @@ SUPPORT_EMAIL = "support@sci-bots.com"
 # in this repo or another, import only this module.
 TUTORIALS = f"{PKG}.tutorials"
 
+# Help > Tutorials follows a learning path, one section per hundred: start
+# here, then the device, protocols, hardware, analysis, managing the app and
+# reference pages. A contributor sets ``order=<SECTION> + offset`` to slot an
+# entry within its section; the menu sorts by order, then title, and puts a
+# separator between sections.
+TUTORIAL_SECTION_SPAN = 100
+TUTORIAL_ORDER_START = 0
+TUTORIAL_ORDER_DEVICE = 100
+TUTORIAL_ORDER_PROTOCOLS = 200
+TUTORIAL_ORDER_HARDWARE = 300
+TUTORIAL_ORDER_ANALYSIS = 400
+TUTORIAL_ORDER_MANAGEMENT = 500
+TUTORIAL_ORDER_REFERENCE = 600
+
+#: Entries that set no order: a section of their own after every built-in
+#: one, alphabetically.
+TUTORIAL_ORDER_DEFAULT = 1000
+
 
 class TutorialEntry(HasTraits):
     """One Help > Tutorials entry: a self-contained, offline HTML page."""
@@ -56,3 +74,7 @@ class TutorialEntry(HasTraits):
 
     #: The built page (see examples/tutorials/README.md).
     path = Instance(Path)
+
+    #: Place in the menu, lower first: a ``TUTORIAL_ORDER_*`` section plus an
+    #: offset. Entries that share an order are sorted by title.
+    order = Int(TUTORIAL_ORDER_DEFAULT)
