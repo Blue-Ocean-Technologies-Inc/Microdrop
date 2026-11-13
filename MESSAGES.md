@@ -394,6 +394,20 @@ The portable answers `DETECT_DROPLETS` with the driver's own drop finder, `DropB
 - `on_detect_droplets_request` reads the threshold key, sets it as the session's default drop threshold, runs `find_drops` through `_proxy_call` and replies with its sorted liquid channels.
 - `find_drops` never actuates an electrode and leaves V/F alone; it switches HV on for the scan only when HV is off and the pads are engaged, and back off afterwards. With HV off and no device on the pads it refuses, and the reply's `error` carries the driver's reason; a scan with no readings at all also replies with an error.
 
+### Protocol Zone Target column: first zone region with / without a droplet (#965)
+
+A step whose Zone Target cell names a zone type resolves, at step start, the first region of that type meeting the step's Zone Criterion (Has Droplet / No Droplet) and actuates its electrodes with the step's own. No new topics: it reuses the shared droplet-detection round trip, so the DropBot, the portable and the mock answer it unchanged.
+
+**Inputs**
+- `ZONES_KEY` (app_globals, owned by `device_viewer`) — the zones snapshot `{zone_id: {"name", "color", "regions": [{"id", "electrode_ids", "channels"}]}}`; region order (the zone manager's stored order) is the check order, listed in the Zone Target cell's tooltip.
+- `electrode_to_channel` (protocol metadata, `ctx.protocol.scratch`) — the same map RoutesHandler actuates through.
+
+**Flow (`zone_protocol_controls/protocol_columns/zone_target_column.py`, `ZoneTargetHandler.on_pre_step`, priority 25)**
+- `DETECT_DROPLETS` — JSON list: the union of the zone type's region channels. Reply awaited on `DROPLETS_DETECTED` (`ctx.wait_for`, Protocol Settings ack wait, default 12 s).
+- The first region with a detected channel (Has Droplet) or with none (No Droplet) wins (`zone_selection.select_zone_region`); its electrode ids go into the step scratch under `EXTRA_STATIC_ELECTRODES_KEY`, which RoutesHandler unions into every phase's static electrodes — so they reach `ELECTRODES_STATE_CHANGE` and `PROTOCOL_TREE_DISPLAY_STATE` like the step's own electrodes. The row is not modified.
+- `PROTOCOL_LOGGING_DATA_CONTRIBUTION` — `{"Zone Target", "Zone Target Criterion", "Zone Target Region"}` (strings, stored in the report's data files, not charted).
+- A missing zone type, a failed or timed-out detection, or no matching region raises, failing the step through the executor's protocol-error path. A step with an empty Zone Target publishes nothing; preview mode skips the column.
+
 ### Portable DropBot protocol columns: magnet + heater step execution
 
 The portable's built-in magnet and heater join a protocol through `portable_dropbot_protocol_controls` (one plugin for every portable peripheral, since they all sit behind the one backend). Each column is a PPT-11 compound column: a "set" checkbox gates the step, and a checked step publishes one request and blocks on one ack, mirroring the standalone magnet/heater plugins.
