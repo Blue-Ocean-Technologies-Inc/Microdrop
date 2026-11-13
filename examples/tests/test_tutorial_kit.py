@@ -28,7 +28,10 @@ from apptools.preferences import package_globals
 from envisage.api import Application
 
 # Microdrop package imports.
-from device_viewer.consts import CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH
+from device_viewer.consts import (
+    CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
+    ZONES_TUTORIAL_HTML_PATH,
+)
 from device_viewer.plugin import DeviceViewerPlugin
 from dropbot_status_and_controls.consts import DROPBOT_STATUS_TUTORIAL_HTML_PATH
 from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
@@ -66,6 +69,7 @@ GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
 )
+ZONES_SOURCE = ZONES_TUTORIAL_HTML_PATH.with_name("zones.src.html")
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
 #: A plugin.py with no tutorials yet, as new_tutorial.py first meets it.
@@ -274,6 +278,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Getting Started with MicroDrop",
         "Image Analysis Tutorial",
         "Protocol Tree Tutorial",
+        "Zones Tutorial",
     ]
 
     for entry in entries:
@@ -297,6 +302,10 @@ def test_getting_started_tutorial_rebuilds_identically():
 
 def test_protocol_tree_tutorial_rebuilds_identically():
     assert is_up_to_date(PROTOCOL_TREE_SOURCE)
+
+
+def test_zones_tutorial_rebuilds_identically():
+    assert is_up_to_date(ZONES_SOURCE)
 
 
 def _clip_page(clip="t_media/a.webm", poster=""):
