@@ -355,14 +355,13 @@ def test_restore_stays_off_the_undo_stack(controller, model, cameras):
     _switch(cameras, CAM_B)
     _set_live(model, REFERENCE_B, SCENE_B)
     stack = model.undo_manager.active_stack
-    entries_before = len(stack._stack)
-    undo_name_before = stack.undo_name
 
     _switch(cameras, CAM_A)
 
+    # The switch clears the stack; the restore after it adds nothing.
     assert _live(model) == (_tuples(REFERENCE_A), _tuples(SCENE_A))
-    assert len(stack._stack) == entries_before
-    assert stack.undo_name == undo_name_before
+    assert stack._stack == []
+    assert stack.undo_name == ""
 
 
 def test_undo_after_a_restore_cannot_hand_over_another_cameras_alignment(
@@ -820,3 +819,33 @@ def test_records_keep_their_devices_scene_rect(controller, model, cameras):
     record = controller.preset_store.last_used_for(CAM_A, "2x3device")
 
     assert record.device_scene_rect == [-2.0, -2.0, 104.0, 84.0]
+
+
+def test_a_camera_switch_clears_the_undo_stack(controller, model, cameras):
+    DeviceViewerPublishController(model=model)
+    _take_charge(controller, model, cameras)
+    _switch(cameras, CAM_B)
+    _set_live(model, REFERENCE_B, SCENE_B)
+    _switch(cameras, CAM_A)
+
+    # Camera A's edit is on the stack before the switch to B...
+    _set_live(model, REFERENCE_B, SCENE_A)
+    _switch(cameras, CAM_B)
+    live = _live(model)
+
+    # ...but cannot be undone onto camera B.
+    model.undo_manager.undo()
+
+    assert _live(model) == live
+    assert controller.preset_store.last_used_for(CAM_B, "2x3device").scene_quad == (
+        _scene(SCENE_B)
+    )
+    assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
+        _scene(SCENE_A)
+    )
+
+    _switch(cameras, CAM_A)
+
+    assert controller.preset_store.last_used_for(CAM_B, "2x3device").scene_quad == (
+        _scene(SCENE_B)
+    )

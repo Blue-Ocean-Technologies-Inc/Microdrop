@@ -1269,6 +1269,11 @@ class CameraAlignmentWorkflowController(HasTraits):
         if camera_switched:
             self._remember_live_alignment()
 
+            # Like a device load (the pane clears the stack then): edits made
+            # under the outgoing camera must not be undone onto the new one.
+            if self.model.undo_manager is not None:
+                self.model.undo_manager.active_stack.clear()
+
         self._stop_glide()
         self._set_live_setup(camera, device_key, owned=False)
         self._restore_live_alignment(saved_frame=camera_switched)
