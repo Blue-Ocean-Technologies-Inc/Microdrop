@@ -1,0 +1,835 @@
+<!--
+  (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>Plugin Management Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+ol.howto { padding-left: 1.4em; max-width: 75ch; }
+ol.howto li { margin: 5px 0; }
+ol.steps.stack li.step { grid-template-columns: minmax(0, 1fr); }
+.table-wrap { overflow-x: auto; }
+figure.still { margin: 10px 0 4px; }
+figure.still figcaption { font-size: .88rem; color: var(--muted); margin-top: 4px; max-width: 75ch; }
+.still-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+.still-wrap img { display: block; max-width: 100%; height: auto; border-radius: 6px; }
+.still-wrap svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+.still-wrap .ann-n { fill: #ffd400; stroke: #1d2328; stroke-width: 2; }
+.still-wrap .ann-nt { font: 700 14px "Segoe UI", system-ui, sans-serif; fill: #1d2328; text-anchor: middle; }
+ol.legend { padding-left: 1.6em; margin: 4px 0; font-size: .9rem; }
+ol.legend li { margin: 2px 0; }
+.mock { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 10px 12px; font-size: .88rem; }
+.mock .mock-title { font-weight: 700; margin-bottom: 6px; }
+.mock .hint { color: var(--muted); margin: 0 0 6px; }
+.mock table { border-collapse: collapse; width: 100%; }
+.mock td, .mock th { padding: 3px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.mock th { color: var(--muted); font-weight: 600; }
+.mock td.c { text-align: center; width: 4.5em; }
+.mock .btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.mock button, .mock select { font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 2px 10px; cursor: pointer; }
+.mock button.ic-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; padding: 0; }
+.mock button.ic-btn svg.ic { width: 20px; height: 20px; fill: currentColor; }
+.mock button.ic-btn.ok { color: var(--ok); }
+.mock button.ic-btn.info { color: var(--blue); }
+.mock button.ic-btn.off { color: var(--muted); opacity: .5; cursor: default; }
+.mock tr.changed td { background: var(--accent-soft); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.app-now h5 { margin: 8px 0 2px; font-size: .84rem; color: var(--muted); }
+.app-now ul { margin: 0; padding-left: 1.2em; }
+.app-now li.new { color: var(--ok); font-weight: 600; }
+.app-now li.gone { color: var(--muted); text-decoration: line-through; }
+.app-now li.kept { color: var(--muted); font-style: italic; }
+.dlg { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 8px 10px; margin: 8px 0; max-width: 52ch; font-size: .86rem; }
+.dlg[hidden] { display: none; }
+.dlg .dlg-title { font-weight: 700; margin-bottom: 4px; }
+.dlg .btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+.log { font-size: .86rem; color: var(--muted); min-height: 1.4em; margin: 6px 0 0; }
+</style>
+
+<header data-hero>
+  <h1>Plugin Management</h1>
+  <p>Plugins add hardware and features to MicroDrop: the heater, the magnet (Z-Stage), fluorescence imaging and more.
+  <strong>Tools ▸ Manage Plugins…</strong> is where you switch them on and off, install new ones, pick a version, update
+  them and remove them.</p>
+  <p>Most changes take effect straight away, without closing MicroDrop. When one cannot, MicroDrop says why and offers
+  to restart. Start with the short walkthrough; the rest is a reference for every button, window and message.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">There are two kinds of thing to manage, and the window has a tab for each.</p>
+<ul class="uses">
+  <li><strong>Plugin groups</strong> (tab <span class="ui">Available Groups</span>): parts of MicroDrop you can switch
+  on and off. A group is a set of pieces that load together, for example the heater's panes and protocol column. Groups
+  come from the installed plugins, plus a few built into MicroDrop itself such as
+  <span class="ui">Battery status icon (portable rig)</span>.</li>
+  <li><strong>Installed packages</strong> (tab <span class="ui">Installed Packages</span>): the plugin downloads
+  themselves. One package can hold several groups. Here you read a plugin's documentation, change its version,
+  upgrade it or remove it.</li>
+</ul>
+<p>New plugins come from the <a href="#term-channel">plugin channel</a>, an online list of MicroDrop plugins.
+<span class="ui">Install Plugin…</span> opens it in a second window, <strong>Browse Plugins</strong>. A third window,
+<strong>Plugin Updates</strong>, appears by itself at start-up when an update is waiting.</p>
+
+<figure class="still">
+<div class="still-wrap"><img data-media src="plugin_management_media/manage-plugins.webp" width="760" height="461" alt="Real screenshot of the Manage Plugins window on its Installed Packages tab: a refresh button at the top left, the Available Groups and Installed Packages tabs, two installed packages (magnet-microdrop-plugin 1.2.0 and scipy_analysis 0.2.0) each with a documentation icon, a version drop-down, a grey upgrade arrow and a delete icon, a chevron at the right edge, and the Apply, Install Plugin and Close buttons"><svg viewBox="0 0 760 461" aria-hidden="true"><circle cx="92" cy="52" r="10" class="ann-n"/><text x="92" y="56" class="ann-nt">1</text><circle cx="168" cy="78" r="10" class="ann-n"/><text x="168" y="82" class="ann-nt">2</text><circle cx="206" cy="108" r="10" class="ann-n"/><text x="206" y="112" class="ann-nt">3</text><circle cx="256" cy="106" r="10" class="ann-n"/><text x="256" y="110" class="ann-nt">4</text><circle cx="336" cy="106" r="10" class="ann-n"/><text x="336" y="110" class="ann-nt">5</text><circle cx="410" cy="106" r="10" class="ann-n"/><text x="410" y="110" class="ann-nt">6</text><circle cx="464" cy="106" r="10" class="ann-n"/><text x="464" y="110" class="ann-nt">7</text><circle cx="735" cy="236" r="10" class="ann-n"/><text x="735" y="240" class="ann-nt">8</text><circle cx="428" cy="443" r="10" class="ann-n"/><text x="428" y="447" class="ann-nt">9</text></svg></div>
+<figcaption><strong>Real screenshot.</strong> Manage Plugins, <span class="ui">Installed Packages</span> tab:
+<ol class="legend">
+  <li><i data-glyph="ICON_REFRESH" data-inline></i> Refresh the version lists from the plugin channel.</li>
+  <li>The two tabs.</li>
+  <li>The package name.</li>
+  <li><i data-glyph="ICON_DESCRIPTION" data-inline></i> Documentation: blue opens it in your browser; grey means the
+  package has no link yet.</li>
+  <li>The installed version. Pick another one here to install it.</li>
+  <li><i data-glyph="upgrade" data-inline></i> Upgrade: green when a newer version exists, grey (as here) when up to
+  date.</li>
+  <li><i data-glyph="ICON_DELETE" data-inline></i> Uninstall.</li>
+  <li>Show or hide the details pane.</li>
+  <li><span class="ui">Apply</span>, <span class="ui">Install Plugin…</span>, <span class="ui">Close</span>.</li>
+</ol></figcaption>
+</figure>
+<p>While Manage Plugins (or Browse Plugins) is open, the main window waits. <kbd>Esc</kbd> only clears the selected
+row; use <span class="ui">Close</span> to leave.</p>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<p class="intro">Six short tasks, from switching a plugin on to removing it. Installing and updating need an internet
+connection; switching groups on and off does not.</p>
+<ol class="steps stack">
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">1</span>Open Manage Plugins</h4>
+    <p>Choose <span class="ui">Tools ▸ Manage Plugins…</span>. The window opens on <span class="ui">Available
+    Groups</span>: one row per plugin group, with a tick box under <span class="ui">Enabled</span> and its name under
+    <span class="ui">Plugin group</span>. A ticked box means the group is loaded now.</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">2</span>Switch a group on or off</h4>
+    <p>Tick a group (or untick it) and click <span class="ui">Apply</span>. Its panes, menu items, protocol columns and
+    status-bar icons appear (or disappear) at once; MicroDrop does not restart. Your choice is remembered at the next
+    start. Clicking <span class="ui">Close</span> without <span class="ui">Apply</span> changes nothing. Try it in
+    <a href="#groups-demo">the demo below</a>.</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">3</span>Install a new plugin</h4>
+    <p>Click <span class="ui">Install Plugin…</span>. <strong>Browse Plugins</strong> opens and fetches the list from
+    the plugin channel (<em>Fetching available plugins…</em>). It shows only plugins you do not have yet. Click one: the
+    right side shows its details, including what it depends on. The version cell defaults to the newest; click it to
+    choose an older one. Click <span class="ui">Install</span>, read the <span class="ui">Install Plugin?</span>
+    question and answer <span class="ui">Yes</span>. When it is done, <span class="ui">Plugin ready</span> says
+    <em>Installed and enabled …</em>: its groups are already on.</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">4</span>Choose a version, or upgrade</h4>
+    <p>In <span class="ui">Installed Packages</span>, click a package's version and pick another one: MicroDrop asks
+    <span class="ui">Install version?</span> and swaps it in. The version you pick stays until you change it. When the
+    <i data-glyph="upgrade" data-inline></i> arrow is green, a newer version exists; click it and answer
+    <span class="ui">Upgrade plugin?</span>. If the version list looks out of date, click
+    <i data-glyph="ICON_REFRESH" data-inline></i> first.</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">5</span>Uninstall</h4>
+    <p>Click <i data-glyph="ICON_DELETE" data-inline></i> on the package's row and answer <span class="ui">Uninstall
+    Plugin?</span>. MicroDrop switches the plugin's groups off, removes the package and forgets its on/off choices.
+    If you only want it out of the way, untick its groups instead: that is quicker to undo.</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">6</span>Answer the Plugin Updates window</h4>
+    <p>Each time MicroDrop starts, it checks the channel in the background. If an installed plugin has a newer version,
+    or new plugins have appeared since the last check, a <strong>Plugin Updates</strong> window lists them.
+    <span class="ui">Update All</span> updates every listed plugin; <span class="ui">Later</span> closes the window and
+    changes nothing. Without a connection the check stays silent.</p></div>
+  </li>
+</ol>
+<div class="callout"><p>After an install, a version change, an upgrade or an uninstall, MicroDrop either says
+<span class="ui">Plugin ready</span> (done, nothing else to do) or asks <span class="ui">Relaunch required</span>, with
+the reason. See <a href="#live-or-relaunch">Live or relaunch</a>.</p></div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="groups-demo">
+<h2>What a group adds</h2>
+<p class="intro">Turning a group on loads its parts into the running window; turning it off takes them out again.</p>
+<ul class="uses">
+  <li><strong>Panes</strong> dock into the window and are listed in the <span class="ui">View</span> menu, like the
+  built-in ones.</li>
+  <li><strong>Protocol columns</strong> appear in the Protocol Tree, and disappear when the group goes off.</li>
+  <li><strong>Status-bar icons</strong> and <strong>menu items</strong> come and go with the group.</li>
+  <li>A <strong>backend</strong> group has no window of its own: it is the part that talks to the board.</li>
+</ul>
+<p>The heater, magnet and fluorescence plugins each come as two groups: a <em>UI</em> group for what you see and a
+<em>backend</em> group for the board. To use the hardware, keep both on.</p>
+
+<figure class="still">
+<div class="still-wrap"><img data-media src="plugin_management_media/plugin-pane.webp" width="820" height="416" alt="Real screenshot of MicroDrop with the View menu open: Device Viewer, Dropbot Status And Controls, Microdrop Console Logs, Peripherals UI Dock Pane (ringed), Pluggable Protocol Tree, Recording Viewer and Scipy Analysis Dock Pane. Below, the Peripherals UI Dock Pane is docked, showing Status Active, Position 0.00 mm, Up, Down and Home buttons and Set Position 0.50 mm"><svg viewBox="0 0 820 416" aria-hidden="true"><circle cx="226" cy="18" r="10" class="ann-n"/><text x="226" y="22" class="ann-nt">1</text><circle cx="372" cy="128" r="10" class="ann-n"/><text x="372" y="132" class="ann-nt">2</text><circle cx="176" cy="249" r="10" class="ann-n"/><text x="176" y="253" class="ann-nt">3</text></svg></div>
+<figcaption><strong>Real screenshot</strong> (an earlier build), with the magnet plugin's <em>Z-Stage UI</em> group on:
+<ol class="legend">
+  <li>The <span class="ui">View</span> menu lists every pane, including plugin panes; a tick means it is shown.</li>
+  <li>The magnet plugin's pane, <span class="ui">Peripherals UI Dock Pane</span> (ringed).</li>
+  <li>The same pane docked in the window.</li>
+</ol></figcaption>
+</figure>
+
+<figure data-demo="groups" id="groups-mock">
+<div class="two">
+  <div class="mock" aria-label="Mock Manage Plugins window, Available Groups tab">
+    <div class="mock-title">Manage Plugins · Available Groups</div>
+    <p class="hint">Tick a group and Apply to load it now; untick to unload. Choices persist across launches.</p>
+    <table><thead><tr><th class="c">Enabled</th><th>Plugin group</th></tr></thead><tbody data-rows></tbody></table>
+    <div class="btns"><button type="button" data-act="apply">Apply</button><button type="button" data-act="close">Close</button></div>
+  </div>
+  <div class="mock app-now" aria-live="polite">
+    <div class="mock-title">MicroDrop now</div>
+    <h5>Plugin panes (View menu)</h5><ul data-list="pane"></ul>
+    <h5>Plugin protocol columns</h5><ul data-list="col"></ul>
+    <h5>Plugin status-bar icons</h5><ul data-list="icon"></ul>
+    <h5>Board drivers (no window)</h5><ul data-list="driver"></ul>
+  </div>
+</div>
+<p class="log" data-log></p>
+<figcaption><strong>Try it.</strong> Tick and untick groups: nothing changes on the right until you click
+<span class="ui">Apply</span>. <span class="ui">Close</span> throws unapplied ticks away. Switch the heater UI on,
+then off: its column's values are kept for the rest of the session (shown in italics) and come back when you switch it
+on again. The group names are the real ones from the plugins; the pane, column and icon names on the right are
+placeholders, except the magnet's pane.</figcaption>
+</figure>
+
+<h3 id="columns">Protocol columns and saved protocols</h3>
+<ul class="uses">
+  <li>Switching a group off removes its columns from the open protocol. The values are kept in memory: switch the
+  group back on in the same session and they return on the same steps. Steps you added meanwhile get the column's
+  default.</li>
+  <li><strong>Saving while a column is missing</strong> writes the protocol without that column's values.</li>
+  <li><strong>Opening a protocol</strong> that has a column from a plugin that is not loaded shows
+  <span class="ui">Protocol has errors</span>: <em>… column(s) in this protocol have no matching plugin; their values
+  will be dropped on load</em>. <span class="ui">OK</span> opens it without those values;
+  <span class="ui">Cancel</span> leaves it unopened. Switch the plugin's group on first, then open the protocol
+  again.</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="versions">
+<h2>Versions, pinning and updates</h2>
+<p class="intro">MicroDrop never changes a plugin's version on its own. A version changes only when you install,
+pick a version, click upgrade or click <span class="ui">Update All</span>.</p>
+<ul class="uses">
+  <li><strong>Install</strong> (Browse Plugins) installs exactly the version shown in the row, the newest unless you
+  picked another, and records that exact version.</li>
+  <li><strong>Picking a version</strong> in Installed Packages removes the package and installs the one you picked, so
+  nothing of the old one is left behind. That version is fixed (pinned) until you change it again.</li>
+  <li><strong>Upgrade</strong> <i data-glyph="upgrade" data-inline></i> and <strong>Update All</strong> install the
+  newest version on the channel, the same remove-and-install way. That also ends a pin.</li>
+  <li>The version lists come from MicroDrop's saved copy of the channel list. It is refreshed whenever the channel is
+  read: when Browse Plugins opens, at start-up, and when you click <i data-glyph="ICON_REFRESH" data-inline></i>.</li>
+  <li>A pinned older version still counts as <em>out of date</em>: the Plugin Updates window lists it at every start.
+  Click <span class="ui">Later</span> to keep it.</li>
+</ul>
+
+<figure data-demo="versions">
+<div class="mock" aria-label="Mock Installed Packages row">
+  <div class="mock-title">Manage Plugins · Installed Packages</div>
+  <table><tbody><tr>
+    <td>magnet-microdrop-plugin</td>
+    <td><button type="button" class="ic-btn info" title="Open documentation" aria-label="Open documentation" data-act="docs"><svg class="ic" aria-hidden="true"><use href="#ic-description"/></svg></button></td>
+    <td><select data-version aria-label="Version"></select></td>
+    <td><button type="button" class="ic-btn" data-act="upgrade" aria-label="Upgrade"><svg class="ic" aria-hidden="true"><use href="#ic-upgrade"/></svg></button></td>
+    <td><button type="button" class="ic-btn off" title="Not in this demo" aria-label="Uninstall (not in this demo)" disabled><svg class="ic" aria-hidden="true"><use href="#ic-delete"/></svg></button></td>
+  </tr></tbody></table>
+  <div class="dlg" data-dlg hidden><div class="dlg-title" data-dlg-title></div><div data-dlg-text></div>
+    <div class="btns"><button type="button" data-act="yes">Yes</button><button type="button" data-act="no">No</button></div></div>
+  <div class="btns">
+    <button type="button" data-act="publish">Publish a new version on the channel</button>
+    <button type="button" class="ic-btn" data-act="refresh" title="Refresh available versions from the plugin channel" aria-label="Refresh available versions"><svg class="ic" aria-hidden="true"><use href="#ic-refresh"/></svg></button>
+    <button type="button" data-act="launch">Start MicroDrop again</button>
+  </div>
+</div>
+<p class="status" data-state></p>
+<p class="log" data-log></p>
+<figcaption><strong>Try it.</strong> Publish a new version: the upgrade arrow stays grey until the saved list is
+refreshed (<i data-glyph="ICON_REFRESH" data-inline></i>, or a new start). Pick an older version to pin it, start
+again to see the Plugin Updates window, then upgrade. Version numbers are made up.</figcaption>
+</figure>
+
+<h3 id="updates-window">The Plugin Updates window</h3>
+<p>It has up to two boxes. <span class="ui">Updates available</span> lists installed plugins with a newer version, as
+<em>name: installed --&gt; newest</em>. <span class="ui">New plugins available</span> lists plugins that appeared on the
+channel since the previous check, with a hint to install them from Manage Plugins (the hint says <em>Browse</em>; the
+button is <span class="ui">Install Plugin…</span>). New plugins are not listed on the very first check, which only
+records what the channel offers.</p>
+<p><span class="ui">Update All</span> (shown only when there are updates) switches each plugin off, updates it, and
+switches it back on. If some fail, <span class="ui">Some updates failed</span> names them and why; those stay on their
+old version. <span class="ui">Later</span> closes the window; it comes back at the next start while an update is
+waiting.</p>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="live-or-relaunch">
+<h2>Live or relaunch</h2>
+<p class="intro">Python cannot unload code it has already loaded. So MicroDrop applies a change live only when that is
+safe, and otherwise asks you to restart.</p>
+<ul class="uses">
+  <li><strong>Switching groups</strong> with <span class="ui">Apply</span> is always live.</li>
+  <li><strong>Install, version change, upgrade</strong>: MicroDrop first switches the plugin off and clears its code,
+  then changes the package, then loads the new code. This is live as long as the change touched only this plugin's
+  package and added new ones. If it also changed or removed <em>other</em> packages that may already be in use, a
+  relaunch is needed.</li>
+  <li><strong>Uninstall</strong> is live when only packages were removed.</li>
+</ul>
+<p>When a relaunch is needed, <span class="ui">Relaunch required</span> says what was done, then <em>Could not apply
+without a relaunch:</em> and the reason, and asks <em>Relaunch MicroDrop now to apply?</em>
+<span class="ui">Yes</span> closes MicroDrop (saving the window layout) and starts it again with its standard
+<code>microdrop</code> task. <span class="ui">No</span> shows <span class="ui">Relaunch later</span>: <em>The change
+takes effect the next time you launch MicroDrop.</em></p>
+
+<figure data-demo="relaunch">
+<div class="mock">
+  <div class="mock-title">After clicking Install: what did the install do?</div>
+  <div class="controls" style="flex-direction: column; align-items: flex-start;">
+    <label><input type="checkbox" data-c="other"> It also changed or removed another package (for example a shared library)</label>
+    <label><input type="checkbox" data-c="loaded"> Some of the plugin's code was still loaded from earlier</label>
+    <label><input type="checkbox" data-c="unknown"> MicroDrop could not read the environment before or after</label>
+    <label><input type="checkbox" data-c="nomanifest"> The package did not describe its plugin groups</label>
+  </div>
+  <div class="dlg" data-out><div class="dlg-title" data-out-title></div><div data-out-text></div></div>
+</div>
+<figcaption><strong>Try it.</strong> Tick what happened during an install of <em>heater-microdrop-plugin 1.12.0</em>
+and read the message MicroDrop would show. The reasons are the app's own wording.</figcaption>
+</figure>
+<div class="callout"><p>The relaunch always starts MicroDrop's standard <code>microdrop</code> task. If you normally
+start MicroDrop some other way, for example from the Launcher with a saved profile, answer <span class="ui">No</span>
+and start it again yourself.</p></div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-toolbar">
+<h2>Toolbar icons</h2>
+<p class="intro">Hover over a button in MicroDrop to see its tooltip.</p>
+<section data-term id="tb-main" data-where="Manage Plugins and Browse Plugins">
+  <h3>Buttons</h3>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Button</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_REFRESH"></i></td><td class="lbl">Refresh available versions from the plugin channel</td><td>Manage Plugins, top left. Reads the channel again and updates every version list. Needs a connection; a failure shows <span class="ui">Refreshing versions</span> with the reason.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_REFRESH"></i></td><td class="lbl">Refresh the plugin list from the channel</td><td>Browse Plugins, top left. Fetches the list of plugins again.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_DESCRIPTION"></i></td><td class="lbl">Open documentation</td><td>Opens the plugin's documentation (or home page) in your web browser. Greyed, with the tooltip <em>Documentation link available after the plugin's next release.</em>, when the package does not give a link.</td></tr>
+      <tr><td class="icons"><i data-glyph="upgrade"></i></td><td class="lbl">Upgrade to …</td><td>Green when a newer version is in the saved channel list; the tooltip names it. Grey with <em>Already up to date</em> otherwise, and then it does nothing.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_DELETE"></i></td><td class="lbl">(uninstall)</td><td>Asks <span class="ui">Uninstall Plugin?</span>, then removes the package.</td></tr>
+      <tr><td class="icons"><i data-glyph="chevron_left"></i> <i data-glyph="chevron_right"></i></td><td class="lbl">Show/Hide Details</td><td>The tall button at the right of the Installed Packages table. It opens a details pane (package, installed version, available versions, documentation link, plugin groups) for the selected row. Hidden at first.</td></tr>
+    </tbody>
+  </table>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-terms">
+<h2>Terms</h2>
+<p class="intro">The words the windows and messages use.</p>
+
+<section data-term id="term-group" data-where="Available Groups tab, Plugin group column">
+  <h3>Plugin group</h3>
+  <p>A set of plugin parts that load and unload together, with one tick box.</p>
+  <div data-what><p>Each plugin package says which groups it has. The heater, for example, has
+  <em>Heater UI (status/controls and plotting dock-pane + protocol column + statusbar icon)</em> and
+  <em>Heater backend (board driver)</em>. The name usually lists what the group adds.</p></div>
+  <div data-when><p>Switch a group off when you do not have that hardware on the bench, or to tidy the window; switch
+  it on when you need it.</p></div>
+  <div data-read><p>Ticked = loaded now. A box that is clear again after <span class="ui">Apply</span> means the group
+  could not be loaded; the log says why.</p></div>
+  <div data-typical><p>Groups of a newly installed plugin start on.</p></div>
+</section>
+
+<section data-term id="term-enabled" data-where="Available Groups tab, Enabled column">
+  <h3>Enabled</h3>
+  <p>Whether a group is loaded, and whether it loads at the next start.</p>
+  <div data-what><p>The tick box. <span class="ui">Apply</span> loads or unloads the groups you changed and saves each
+  choice in MicroDrop's settings file, so it survives a restart, even a crash.</p></div>
+  <div data-when><p>Every time you want a plugin's panes and columns, or want them gone.</p></div>
+  <div data-read><p>The box shows the live state when the window opens. Ticks you have not applied yet do nothing.</p></div>
+  <div data-typical><p>A group you never touched uses its plugin's default: on for the heater, magnet and fluorescence
+  groups. <span class="ui">Battery status icon (portable rig)</span> is on by default only on the portable rig's
+  Raspberry Pi.</p></div>
+</section>
+
+<section data-term id="term-package" data-where="Installed Packages tab; Browse Plugins">
+  <h3>Installed package</h3>
+  <p>A plugin download (a conda package) that is in MicroDrop's environment.</p>
+  <div data-what><p>MicroDrop runs on its own set of software packages, managed by a tool called pixi in the
+  pixi-microdrop folder. A plugin is one more package in that set. The Installed Packages tab lists every installed
+  package that contains a MicroDrop plugin and is not part of MicroDrop itself, including plugins that came with your
+  MicroDrop install.</p></div>
+  <div data-when><p>Look here to see what is installed and at which version.</p></div>
+  <div data-read><p>The name is the package name, for example <em>heater-microdrop-plugin</em>. Built-in groups, such
+  as the battery icon, are never listed here: they cannot be uninstalled.</p></div>
+  <div data-typical><p>On the classic DropBot rig: the heater, magnet and fluorescence plugins.</p></div>
+</section>
+
+<section data-term id="term-version" data-where="Installed Packages tab, version drop-down; Browse Plugins, version cell">
+  <h3>Version</h3>
+  <p>Which release of a plugin is installed, or will be.</p>
+  <div data-what><p>Plugins are released with numbers like 1.2.0; a bigger number is newer. The drop-down lists the
+  versions in MicroDrop's saved copy of the channel list, newest first, and always includes the one installed.</p></div>
+  <div data-when><p>Pick an older version when a newer one causes a problem in your experiments, or to match another
+  instrument.</p></div>
+  <div data-read><p>The shown value is what is installed. Picking another asks <span class="ui">Install version?</span>;
+  <span class="ui">No</span> puts the drop-down back.</p></div>
+  <div data-typical><p>The newest release.</p></div>
+</section>
+
+<section data-term id="term-pin" data-where="Installed Packages tab, version drop-down">
+  <h3>Pinned version</h3>
+  <p>A version you picked on purpose, kept until you change it.</p>
+  <div data-what><p>Installing from Browse Plugins, or picking a version, records that exact version in the
+  environment. Upgrade and Update All replace it with "the newest". MicroDrop shows no pin label; the version simply
+  stays.</p></div>
+  <div data-when><p>To stay on a known-good version during a study.</p></div>
+  <div data-read><p>A green upgrade arrow next to it is normal: a newer version exists, and you chose not to take it.
+  The Plugin Updates window will list it at every start.</p></div>
+  <div data-typical><p>Not pinned to an old version: most labs run the newest.</p></div>
+</section>
+
+<section data-term id="term-upgrade" data-where="Installed Packages tab, upgrade arrow; Plugin Updates, Update All">
+  <h3>Upgrade</h3>
+  <p>Replace a plugin with the newest version on the channel.</p>
+  <div data-what><p>MicroDrop switches the plugin off, removes the package, installs the newest one and switches it
+  back on, live when it can. If a step fails, the old version is put back and switched on again, and a message shows
+  what went wrong.</p></div>
+  <div data-when><p>When the arrow is green, or the Plugin Updates window lists the plugin. Not in the middle of a
+  run: the plugin's panes close while it is replaced.</p></div>
+  <div data-read><p>Green arrow = a newer version is in the saved list (its tooltip names it). Grey = up to date, as far
+  as the saved list knows.</p></div>
+  <div data-typical><p>Upgrade when you are between experiments.</p></div>
+</section>
+
+<section data-term id="term-uninstall" data-where="Installed Packages tab, delete icon">
+  <h3>Uninstall</h3>
+  <p>Remove a plugin package from MicroDrop's environment.</p>
+  <div data-what><p>After <span class="ui">Uninstall Plugin?</span> (<em>This removes its package from the
+  environment.</em>), MicroDrop switches the plugin's groups off, forgets their on/off choices and removes the
+  package. If removing fails, it shows the error and switches the plugin back on.</p></div>
+  <div data-when><p>When you no longer use that hardware at all. To hide a plugin for a while, untick its groups
+  instead.</p></div>
+  <div data-read><p><span class="ui">Plugin ready</span> with <em>Uninstalled …</em> means done; protocols that use its
+  columns will then warn when opened (see <a href="#columns">above</a>).</p></div>
+  <div data-typical><p>Rare.</p></div>
+</section>
+
+<section data-term id="term-channel" data-where="Browse Plugins; Refresh buttons; start-up check">
+  <h3>Plugin channel</h3>
+  <p>The online list MicroDrop plugins are installed from.</p>
+  <div data-what><p>A conda channel at <code>https://prefix.dev/microdrop-plugins</code>. Browse Plugins lists it, and
+  every install makes sure MicroDrop's environment knows about it. Every read saves a copy of the list on this computer.</p></div>
+  <div data-when><p>Read when Browse Plugins opens, when you click a refresh button, and once at every start.</p></div>
+  <div data-read><p>Browse Plugins shows a package's file details for its newest version: version, build, size, date,
+  web address, checksums and dependencies.</p></div>
+  <div data-typical><p><code>https://prefix.dev/microdrop-plugins</code></p></div>
+</section>
+
+<section data-term id="term-offline" data-where="Browse Plugins, Offline message">
+  <h3>Offline mode</h3>
+  <p>What MicroDrop does when it cannot reach the plugin channel.</p>
+  <div data-what><p>Browse Plugins then shows the last saved list, with the message <span class="ui">Offline</span>:
+  <em>Could not reach the plugin channel — showing the last cached list.</em> The start-up update check says nothing.
+  Version drop-downs use the saved list.</p></div>
+  <div data-when><p>On an instrument without internet, or when the network is down.</p></div>
+  <div data-read><p>You can look, but installing, changing versions and upgrading still need the channel and will fail
+  with pixi's message. Switching groups on and off works offline.</p></div>
+  <div data-typical><p>Online.</p></div>
+</section>
+
+<section data-term id="term-hotload" data-where="After Apply, install, upgrade, version change or uninstall">
+  <h3>Hot load / unload</h3>
+  <p>Loading or unloading plugin parts while MicroDrop keeps running.</p>
+  <div data-what><p>MicroDrop adds the plugin's parts to the open window (panes, columns, icons, menus) or takes them
+  out. Ticking a group is always hot. Installs, version changes, upgrades and uninstalls are hot when they are
+  safe.</p></div>
+  <div data-when><p>Automatic; you do not choose it.</p></div>
+  <div data-read><p><span class="ui">Plugin ready</span> = it was applied live. A newly loaded pane docks where
+  MicroDrop puts it; move it as you like.</p></div>
+  <div data-typical><p>Usually live for a first install of a plugin.</p></div>
+</section>
+
+<section data-term id="term-relaunch" data-where="Relaunch required message">
+  <h3>Relaunch required</h3>
+  <p>A change that only takes effect after MicroDrop restarts.</p>
+  <div data-what><p>Shown when a change could not be applied live, with the reason, for example <em>existing packages
+  were changed or removed: …</em>. The package change itself is already done.</p></div>
+  <div data-when><p>Answer <span class="ui">Yes</span> when you are not running anything; <span class="ui">No</span> to
+  restart later yourself.</p></div>
+  <div data-read><p>Until you restart, the old code may still be the one running.</p></div>
+  <div data-typical><p>Uncommon for a plain install; more likely when an update also moved a shared library.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="messages">
+<h2>Messages you may see</h2>
+<p class="intro">Every window title in plugin management, in the order you are likely to meet them.</p>
+<div class="table-wrap">
+<table class="small">
+  <thead><tr><th>Title</th><th>When</th><th>What to do</th></tr></thead>
+  <tbody>
+    <tr><td>Loading plugins</td><td>Browse Plugins is fetching the channel.</td><td>Wait.</td></tr>
+    <tr><td>Offline</td><td>The channel could not be reached; the saved list is shown.</td><td>Check the network, then refresh.</td></tr>
+    <tr><td>Could not load plugins</td><td>Fetching failed for another reason.</td><td>Read the message; try again.</td></tr>
+    <tr><td>No selection</td><td><span class="ui">Install</span> with no row selected.</td><td>Click a plugin first.</td></tr>
+    <tr><td>Install Plugin?</td><td>Before installing: name, version, dependencies, and <em>installing runs third-party code that has not been verified. Only install plugins you trust.</em></td><td><span class="ui">Yes</span> to install.</td></tr>
+    <tr><td>Installing plugin</td><td>An install from Browse Plugins is running.</td><td>Wait.</td></tr>
+    <tr><td>Installing version, Upgrading plugin, Uninstalling plugin</td><td>Work in progress; also the title of the error if that step fails.</td><td>Wait. On an error, the plugin is put back as it was.</td></tr>
+    <tr><td>Install failed</td><td>An install from Browse Plugins failed.</td><td>Read pixi's message (often a network problem). MicroDrop puts its package list back as it was.</td></tr>
+    <tr><td>Install version?, Upgrade plugin?, Uninstall Plugin?</td><td>Before changing an installed package.</td><td><span class="ui">Yes</span> to go ahead.</td></tr>
+    <tr><td>Plugin ready</td><td>The change is done and live.</td><td>Nothing.</td></tr>
+    <tr><td>Relaunch required</td><td>The change is done but needs a restart.</td><td>See <a href="#live-or-relaunch">Live or relaunch</a>.</td></tr>
+    <tr><td>Relaunch later</td><td>You answered No to the relaunch.</td><td>Restart MicroDrop when convenient.</td></tr>
+    <tr><td>Refreshing versions</td><td>The Manage Plugins refresh is running, or failed.</td><td>Check the network.</td></tr>
+    <tr><td>Apply failed</td><td>Switching groups hit an error.</td><td>Read the message; check the log.</td></tr>
+    <tr><td>Plugin Updates</td><td>At start-up, updates or new plugins are waiting.</td><td><span class="ui">Update All</span> or <span class="ui">Later</span>.</td></tr>
+    <tr><td>Updating plugins, Some updates failed, Update failed</td><td>Update All is running, or some or all of it failed.</td><td>Failed plugins stay on their old version.</td></tr>
+    <tr><td>Protocol has errors</td><td>Opening a protocol whose columns' plugin is not loaded.</td><td><span class="ui">Cancel</span>, switch the group on, open it again.</td></tr>
+    <tr><td>Update required, Updating MicroDrop, Update complete, Update failed</td><td>A feature needs a package the environment does not have.</td><td>See below.</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="env-update">
+<h2>When a feature needs a package</h2>
+<p class="intro">Sometimes MicroDrop's own code is newer than its environment: a feature needs a package that was
+never installed. Instead of failing, MicroDrop offers to update.</p>
+<ol class="howto">
+  <li><span class="ui">Update required</span> names the feature and the package, for example: <em>Sending experimental
+  folders to the Trash needs the send2trash package, which this environment does not have. Update the pixi-microdrop
+  repository to install it.</em></li>
+  <li>It also says what the update does: the pixi-microdrop folder is switched to its default branch (named in the message) and updated, local
+  changes to its <code>pyproject.toml</code>, <code>pixi.lock</code> and other tracked files are discarded, and the
+  plugins you installed from the channel are added back afterwards (they are listed by name).</li>
+  <li><span class="ui">Update</span> runs it behind <span class="ui">Updating MicroDrop</span>; <span class="ui">Not
+  now</span> leaves everything as it is.</li>
+  <li>On success, <span class="ui">Update complete</span>: <em>… can continue</em>. The package is loaded into the running
+  MicroDrop, so you do not restart. If it cannot be loaded, the message asks you to restart MicroDrop.</li>
+  <li>On failure, <span class="ui">Update failed</span> shows why and the exact commands to run by hand, after closing
+  MicroDrop.</li>
+</ol>
+<p>Plugins you picked a version for are added back at that version. Plugins that came with the MicroDrop install are
+not part of that list; the update brings them in itself.</p>
+<figure class="still">
+<div class="still-wrap"><img data-media src="plugin_management_media/launcher-note.webp" width="860" height="109" alt="Real screenshot from the MicroDrop Launcher's Git settings tab: a red note reading Note: if you have external plugins installed, changing the pixi-microdrop repo (branch switch, pull, or reset) may require reinstalling those plugins. Below it, the Repositories box with the pixi-microdrop branch set to master and the Microdrop source branch set to main"></div>
+<figcaption><strong>Real screenshot</strong> of the MicroDrop Launcher, a separate program not covered here. Its Git
+settings tab gives the same warning: changing the pixi-microdrop folder by hand can drop the plugins you installed;
+reinstall them from Manage Plugins afterwards.</figcaption>
+</figure>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>Internet needed.</strong> Installing, changing versions, upgrading and refreshing all read the plugin
+    channel. Switching groups does not.</li>
+    <li><strong>Not during a run.</strong> Install, upgrade, version changes and uninstall switch the plugin off while
+    its package changes; its panes close and its hardware stops being driven.</li>
+    <li><strong>Some changes need a relaunch.</strong> MicroDrop says so and why. The relaunch uses the standard
+    <code>microdrop</code> task, not a Launcher profile.</li>
+    <li><strong>Columns and saved protocols.</strong> Switching a group off hides its protocol columns; the values come
+    back if you switch it on again before closing MicroDrop. Saving meanwhile, or opening a protocol without the plugin,
+    loses those values (opening warns first).</li>
+    <li><strong>Pinned versions keep asking.</strong> An older version you chose is listed in Plugin Updates at every
+    start; answer <span class="ui">Later</span>.</li>
+    <li><strong>The saved channel list can be old.</strong> If an upgrade arrow or version list looks wrong, click
+    <i data-glyph="ICON_REFRESH" data-inline></i>.</li>
+    <li><strong>Only install plugins you trust.</strong> A plugin is code that runs inside MicroDrop with your access to
+    the instrument and files.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Plugin</dt><dd>An add-on that gives MicroDrop new panes, columns or hardware support.</dd>
+  <dt>Plugin group</dt><dd>The parts of a plugin that switch on and off together.</dd>
+  <dt>Package</dt><dd>A downloadable piece of software; a plugin ships as one.</dd>
+  <dt>Environment</dt><dd>The set of packages MicroDrop runs on, kept in the pixi-microdrop folder.</dd>
+  <dt>pixi</dt><dd>The tool that installs and removes those packages. MicroDrop runs it for you.</dd>
+  <dt>Channel</dt><dd>An online list of packages to install from; MicroDrop's is prefix.dev/microdrop-plugins.</dd>
+  <dt>Backend</dt><dd>The part of a plugin that talks to the board, with no window of its own.</dd>
+  <dt>Dock pane</dt><dd>A panel inside the MicroDrop window; the View menu lists them.</dd>
+  <dt>Pin</dt><dd>Keep a chosen version until you change it.</dd>
+  <dt>Hot load</dt><dd>Apply a change while MicroDrop keeps running.</dd>
+  <dt>Relaunch</dt><dd>Close MicroDrop and start it again.</dd>
+</dl>
+</section>
+
+<script>
+Tutorial.demo("groups", function (figure, T) {
+  var GROUPS = [
+    { id: "heater_ui", label: "Heater UI (status/controls and plotting dock-pane + protocol column + statusbar icon)",
+      pane: "Heater pane", col: "Heater column", icon: "Heater icon" },
+    { id: "heater_backend", label: "Heater backend (board driver)", driver: "Heater board driver" },
+    { id: "zstage_ui", label: "Z-Stage UI (controls/status dock-pane + protocol column + statusbar icon)",
+      pane: "Peripherals UI Dock Pane", col: "Magnet column", icon: "Z-Stage icon" },
+    { id: "zstage_backend", label: "Z-Stage backend (board driver)", driver: "Z-Stage board driver" },
+    { id: "fluorescence_ui", label: "Fluorescence UI (status/controls dock-pane + statusbar icon)",
+      pane: "Fluorescence pane", col: "Fluorescence columns", icon: "Fluorescence icon" },
+    { id: "fluorescence_backend", label: "Fluorescence backend (board driver)", driver: "Fluorescence board driver" },
+    { id: "rpi_battery_ui", label: "Battery status icon (portable rig)", icon: "Battery icon" }
+  ];
+  var loaded = { zstage_ui: true, zstage_backend: true };
+  var ticks = {};
+  var kept = {};
+  var changed = {};
+  var body = figure.querySelector("[data-rows]");
+  var log = figure.querySelector("[data-log]");
+
+  function resetTicks() {
+    GROUPS.forEach(function (g) { ticks[g.id] = !!loaded[g.id]; });
+  }
+
+  function drawRows() {
+    T.clear(body);
+    GROUPS.forEach(function (g) {
+      var tr = document.createElement("tr");
+      var td = document.createElement("td");
+      var box = document.createElement("input");
+      var name = document.createElement("td");
+
+      td.className = "c";
+      box.type = "checkbox";
+      box.checked = ticks[g.id];
+      box.setAttribute("aria-label", g.label);
+      box.addEventListener("change", function () {
+        ticks[g.id] = box.checked;
+        tr.classList.toggle("changed", ticks[g.id] !== !!loaded[g.id]);
+        var pending = GROUPS.filter(function (x) { return ticks[x.id] !== !!loaded[x.id]; }).length;
+        log.textContent = pending ? pending + " change(s) not applied yet: the window on the right is unchanged." : "";
+      });
+      td.appendChild(box);
+      name.textContent = g.label;
+      tr.appendChild(td);
+      tr.appendChild(name);
+      body.appendChild(tr);
+    });
+  }
+
+  function drawApp() {
+    ["pane", "col", "icon", "driver"].forEach(function (kind) {
+      var ul = figure.querySelector('[data-list="' + kind + '"]');
+      var count = 0;
+
+      T.clear(ul);
+      GROUPS.forEach(function (g) {
+        if (!g[kind]) { return; }
+        var li = document.createElement("li");
+
+        if (loaded[g.id]) {
+          li.textContent = g[kind];
+          if (changed[g.id] === "on") { li.className = "new"; }
+        } else if (changed[g.id] === "off" && kind !== "col") {
+          li.textContent = g[kind];
+          li.className = "gone";
+        } else if (kind === "col" && kept[g.id]) {
+          li.textContent = g[kind] + ": hidden, values kept for this session";
+          li.className = "kept";
+        } else {
+          return;
+        }
+        ul.appendChild(li);
+        count += 1;
+      });
+      if (!count) {
+        var none = document.createElement("li");
+        none.textContent = "none";
+        none.className = "kept";
+        ul.appendChild(none);
+      }
+    });
+  }
+
+  figure.querySelector('[data-act="apply"]').addEventListener("click", function () {
+    var on = [], off = [];
+
+    changed = {};
+    GROUPS.forEach(function (g) {
+      if (ticks[g.id] && !loaded[g.id]) { on.push(g); changed[g.id] = "on"; }
+      if (!ticks[g.id] && loaded[g.id]) { off.push(g); changed[g.id] = "off"; if (g.col) { kept[g.id] = true; } }
+      loaded[g.id] = ticks[g.id];
+    });
+    log.textContent = (on.length || off.length)
+      ? "Applied live: " + on.length + " group(s) loaded, " + off.length + " unloaded. No restart, and remembered for the next start."
+      : "Nothing to apply.";
+    drawRows();
+    drawApp();
+  });
+
+  figure.querySelector('[data-act="close"]').addEventListener("click", function () {
+    resetTicks();
+    changed = {};
+    log.textContent = "Closed without Apply: nothing changed. Reopening shows the loaded groups ticked.";
+    drawRows();
+    drawApp();
+  });
+
+  resetTicks();
+  drawRows();
+  drawApp();
+});
+
+Tutorial.demo("versions", function (figure, T) {
+  var channel = ["1.0.0", "1.1.0", "1.2.0"];
+  var saved = channel.slice();
+  var installed = "1.2.0";
+  var pinned = false;
+  var pending = null;
+  var select = figure.querySelector("[data-version]");
+  var up = figure.querySelector('[data-act="upgrade"]');
+  var dlg = figure.querySelector("[data-dlg]");
+  var state = figure.querySelector("[data-state]");
+  var log = figure.querySelector("[data-log]");
+
+  function key(v) { return v.split(".").map(Number); }
+  function newer(a, b) {
+    var x = key(a), y = key(b);
+    for (var i = 0; i < 3; i++) { if (x[i] !== y[i]) { return x[i] > y[i]; } }
+    return false;
+  }
+  function newest(list) { return list.reduce(function (a, b) { return newer(b, a) ? b : a; }); }
+
+  function draw() {
+    var list = saved.slice();
+
+    if (list.indexOf(installed) < 0) { list.push(installed); }
+    list.sort(function (a, b) { return newer(a, b) ? -1 : 1; });
+    T.clear(select);
+    list.forEach(function (v) {
+      var o = document.createElement("option");
+      o.value = v;
+      o.textContent = v;
+      select.appendChild(o);
+    });
+    select.value = installed;
+
+    var latest = list[0];
+    var canUp = latest !== installed;
+    up.className = "ic-btn " + (canUp ? "ok" : "off");
+    up.title = canUp ? "Upgrade to " + latest : "Already up to date";
+    state.innerHTML = "Installed: <strong>" + installed + "</strong>" + (pinned ? " (pinned)" : "") +
+      " · newest on the channel: <strong>" + newest(channel) + "</strong> · newest in the saved list: <strong>" + newest(saved) + "</strong>";
+  }
+
+  function ask(title, text, action) {
+    pending = action;
+    figure.querySelector("[data-dlg-title]").textContent = title;
+    figure.querySelector("[data-dlg-text]").textContent = text;
+    dlg.hidden = false;
+  }
+
+  select.addEventListener("change", function () {
+    var v = select.value;
+    if (v === installed) { return; }
+    ask("Install version?", "Install Magnet Peripherals (Z-Stage) version " + v + "? This changes the package in the environment.", function (yes) {
+      if (yes) {
+        installed = v;
+        pinned = v !== newest(channel);
+        log.textContent = "Plugin ready: Installed Magnet Peripherals (Z-Stage) " + v + ". It stays on " + v + " until you change it.";
+      } else {
+        log.textContent = "No: the drop-down goes back to " + installed + ".";
+      }
+    });
+  });
+
+  up.addEventListener("click", function () {
+    if (up.classList.contains("off")) { log.textContent = "Already up to date: the grey arrow does nothing."; return; }
+    ask("Upgrade plugin?", "Upgrade Magnet Peripherals (Z-Stage) to the latest version (" + newest(saved) + ")?", function (yes) {
+      if (!yes) { log.textContent = "Not upgraded."; return; }
+      installed = newest(channel);
+      pinned = false;
+      log.textContent = "Plugin ready: Upgraded Magnet Peripherals (Z-Stage). It is on " + installed + " and no longer pinned.";
+    });
+  });
+
+  figure.querySelectorAll('[data-act="yes"], [data-act="no"]').forEach(function (b) {
+    b.addEventListener("click", function () {
+      var yes = b.getAttribute("data-act") === "yes";
+      var action = pending;
+      dlg.hidden = true;
+      pending = null;
+      if (action) { action(yes); }
+      draw();
+    });
+  });
+
+  figure.querySelector('[data-act="publish"]').addEventListener("click", function () {
+    var parts = key(newest(channel));
+    var v = parts[0] + "." + (parts[1] + 1) + ".0";
+    channel.push(v);
+    log.textContent = "Version " + v + " is now on the channel. This computer's saved list does not know yet.";
+    draw();
+  });
+
+  figure.querySelector('[data-act="refresh"]').addEventListener("click", function () {
+    saved = channel.slice();
+    log.textContent = "Refreshed: the saved list now matches the channel.";
+    draw();
+  });
+
+  figure.querySelector('[data-act="launch"]').addEventListener("click", function () {
+    saved = channel.slice();
+    var latest = newest(channel);
+    log.textContent = newer(latest, installed)
+      ? "Start-up check: the Plugin Updates window lists magnet-microdrop-plugin: " + installed + " --> " + latest + ". Update All or Later."
+      : "Start-up check: everything up to date, no window.";
+    draw();
+  });
+
+  figure.querySelector('[data-act="docs"]').addEventListener("click", function () {
+    log.textContent = "In MicroDrop this opens the plugin's documentation in your web browser.";
+  });
+
+  draw();
+});
+
+Tutorial.demo("relaunch", function (figure, T) {
+  var boxes = figure.querySelectorAll("[data-c]");
+  var title = figure.querySelector("[data-out-title]");
+  var text = figure.querySelector("[data-out-text]");
+  var REASONS = {
+    unknown: "the environment change could not be determined",
+    other: "existing packages were changed or removed: libtiff",
+    nomanifest: "no plugin manifest was found for it",
+    loaded: "heater_controls_ui is already loaded from an earlier install"
+  };
+  var ORDER = ["unknown", "other", "nomanifest", "loaded"];
+
+  function update() {
+    var on = {};
+    boxes.forEach(function (b) { on[b.getAttribute("data-c")] = b.checked; });
+    var first = ORDER.filter(function (k) { return on[k]; })[0];
+
+    if (!first) {
+      title.textContent = "Plugin ready";
+      text.textContent = "Installed and enabled heater-microdrop-plugin 1.12.0. Its groups are on; no restart.";
+      return;
+    }
+    title.textContent = "Relaunch required";
+    text.textContent = "Installed heater-microdrop-plugin 1.12.0. Could not apply without a relaunch: " +
+      REASONS[first] + ". Relaunch MicroDrop now to apply?  [Yes] [No]";
+  }
+
+  boxes.forEach(function (b) { b.addEventListener("change", update); });
+  update();
+});
+</script>

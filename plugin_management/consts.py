@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+from pathlib import Path
+
 # Microdrop utils imports.
 from microdrop_utils.system_config import is_rpi
 
@@ -50,3 +53,8 @@ BUILTIN_PLUGIN_GROUPS = (
 # must live in the preferences FILE — the Redis-backed app_globals runs with
 # persistence disabled (redis.conf: save "") and dies with the app.
 GROUP_ENABLED_PREFERENCES_PATH = "microdrop.plugin_groups"
+
+#: Help > Tutorials page, built from resources/plugin_management.src.html.
+PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "plugin_management.html"
+)
