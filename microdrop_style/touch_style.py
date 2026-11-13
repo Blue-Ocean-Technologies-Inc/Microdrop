@@ -74,6 +74,8 @@ TOUCH_GLYPH_SHAPES = {
     "check": '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     "dash": '<path d="M6 12h12"/>',
     "chevron_down": '<path d="M6 9l6 6 6-6"/>',
+    "chevron_left": '<path d="M15 6l-6 6 6 6"/>',
+    "chevron_right": '<path d="M9 6l6 6-6 6"/>',
     "close": '<path d="M6 6l12 12M18 6L6 18"/>',
 }
 
@@ -186,6 +188,7 @@ def get_touch_style(palette, dark):
             _slider_rules(colors),
             _button_and_field_rules(),
             _tab_menu_and_header_rules(colors),
+            _tab_scroller_rules(colors),
             _item_view_rules(),
         )
     )
@@ -560,6 +563,48 @@ QHeaderView::section {{
     border-bottom: 1px solid {colors["frame"]};
     background-color: {colors["window"]};
     color: {colors["window_text"]};
+}}
+"""
+
+
+def _tab_scroller_rules(colors):
+    """Finger-sized scroll arrows on a tab bar whose tabs overflow it."""
+    arrow = "QTabBar QToolButton"
+    left = touch_glyph_path("chevron_left", colors["text"])
+    right = touch_glyph_path("chevron_right", colors["text"])
+    left_disabled = touch_glyph_path("chevron_left", colors["disabled_text"])
+    right_disabled = touch_glyph_path("chevron_right", colors["disabled_text"])
+
+    return f"""
+QTabBar::scroller {{
+    width: {2 * TOUCH_TARGET_PX}px;
+}}
+{arrow} {{
+    min-width: {TOUCH_TARGET_PX - 2 * TOUCH_FRAME_PX}px;
+    padding: 0px;
+    border: {TOUCH_FRAME_PX}px solid {colors["frame"]};
+    border-radius: {TOUCH_RADIUS_PX}px;
+    background-color: {colors["button"]};
+}}
+{arrow}:pressed {{
+    background-color: {colors["pressed"]};
+    border-color: {colors["accent"]};
+}}
+{arrow}::left-arrow, {arrow}::right-arrow {{
+    width: 22px;
+    height: 22px;
+}}
+{arrow}::left-arrow {{
+    image: url({left});
+}}
+{arrow}::right-arrow {{
+    image: url({right});
+}}
+{arrow}::left-arrow:disabled {{
+    image: url({left_disabled});
+}}
+{arrow}::right-arrow:disabled {{
+    image: url({right_disabled});
 }}
 """
 

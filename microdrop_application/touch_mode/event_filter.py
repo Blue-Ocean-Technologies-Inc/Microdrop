@@ -56,6 +56,7 @@ from .spin_box_session import (
     is_delegate_editor,
     item_view_cell,
 )
+from .tab_bar_scroll import TabBarDragScroller
 from .touch_fit import clear_touch_fit, mark_touch_fit, thin_scroll_bars
 
 #: The only event types the filter acts on; everything else passes at once.
@@ -122,11 +123,15 @@ class TouchModeEventFilter(QObject):
         #: Whether the keyboard on screen is one this filter brought up.
         self._keyboard_shown = False
 
+        #: Scrolls overflowing tab bars by drag, alongside this filter.
+        self._tab_bar_scroller = TabBarDragScroller(self)
+
     def install(self):
         """Filter every event, and mark the widgets already on screen for
         the touch style; ``adapt_existing`` finishes them once it applies."""
         app = QApplication.instance()
         app.installEventFilter(self)
+        app.installEventFilter(self._tab_bar_scroller)
         app.focusChanged.connect(self._on_focus_changed)
 
         for widget in QApplication.allWidgets():
@@ -142,6 +147,7 @@ class TouchModeEventFilter(QObject):
         """Stop filtering, and undo every adaptation."""
         app = QApplication.instance()
         app.removeEventFilter(self)
+        app.removeEventFilter(self._tab_bar_scroller)
         app.focusChanged.disconnect(self._on_focus_changed)
 
         for widget in QApplication.allWidgets():

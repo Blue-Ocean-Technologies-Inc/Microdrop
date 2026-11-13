@@ -26,6 +26,7 @@ from pyface.qt.QtWidgets import (
     QPushButton,
     QScrollArea,
     QScrollBar,
+    QTabBar,
     QToolButton,
 )
 
@@ -111,12 +112,15 @@ def is_compact(widget):
 def grows(widget):
     """Whether the widget grows to finger size by padding: a button or a
     text field its code left free to size (a spin box's or combo box's own
-    line edit is part of that control, not a field)."""
+    line edit is part of that control, not a field, and a tab bar sizes its
+    own scroll arrows)."""
 
     if not isinstance(widget, _GROWING_WIDGETS) or not is_size_free(widget):
         return False
 
-    return not isinstance(widget.parentWidget(), (QAbstractSpinBox, QComboBox))
+    owned_by = (QAbstractSpinBox, QComboBox, QTabBar)
+
+    return not isinstance(widget.parentWidget(), owned_by)
 
 
 def mark_touch_fit(widget):
