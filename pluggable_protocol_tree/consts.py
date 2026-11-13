@@ -265,3 +265,8 @@ PROTOCOL_QUICK_ACTIONS = f"{PKG}.protocol_quick_actions"
 PROTOCOL_TREE_TUTORIAL_HTML_PATH = (
     Path(__file__).parent / "resources" / "protocol_tree.html"
 )
+
+#: Help > Tutorials page, built from resources/protocol_files.src.html.
+PROTOCOL_FILES_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "protocol_files.html"
+)

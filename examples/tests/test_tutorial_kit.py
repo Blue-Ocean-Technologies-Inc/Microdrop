@@ -58,7 +58,10 @@ from microdrop_application.consts import (
     SHORTCUTS_TUTORIAL_HTML_PATH,
 )
 from microdrop_application.plugin import MicrodropPlugin
-from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
+from pluggable_protocol_tree.consts import (
+    PROTOCOL_FILES_TUTORIAL_HTML_PATH,
+    PROTOCOL_TREE_TUTORIAL_HTML_PATH,
+)
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from plugin_management.consts import PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH
 from plugin_management.plugin import PluginManagementPlugin
@@ -84,6 +87,9 @@ GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
 )
 HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
     "help_logs_storage.src.html"
+)
+PROTOCOL_FILES_SOURCE = PROTOCOL_FILES_TUTORIAL_HTML_PATH.with_name(
+    "protocol_files.src.html"
 )
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
@@ -327,6 +333,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Camera & Alignment Tutorial",
         "Zones Tutorial",
         "Protocol Tree Tutorial",
+        "Protocol Files & Experiments Tutorial",
         "Dropbot Status & Controls Tutorial",
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
@@ -356,6 +363,10 @@ def test_getting_started_tutorial_rebuilds_identically():
 
 def test_help_logs_storage_tutorial_rebuilds_identically():
     assert is_up_to_date(HELP_LOGS_STORAGE_SOURCE)
+
+
+def test_protocol_files_tutorial_rebuilds_identically():
+    assert is_up_to_date(PROTOCOL_FILES_SOURCE)
 
 
 def test_protocol_tree_tutorial_rebuilds_identically():
