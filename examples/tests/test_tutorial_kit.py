@@ -51,6 +51,8 @@ from examples.tutorials.new_tutorial import (
     scaffold_tutorial,
 )
 from image_viewer.plugin import ImageViewerPlugin
+from microdrop_application.consts import SHORTCUTS_TUTORIAL_HTML_PATH
+from microdrop_application.plugin import MicrodropPlugin
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from plugin_management.consts import PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH
@@ -80,6 +82,7 @@ HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
 )
+SHORTCUTS_SOURCE = SHORTCUTS_TUTORIAL_HTML_PATH.with_name("shortcuts.src.html")
 PLUGIN_MANAGEMENT_SOURCE = PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH.with_name(
     "plugin_management.src.html"
 )
@@ -272,6 +275,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         DropbotStatusAndControlsPlugin(),
         PluggableProtocolTreePlugin(),
         DeviceViewerPlugin(),
+        MicrodropPlugin(),
         PluginManagementPlugin(),
     ]
 
@@ -295,6 +299,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
         "Protocol Tree Tutorial",
+        "Shortcuts, Gamepad & Touch Assist Tutorial",
     ]
 
     for entry in entries:
@@ -322,6 +327,10 @@ def test_help_logs_storage_tutorial_rebuilds_identically():
 
 def test_protocol_tree_tutorial_rebuilds_identically():
     assert is_up_to_date(PROTOCOL_TREE_SOURCE)
+
+
+def test_shortcuts_tutorial_rebuilds_identically():
+    assert is_up_to_date(SHORTCUTS_SOURCE)
 
 
 def test_plugin_management_tutorial_rebuilds_identically():
