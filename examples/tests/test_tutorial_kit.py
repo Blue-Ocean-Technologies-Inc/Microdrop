@@ -50,7 +50,10 @@ from examples.tutorials.new_tutorial import (
 from image_viewer.plugin import ImageViewerPlugin
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
-from user_help_plugin.consts import GETTING_STARTED_TUTORIAL_HTML_PATH
+from user_help_plugin.consts import (
+    GETTING_STARTED_TUTORIAL_HTML_PATH,
+    HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
+)
 from user_help_plugin.plugin import UserHelpPlugin
 
 # Microdrop style imports.
@@ -62,6 +65,9 @@ CAMERA_ALIGNMENT_SOURCE = CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH.with_name(
 DROPBOT_SOURCE = DROPBOT_STATUS_TUTORIAL_HTML_PATH.with_name("dropbot_status.src.html")
 GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
     "getting_started.src.html"
+)
+HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
+    "help_logs_storage.src.html"
 )
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
@@ -272,6 +278,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Camera & Alignment Tutorial",
         "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
+        "Help, Logs & Saved Files Tutorial",
         "Image Analysis Tutorial",
         "Protocol Tree Tutorial",
     ]
@@ -293,6 +300,10 @@ def test_dropbot_tutorial_rebuilds_identically():
 
 def test_getting_started_tutorial_rebuilds_identically():
     assert is_up_to_date(GETTING_STARTED_SOURCE)
+
+
+def test_help_logs_storage_tutorial_rebuilds_identically():
+    assert is_up_to_date(HELP_LOGS_STORAGE_SOURCE)
 
 
 def test_protocol_tree_tutorial_rebuilds_identically():
