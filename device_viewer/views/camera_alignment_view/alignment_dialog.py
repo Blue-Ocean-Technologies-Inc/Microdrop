@@ -18,7 +18,8 @@ placed side by side. The green Confirm Alignment button between
 them is the macro that commits everything: it saves the endpoint,
 stages the outline points, and fires alignment_confirmed for the
 owner to run Go To Endpoint. Nothing closes the window — the user
-iterates freely and closes when done.
+iterates freely and closes when done. Below the panes, the collapsible
+Presets strip lists the saved alignments (its actions are the owner's).
 
 The three pieces live separately in this module:
 
@@ -63,6 +64,7 @@ from microdrop_style.button_styles import (
     TEXT_BUTTON_STYLE,
 )
 from microdrop_style.icons.icons import (
+    ICON_BOOKMARKS,
     ICON_CHEVRON_LEFT,
     ICON_CHEVRON_RIGHT,
 )
@@ -72,8 +74,11 @@ from microdrop_utils.color_helpers import rgb_to_hex
 from microdrop_utils.traitsui_qt_helpers import IconToggleEditor
 
 # Local imports.
+from ...consts import ALIGNMENT_PRESETS_STRIP_HEIGHT_PX
+from ...models.alignment_preset_table import AlignmentPresetTable
 from ...utils.quad_order import quads_order_matches
 from .alignment_panes import EndpointPane, OutlinePane
+from .alignment_presets_view import alignment_presets_view
 from .alignment_settings import (
     COLOR_SETTING_TRAITS,
     SETTING_TRAITS,
@@ -115,6 +120,12 @@ class CameraAlignmentModel(HasTraits):
 
     #: The sidebar's model (persists through the preferences).
     settings = Instance(AlignmentSettingsModel)
+
+    #: The Presets strip's model; None leaves the strip out.
+    preset_table = Instance(AlignmentPresetTable)
+
+    #: Reveals the Presets strip.
+    presets_visible = Bool(True)
 
     #: True once the outline pane has a real camera frame — gates
     #: Confirm Alignment.
@@ -169,6 +180,16 @@ camera_alignment_dialog_view = View(
                 visible_when="options_visible",
             ),
         ),
+        VGroup(
+            UItem(
+                "preset_table",
+                style="custom",
+                editor=InstanceEditor(view=alignment_presets_view),
+                # Negative: a fixed height, so the panes take the rest.
+                height=-ALIGNMENT_PRESETS_STRIP_HEIGHT_PX,
+            ),
+            visible_when="presets_visible and preset_table is not None",
+        ),
         HGroup(
             spring,
             Group(
@@ -180,6 +201,15 @@ camera_alignment_dialog_view = View(
                     "Endpoint",
                 ),
                 style_sheet=CONFIRM_BUTTON_STYLE,
+            ),
+            UItem(
+                "presets_visible",
+                editor=IconToggleEditor(
+                    on_glyph=ICON_BOOKMARKS,
+                    off_glyph=ICON_BOOKMARKS,
+                    tooltip="Hide or show the saved alignment presets",
+                ),
+                enabled_when="preset_table is not None",
             ),
             spring,
         ),

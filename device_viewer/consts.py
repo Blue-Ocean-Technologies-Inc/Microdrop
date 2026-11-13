@@ -676,6 +676,125 @@ DEVICE_VIEWER_CACHE_DIRNAME = ".device_viewer_cache"
 CAMERA_ENDPOINTS_FILENAME = "camera_endpoints.json"
 
 # ---------------------------------------------------------------------------
+# Camera-alignment presets
+# ---------------------------------------------------------------------------
+#: The presets library: one JSON file in this directory under
+#: ETSConfig.application_home (resolved at run time, like the endpoints).
+CAMERA_ALIGNMENT_DIRNAME = "camera_alignment"
+ALIGNMENT_PRESETS_FILENAME = "alignment_presets.json"
+
+#: The file's schema; a file written by a newer schema opens read-only.
+ALIGNMENT_PRESETS_SCHEMA_VERSION = 1
+
+#: Record kinds and scopes. Stage 1 writes only named, device-scoped
+#: presets; later stages add history snapshots and camera/any scopes.
+ALIGNMENT_PRESET_KIND_NAMED = "named"
+ALIGNMENT_PRESET_SCOPE_DEVICE = "device"
+
+#: Suggested names are ``<stem>-N``; migrated endpoints are named
+#: ``<device> <suffix>``.
+ALIGNMENT_PRESET_DEFAULT_STEM = "alignment"
+MIGRATED_ENDPOINT_PRESET_SUFFIX = "endpoint"
+
+#: Two quads closer than this per coordinate (camera pixels or scene
+#: units) are the same alignment.
+ALIGNMENT_QUAD_TOLERANCE = 0.01
+
+#: Height of the window's Presets strip.
+ALIGNMENT_PRESETS_STRIP_HEIGHT_PX = 180
+
+#: How a preset's save time shows in the table (local time).
+ALIGNMENT_PRESET_SAVED_AT_FORMAT = "%Y-%m-%d %H:%M"
+
+SAVE_ALIGNMENT_PRESET_DIALOG_TITLE = "Save Alignment Preset"
+ALIGNMENT_PRESETS_TITLE = "Alignment Presets"
+APPLY_ALIGNMENT_PRESET_DIALOG_TITLE = "Apply Alignment Preset"
+DELETE_ALIGNMENT_PRESET_DIALOG_TITLE = "Delete Alignment Preset"
+
+#: Save as… with dots moved in the panes but not confirmed: the choices.
+CONFIRM_AND_SAVE_CHOICE = "Confirm & Save"
+SAVE_CONFIRMED_CHOICE = "Save Confirmed"
+PENDING_PANE_EDITS_MESSAGE = (
+    "The dots in the panes differ from the confirmed alignment. Confirm "
+    "them first and save the result, or save the alignment as last "
+    "confirmed?"
+)
+
+#: The naming dialog's note for a preset without camera-side corners.
+ENDPOINT_ONLY_PRESET_NOTE = (
+    "No camera outline is confirmed (or the camera has no frame): this "
+    "preset will hold the endpoint only."
+)
+
+#: Save as… with nothing confirmed for the device yet: only Confirm & Save.
+NOTHING_CONFIRMED_MESSAGE = (
+    "Nothing is confirmed for this device yet. Confirm the dots in the "
+    "panes and save the result?"
+)
+
+#: Two frame sizes whose width/height ratios differ by less than this
+#: fraction have the same picture shape, so a saved camera quad rescales
+#: onto the live frame axis by axis.
+ALIGNMENT_ASPECT_RATIO_TOLERANCE = 0.01
+
+#: Naming rule and store refusals.
+PRESET_NAME_EMPTY_MESSAGE = "Enter a name for the preset."
+PRESET_NAME_CONTROL_CHARACTERS_MESSAGE = (
+    "A preset name cannot contain control characters."
+)
+PRESET_NAME_TAKEN_TEMPLATE = "{device_key} already has a preset named '{name}'."
+PRESET_UNKNOWN_MESSAGE = "There is no such camera-alignment preset."
+PRESET_NEEDS_DEVICE_MESSAGE = "A preset needs the device it was saved for."
+
+#: Why presets are read-only, shown above the table.
+PRESETS_NEWER_SCHEMA_MESSAGE = (
+    "Presets are read-only: the presets file was written by a newer version "
+    "of MicroDrop."
+)
+PRESETS_UNAVAILABLE_TEMPLATE = (
+    "Presets are read-only this session: {path} could not be read or written."
+)
+
+#: Shown once when the window opens after an unreadable presets file was
+#: set aside.
+PRESETS_UNREADABLE_TEMPLATE = (
+    "The camera-alignment presets file could not be read. It was kept as "
+    "{copy} and the presets start again from the saved endpoints."
+)
+
+#: Why a preset cannot be (fully) applied — the table's Warning column and
+#: the status bar after Apply.
+PRESET_OTHER_DEVICE_WARNING_TEMPLATE = (
+    "Saved for {device_key} — load that device to apply it"
+)
+PRESET_SHAPE_MISMATCH_NOTE = (
+    "camera picture shape differs from when this preset was saved — endpoint only"
+)
+PRESET_INVALID_FRAME_SIZE_NOTE = (
+    "the preset's saved camera picture size is invalid — endpoint only"
+)
+PRESET_NO_CAMERA_FRAME_NOTE = "the camera shows no picture — endpoint only"
+PRESET_ENDPOINT_ONLY_NOTE = "endpoint only"
+PRESET_RESCALED_TEMPLATE = "camera corners rescaled from {saved} to {live}"
+
+#: The automatic snapshot of a working alignment no preset holds, taken
+#: before Apply replaces it.
+BEFORE_APPLY_PRESET_NAME_TEMPLATE = 'Before "{name}" {when}'
+
+#: The endpoint pane's Reset prompt when the device has a default preset.
+RESET_ENDPOINT_WITH_DEFAULT_TEMPLATE = (
+    "Clear the saved endpoint for {device}? The dots return to the default "
+    "grid; the next time this window opens it starts from the default "
+    "preset '{preset}'."
+)
+
+#: The endpoint cache exists but cannot be read; it is never overwritten.
+ENDPOINTS_UNREADABLE_TEMPLATE = (
+    "The camera endpoints file {path} exists but could not be read, so it was "
+    "not overwritten."
+)
+
+# ---------------------------------------------------------------------------
 # Edit Connections dialog
 # ---------------------------------------------------------------------------
 #: Line colors are '#rrggbb' hex strings; widths and radii are in VIEW

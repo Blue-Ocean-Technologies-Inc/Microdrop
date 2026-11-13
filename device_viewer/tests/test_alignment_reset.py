@@ -94,3 +94,38 @@ def test_declined_endpoint_reset_changes_nothing(endpoint_pane, monkeypatch):
 
     assert endpoint_pane.endpoint_store.load("chip") == SAVED
     assert _rounded(endpoint_pane.shown_quad()) == SAVED
+
+
+def test_reset_prompt_names_the_default_preset_used_next_time(
+    endpoint_pane, monkeypatch
+):
+    messages = []
+    endpoint_pane.default_preset_name = "bench"
+
+    def record(parent, message, **kwargs):
+        messages.append(message)
+
+        return NO
+
+    monkeypatch.setattr(alignment_panes, "confirm", record)
+
+    endpoint_pane.reset = True
+
+    assert "default preset 'bench'" in messages[0]
+
+
+def test_reset_over_an_unreadable_cache_reports_and_keeps_the_dots(
+    endpoint_pane, monkeypatch
+):
+    errors = []
+    endpoint_pane.endpoint_store.path.write_text("{not json", encoding="utf-8")
+    monkeypatch.setattr(alignment_panes, "confirm", lambda *a, **k: YES)
+    monkeypatch.setattr(alignment_panes, "error", lambda *a, **k: errors.append(a))
+
+    endpoint_pane.reset = True
+
+    assert errors
+    assert _rounded(endpoint_pane.shown_quad()) == SAVED
+    assert endpoint_pane.endpoint_store.path.read_text(encoding="utf-8") == (
+        "{not json"
+    )

@@ -78,10 +78,23 @@ def test_quad_points_are_coerced_to_floats(store):
 def test_corrupt_file_reads_as_empty(store):
     store.path.parent.mkdir(parents=True, exist_ok=True)
     store.path.write_text("{not json", encoding="utf-8")
+
     assert store.load("device_a") is None
-    # ...and saving over it recovers the cache.
-    store.save("device_a", QUAD)
-    assert store.load("device_a") == QUAD
+    assert store.device_keys() == []
+
+
+def test_unreadable_file_is_never_written_over(store):
+    store.path.parent.mkdir(parents=True, exist_ok=True)
+    store.path.write_text("{not json", encoding="utf-8")
+
+    # A save would otherwise drop every other device's endpoint.
+    with pytest.raises(OSError):
+        store.save("device_a", QUAD)
+
+    with pytest.raises(OSError):
+        store.remove("device_a")
+
+    assert store.path.read_text(encoding="utf-8") == "{not json"
 
 
 def test_malformed_stored_quad_is_ignored(store):
