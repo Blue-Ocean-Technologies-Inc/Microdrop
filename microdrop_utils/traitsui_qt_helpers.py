@@ -2134,10 +2134,15 @@ class _PresetButtonsEditor(QtEditor):
         for value, label in zip(self.value, labels):
             button = QPushButton(label)
             button.setFixedWidth(width)
-            button.setMinimumHeight(BUTTON_MIN_HEIGHT)
             button.clicked.connect(partial(self._apply, value))
 
             layout.addWidget(button)
+
+            # A floor below what the label needs lets a short pane squeeze
+            # the button instead of scrolling.
+            button.setMinimumHeight(
+                max(BUTTON_MIN_HEIGHT, button.minimumSizeHint().height())
+            )
 
 
 class PresetButtonsEditor(BasicEditorFactory):
