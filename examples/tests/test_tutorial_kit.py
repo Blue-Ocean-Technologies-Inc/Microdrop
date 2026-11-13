@@ -336,6 +336,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
     assert [entry.title for entry in entries] == [
         "Getting Started with MicroDrop",
         "Device Viewer Tutorial",
+        "Device Files, Channels & Connections Tutorial",
         "Camera & Alignment Tutorial",
         "Recording Viewer Tutorial",
         "Zones Tutorial",
