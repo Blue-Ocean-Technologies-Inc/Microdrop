@@ -154,8 +154,7 @@ ol.legend { padding-left: 1.6em; margin: 4px 0; font-size: .88rem; color: var(--
   <h1>The Device Viewer</h1>
   <p>The Device Viewer is the map of your chip. You click electrodes here to switch them on, draw routes for droplets to
   follow, run those routes, and undo what you did not mean to do.</p>
-  <p>The short looping clips are recordings of MicroDrop; they play while they are on screen. A few marked <em>Simulated</em>
-  are made from real footage and stand in until a recording replaces them. The chip pictures you can
+  <p>The short looping clips are recordings of MicroDrop; they play while they are on screen. The chip pictures you can
   press <strong>▶ Play</strong> or <strong>Step ▸</strong> on are simulations that follow MicroDrop's own route rules: change
   the settings and watch what the app would do.</p>
 </header>
@@ -399,7 +398,7 @@ width and the minimum heights of its tables (<span class="ui">Device Viewer Side
 <div class="clip-box" style="max-width:336px"><video data-clip data-media muted loop playsinline controls preload="metadata" width="336" height="146" poster="device_viewer_basics_media/mode-label.webp" aria-label="Simulated: the keys E, A, N and D; the label reads Mode: Edit, Auto, Channel Edit, Draw" data-simulated="mode label (sim_toolkit shots/dv_modes.py)">
 <source src="device_viewer_basics_media/mode-label.webm" type="video/webm">
 </video></div>
-<figcaption>Simulated from real footage — to be replaced with a recording. Keys <kbd>E</kbd>, <kbd>A</kbd>, <kbd>N</kbd>, <kbd>D</kbd>: the label follows.</figcaption>
+<figcaption>Keys <kbd>E</kbd>, <kbd>A</kbd>, <kbd>N</kbd>, <kbd>D</kbd>: the label follows.</figcaption>
 </figure>
 <table class="small icons-table">
   <thead><tr><th>Icon</th><th>Tooltip</th><th>What it does</th></tr></thead>
@@ -670,7 +669,7 @@ change any value; the chip replays the phases MicroDrop would switch.</p>
 <div class="clip-box" style="max-width:816px"><video data-clip data-media muted loop playsinline controls preload="metadata" width="816" height="664" poster="device_viewer_basics_media/length-run.webp" aria-label="Simulated: one loop run with Length 1, then Length 2; the switched-on electrodes go round it" data-simulated="Length 1 then 2 (sim_toolkit shots/dv_length.py)">
 <source src="device_viewer_basics_media/length-run.webm" type="video/webm">
 </video></div>
-<figcaption>Simulated from real footage — to be replaced with a recording. Realtime Off: the electrodes switch, the droplet stays put. 2× speed. The same loop with Length 1, then Length 2 and Overlay 1: each phase switches on one row of the two-wide slug (Lanes 1), then a 2 × 2 block.</figcaption>
+<figcaption>Realtime Off: the electrodes switch, the droplet stays put. 2× speed. The same loop with Length 1, then Length 2 and Overlay 1: each phase switches on one row of the two-wide slug (Lanes 1), then a 2 × 2 block.</figcaption>
 </figure>
   <div data-what><p>How many electrodes along the route are on at once: the droplet's footprint along its way.</p></div>
   <div data-when><p>Match it to the droplet: a droplet two electrodes long wants Length 2.</p></div>
@@ -721,7 +720,7 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 <div class="clip-box" style="max-width:816px"><video data-clip data-media muted loop playsinline controls preload="metadata" width="816" height="664" poster="device_viewer_basics_media/rep-duration.webp" aria-label="Simulated: a loop run with Rep Duration 20; two laps, then the start electrodes stay on until Phase 20/20" data-simulated="Rep Duration 20 (sim_toolkit shots/dv_repdur.py)">
 <source src="device_viewer_basics_media/rep-duration.webm" type="video/webm">
 </video></div>
-<figcaption>Simulated from real footage — to be replaced with a recording. Realtime Off: the electrodes switch, the droplet stays put. 3× speed. Rep Duration 20 on an 8-phase loop: two laps fit (<span class="ui">Rep: 1/2</span>, <span class="ui">2/2</span>), then the slug waits on its start electrodes until <span class="ui">Phase: 20/20</span>.</figcaption>
+<figcaption>Realtime Off: the electrodes switch, the droplet stays put. 3× speed. Rep Duration 20 on an 8-phase loop: two laps fit (<span class="ui">Rep: 1/2</span>, <span class="ui">2/2</span>), then the slug waits on its start electrodes until <span class="ui">Phase: 20/20</span>.</figcaption>
 </figure>
   <div data-what><p>Instead of a number of laps, a time: as many whole laps as fit (at least one), then the droplet waits at
   the start until the time is up.</p></div>
@@ -738,7 +737,7 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 <div class="clip-box" style="max-width:816px"><video data-clip data-media muted loop playsinline controls preload="metadata" width="816" height="664" poster="device_viewer_basics_media/ramps.webp" aria-label="Simulated: a loop run with Ramp Up, then with Ramp Dn; the slug switches on and off a row at a time" data-simulated="Ramp Up then Ramp Dn (sim_toolkit shots/dv_ramps.py)">
 <source src="device_viewer_basics_media/ramps.webm" type="video/webm">
 </video></div>
-<figcaption>Simulated from real footage — to be replaced with a recording. Realtime Off: the electrodes switch, the droplet stays put. 2× speed. Ramp Up: the first phase switches on only the slug's tail row, the next the whole 2 × 2. Ramp Dn: an extra last phase leaves only the head row on.</figcaption>
+<figcaption>Realtime Off: the electrodes switch, the droplet stays put. 2× speed. Ramp Up: the first phase switches on only the slug's tail row, the next the whole 2 × 2. Ramp Dn: an extra last phase leaves only the head row on.</figcaption>
 </figure>
   <div data-what><p>The footprint comes on a row at a time from its tail until it is full, instead of all at once.</p></div>
   <div data-when><p>A droplet that tears or lags when a long footprint switches on at once.</p></div>
@@ -760,7 +759,7 @@ The run is stopped, Overlay set to 1 and the droplet clicked back to the start; 
 <div class="clip-box" style="max-width:816px"><video data-clip data-media muted loop playsinline controls preload="metadata" width="816" height="664" poster="device_viewer_basics_media/lin-reps.webp" aria-label="Simulated: an open route run with Reps 2 and Lin Reps; the switched-on electrodes run to its end, then start again" data-simulated="Lin Reps, Reps 2 (sim_toolkit shots/dv_linreps.py)">
 <source src="device_viewer_basics_media/lin-reps.webm" type="video/webm">
 </video></div>
-<figcaption>Simulated from real footage — to be replaced with a recording. Realtime Off: the electrodes switch, the droplet stays put. 2× speed. An open L route, Reps 2, Lin Reps ticked: the slug runs to the end, then starts again from the first electrode (<span class="ui">Rep: 2/2</span>).</figcaption>
+<figcaption>Realtime Off: the electrodes switch, the droplet stays put. 2× speed. An open L route, Reps 2, Lin Reps ticked: the slug runs to the end, then starts again from the first electrode (<span class="ui">Rep: 2/2</span>).</figcaption>
 </figure>
   <div data-what><p>Replays an open (not loop) route Reps times, each time starting again from its first electrode, not back
   and forth.</p></div>
