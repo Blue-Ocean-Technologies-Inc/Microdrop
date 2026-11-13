@@ -9,7 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """The Touch mode switch: turning it on installs the touch stylesheet block
-and the touch event filter, turning it off removes both."""
+and the touch event filter, and shows long-press tooltips as help bubbles;
+turning it off undoes all three."""
 
 # Enthought library imports.
 from pyface.qt.QtCore import QTimer
@@ -19,9 +20,13 @@ from traits.api import Bool, HasTraits, Instance, observe
 # Microdrop style imports.
 from microdrop_style.helpers import apply_touch_style
 
+# Microdrop utils imports.
+from microdrop_utils.touch_long_press import set_tooltip_presenter
+
 # Local imports.
 from ..consts import TOUCH_MODE_APP_PROPERTY
 from .event_filter import TouchModeEventFilter
+from .help_mode import help_mode_controller
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -62,8 +67,10 @@ class TouchModeController(HasTraits):
             self._event_filter.install()
             apply_touch_style(True)
             self._event_filter.adapt_existing()
+            set_tooltip_presenter(help_mode_controller.presenter.present_transient)
 
         else:
+            set_tooltip_presenter(None)
             self._event_filter.uninstall()
             self._event_filter = None
             apply_touch_style(False)

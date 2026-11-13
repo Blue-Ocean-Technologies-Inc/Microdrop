@@ -29,6 +29,7 @@ ICON_CHECK = "check"  # confirm/apply
 ICON_CALL_TO_ACTION = "call_to_action"  # panel with a button strip
 ICON_REMOVE_SELECTION = "remove_selection"  # undraw: sweep electrodes out
 ICON_CHECKLIST = "checklist"  # multi-select: clicks add to the selection
+ICON_HELP = "help"  # help mode: touch a control to read what it does
 ICON_CLOSE = "close"  # dismiss/cancel
 ICON_UNDO = "undo"  # step back one edit
 ICON_REDO = "redo"  # re-apply an undone edit

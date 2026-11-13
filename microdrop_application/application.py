@@ -169,7 +169,8 @@ class MicrodropApplication(TasksApplication):
     #: Whether the dock separators already re-style on colour-scheme changes.
     _dock_separator_follows_color_scheme = Bool(False)
 
-    #: Applies the touch_mode preference to the running app.
+    #: Applies the touch_mode preference to the running app; MicrodropPlugin
+    #: follows it to show the Help-mode toggle in the status bar.
     touch_mode_controller = Instance(TouchModeController, ())
 
     ###########################################################################

@@ -13,6 +13,18 @@ from pyface.qt.QtCore import QEvent, QObject, Qt, QTimer
 from pyface.qt.QtGui import QContextMenuEvent, QGuiApplication
 from pyface.qt.QtWidgets import QApplication, QToolTip, QWidget
 
+#: Shows a long-press tooltip as ``presenter(global_pos, text)`` in place of
+#: QToolTip; Touch mode installs its help bubble here.
+_tooltip_presenter = None
+
+
+def set_tooltip_presenter(presenter):
+    """Show long-press tooltips through ``presenter(global_pos, text)``;
+    None restores QToolTip."""
+    global _tooltip_presenter
+
+    _tooltip_presenter = presenter
+
 
 class TouchLongPressRightClickFilter(QObject):
     """Application-level event filter that turns a touch long-press into a
@@ -98,5 +110,7 @@ class TouchLongPressRightClickFilter(QObject):
 
         global_pos, text = self._pending_tooltip
         self._pending_tooltip = None
+        show_tooltip = _tooltip_presenter or QToolTip.showText
+
         # Deferred a tick so the release finishes dispatching first.
-        QTimer.singleShot(0, lambda: QToolTip.showText(global_pos, text))
+        QTimer.singleShot(0, lambda: show_tooltip(global_pos, text))

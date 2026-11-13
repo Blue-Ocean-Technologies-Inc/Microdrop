@@ -68,5 +68,43 @@ ADAPTED_ACCELERATION_PROPERTY = "_touch_mode_accelerated"
 #: so re-showing it (the view scrolling it back into sight) does not reopen.
 PAD_OPENED_PROPERTY = "_touch_mode_pad_opened"
 
+#### Help mode ##############################################################
+
+#: Longest button or label text used as a help bubble's bold title.
+HELP_TITLE_MAX_CHARS = 40
+
+#: Font families whose button "text" is an icon ligature, never a title.
+ICON_FONT_FAMILY_PREFIXES = ("Material",)
+
+#: Help bubble: widest text column, arrow depth, gap to the control, and
+#: how far above the touch point it stays so the finger never covers it.
+HELP_BUBBLE_MAX_WIDTH_PX = 320
+HELP_BUBBLE_ARROW_PX = 10
+HELP_BUBBLE_GAP_PX = 4
+HELP_BUBBLE_FINGER_CLEARANCE_PX = 40
+
+#: Width of the accent outline around the control a bubble describes.
+HELP_OUTLINE_PX = 3
+
+#: How long a long-press help bubble stays up outside Help mode.
+HELP_TRANSIENT_HIDE_MS = 6000
+
+#: Bubble text for a control without any description.
+HELP_NO_DESCRIPTION_TEXT = "No description yet."
+
+#: Banner shown while Help mode is on.
+HELP_BANNER_TEXT = "Help mode — touch anything to see what it does"
+
+#: Tooltip of the Help-mode toggle.
+HELP_TOGGLE_TOOLTIP = "Help mode: touch any control to read what it does"
+
+#: Dynamic property marking the Help-mode controls (toggle, Done), whose
+#: input Help mode lets through.
+HELP_MODE_CONTROL_PROPERTY = "_help_mode_control"
+
+#: Dynamic property marking a viewport whose flick scrolling Help mode
+#: suspended, to grab again when it ends.
+SUSPENDED_SCROLLER_PROPERTY = "_help_mode_suspended_scroller"
+
 #: Dynamic property marking a viewport touch mode gave flick scrolling.
 FLICK_SCROLLING_PROPERTY = "_touch_mode_flick_scrolling"

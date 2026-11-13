@@ -22,10 +22,11 @@ from envisage.api import (
     ServiceOffer,
 )
 from envisage.ui.tasks.api import TaskFactory
-from traits.api import List
+from traits.api import List, observe
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_status_bar.consts import STATUS_BAR_ICONS
 from user_help_plugin.consts import TUTORIALS, TutorialEntry
 
 # Local imports.
@@ -57,6 +58,22 @@ class MicrodropPlugin(Plugin):
 
     #: Help > Tutorials entries for the app-wide keys and touch tools.
     tutorials = List(contributes_to=TUTORIALS)
+
+    #: The Help-mode ? toggle, in the status bar while Touch mode is on.
+    status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
+
+    @observe("application:touch_mode_controller:enabled")
+    def _show_help_toggle_in_touch_mode(self, event):
+        """Add the ? toggle when Touch mode turns on, remove it (the status
+        bar deletes it) when it turns off."""
+
+        if event.new:
+            from .touch_mode.help_controls import make_help_toggle_button
+
+            self.status_bar_icons.append(make_help_toggle_button())
+
+        else:
+            del self.status_bar_icons[:]
 
     ###########################################################################
     # Protected interface.
