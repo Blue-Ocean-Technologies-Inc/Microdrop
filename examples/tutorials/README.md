@@ -131,7 +131,7 @@ these elements explicitly):
 | `<i data-glyph="ICON_X">` or `<i data-glyph="ligature">` | a toolbar button showing that glyph; add `data-on` for the switched-on look, `data-inline` for text size, `data-label="…"` to announce it |
 | `<img src="figure.svg">`, `.png` | inlined as a data URI; `data-inline` on an SVG pastes its markup instead, so it can use the theme colours |
 | `<style>` / `<script>` | moved after the kit's CSS / JS; a `<style>` with attributes (`media="print"`) keeps its own element. Scripts must be inline: `<script src>` fails the build |
-| `<video data-clip poster="…"><source src="<slug>_media/clip.webm"></video>` | a real clip, left as a sidecar file (see *Clips* below); the `poster` is inlined |
+| `<video data-clip poster="…"><source src="<slug>_media/clip.webm"></video>` | a real clip, left as a sidecar file (see *Clips* below); the `poster` is inlined, or left as a sidecar too with `data-media` on the `<video>` |
 | `<img data-media src="<slug>_media/still.webp" alt="…">` | a large still, left as a sidecar file instead of inlined (see *Clips* below) |
 | `<a data-media href="<slug>_media/report.html">` | a link to a document shipped as a sidecar file (see *Linked documents* below) |
 
@@ -203,6 +203,12 @@ screenshot, see `data-media` below). A clip ships as a sidecar file in a folder 
   is, at a scale where the text the reader must read is at least about 11 px
   tall, rather than shrinking the whole screen; keep posters small (a third of
   the clip's size is enough), since they are inlined into the page.
+- A page short of room can keep a poster beside its clip instead: with
+  `data-media` on the `<video>`, the `poster` follows the clip rules (inside
+  the folder, present, counted in its budget) and is not inlined. Then the
+  page alone shows no still for that clip, so keep it for clips the page can
+  spare that way, such as a second player of a clip already shown inlined
+  elsewhere on the page, or a stand-in clip waiting for a recording.
 - The kit plays a `data-clip` only while it is on screen, never on its own
   under `prefers-reduced-motion`, and when the folder is missing it keeps the
   poster and says where the clip ships.
