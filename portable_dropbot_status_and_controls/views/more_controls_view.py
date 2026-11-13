@@ -52,7 +52,11 @@ _pid_spin_box = DoubleSpinBoxEditor(
 
 temperature = VGroup(
     HGroup(
-        UItem("show_temperature", editor=IconToggleEditor()),
+        UItem(
+            "show_temperature",
+            editor=IconToggleEditor(),
+            tooltip="Show or hide the per-channel heater controls",
+        ),
         Label("Temperature Control (per channel)"),
     ),
     VGroup(
@@ -75,6 +79,7 @@ temperature = VGroup(
                     unit="°C",
                     decimals=1,
                 ),
+                tooltip="Set the selected channel's target to this temperature now",
             ),
         ),
         HGroup(
@@ -91,11 +96,17 @@ temperature = VGroup(
                 editor=InPlaceToggleEditor(
                     on_label="Stop Heating", off_label="Start Heating"
                 ),
+                tooltip="Turn the selected channel's heater control on or off; "
+                "the board does not report it back",
             ),
         ),
         VGroup(
             HGroup(
-                UItem("show_pid", editor=IconToggleEditor()),
+                UItem(
+                    "show_pid",
+                    editor=IconToggleEditor(),
+                    tooltip="Show or hide the heater PID tuning",
+                ),
                 Label("PID Tuning"),
             ),
             VGroup(
@@ -104,8 +115,14 @@ temperature = VGroup(
                 Item("pid_kd", label="Kd", editor=_pid_spin_box),
                 Item("pid_period_ms", label="Period (ms)"),
                 HGroup(
-                    UItem("read_pid_button"),
-                    UItem("apply_pid_button"),
+                    UItem(
+                        "read_pid_button",
+                        tooltip="Read the selected channel's PID settings",
+                    ),
+                    UItem(
+                        "apply_pid_button",
+                        tooltip="Write these PID settings to the selected channel",
+                    ),
                 ),
                 visible_when="show_pid",
             ),
@@ -117,7 +134,11 @@ temperature = VGroup(
 
 pmt = VGroup(
     HGroup(
-        UItem("show_pmt", editor=IconToggleEditor()),
+        UItem(
+            "show_pmt",
+            editor=IconToggleEditor(),
+            tooltip="Show or hide the PMT power and gain",
+        ),
         Label("PMT"),
     ),
     VGroup(
@@ -132,12 +153,14 @@ pmt = VGroup(
             UItem(
                 "gain_presets",
                 editor=PresetButtonsEditor(target="pmt_gain", fire="set_gain_button"),
+                tooltip="Set the PMT gain to this value now",
             ),
         ),
         UItem(
             "pmt_power",
             style="custom",
             editor=InPlaceToggleEditor(on_label="PMT On", off_label="PMT Off"),
+            tooltip="Turn the PMT on or off",
         ),
         visible_when="show_pmt",
         enabled_when="connected",

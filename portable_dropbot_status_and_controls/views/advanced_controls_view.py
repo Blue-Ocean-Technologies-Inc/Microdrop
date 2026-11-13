@@ -59,10 +59,24 @@ fields = VGrid(
 motor_params = VGroup(
     HGroup(
         Item("selected_motor", label="Motor"),
-        UItem("read_button"),
-        UItem("write_button", enabled_when="params_loaded"),
-        UItem("preset_button", enabled_when="params_loaded"),
-        UItem("reboot_button"),
+        UItem("read_button", tooltip="Read the selected motor's params from the board"),
+        UItem(
+            "write_button",
+            enabled_when="params_loaded",
+            tooltip="Send the edited params to the board's RAM; "
+            "lost on reboot unless preset to flash",
+        ),
+        UItem(
+            "preset_button",
+            enabled_when="params_loaded",
+            tooltip="Save the motor's current on-board params to "
+            "flash so they survive a reboot",
+        ),
+        UItem(
+            "reboot_button",
+            tooltip="Reboot the motor board so flashed params take "
+            "effect; run Home All afterwards",
+        ),
     ),
     fields,
     Item("params_status", style="readonly", label="Status"),

@@ -25,7 +25,12 @@ macro = VGroup(
         "→ press pogos"
     ),
     HGroup(
-        UItem("run_calibration_button"),
+        UItem(
+            "run_calibration_button",
+            tooltip="Fit the capacitance calibration against the "
+            "reference caps; applies 100 V/10 kHz HV with "
+            "the pogo pads released",
+        ),
         Item("calibration_status", style="readonly", label="Status"),
     ),
     label="ML Calibration Macro",
@@ -47,8 +52,13 @@ ml_path = VGroup(
 gain = VGroup(
     HGroup(
         Item("electrode_gain", label="Permille"),
-        UItem("read_gain_button"),
-        UItem("apply_gain_button"),
+        UItem(
+            "read_gain_button", tooltip="Read the board's electrode gain into the field"
+        ),
+        UItem(
+            "apply_gain_button",
+            tooltip="Write this gain to the board, which keeps it in flash",
+        ),
     ),
     label="Electrode Gain",
     show_border=True,
@@ -58,8 +68,15 @@ gain = VGroup(
 cal_caps = VGroup(
     HGroup(
         Item("cal_caps", label="Reference Caps"),
-        UItem("read_cal_caps_button"),
-        UItem("apply_cal_caps_button"),
+        UItem(
+            "read_cal_caps_button",
+            tooltip="Read the board's reference-cap count into the field",
+        ),
+        UItem(
+            "apply_cal_caps_button",
+            tooltip="Set the board's reference-cap count, kept in "
+            "flash; it must match the caps fitted on the board",
+        ),
     ),
     label="Reference-Cap Count",
     show_border=True,
