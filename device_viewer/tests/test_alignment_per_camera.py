@@ -349,21 +349,63 @@ def test_restore_creates_no_before_preset(controller, model, cameras):
     assert not any(name.startswith("Before") for name in names)
 
 
-def test_restore_is_one_undo_entry(controller, model, cameras):
+def test_restore_stays_off_the_undo_stack(controller, model, cameras):
     DeviceViewerPublishController(model=model)
     _take_charge(controller, model, cameras)
     _switch(cameras, CAM_B)
     _set_live(model, REFERENCE_B, SCENE_B)
     stack = model.undo_manager.active_stack
     entries_before = len(stack._stack)
+    undo_name_before = stack.undo_name
 
     _switch(cameras, CAM_A)
 
-    assert len(stack._stack) == entries_before + 1
+    assert _live(model) == (_tuples(REFERENCE_A), _tuples(SCENE_A))
+    assert len(stack._stack) == entries_before
+    assert stack.undo_name == undo_name_before
 
+
+def test_undo_after_a_restore_cannot_hand_over_another_cameras_alignment(
+    controller, model, cameras
+):
+    DeviceViewerPublishController(model=model)
+    _take_charge(controller, model, cameras)
+    _switch(cameras, CAM_B)
+    _set_live(model, REFERENCE_B, SCENE_B)
+    _switch(cameras, CAM_A)
+
+    # The restore is not on the stack: undo cannot put camera B's
+    # alignment back under camera A.
     model.undo_manager.undo()
+    _switch(cameras, CAM_B)
+
+    assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
+        [list(point.toTuple()) for point in SCENE_A]
+    )
+
+
+def test_a_start_up_restore_pushes_no_undo_entry(controller, model, cameras):
+    DeviceViewerPublishController(model=model)
+    controller.preset_store.remember_last_used(_camera_preset(CAM_A, "camera_device"))
+    model.preferences.preferences.set(
+        LIVE_ALIGNMENT_SETUP_PREFERENCE,
+        json.dumps(
+            {
+                "camera_id": "usb#b",
+                "camera_label": "",
+                "device_key": "2x3device",
+                "owned": False,
+            }
+        ),
+    )
+    _set_live(model, REFERENCE_A, SCENE_A)
+    stack = model.undo_manager.active_stack
+    entries_before = len(stack._stack)
+
+    controller.camera_model = cameras
 
     assert _live(model) == (_tuples(REFERENCE_B), _tuples(SCENE_B))
+    assert len(stack._stack) == entries_before
 
 
 def test_restore_waits_for_a_running_protocol(controller, model, cameras):

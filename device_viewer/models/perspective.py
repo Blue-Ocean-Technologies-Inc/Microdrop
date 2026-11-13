@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 # Enthought library imports.
 from pyface.qt.QtCore import QPointF
 from pyface.qt.QtGui import QTransform
-from traits.api import Event, HasTraits, Instance, List, observe
+from traits.api import Bool, Event, HasTraits, Instance, List, observe
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -43,6 +43,11 @@ class PerspectiveModel(HasTraits):
 
     #: Fires after reset(): the user threw the alignment away.
     alignment_reset = Event()
+
+    #: True while a saved alignment is put back on the rects (a camera or
+    #: device switch restores one): not a user edit, so it stays off the
+    #: undo stack.
+    restoring = Bool(False)
 
     # -------------------- Methods ------------------------
     def get_closest_point(self, point: QPointF) -> Tuple[Optional[QPointF], int]:

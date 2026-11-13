@@ -715,9 +715,6 @@ CAMERA_MATCHED_BY_NAME_NOTE = "(matched by name — no stable camera id)"
 #: camera.reference_rect preferences) was made for, as JSON.
 LIVE_ALIGNMENT_SETUP_PREFERENCE = "camera.alignment_setup"
 
-#: The undo-stack entry of a restored alignment.
-RESTORE_ALIGNMENT_UNDO_NAME = "Restore Camera Alignment"
-
 #: Suggested names are ``<stem>-N``; migrated endpoints are named
 #: ``<device> <suffix>``.
 ALIGNMENT_PRESET_DEFAULT_STEM = "alignment"

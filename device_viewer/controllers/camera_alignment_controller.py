@@ -97,7 +97,6 @@ from ..consts import (
     PRESET_SHAPE_MISMATCH_NOTE,
     PRESETS_UNAVAILABLE_TEMPLATE,
     PRESETS_UNREADABLE_TEMPLATE,
-    RESTORE_ALIGNMENT_UNDO_NAME,
     RESTORE_DEFERRED_MESSAGE,
     RESTORED_DEFAULT_TEMPLATE,
     RESTORED_LAST_USED_TEMPLATE,
@@ -198,10 +197,6 @@ class CameraAlignmentWorkflowController(HasTraits):
     #: ``_live_device_key`` (restored, or changed since by the user) — only
     #: then is it remembered as theirs.
     _live_owned = Bool(False)
-
-    #: True while a restore writes the reference rects, so the change is not
-    #: taken for the user's.
-    _restoring = Bool(False)
 
     #: A restore waits for the protocol to stop; whether it maps the
     #: camera corners through their saved frame size (a camera switch: the
@@ -528,7 +523,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         """Any change but a restore (a glide, a drag, a rotation) makes the
         live alignment the selected camera's own."""
 
-        if not self._restoring:
+        if not self.model.camera_perspective.restoring:
             self._live_owned = True
 
     @observe("_alignment_model:alignment_confirmed")
@@ -1298,7 +1293,7 @@ class CameraAlignmentWorkflowController(HasTraits):
     def _put_on_live_alignment(self, preset, device_key, saved_frame):
         """Apply ``preset`` the way Apply places it — endpoint, rescaled
         camera corners, the open panes — but in one step: no glide, no
-        "Before" snapshot, one undo entry. Return ``(whether the camera
+        "Before" snapshot, no undo entry. Return ``(whether the camera
         corners were placed, note)``."""
         camera_quad, mapping, note = self._preset_placement(
             preset, saved_frame=saved_frame
@@ -1324,32 +1319,20 @@ class CameraAlignmentWorkflowController(HasTraits):
         return camera_quad is not None, note
 
     def _set_live_rects(self, reference_rect, transformed_reference_rect):
-        """Replace both reference rects as ONE undo entry (a macro holds the
-        two recorded changes), without taking it for the user's change."""
-
-        if self._align_timer is not None:
-            self._align_timer.stop()
-
+        """Replace both reference rects as a restore: off the undo stack
+        (switching back reverses it) and not taken for the user's
+        change."""
         perspective = self.model.camera_perspective
-        stack = (
-            self.model.undo_manager.active_stack
-            if self.model.undo_manager is not None
-            else None
-        )
 
-        self._restoring = True
+        self._stop_glide()
 
-        if stack is not None:
-            stack.begin_macro(RESTORE_ALIGNMENT_UNDO_NAME)
+        perspective.restoring = True
 
         try:
             perspective.reference_rect = reference_rect
             perspective.transformed_reference_rect = transformed_reference_rect
         finally:
-            if stack is not None:
-                stack.end_macro()
-
-            self._restoring = False
+            perspective.restoring = False
 
     def _stop_glide(self):
         """Stop a running Go To Endpoint glide where it is, leaving the
