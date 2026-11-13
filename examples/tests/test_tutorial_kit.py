@@ -55,7 +55,10 @@ from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from plugin_management.consts import PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH
 from plugin_management.plugin import PluginManagementPlugin
-from user_help_plugin.consts import GETTING_STARTED_TUTORIAL_HTML_PATH
+from user_help_plugin.consts import (
+    GETTING_STARTED_TUTORIAL_HTML_PATH,
+    HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
+)
 from user_help_plugin.plugin import UserHelpPlugin
 
 # Microdrop style imports.
@@ -70,6 +73,9 @@ DEVICE_VIEWER_SOURCE = DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH.with_name(
 )
 GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
     "getting_started.src.html"
+)
+HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
+    "help_logs_storage.src.html"
 )
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
@@ -285,6 +291,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Device Viewer Tutorial",
         "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
+        "Help, Logs & Saved Files Tutorial",
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
         "Protocol Tree Tutorial",
@@ -307,6 +314,10 @@ def test_dropbot_tutorial_rebuilds_identically():
 
 def test_getting_started_tutorial_rebuilds_identically():
     assert is_up_to_date(GETTING_STARTED_SOURCE)
+
+
+def test_help_logs_storage_tutorial_rebuilds_identically():
+    assert is_up_to_date(HELP_LOGS_STORAGE_SOURCE)
 
 
 def test_protocol_tree_tutorial_rebuilds_identically():

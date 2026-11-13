@@ -22,7 +22,12 @@ from envisage.api import Application, Plugin
 from traits.api import List
 
 # Local imports.
-from ..consts import GETTING_STARTED_TUTORIAL_TITLE, TUTORIALS, TutorialEntry
+from ..consts import (
+    GETTING_STARTED_TUTORIAL_TITLE,
+    HELP_LOGS_STORAGE_TUTORIAL_TITLE,
+    TUTORIALS,
+    TutorialEntry,
+)
 from ..menus import (
     OpenWebViewDialogAction,
     TutorialCatalog,
@@ -32,6 +37,9 @@ from ..menus import (
 from ..plugin import UserHelpPlugin
 
 PAGE = Path(__file__).resolve()
+
+#: The Help plugin's own pages, as the Tutorials submenu sorts them.
+OWN_TUTORIAL_TITLES = [GETTING_STARTED_TUTORIAL_TITLE, HELP_LOGS_STORAGE_TUTORIAL_TITLE]
 
 
 class TutorialContributingPlugin(Plugin):
@@ -103,17 +111,18 @@ def test_a_plugin_loaded_at_runtime_adds_its_tutorials(help_plugin):
     contributor = TutorialContributingPlugin()
     menu = TutorialsMenuManager(catalog=help_plugin.tutorial_catalog)
 
-    # The Help plugin contributes its own Getting Started page.
-    assert _tutorial_titles(menu) == [GETTING_STARTED_TUTORIAL_TITLE]
+    # The Help plugin contributes its own pages.
+    assert _tutorial_titles(menu) == OWN_TUTORIAL_TITLES
 
     help_plugin.application.add_plugin(contributor)
 
     assert _tutorial_titles(menu) == [
         GETTING_STARTED_TUTORIAL_TITLE,
         "Heater & Magnet Tutorial",
+        HELP_LOGS_STORAGE_TUTORIAL_TITLE,
         "Zebra Tutorial",
     ]
 
     help_plugin.application.remove_plugin(contributor)
 
-    assert _tutorial_titles(menu) == [GETTING_STARTED_TUTORIAL_TITLE]
+    assert _tutorial_titles(menu) == OWN_TUTORIAL_TITLES
