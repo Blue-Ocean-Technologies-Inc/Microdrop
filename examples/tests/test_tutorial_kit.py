@@ -31,6 +31,7 @@ from envisage.api import Application
 from device_viewer.consts import (
     CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
+    RECORDING_VIEWER_TUTORIAL_HTML_PATH,
     ZONES_TUTORIAL_HTML_PATH,
 )
 from device_viewer.plugin import DeviceViewerPlugin
@@ -100,6 +101,9 @@ PLUGIN_MANAGEMENT_SOURCE = PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH.with_name(
     "plugin_management.src.html"
 )
 ZONES_SOURCE = ZONES_TUTORIAL_HTML_PATH.with_name("zones.src.html")
+RECORDING_VIEWER_SOURCE = RECORDING_VIEWER_TUTORIAL_HTML_PATH.with_name(
+    "recording_viewer.src.html"
+)
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
 #: A plugin.py with no tutorials yet, as new_tutorial.py first meets it.
@@ -331,6 +335,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Getting Started with MicroDrop",
         "Device Viewer Tutorial",
         "Camera & Alignment Tutorial",
+        "Recording Viewer Tutorial",
         "Zones Tutorial",
         "Protocol Tree Tutorial",
         "Protocol Files & Experiments Tutorial",
@@ -391,6 +396,10 @@ def test_device_viewer_tutorial_rebuilds_identically():
 
 def test_zones_tutorial_rebuilds_identically():
     assert is_up_to_date(ZONES_SOURCE)
+
+
+def test_recording_viewer_tutorial_rebuilds_identically():
+    assert is_up_to_date(RECORDING_VIEWER_SOURCE)
 
 
 def _clip_page(clip="t_media/a.webm", poster=""):
