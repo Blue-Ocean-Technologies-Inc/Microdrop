@@ -34,6 +34,7 @@ from .consts import (
     CAMERA_SOURCES,
     DEVICE_VIEWER_LAYERS,
     PKG,
+    ZONES_TUTORIAL_HTML_PATH,
     PKG_name,
 )
 
@@ -196,4 +197,5 @@ class DeviceViewerPlugin(Plugin):
                 title="Camera & Alignment Tutorial",
                 path=CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
             ),
+            TutorialEntry(title="Zones Tutorial", path=ZONES_TUTORIAL_HTML_PATH),
         ]

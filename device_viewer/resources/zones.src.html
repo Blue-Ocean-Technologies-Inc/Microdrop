@@ -1,0 +1,1108 @@
+<!--
+  (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>Zones Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+ol.steps.clips li.step { grid-template-columns: minmax(0, 380px) minmax(0, 1fr); }
+ol.steps.clips li.step.wide { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 700px) { ol.steps.clips li.step { grid-template-columns: minmax(0, 1fr); } }
+figure.clip video { width: 100%; }
+figure.step-panel figure.clip { margin: 0; }
+kbd { white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+table.small td { overflow-wrap: anywhere; }
+code.id { white-space: nowrap; }
+.zp-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; align-items: start; }
+@media (max-width: 640px) { .zp-grid { grid-template-columns: minmax(0, 1fr); } }
+svg.zp { display: block; width: 100%; height: auto; touch-action: none; user-select: none; cursor: crosshair; }
+svg.zp .plate { fill: var(--chip-plate); }
+svg.zp .cell { fill: #ffffff; fill-opacity: .55; stroke: var(--electrode-edge); stroke-width: .6; }
+svg.zp .band { fill: var(--accent); fill-opacity: .08; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
+svg.zp .band.sub { fill: #d32f2f; stroke: #d32f2f; }
+svg.zp .pend { fill-opacity: .43; stroke-width: 1.2; stroke-dasharray: 4 3; }
+svg.zp .edge { stroke-width: 1.6; stroke-linecap: square; fill: none; }
+svg.zp .edge.sel { stroke-width: 3.4; }
+.controls button[aria-pressed="true"] { background: var(--icon-on); border-color: var(--icon-on); color: #ffffff; }
+.controls button:disabled { opacity: .45; cursor: default; }
+table.zp-tree { margin: 0; }
+table.zp-tree td.sw span { display: inline-block; width: 26px; height: 12px; border-radius: 2px; vertical-align: middle; }
+table.zp-tree tr.reg td:first-child { padding-left: 22px; }
+table.zp-tree tr.reg.on td { background: var(--accent-soft); }
+table.zp-tree .muted { color: var(--muted); font-size: .82rem; }
+.zt-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
+.zt-slot { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--surface); font-size: .88rem; }
+.zt-slot.chosen { border: 2px solid var(--accent); }
+.zt-slot.skipped { opacity: .75; }
+.zt-slot svg { display: block; width: 100%; height: auto; margin: 4px 0; }
+.zt-slot label { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+.zt-slot .tag { font-size: .8rem; color: var(--muted); min-height: 1.3em; }
+.zt-slot.chosen .tag { color: var(--accent); font-weight: 700; }
+p.zt-msg { font-family: Consolas, "Courier New", monospace; font-size: .82rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; overflow-wrap: anywhere; margin: 6px 0 0; }
+</style>
+
+<header data-hero>
+  <h1>Zones</h1>
+  <p>Zones put names on parts of a chip: reservoirs, waste, heater spots, parking slots. You make a <strong>zone type</strong>
+  (a name and a colour), then draw <strong>regions</strong> of that type over the electrodes. A protocol step can then say
+  "switch on the first parking slot that is still free", without naming electrodes.</p>
+  <p>This tutorial covers the <strong>Zones</strong> section of the Device Viewer side panel and the <strong>Zone Target</strong>
+  protocol column. The clips are real screen recordings; they play when they scroll into view. The two interactive figures
+  let you try drawing regions and the Zone Target rule without a chip.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">Two things to keep apart: a zone type is a label, a region is a patch of electrodes wearing that label. One
+zone type can have many regions.</p>
+<ul class="uses">
+  <li><strong>Zone types</strong> are shared by every device. MicroDrop keeps them in its preferences. A fresh install starts
+  with two, <em>heating</em> (yellow) and <em>mixing</em> (red).</li>
+  <li><strong>Regions</strong> belong to one device. They are saved inside the device's SVG file, in a layer called
+  <code>Zones</code>, when you save the device.</li>
+  <li>The <strong>Zone Target</strong> column in the protocol tree lets a step switch on one region of a zone type, chosen
+  at run time by whether a droplet sits on it.</li>
+</ul>
+<p>The Zones section sits in the side panel to the right of the Device Viewer, below <span class="ui">Alpha Settings</span>
+and <span class="ui">Paths</span>. If the panel is hidden, click the <i data-glyph="chevron_right" data-inline
+data-label="Reveal Hidden Controls"></i> strip at the picture's right edge, then click the <span class="ui">Zones</span>
+heading to fold it open.</p>
+<div class="callout">
+  <p><strong>Two different numbers for one region.</strong> The Zones table numbers the regions of a zone type by their place
+  in the list: 1, 2, 3. Each region also has a fixed <a href="#region-id">id</a> such as <code class="id">zone-1-4</code>,
+  which is never handed out again, even after the region is deleted. The Zone Target tooltip, the run log and the run report
+  use the id. Hover a region's row in the Zones table to see its id.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<p class="intro">From an empty zone list to a protocol step that picks a region on its own. Steps 1 to 3 were recorded on one
+chip, steps 5 and 6 on the same chip a little later; the worked example after this list uses a different chip layout.</p>
+<ol class="steps clips">
+  <li class="step">
+    <figure class="step-panel">
+      <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="374" height="300" poster="zones_media/add-zone-type.webp" aria-label="Clicking the plus button under the Zones heading adds a row named zone-1 with a yellow colour swatch and a region count of 0"><source src="zones_media/add-zone-type.webm" type="video/webm"></video>
+      <figcaption><strong>Real clip, 1×.</strong> <em>Add zone type</em> adds the row <code>zone-1</code>, yellow, 0 regions.</figcaption></figure>
+    </figure>
+    <div class="step-text"><h4><span class="step-n">1</span>Add a zone type</h4>
+    <p>Click <i data-glyph="add" data-inline data-label="Add zone type"></i> <em>Add zone type</em>. A new row appears in the
+    table under the buttons, named <code>zone-</code> plus its row number, with the next colour in MicroDrop's list.</p>
+    <p>To rename it, double-click the name and type. To change its colour, click the colour swatch: the
+    <span class="ui">Select Color</span> window opens.</p>
+    <p>New regions go to the zone type whose row is selected, so click the row of the type you want to draw.</p></div>
+  </li>
+  <li class="step wide">
+    <div class="step-text"><h4><span class="step-n">2</span>Draw regions and commit each one</h4>
+    <p>Click <i data-glyph="ICON_CROP" data-inline data-label="Draw zones"></i> <em>Draw zones</em> (it turns blue while on).
+    Drag a box over the electrodes you want: every electrode the box touches joins a dashed selection. Click a single
+    electrode to add or remove just that one.</p>
+    <p>Click <i data-glyph="check" data-inline data-label="Commit zone"></i> <em>Commit zone</em>. The selection becomes a
+    region: it fills with the zone colour, and a numbered row appears under the zone type, whose <span class="ui">#</span>
+    count goes up by one. Repeat for each region.</p></div>
+    <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="736" height="476" poster="zones_media/draw-regions.webp" aria-label="With Draw zones on, three boxes are dragged over the camera picture of the chip, each followed by Commit zone; three yellow regions appear, one under a large red droplet, one under a small one and one empty, and rows 1, 2 and 3 appear under zone-1"><source src="zones_media/draw-regions.webm" type="video/webm"></video>
+    <figcaption><strong>Real clip, sped up 1.5×.</strong> The <code>zone-1</code> row is selected, then Draw zones is switched
+    on. Three drags, each followed by Commit zone: the region under the large red droplet (row 1), the one under the small
+    droplet (row 2), and an empty one near the top (row 3).</figcaption></figure>
+  </li>
+  <li class="step wide">
+    <div class="step-text"><h4><span class="step-n">3</span>Select, hide and show regions</h4>
+    <p>Click <i data-glyph="ICON_SELECT_All" data-inline data-label="Select zones"></i> <em>Select zones</em>. Now a click on
+    a region selects it: its outline gets thicker and its row in the table is highlighted. <kbd>Ctrl</kbd>+click adds more
+    regions to the selection.</p>
+    <p>Each row has an eye <i data-glyph="ICON_VISIBILITY" data-inline data-label="Visible"></i>. Click it to hide that region
+    (the eye is crossed out) and again to show it. The eye on a zone type's own row hides or shows all of its regions.</p></div>
+    <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="736" height="476" poster="zones_media/select-hide.webp" aria-label="Select zones is switched on, the three regions are clicked one after the other and each gets a thicker outline, then the eye of row 3 hides the top region and a second click shows it again"><source src="zones_media/select-hide.webm" type="video/webm"></video>
+    <figcaption><strong>Real clip, sped up 1.5×.</strong> Same chip as step 2. Select zones on; clicking each region selects it
+    (the <em>Edit region</em> button lights up). Then the eye of row 3 hides the top region and shows it again. The floating
+    canvas buttons were switched off in this recording, so no button strip appears next to the selection.</figcaption></figure>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: File menu, Device submenu, Save; the device SVG file gains a Zones layer"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="14" y="14" width="70" height="24" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="49" y="30" text-anchor="middle" style="fill:var(--ink)">File</text><rect x="92" y="14" width="80" height="24" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="132" y="30" text-anchor="middle" style="fill:var(--ink)">Device ▸</text><rect x="180" y="14" width="80" height="24" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="220" y="30" text-anchor="middle" style="fill:var(--ink)">Save</text><rect x="40" y="62" width="220" height="74" rx="4" fill="var(--surface-2)" stroke="var(--line)"/><text x="52" y="80">device.svg</text><text x="64" y="98">layer: electrodes</text><text x="64" y="114">layer: Connections</text><text x="64" y="130" style="fill:var(--accent);font-weight:700">layer: Zones (your regions)</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">4</span>Save the device</h4>
+    <p>Choose <span class="ui">File ▸ Device ▸ Save</span> (or <span class="ui">Save As…</span>). MicroDrop writes every region
+    into the device SVG file's <a href="#zones-layer">Zones layer</a>, with its zone type's name and colour.</p>
+    <p><strong>Do this before you load another device or close MicroDrop.</strong> Zone edits do not mark the device as
+    changed, so MicroDrop will not remind you, and unsaved regions are gone the next time the file is loaded.</p></div>
+  </li>
+  <li class="step wide">
+    <div class="step-text"><h4><span class="step-n">5</span>Pick a zone type for a step</h4>
+    <p>The Zone Target columns are hidden at first. Right-click the protocol tree's column headings and tick
+    <span class="ui">Zone Target</span> and <span class="ui">Zone Criterion</span>.</p>
+    <p>Double-click a step's <span class="ui">Zone Target</span> cell and pick a zone type; <span class="ui">(none)</span>
+    switches the feature off for that step. The <span class="ui">Zone Criterion</span> cell next to it fills with
+    <em>Has Droplet</em>; double-click it to change it to <em>No Droplet</em>.</p>
+    <p>Hover the Zone Target cell: the tooltip lists the regions in the order they will be checked, by id.</p></div>
+    <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="830" height="156" poster="zones_media/zone-target.webp" aria-label="In the protocol tree, step 1's Zone Target cell is opened, showing (none) and zone-1; zone-1 is picked and Has Droplet appears in the Zone Criterion cell; hovering step 3's zone-1 cell shows the tooltip Regions, checked in this order: zone-1-4, zone-1-5, zone-1-6"><source src="zones_media/zone-target.webm" type="video/webm"></video>
+    <figcaption><strong>Real clip, 1×.</strong> Step 1's cell offers <code>(none)</code> and <code>zone-1</code>; picking
+    zone-1 fills <em>Has Droplet</em> in the next column (cut off at the window edge). The tooltip over step 3 reads
+    <em>Regions, checked in this order: zone-1-4, zone-1-5, zone-1-6</em>. These are the same three regions the Zones table
+    shows as rows 1, 2 and 3: the ids count on from regions drawn and deleted earlier.</figcaption></figure>
+  </li>
+  <li class="step wide">
+    <div class="step-text"><h4><span class="step-n">6</span>Run the step</h4>
+    <p>Run the protocol, or right-click a step and choose <span class="ui">Run Selected Steps</span>. At the start of the
+    step MicroDrop asks the DropBot which electrodes of the zone type's regions have liquid on them, takes the
+    <strong>first</strong> region in check order that meets the criterion, and switches it on together with the step's own
+    electrodes and routes, for the whole step.</p>
+    <p>If no region qualifies, the step fails with a <span class="ui">Protocol error</span> message (see
+    <a href="#zt-failures">When the step fails</a>).</p></div>
+    <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="1152" height="600" poster="zones_media/run-has-droplet.webp" aria-label="Right-click on step 3, Run Selected Steps, a Preparing protocol run progress bar, then the step runs: the two blue electrodes at the top stay on and the region under the large droplet turns grey-green"><source src="zones_media/run-has-droplet.webm" type="video/webm"></video>
+    <figcaption><strong>Real clip, 1×.</strong> Step 3 has two electrodes of its own (blue, near the top) and Zone Target
+    <code>zone-1</code> / <em>Has Droplet</em>. <em>Run Selected Steps</em>, <em>Preparing protocol run…</em>, then the region
+    under the large droplet (zone-1-4, first in check order, and it holds a droplet) turns grey-green: the blue "on" colour
+    seen through the yellow zone fill. The clip ends as the run finishes.</figcaption></figure>
+  </li>
+</ol>
+
+<h3 id="example">Worked example: send the droplet to the first free slot</h3>
+<p>A recording on a different layout. There is one zone type, <code>zone-1</code>, with two regions: a 2×2 patch near the
+top with a green droplet on it, and a row of four electrodes at the bottom that is empty. The protocol has three steps:</p>
+<div class="table-wrap">
+<table class="small">
+  <thead><tr><th>Step</th><th>Electrodes</th><th>Routes</th><th>Zone Target</th><th>Zone Criterion</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>2</td><td>0</td><td></td><td></td><td>Holds the red droplet where it is.</td></tr>
+    <tr><td>2</td><td>0</td><td>1</td><td></td><td></td><td>The route carries the red droplet down, to just above the bottom row.</td></tr>
+    <tr><td>3</td><td>0</td><td>0</td><td>zone-1</td><td>No Droplet</td><td>The top patch has a droplet, so it is skipped. The bottom row has none, so it is switched on, and the red droplet moves onto it.</td></tr>
+  </tbody>
+</table>
+</div>
+<figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="1152" height="600" poster="zones_media/run-no-droplet.webp" aria-label="A three-step protocol runs: the red droplet is held, carried down by a route, then the bottom row of four electrodes, a zone-1 region with no droplet, turns grey-green and the red droplet moves onto its left half"><source src="zones_media/run-no-droplet.webm" type="video/webm"></video>
+<figcaption><strong>Real clip, sped up 1.5×.</strong> After <em>Preparing protocol run…</em>, step 1 holds the red droplet,
+step 2's route carries it down, and step 3 (<code>zone-1</code> / <em>No Droplet</em>) switches on the empty bottom row: it
+turns grey-green and the droplet is pulled down onto it. The clip stops as the run ends.</figcaption></figure>
+<p>Step 3 names no electrodes at all; the zone decides. If you add more parking regions to <code>zone-1</code>, the same
+step fills them one by one in the order you drew them, until none is free and the step fails.</p>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-icons">
+<h2>Buttons and icons</h2>
+<p class="intro">Hover over a button in MicroDrop to see the tooltip quoted here. Greyed-out buttons wait for the right tool
+or selection, as the last column says.</p>
+
+<section data-term id="tb-sidebar" data-where="Device Viewer side panel ▸ Zones">
+  <h3>Zones section: three rows of buttons</h3>
+  <div class="table-wrap">
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Tooltip</th><th>What it does</th><th>Usable when</th></tr></thead>
+    <tbody>
+      <tr><td colspan="4"><strong>Row 1: the two tools, each followed by its switch</strong></td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_CROP"></i><i data-glyph="ICON_CROP" data-on></i></td><td class="lbl">Draw zones</td><td>Turns on <a href="#draw-mode">draw mode</a>; click again to leave it.</td><td>always</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_REMOVE_SELECTION"></i></td><td class="lbl">Undraw: rubber bands remove electrodes from the selection</td><td>While on, each box you drag takes electrodes out of the dashed selection (<a href="#undraw">Undraw</a>).</td><td>draw mode</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_SELECT_All"></i><i data-glyph="ICON_SELECT_All" data-on></i></td><td class="lbl">Select zones</td><td>Turns on <a href="#select-mode">select mode</a>; click again to leave it.</td><td>always</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_CHECKLIST"></i></td><td class="lbl">Multi-select: clicks add regions to the selection</td><td>While on, a click adds or removes a region instead of replacing the selection (<a href="#multi-select">Multi-select</a>).</td><td>select mode</td></tr>
+      <tr><td colspan="4"><strong>Row 2: act on the current selection</strong></td></tr>
+      <tr><td class="icons"><i data-glyph="check"></i></td><td class="lbl">Commit zone</td><td>Turns the dashed selection into a region (<a href="#commit">Commit</a>).</td><td>draw mode, something selected</td></tr>
+      <tr><td class="icons"><i data-glyph="delete"></i></td><td class="lbl">Clear selection</td><td>Drops the dashed selection without making a region. During <a href="#edit-region">Edit region</a> it cancels the edit. It never deletes a region.</td><td>a dashed selection or an edit in progress</td></tr>
+      <tr><td class="icons"><i data-glyph="edit"></i></td><td class="lbl">Edit region</td><td>Reopens the selected region's electrodes for changes (<a href="#edit-region">Edit region</a>).</td><td>select mode, a region selected</td></tr>
+      <tr><td class="icons"><i data-glyph="merge"></i></td><td class="lbl">Merge the selected regions into one</td><td>See <a href="#merge">Merge</a>.</td><td>select mode, two or more touching regions of one type selected</td></tr>
+      <tr><td colspan="4"><strong>Row 3: the zone list and the view</strong></td></tr>
+      <tr><td class="icons"><i data-glyph="add"></i></td><td class="lbl">Add zone type</td><td>Adds a zone type named <code>zone-</code><em>row number</em> and selects it.</td><td>always</td></tr>
+      <tr><td class="icons"><i data-glyph="arrow_upward"></i><i data-glyph="arrow_downward"></i></td><td class="lbl">Move the zone up a layer / Move the zone down a layer</td><td>Moves the selected zone type one row up or down: its <a href="#layer-order">layer</a>.</td><td>a zone type row selected</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_CALL_TO_ACTION"></i><i data-glyph="ICON_CALL_TO_ACTION" data-on></i></td><td class="lbl">Show or hide the floating canvas buttons</td><td>Switches the small button strips that appear next to a selection on the device view (<a href="#tb-canvas">below</a>).</td><td>always</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section data-term id="tb-tree" data-where="Zones section ▸ table">
+  <h3>The Zone / Color / # table</h3>
+  <p>One row per zone type; its regions hang underneath, numbered by position. Click the arrow beside a zone type to fold its
+  regions away.</p>
+  <div class="table-wrap">
+  <table class="small icons-table">
+    <thead><tr><th>Column</th><th>Zone type row</th><th>Region row</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Zone</td><td>The name. Double-click to rename; an empty name falls back to <code>zone-</code><em>row number</em>.</td><td>Position under its zone type (1, 2, 3 …). The tooltip shows the region's <a href="#region-id">id</a>.</td></tr>
+      <tr><td class="lbl">Color</td><td>Swatch. Click it to open <span class="ui">Select Color</span>.</td><td>Empty: regions use their zone type's colour.</td></tr>
+      <tr><td class="lbl">#</td><td>Number of regions of this type.</td><td>Empty.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_VISIBILITY"></i><i data-glyph="ICON_VISIBILITY_OFF"></i></td><td>Shows or hides all regions of the type at once.</td><td>Shows or hides this region only.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_DELETE"></i></td><td>Deletes the zone type and its regions. With regions, it asks first: <em>Delete zone '…' and its N region(s)?</em></td><td>Deletes this region straight away (<kbd>Ctrl</kbd>+<kbd>Z</kbd> brings it back).</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Clicking a zone type row makes it the type new regions are drawn as. Clicking a region row selects that region.
+  <kbd>Esc</kbd> clears both selections.</p>
+</section>
+
+<section data-term id="tb-canvas" data-where="device view, next to a selection">
+  <h3>Floating canvas buttons and the right-click menu</h3>
+  <p>While <i data-glyph="ICON_CALL_TO_ACTION" data-inline data-on></i> is on, a small strip appears at the top right of what
+  you are working on, so you do not have to reach for the side panel.</p>
+  <div class="table-wrap">
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Tooltip</th><th>Appears</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="check"></i></td><td class="lbl">Commit zone</td><td>next to a dashed selection, in draw mode</td><td>Same as the side-panel button.</td></tr>
+      <tr><td class="icons"><i data-glyph="delete"></i></td><td class="lbl">Discard selection</td><td>same</td><td>Same as <em>Clear selection</em>.</td></tr>
+      <tr><td class="icons"><i data-glyph="edit"></i></td><td class="lbl">Edit region</td><td>next to the selected region, in select mode</td><td>Same as the side-panel button.</td></tr>
+      <tr><td class="icons"><i data-glyph="delete"></i></td><td class="lbl">Delete region</td><td>same</td><td>Deletes the selected region.</td></tr>
+      <tr><td class="icons"><i data-glyph="visibility_off"></i></td><td class="lbl">Hide region</td><td>same</td><td>Hides the selected region (show it again with its eye in the table).</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_CLOSE"></i></td><td class="lbl">Hide these buttons</td><td>on both strips</td><td>Switches the strips off, like the side-panel toggle.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Right-click a region while either zone tool is on for a menu: <span class="ui">Edit region</span>,
+  <span class="ui">Change type ▸</span> <em>another zone type</em>, and <span class="ui">Delete region</span>.</p>
+</section>
+
+<section data-term id="tb-mouse" data-where="device view, zone tools on">
+  <h3>Mouse and keyboard</h3>
+  <div class="table-wrap">
+  <table class="small">
+    <thead><tr><th>Do this</th><th>In draw mode</th><th>In select mode</th></tr></thead>
+    <tbody>
+      <tr><td>Drag a box</td><td>Adds every electrode the box touches to the dashed selection.</td><td>Drag starting on a region moves it (see <a href="#move-region">Moving a region</a>).</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+drag</td><td>Removes the electrodes the box touches; the preview turns red. Same as <em>Undraw</em>.</td><td>—</td></tr>
+      <tr><td>Click</td><td>Adds or removes one electrode.</td><td>Selects the region under the pointer; a click on empty space clears the selection.</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+click</td><td>—</td><td>Adds the region to the selection, or takes it out. Same as <em>Multi-select</em>.</td></tr>
+      <tr><td>Right-click a region</td><td colspan="2">Edit region / Change type / Delete region.</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Drops the dashed selection, or cancels an edit.</td><td>Clears the region selection.</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td colspan="2">Undo / redo any zone change (add, delete, commit, merge, move, rename …). Loading another device clears the history.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Switching to another Device Viewer tool (for example Draw, <kbd>D</kbd>) leaves the zone tools and drops a
+  half-made selection or edit.</p>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-terms">
+<h2>Zone terms</h2>
+<p class="intro">What the words in the Zones section mean, and what MicroDrop starts with.</p>
+
+<section data-term id="zone-type" data-where="Zones table, top-level rows">
+  <h3>Zone type</h3>
+  <p>A label with a name and a colour, such as <em>waste</em> in blue.</p>
+  <div data-what><p>The kind of place a region is. Each zone type has a fixed id (its first name, or that name with
+  <code>-2</code>, <code>-3</code> … if it was taken) and a name you can change. Renaming keeps the id, so protocol steps
+  that use the zone type keep working.</p></div>
+  <div data-when><p>Make one per kind of place you want to talk about: reservoirs, waste, parking slots, detection spots.</p></div>
+  <div data-read><p>The <span class="ui">#</span> column counts its regions on the loaded device.</p></div>
+  <div data-typical><p><em>heating</em> (yellow) and <em>mixing</em> (red) on a fresh install. New ones are called
+  <code>zone-</code><em>row number</em> and take the next colour of: yellow, red, green, blue, pink, orange.</p></div>
+</section>
+
+<section data-term id="region" data-where="Zones table, numbered rows; coloured patches on the device">
+  <h3>Region</h3>
+  <p>A set of electrodes that belongs to one zone type.</p>
+  <div data-what><p>The list of electrodes is what MicroDrop stores; the coloured patch and its outline are drawn from it.
+  Because the region knows its electrodes, it also knows their channels, which is what the Zone Target column switches on.</p></div>
+  <div data-when><p>One region per place: three parking slots of the same kind are three regions of one zone type.</p></div>
+  <div data-read><p>A filled patch in the zone type's colour with a solid outline. Where regions of two zone types overlap,
+  the colours blend; the <a href="#layer-order">layer order</a> decides which is drawn on top.</p></div>
+  <div data-typical><p>None until you draw some. Regions are per device.</p></div>
+  <figure data-demo="painter" aria-label="Interactive: draw, commit, select and merge regions on a small electrode grid">
+    <div class="controls">
+      <button type="button" id="zp-draw" aria-pressed="true">Draw zones</button>
+      <button type="button" id="zp-undraw" aria-pressed="false">Undraw</button>
+      <button type="button" id="zp-select" aria-pressed="false">Select zones</button>
+      <button type="button" id="zp-multi" aria-pressed="false">Multi-select</button>
+    </div>
+    <div class="controls">
+      <button type="button" id="zp-commit">Commit zone</button>
+      <button type="button" id="zp-clear">Clear selection</button>
+      <button type="button" id="zp-merge">Merge</button>
+      <button type="button" id="zp-delete">Delete region</button>
+      <label>Draw as <select id="zp-type"></select></label>
+      <button type="button" id="zp-up">Move up a layer</button>
+    </div>
+    <div class="zp-grid">
+      <svg class="zp" id="zp-chip" viewBox="0 0 310 190" role="img" aria-label="A grid of 10 by 6 electrodes; drag to select electrodes"></svg>
+      <div class="table-wrap"><table class="small zp-tree" id="zp-tree"></table></div>
+    </div>
+    <p class="status" id="zp-status" aria-live="polite"></p>
+    <figcaption>Drag boxes over the grid, then <em>Commit zone</em>. Try a selection in two separate pieces: it commits as two
+    regions. Switch to <em>Select zones</em>, <kbd>Ctrl</kbd>+click two touching regions of one type and <em>Merge</em> them.
+    Delete a region and draw a new one: the positions in the table close up, the ids never repeat. Draw a <em>waste</em>
+    region over a <em>heating</em> one and use <em>Move up a layer</em> to change which is on top. (A schematic, not the real
+    widget: moving regions by dragging is left out.)</figcaption>
+  </figure>
+</section>
+
+<section data-term id="region-id" data-where="region row tooltip, Zone Target tooltip, run report">
+  <h3>Region number and region id</h3>
+  <p>The table shows a region's place in its list; the id is its permanent name.</p>
+  <div data-what><p>The id is the zone type's id, a dash, and a counter: <code class="id">zone-1-4</code>. The counter only
+  ever goes up for that zone type, even across undo and after deletions, so an id is never reused. The row number is just
+  the region's position, so it changes when an earlier region is deleted.</p></div>
+  <div data-when><p>Use the id whenever you compare what the table shows with the Zone Target tooltip, the log or the run
+  report: those always use ids.</p></div>
+  <div data-read><p>Hover the region's row in the Zones table to see its id. Moving a region to another zone type with
+  <span class="ui">Change type</span> gives it a new id in that type.</p></div>
+  <div data-typical><p><code class="id">heating-1</code>, <code class="id">heating-2</code> … for a fresh zone type.</p></div>
+</section>
+
+<section data-term id="outline" data-where="device view">
+  <h3>Outline</h3>
+  <p>The line drawn around a region, computed from its electrodes; you never draw it yourself.</p>
+  <div data-what><p>MicroDrop joins the shapes of the region's electrodes. To make neighbours read as one patch it closes
+  the gaps between them, up to a little more than the narrowest gap between any two electrodes on the device (1.2 times
+  it), while a skipped electrode still shows as a hole.</p></div>
+  <div data-read><p>A selected region's outline is drawn thicker. Where neighbouring electrodes sit further apart than that,
+  the gaps stay open and the outline traces each electrode. That is what you see in the clips above, recorded on the 90-pin
+  array: most of its neighbouring electrodes are twice as far apart as its narrowest gap, so each region still shows its
+  electrode lines.</p></div>
+  <div data-typical><p>2 px; 4 px when selected.</p></div>
+</section>
+
+<section data-term id="layer-order" data-where="Zones table order; up/down arrows">
+  <h3>Layer order</h3>
+  <p>Which zone type is drawn on top where regions overlap.</p>
+  <div data-what><p>The first zone type in the table is the top layer, the last is the bottom one. Use
+  <i data-glyph="arrow_upward" data-inline></i> and <i data-glyph="arrow_downward" data-inline></i> on the selected zone type
+  to move it.</p></div>
+  <div data-when><p>When regions of different types share electrodes, for example a detection spot inside a reservoir.</p></div>
+  <div data-read><p>Only the drawing order changes. It does not change the order in which the
+  <a href="#zt-order">Zone Target column checks regions</a>.</p></div>
+  <div data-typical><p>The order you added the zone types in.</p></div>
+</section>
+
+<section data-term id="draw-mode" data-where="Draw zones button">
+  <h3>Draw mode</h3>
+  <p>The tool for building a dashed selection of electrodes that will become a region.</p>
+  <div data-what><p>Each box you drag adds every electrode it touches, even a corner. A plain click adds or removes one
+  electrode, for shapes a box cannot make. The selection is drawn dashed in the colour of the zone type it will become.</p></div>
+  <div data-when><p>To make new regions, and while editing one (<a href="#edit-region">Edit region</a> switches to draw mode by
+  itself).</p></div>
+  <div data-read><p>The button is blue while on. The status bar shows the Device Viewer's current mode.</p></div>
+  <div data-typical><p>Off. Choosing another Device Viewer tool turns it off.</p></div>
+</section>
+
+<section data-term id="undraw" data-where="second button of row 1; Ctrl+drag">
+  <h3>Undraw</h3>
+  <p>Makes your boxes take electrodes out of the dashed selection instead of adding them.</p>
+  <div data-what><p>The switch for screens without a keyboard; holding <kbd>Ctrl</kbd> while you drag does the same.</p></div>
+  <div data-when><p>To carve a notch out of a large box, or to trim a region during Edit region.</p></div>
+  <div data-read><p>The box preview turns red while it removes.</p></div>
+  <div data-typical><p>Off. Usable only in draw mode.</p></div>
+</section>
+
+<section data-term id="select-mode" data-where="Select zones button">
+  <h3>Select mode</h3>
+  <p>The tool for picking regions that already exist.</p>
+  <div data-what><p>A click selects the region under the pointer; the selected one gets a thicker outline and its row is
+  highlighted. Selected regions can be edited, merged, deleted, hidden or moved.</p></div>
+  <div data-when><p>Everything that changes or removes a finished region.</p></div>
+  <div data-typical><p>Off.</p></div>
+</section>
+
+<section data-term id="multi-select" data-where="fourth button of row 1; Ctrl+click">
+  <h3>Multi-select</h3>
+  <p>Makes a click add a region to the selection, or take it out, instead of replacing it.</p>
+  <div data-what><p>The touch-screen version of <kbd>Ctrl</kbd>+click. It works on the canvas and in the table.</p></div>
+  <div data-when><p>To select several regions, usually to merge them or move them together.</p></div>
+  <div data-typical><p>Off. Usable only in select mode.</p></div>
+</section>
+
+<section data-term id="commit" data-where="Commit zone button">
+  <h3>Commit</h3>
+  <p>Turns the dashed selection into region(s) of the zone type selected in the table.</p>
+  <div data-what><p>If the selection is in separate pieces, each piece that does not touch the others becomes its own region,
+  biggest first. Touching is judged by the device's own neighbour connections.</p></div>
+  <div data-when><p>After every selection you want to keep. Nothing is a region until it is committed.</p></div>
+  <div data-read><p>The dashed selection becomes a filled patch, a numbered row appears, and the zone type's
+  <span class="ui">#</span> goes up.</p></div>
+  <div data-typical><p>Greyed out until something is selected in draw mode.</p></div>
+</section>
+
+<section data-term id="merge" data-where="Merge button, row 2">
+  <h3>Merge</h3>
+  <p>Joins several selected regions into one.</p>
+  <div data-what><p>Allowed when two or more regions are selected, all of one zone type, and together they form one connected
+  block. The merged region keeps the id and the list place of whichever of them was made first.</p></div>
+  <div data-when><p>When you drew one place in several pieces.</p></div>
+  <div data-read><p>The button is greyed out while the selection does not qualify, for example when the regions do not touch
+  or belong to different zone types.</p></div>
+  <div data-typical><p>Off until a qualifying selection exists.</p></div>
+</section>
+
+<section data-term id="edit-region" data-where="Edit region button, canvas strip, right-click menu">
+  <h3>Edit region</h3>
+  <p>Reopens a region's electrodes as a dashed selection so you can add or remove some.</p>
+  <div data-what><p>MicroDrop switches to draw mode and hides the committed patch while you work. <em>Commit zone</em> updates
+  the same region, keeping its id. If your changes cut it into pieces, the biggest piece stays this region and the others
+  become new regions of the same type. Committing an empty selection leaves the region as it was.</p></div>
+  <div data-when><p>To grow, shrink or reshape a region without losing its id.</p></div>
+  <div data-read><p><em>Clear selection</em> or <kbd>Esc</kbd> cancels: the region comes back unchanged. Either way you land
+  back in select mode.</p></div>
+</section>
+
+<section data-term id="move-region" data-where="select mode, drag a region">
+  <h3>Moving a region</h3>
+  <p>Drag a region in select mode to shift it across the electrode grid.</p>
+  <div data-what><p>Each electrode of the region moves to the electrode nearest its new spot. With several regions selected,
+  dragging one of them moves them all.</p></div>
+  <div data-read><p>If a region would leave the device or break apart, nothing moves and the status bar says <em>Move
+  rejected: regions must stay on the device and contiguous</em> for a few seconds.</p></div>
+</section>
+
+<section data-term id="zones-layer" data-where="the device's .svg file">
+  <h3>Zones layer in the device SVG</h3>
+  <p>Where regions are saved: a layer named <code>Zones</code> inside the device file.</p>
+  <div data-what><p>One entry per region, holding its id, its zone type's id, name and colour, whether it is shown, and its
+  electrode ids. MicroDrop rewrites the layer each time the device is saved and reads it when the device is loaded.</p></div>
+  <div data-when><p>Every <span class="ui">File ▸ Device ▸ Save</span> or <span class="ui">Save As…</span>.</p></div>
+  <div data-read><p>When a saved region names electrodes the file no longer has, MicroDrop trims or drops it and shows
+  <span class="ui">Zones Not Loaded</span>: <em>N zone region(s) in this device file reference electrodes that do not exist
+  in it and were dropped or trimmed. Saving the file will write it without those electrodes.</em></p></div>
+  <div data-typical><p>No layer until the first save with regions.</p></div>
+</section>
+
+<section data-term id="snapshot" data-where="shared app data, key microdrop.device.zones">
+  <h3>Zones snapshot (for other plugins)</h3>
+  <p>A live copy of every zone type and its regions that other parts of MicroDrop read.</p>
+  <div data-what><p>MicroDrop republishes it after every change, saved or not: for each zone type its name, colour and
+  regions, each region with its id, electrode ids and channels, in check order. The Zone Target column reads it.</p></div>
+  <div data-when><p>Nothing to do: it follows the Zones section on its own.</p></div>
+  <div data-read><p>Developers: the key is <code>ZONES_KEY</code> in <code>device_viewer/consts.py</code>.</p></div>
+  <div data-typical><p>Reflects the loaded device.</p></div>
+</section>
+
+<section data-term id="zones-alpha" data-where="Alpha Settings ▸ Zones">
+  <h3>Zones transparency</h3>
+  <p>The <span class="ui">Zones</span> row of <span class="ui">Alpha Settings</span> sets how strongly all regions are drawn.</p>
+  <div data-what><p>At 100 the zone fill is 43 % opaque, so the electrodes and the camera picture show through. Lower values
+  fade the regions; 0, or the row's eye switched off, hides all of them.</p></div>
+  <div data-when><p>When regions hide what is under them on the camera picture.</p></div>
+  <div data-typical><p>100, shown.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-target">
+<h2>The Zone Target column</h2>
+<p class="intro">Two cells per step in the protocol tree, added by the zone protocol controls plugin. They let a step switch
+on "the first region of this type that has (or has no) droplet" without naming electrodes.</p>
+
+<section data-term id="zt-cell" data-where="protocol tree ▸ Zone Target">
+  <h3>Zone Target</h3>
+  <p>The zone type whose regions the step chooses from.</p>
+  <div data-what><p>A drop-down of <span class="ui">(none)</span> and every zone type by name; the cell then shows the zone
+  type's id. A zone type deleted since stays in the list as <em>id (missing)</em>, so the step does not lose it silently.</p></div>
+  <div data-when><p>On steps that should act on "a free slot" or "the slot that holds liquid". Leave it at (none) everywhere
+  else: then the column does nothing and asks the DropBot nothing.</p></div>
+  <div data-read><p>Hover the cell. With a zone type picked: <em>Regions, checked in this order: …</em> (ids). With none:
+  <em>Pick a zone type: at step start, the first of its regions meeting the Zone Criterion is actuated with the step</em>.
+  For a deleted type: <em>Zone type '…' is not defined on the loaded device; this step fails when run</em>.</p></div>
+  <div data-typical><p>(none). The column is hidden until you tick it in the header's right-click menu.</p></div>
+</section>
+
+<section data-term id="zt-criterion" data-where="protocol tree ▸ Zone Criterion">
+  <h3>Zone Criterion</h3>
+  <p>Which region counts as a match: one with a droplet, or one without.</p>
+  <div data-what><p><em>Has Droplet</em>: a region counts if the DropBot detects liquid on any of its electrodes.
+  <em>No Droplet</em>: a region counts if it detects liquid on none of them.</p></div>
+  <div data-when><p><em>No Droplet</em> to send liquid to the first free place; <em>Has Droplet</em> to act on the first
+  place that holds some, for example to pull a droplet out of whichever reservoir is filled.</p></div>
+  <div data-read><p>Blank and locked until the Zone Target cell has a zone type.</p></div>
+  <div data-typical><p>Has Droplet.</p></div>
+</section>
+
+<section data-term id="zt-order" data-where="Zone Target tooltip">
+  <h3>Check order</h3>
+  <p>The order in which a zone type's regions are tried; the first match wins.</p>
+  <div data-what><p>The order the regions were made in. A merged region keeps the place of its oldest part; an edited region
+  keeps its place. Layer order, row folding and hiding do not change it, and hidden regions are still checked.</p></div>
+  <div data-when><p>Draw parking slots in the order you want them filled.</p></div>
+  <div data-read><p>All regions of the type are checked in one detection request, at the start of the step. A region whose
+  electrodes have no channel number cannot be sensed and is skipped for both criteria. The chosen region's electrodes are
+  switched on with the step's own electrodes and routes for every phase of the step; the step itself is not changed.</p></div>
+  <div data-typical><p>See the tooltip; ids, oldest first.</p></div>
+  <figure data-demo="zone-target" aria-label="Interactive: choose which regions hold droplets and see which region the Zone Target column picks">
+    <div class="controls">
+      <label>Zone Target <select id="zt-zone">
+        <option value="zone-1" selected>zone-1</option>
+        <option value="">(none)</option>
+        <option value="old-zone">old-zone (missing)</option>
+      </select></label>
+      <label>Zone Criterion <select id="zt-crit">
+        <option selected>Has Droplet</option>
+        <option>No Droplet</option>
+      </select></label>
+      <label><input type="checkbox" id="zt-fail"> Detection fails</label>
+      <label><input type="checkbox" id="zt-preview"> Preview mode</label>
+    </div>
+    <div class="zt-slots" id="zt-slots"></div>
+    <p class="status" id="zt-status" aria-live="polite"></p>
+    <p class="zt-msg" id="zt-msg"></p>
+    <figcaption>The three regions of the clips above, in check order. Tick where droplets sit and pick the criterion; the
+    outlined region is the one step 3 would switch on. Untick <em>has channels</em> to see a region skipped. The grey line is
+    the message MicroDrop logs, or the error the step fails with. The step selection logic is the same as MicroDrop's (a test
+    checks it against the app's code).</figcaption>
+  </figure>
+</section>
+
+<section data-term id="zt-failures" data-where="Protocol error dialog">
+  <h3>When the step fails</h3>
+  <p>The Zone Target column stops the protocol rather than guess.</p>
+  <div data-what><p>The step fails, the protocol stops, and a <span class="ui">Protocol error</span> dialog shows why, when:</p>
+  <ul class="uses">
+    <li>no region of the zone type meets the criterion (<em>no region of zone type '…' meets '…'. Checked in order: …</em>);</li>
+    <li>the zone type no longer exists (<em>… is not defined on the loaded device. Pick another zone type or clear the Zone
+    Target cell.</em>);</li>
+    <li>the zone type has no region with a channel number, for example none on this device (<em>… has no region with a
+    channel-mapped electrode to check.</em>);</li>
+    <li>droplet detection fails, or no answer comes within the wait time.</li>
+  </ul></div>
+  <div data-when><p>Plan for the "all slots full" case: it ends the run.</p></div>
+  <div data-read><p>Like any failed step, MicroDrop then offers the run summary.</p></div>
+  <div data-typical><p>Wait time 12 s, in Protocol Settings ▸ <span class="ui">Column Ack Wait Times (0 = don't wait)</span>.
+  At 0 the step fails at once: the column needs the detection answer.</p></div>
+</section>
+
+<section data-term id="zt-report" data-where="run log and run report">
+  <h3>What is recorded</h3>
+  <p>Each resolved step logs which region it chose and why.</p>
+  <div data-what><p>The log line reads like <em>Step 3: zone target 'zone-1' (No Droplet) chose region zone-1-6 (checked in
+  order: zone-1-4, zone-1-5, zone-1-6); actuating […]</em>. The run report's data files get three values for the step:
+  <em>Zone Target</em>, <em>Zone Target Criterion</em> and <em>Zone Target Region</em> (stored, not charted).</p></div>
+</section>
+
+<section data-term id="zt-preview" data-where="Play button menu ▸ Preview Mode">
+  <h3>Preview mode</h3>
+  <p>A preview run skips the Zone Target column.</p>
+  <div data-what><p>Detection needs the DropBot, so in preview the step runs with only its own electrodes and routes, and the
+  log notes that the zone target was not resolved.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-saving">
+<h2>Where zones are kept</h2>
+<div class="table-wrap">
+<table class="small">
+  <thead><tr><th>What</th><th>Kept in</th><th>Saved when</th></tr></thead>
+  <tbody>
+    <tr><td>Zone types: name and colour</td><td>MicroDrop preferences, shared by all devices</td><td>At once, on every change</td></tr>
+    <tr><td>Regions</td><td>The device SVG's <a href="#zones-layer">Zones layer</a>, with each region's zone name and colour</td><td>Only on <span class="ui">File ▸ Device ▸ Save</span> / <span class="ui">Save As…</span></td></tr>
+    <tr><td>Live copy for other plugins</td><td>Shared app data (<a href="#snapshot">snapshot</a>)</td><td>At once, on every change</td></tr>
+  </tbody>
+</table>
+</div>
+<p><strong>Loading another device</strong> clears the regions on screen and the zone undo history, then loads the new file's
+Zones layer. Zone types stay. A region in the file whose zone type does not exist here gets that type re-created from the
+name and colour stored in the file. If a zone type with that id already exists, the local name and colour are used.</p>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>Save the device yourself.</strong> Zone edits do not mark the device as changed, so there is no
+    <em>Unsaved Device SVG Changes</em> warning. Unsaved regions are lost when another device is loaded or MicroDrop is
+    restarted.</li>
+    <li><strong>Region numbers are not ids.</strong> The table counts 1, 2, 3; the tooltip, log and report say
+    <code class="id">zone-1-4</code>. Hover a row to match them.</li>
+    <li><strong>Zone Target uses what is on screen now</strong>, saved or not, and checks hidden regions too.</li>
+    <li><strong>Check order is the order the regions were made in.</strong> To change it, redraw the regions in the order you
+    want (or merge into the oldest one); the layer arrows do not affect it.</li>
+    <li><strong>A full zone ends the run.</strong> When no region meets the criterion the step fails and the protocol stops.</li>
+    <li><strong>Moving a device file to another computer</strong> brings its regions and their zone names and colours, but a
+    zone type that already exists there keeps that computer's name and colour.</li>
+    <li><strong>Outlines are computed.</strong> On some chips they trace every electrode instead of one shape (see
+    <a href="#outline">Outline</a>).</li>
+  </ul>
+</div>
+</section>
+
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Zone type</dt><dd>A named, coloured label for a kind of place on the chip.</dd>
+  <dt>Region</dt><dd>A set of electrodes carrying one zone type.</dd>
+  <dt>Region id</dt><dd>A region's permanent name, such as <code class="id">zone-1-4</code>; never reused.</dd>
+  <dt>Commit</dt><dd>Turning a dashed selection into a region.</dd>
+  <dt>Layer</dt><dd>A zone type's place in the drawing order; the first row is on top.</dd>
+  <dt>Check order</dt><dd>The order the Zone Target column tries a zone type's regions in: oldest first.</dd>
+  <dt>Actuate</dt><dd>Switch electrodes on, so they pull liquid.</dd>
+  <dt>Channel</dt><dd>The DropBot output an electrode is wired to; detection and switching work per channel.</dd>
+  <dt>Device / SVG</dt><dd>The drawing of a chip design's electrodes, loaded from an <code>.svg</code> file.</dd>
+</dl>
+</section>
+
+<script>
+/* zone-target-rule:start */
+/* Mirrors select_zone_region in zone_protocol_controls/zone_selection.py:
+   the first region, in check order, that meets the criterion. A region with
+   no channel cannot be sensed and never matches. */
+function zoneTargetPick(regions, detected, criterion) {
+  if (criterion !== "Has Droplet" && criterion !== "No Droplet") {
+    throw new Error("Unknown zone criterion " + criterion);
+  }
+  var wantsDroplet = criterion === "Has Droplet";
+
+  for (var i = 0; i < regions.length; i++) {
+    var channels = regions[i].channels;
+
+    if (!channels.length) { continue; }
+
+    var hasDroplet = channels.some(function (channel) { return detected.indexOf(channel) >= 0; });
+
+    if (hasDroplet === wantsDroplet) { return regions[i]; }
+  }
+
+  return null;
+}
+/* zone-target-rule:end */
+
+Tutorial.demo("zone-target", function (figure, T) {
+  var zoneSelect = figure.querySelector("#zt-zone"), critSelect = figure.querySelector("#zt-crit");
+  var failBox = figure.querySelector("#zt-fail"), previewBox = figure.querySelector("#zt-preview");
+  var slots = figure.querySelector("#zt-slots"), status = figure.querySelector("#zt-status");
+  var msg = figure.querySelector("#zt-msg");
+  var STEP = "Step 3";
+  var regions = [
+    { id: "zone-1-4", row: 1, droplet: true, mapped: true, base: [12, 13, 14], where: "large droplet" },
+    { id: "zone-1-5", row: 2, droplet: true, mapped: true, base: [33, 34, 35], where: "small droplet" },
+    { id: "zone-1-6", row: 3, droplet: false, mapped: true, base: [57, 58], where: "empty" }
+  ];
+
+  function pyList(values) { return "[" + values.join(", ") + "]"; }
+  function quote(text) { return "'" + text + "'"; }
+
+  function build() {
+    regions.forEach(function (region, index) {
+      var card = document.createElement("div");
+      card.className = "zt-slot";
+      card.innerHTML =
+        "<strong>" + region.id + "</strong> <span class=\"tag-row\">(row " + region.row + ")</span>" +
+        "<svg viewBox=\"0 0 120 40\" aria-hidden=\"true\"><rect x=\"6\" y=\"8\" width=\"108\" height=\"24\" rx=\"3\" fill=\"#f5e050\" fill-opacity=\".43\" stroke=\"#f5e050\" stroke-width=\"2\"/>" +
+        "<ellipse class=\"zt-drop\" cx=\"60\" cy=\"20\" rx=\"20\" ry=\"10\" fill=\"#c2185b\" fill-opacity=\".8\"/></svg>" +
+        "<label><input type=\"checkbox\" data-k=\"droplet\"> droplet on it</label>" +
+        "<label><input type=\"checkbox\" data-k=\"mapped\"> has channels</label>" +
+        "<div class=\"tag\"></div>";
+      card.querySelector("[data-k=droplet]").checked = region.droplet;
+      card.querySelector("[data-k=mapped]").checked = region.mapped;
+      card.querySelectorAll("input").forEach(function (box) {
+        box.addEventListener("change", function () { region[box.dataset.k] = box.checked; update(); });
+      });
+      region.card = card;
+      slots.appendChild(card);
+    });
+  }
+
+  function channelsOf(region) { return region.mapped ? region.base : []; }
+
+  function update() {
+    var zone = zoneSelect.value, criterion = critSelect.value;
+    var detected = [], chosen = null, tags = {}, text = "", line = "";
+
+    critSelect.disabled = !zone;
+
+    regions.forEach(function (region) {
+      region.card.querySelector(".zt-drop").style.display = region.droplet ? "" : "none";
+
+      if (region.droplet && region.mapped) { detected = detected.concat(region.base); }
+    });
+
+    var unionChannels = [];
+    regions.forEach(function (region) { unionChannels = unionChannels.concat(channelsOf(region)); });
+
+    if (!zone) {
+      text = "Zone Target is (none): the step runs with its own electrodes only; nothing is detected.";
+    } else if (previewBox.checked) {
+      text = "Preview: the zone target is not resolved; the step runs with its own electrodes only.";
+      line = STEP + ": preview mode, zone target " + quote(zone) + " not resolved (droplet detection needs hardware)";
+    } else if (zone === "old-zone") {
+      text = "The step fails: that zone type no longer exists.";
+      line = STEP + ": zone type " + quote(zone) + " is not defined on the loaded device. Pick another zone type or clear the Zone Target cell.";
+    } else if (!unionChannels.length) {
+      text = "The step fails: no region has a channel to check.";
+      line = STEP + ": zone type " + quote(zone) + " has no region with a channel-mapped electrode to check.";
+    } else if (failBox.checked) {
+      text = "The step fails: droplet detection did not answer properly.";
+      line = STEP + ": droplet detection for the zone target failed: (the DropBot's error)";
+    } else {
+      var view = regions.map(function (region) { return { id: region.id, channels: channelsOf(region) }; });
+      var pick = zoneTargetPick(view, detected, criterion);
+      var checked = regions.map(function (region) { return region.id; }).join(", ");
+
+      regions.forEach(function (region) { tags[region.id] = region.mapped ? "checked, no match" : "skipped: no channels"; });
+
+      for (var i = 0; pick && i < regions.length; i++) {
+        if (regions[i].id === pick.id) { chosen = regions[i]; tags[pick.id] = "chosen: switched on"; break; }
+      }
+
+      if (chosen) {
+        regions.slice(regions.indexOf(chosen) + 1).forEach(function (region) { tags[region.id] = "not reached"; });
+        text = "Step 3 switches on " + chosen.id + " (row " + chosen.row + ") together with its own electrodes.";
+        line = STEP + ": zone target " + quote(zone) + " (" + criterion + ") chose region " + chosen.id +
+          " (checked in order: " + checked + "); actuating its " + chosen.base.length + " electrodes";
+      } else {
+        text = "The step fails: no region meets " + criterion + ". The protocol stops.";
+        line = STEP + ": no region of zone type " + quote(zone) + " meets " + quote(criterion) +
+          ". Checked in order: " + checked + "; droplets detected on channels " +
+          pyList(detected.slice().sort(function (a, b) { return a - b; })) + ".";
+      }
+    }
+
+    regions.forEach(function (region) {
+      region.card.classList.toggle("chosen", chosen === region);
+      region.card.classList.toggle("skipped", !region.mapped);
+      region.card.querySelector(".tag").textContent = tags[region.id] || "";
+    });
+
+    status.innerHTML = chosen ? "<span class=\"good\">" + text + "</span>" :
+      (zone && !previewBox.checked ? "<span class=\"bad\">" + text + "</span>" : text);
+    msg.textContent = line || "(no log line)";
+  }
+
+  build();
+  [zoneSelect, critSelect, failBox, previewBox].forEach(function (input) {
+    input.addEventListener("change", update);
+  });
+  update();
+});
+
+Tutorial.demo("painter", function (figure, T) {
+  var COLS = 10, ROWS = 6, SIZE = 28, GAP = 2, PAD = 6;
+  var svg = figure.querySelector("#zp-chip"), tree = figure.querySelector("#zp-tree");
+  var status = figure.querySelector("#zp-status"), typeSelect = figure.querySelector("#zp-type");
+  var buttons = {};
+  ["draw", "undraw", "select", "multi", "commit", "clear", "merge", "delete", "up"].forEach(function (key) {
+    buttons[key] = figure.querySelector("#zp-" + key);
+  });
+
+  var types = [
+    { id: "heating", color: "#f5e050" },
+    { id: "waste", color: "#6d9eeb" }
+  ];
+  var state = { mode: "draw", undraw: false, multi: false, active: "heating", pending: [], regions: [], selected: [], counters: {} };
+  var drag = null;
+
+  function cellX(index) { return PAD + (index % COLS) * (SIZE + GAP); }
+  function cellY(index) { return PAD + Math.floor(index / COLS) * (SIZE + GAP); }
+  function typeOf(id) { return types.filter(function (type) { return type.id === id; })[0]; }
+
+  function neighbours(index) {
+    var out = [], col = index % COLS, row = Math.floor(index / COLS);
+
+    if (col > 0) { out.push(index - 1); }
+    if (col < COLS - 1) { out.push(index + 1); }
+    if (row > 0) { out.push(index - COLS); }
+    if (row < ROWS - 1) { out.push(index + COLS); }
+
+    return out;
+  }
+
+  function components(cells) {
+    var remaining = cells.slice(), groups = [];
+
+    while (remaining.length) {
+      var group = [remaining.pop()], frontier = group.slice();
+
+      while (frontier.length) {
+        neighbours(frontier.pop()).forEach(function (next) {
+          var at = remaining.indexOf(next);
+
+          if (at >= 0) { remaining.splice(at, 1); group.push(next); frontier.push(next); }
+        });
+      }
+
+      groups.push(group);
+    }
+
+    groups.sort(function (a, b) { return b.length - a.length; });
+
+    return groups;
+  }
+
+  function newRegion(zone, cells) {
+    state.counters[zone] = (state.counters[zone] || 0) + 1;
+
+    return { id: zone + "-" + state.counters[zone], zone: zone, cells: cells.slice() };
+  }
+
+  function svgPoint(event) {
+    var point = svg.createSVGPoint();
+    point.x = event.clientX; point.y = event.clientY;
+
+    return point.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  function cellsIn(x0, y0, x1, y1) {
+    var left = Math.min(x0, x1), right = Math.max(x0, x1), top = Math.min(y0, y1), bottom = Math.max(y0, y1), out = [];
+
+    for (var index = 0; index < COLS * ROWS; index++) {
+      var x = cellX(index), y = cellY(index);
+
+      if (x < right && x + SIZE > left && y < bottom && y + SIZE > top) { out.push(index); }
+    }
+
+    return out;
+  }
+
+  function cellAt(x, y) {
+    var hits = cellsIn(x, y, x + 0.01, y + 0.01);
+
+    return hits.length ? hits[0] : -1;
+  }
+
+  function regionAt(cell) {
+    for (var t = 0; t < types.length; t++) {
+      for (var r = 0; r < state.regions.length; r++) {
+        var region = state.regions[r];
+
+        if (region.zone === types[t].id && region.cells.indexOf(cell) >= 0) { return region; }
+      }
+    }
+
+    return null;
+  }
+
+  function canMerge() {
+    var selection = state.selected;
+
+    if (selection.length < 2) { return false; }
+
+    var zones = selection.map(function (region) { return region.zone; });
+
+    if (zones.some(function (zone) { return zone !== zones[0]; })) { return false; }
+
+    var union = [];
+    selection.forEach(function (region) { union = union.concat(region.cells); });
+
+    return components(union).length === 1;
+  }
+
+  function outline(group, cells, color, cls) {
+    var inside = {}, half = GAP / 2, d = "";
+    cells.forEach(function (cell) { inside[cell] = true; });
+
+    cells.forEach(function (cell) {
+      var col = cell % COLS, row = Math.floor(cell / COLS);
+      var x0 = cellX(cell) - half, y0 = cellY(cell) - half, x1 = x0 + SIZE + GAP, y1 = y0 + SIZE + GAP;
+
+      group.appendChild(T.el("rect", { x: x0, y: y0, width: SIZE + GAP, height: SIZE + GAP, fill: color, "fill-opacity": cls === "pend" ? 0.3 : 0.43 }));
+
+      if (row === 0 || !inside[cell - COLS]) { d += "M" + x0 + " " + y0 + "H" + x1; }
+      if (row === ROWS - 1 || !inside[cell + COLS]) { d += "M" + x0 + " " + y1 + "H" + x1; }
+      if (col === 0 || !inside[cell - 1]) { d += "M" + x0 + " " + y0 + "V" + y1; }
+      if (col === COLS - 1 || !inside[cell + 1]) { d += "M" + x1 + " " + y0 + "V" + y1; }
+    });
+
+    var attrs = { d: d, stroke: color, "class": "edge" + (cls === "sel" ? " sel" : "") };
+
+    if (cls === "pend") { attrs["stroke-dasharray"] = "4 3"; }
+
+    group.appendChild(T.el("path", attrs));
+  }
+
+  function render() {
+    T.clear(svg);
+    svg.appendChild(T.el("rect", { "class": "plate", x: 0, y: 0, width: 310, height: 190, rx: 6 }));
+
+    for (var index = 0; index < COLS * ROWS; index++) {
+      svg.appendChild(T.el("rect", { "class": "cell", x: cellX(index), y: cellY(index), width: SIZE, height: SIZE, rx: 2 }));
+    }
+
+    /* Bottom layer first: the first zone type in the table is drawn last, on top. */
+    types.slice().reverse().forEach(function (type) {
+      state.regions.forEach(function (region) {
+        if (region.zone !== type.id) { return; }
+
+        var group = T.el("g", {});
+        outline(group, region.cells, type.color, state.selected.indexOf(region) >= 0 ? "sel" : "");
+        svg.appendChild(group);
+      });
+    });
+
+    var pending = state.pending.slice();
+
+    if (drag && drag.moved && state.mode === "draw") {
+      var band = cellsIn(drag.x0, drag.y0, drag.x1, drag.y1);
+      pending = drag.subtract ? pending.filter(function (cell) { return band.indexOf(cell) < 0; })
+        : pending.concat(band.filter(function (cell) { return pending.indexOf(cell) < 0; }));
+    }
+
+    if (pending.length) {
+      var pendGroup = T.el("g", {});
+      outline(pendGroup, pending, typeOf(state.active).color, "pend");
+      svg.appendChild(pendGroup);
+    }
+
+    if (drag && drag.moved) {
+      svg.appendChild(T.el("rect", {
+        "class": "band" + (drag.subtract ? " sub" : ""),
+        x: Math.min(drag.x0, drag.x1), y: Math.min(drag.y0, drag.y1),
+        width: Math.abs(drag.x1 - drag.x0), height: Math.abs(drag.y1 - drag.y0)
+      }));
+    }
+
+    renderTree();
+    renderButtons();
+  }
+
+  function renderTree() {
+    var html = "<thead><tr><th>Zone</th><th>Color</th><th>#</th></tr></thead><tbody>";
+
+    types.forEach(function (type) {
+      var own = state.regions.filter(function (region) { return region.zone === type.id; });
+      html += "<tr><td><strong>" + type.id + "</strong>" + (type.id === state.active ? " <span class=\"muted\">(draws)</span>" : "") +
+        "</td><td class=\"sw\"><span style=\"background:" + type.color + "\"></span></td><td>" + own.length + "</td></tr>";
+      own.forEach(function (region, position) {
+        html += "<tr class=\"reg" + (state.selected.indexOf(region) >= 0 ? " on" : "") + "\"><td>" + (position + 1) +
+          " <span class=\"muted\">" + region.id + "</span></td><td></td><td class=\"muted\">" + region.cells.length + " el.</td></tr>";
+      });
+    });
+
+    tree.innerHTML = html + "</tbody>";
+  }
+
+  function renderButtons() {
+    buttons.draw.setAttribute("aria-pressed", String(state.mode === "draw"));
+    buttons.select.setAttribute("aria-pressed", String(state.mode === "select"));
+    buttons.undraw.setAttribute("aria-pressed", String(state.undraw));
+    buttons.multi.setAttribute("aria-pressed", String(state.multi));
+    buttons.undraw.disabled = state.mode !== "draw";
+    buttons.multi.disabled = state.mode !== "select";
+    buttons.commit.disabled = !(state.mode === "draw" && state.pending.length);
+    buttons.clear.disabled = !state.pending.length;
+    buttons.merge.disabled = !(state.mode === "select" && canMerge());
+    buttons.delete.disabled = !(state.mode === "select" && state.selected.length);
+    buttons.up.disabled = types[0].id === state.active;
+  }
+
+  function say(text) { status.textContent = text; }
+
+  function setMode(mode) {
+    state.mode = mode;
+    state.pending = [];
+    state.selected = [];
+    say(mode === "draw" ? "Draw mode: drag boxes or click electrodes, then Commit zone." :
+      "Select mode: click a region; Ctrl+click or Multi-select adds more.");
+    render();
+  }
+
+  svg.addEventListener("pointerdown", function (event) {
+    var point = svgPoint(event);
+    drag = { x0: point.x, y0: point.y, x1: point.x, y1: point.y, moved: false, ctrl: event.ctrlKey,
+      subtract: state.mode === "draw" && (event.ctrlKey || state.undraw) };
+    svg.setPointerCapture(event.pointerId);
+  });
+
+  svg.addEventListener("pointermove", function (event) {
+    if (!drag) { return; }
+
+    var point = svgPoint(event);
+    drag.x1 = point.x; drag.y1 = point.y;
+    drag.moved = drag.moved || Math.abs(drag.x1 - drag.x0) + Math.abs(drag.y1 - drag.y0) > 4;
+
+    if (drag.moved && state.mode === "draw") { render(); }
+  });
+
+  svg.addEventListener("pointerup", function () {
+    if (!drag) { return; }
+
+    var finished = drag;
+    drag = null;
+
+    if (state.mode === "draw") {
+      if (finished.moved) {
+        var band = cellsIn(finished.x0, finished.y0, finished.x1, finished.y1);
+
+        if (finished.subtract) {
+          state.pending = state.pending.filter(function (cell) { return band.indexOf(cell) < 0; });
+        } else {
+          band.forEach(function (cell) { if (state.pending.indexOf(cell) < 0) { state.pending.push(cell); } });
+        }
+      } else {
+        var cell = cellAt(finished.x0, finished.y0);
+        var at = state.pending.indexOf(cell);
+
+        if (cell >= 0) { if (at >= 0) { state.pending.splice(at, 1); } else { state.pending.push(cell); } }
+      }
+
+      say(state.pending.length + " electrode(s) in the dashed selection.");
+    } else if (!finished.moved) {
+      var region = regionAt(cellAt(finished.x0, finished.y0));
+
+      if (finished.ctrl || state.multi) {
+        if (region) {
+          var where = state.selected.indexOf(region);
+
+          if (where >= 0) { state.selected.splice(where, 1); } else { state.selected.push(region); }
+        }
+      } else {
+        state.selected = region ? [region] : [];
+      }
+
+      say(state.selected.length ? "Selected: " + state.selected.map(function (r) { return r.id; }).join(", ") +
+        (state.selected.length > 1 ? (canMerge() ? ". These can be merged." : ". Merge needs one zone type and touching regions.") : ".")
+        : "Nothing selected.");
+    }
+
+    render();
+  });
+
+  buttons.draw.addEventListener("click", function () { setMode("draw"); });
+  buttons.select.addEventListener("click", function () { setMode("select"); });
+  buttons.undraw.addEventListener("click", function () { state.undraw = !state.undraw; render(); });
+  buttons.multi.addEventListener("click", function () { state.multi = !state.multi; render(); });
+
+  buttons.commit.addEventListener("click", function () {
+    var pieces = components(state.pending);
+    var made = pieces.map(function (piece) { return newRegion(state.active, piece); });
+    state.regions = state.regions.concat(made);
+    state.pending = [];
+    say(made.length > 1 ? "The selection was in " + made.length + " separate pieces, so it became " + made.length +
+      " regions: " + made.map(function (r) { return r.id; }).join(", ") + "." : "Committed " + made[0].id + ".");
+    render();
+  });
+
+  buttons.clear.addEventListener("click", function () { state.pending = []; say("Selection cleared; no region made."); render(); });
+
+  buttons.merge.addEventListener("click", function () {
+    var selection = state.selected.slice();
+    var keep = selection.reduce(function (oldest, region) {
+      return state.regions.indexOf(region) < state.regions.indexOf(oldest) ? region : oldest;
+    });
+
+    selection.forEach(function (region) {
+      if (region !== keep) { keep.cells = keep.cells.concat(region.cells); }
+    });
+    state.regions = state.regions.filter(function (region) { return region === keep || selection.indexOf(region) < 0; });
+    state.selected = [keep];
+    say("Merged into " + keep.id + ": the oldest of them keeps its id and its place in the list.");
+    render();
+  });
+
+  buttons.delete.addEventListener("click", function () {
+    var gone = state.selected.map(function (r) { return r.id; });
+    state.regions = state.regions.filter(function (region) { return state.selected.indexOf(region) < 0; });
+    state.selected = [];
+    say("Deleted " + gone.join(", ") + ". Those ids will not be used again.");
+    render();
+  });
+
+  typeSelect.innerHTML = types.map(function (type) { return "<option>" + type.id + "</option>"; }).join("");
+  typeSelect.addEventListener("change", function () { state.active = typeSelect.value; render(); });
+
+  buttons.up.addEventListener("click", function () {
+    var index = types.indexOf(typeOf(state.active));
+
+    if (index > 0) { types.splice(index - 1, 0, types.splice(index, 1)[0]); }
+
+    say(state.active + " is now the top layer: drawn over the other zone type where they overlap.");
+    render();
+  });
+
+  setMode("draw");
+});
+</script>
