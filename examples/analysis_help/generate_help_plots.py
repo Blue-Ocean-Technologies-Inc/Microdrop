@@ -8,17 +8,18 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Regenerate the analysis help guide's example plot figures.
+"""Regenerate the Image Analysis Tutorial's example plot figures.
 
-Renders one figure per plot-pane View (Intensity, 2nd derivative, Fastest
-change) through the real ``RoiPlotCanvas`` over a synthetic ROI series, so
-the figures are what the app itself draws. For each view mode it writes
-``view_<mode>.svg`` (text kept as text), a ``view_<mode>.png`` preview, and
-``view_<mode>.inline.svg`` — the post-processed copy to paste into
-``image_viewer/resources/analysis_help.html``.
+Renders one figure per plot-pane View the page shows (Over time, 2nd
+derivative, Fastest change) through the real ``RoiPlotCanvas`` over a
+synthetic ROI series, so the figures are what the app itself draws. For
+each view mode it writes ``view_<mode>.svg``, post-processed for the page
+(text kept as text, styles gathered into one scoped sheet per figure), which
+``image_viewer/resources/analysis_help.src.html`` inlines. Rebuild the page
+afterwards (``examples/tutorials/build_tutorial.py``).
 
-Output goes to ``image_viewer/resources/analysis_help/`` (next to the help
-HTML) unless an output folder is given. From ``src``::
+Output goes to ``image_viewer/resources/analysis_help_media/`` (next to the
+tutorial source) unless an output folder is given. From ``src``::
 
     pixi run python -m examples.analysis_help.generate_help_plots [out_dir]
 
@@ -26,6 +27,7 @@ Set ``QT_QPA_PLATFORM=offscreen`` to run without a display.
 """
 
 # Standard library imports.
+import io
 import re
 import sys
 import tempfile
@@ -40,7 +42,7 @@ import numpy as np
 from pyface.qt.QtWidgets import QApplication
 
 # Microdrop package imports.
-from image_viewer.analysis.consts import DEFAULT_ROI_COLORS, VIEW_MODES
+from image_viewer.analysis.consts import DEFAULT_ROI_COLORS
 from image_viewer.analysis.plot_pane import RoiPlotCanvas
 from image_viewer.analysis.roi_model import (
     AnalysisSession,
@@ -56,7 +58,15 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-DEFAULT_OUTPUT_DIR = ANALYSIS_HELP_HTML_PATH.parent / "analysis_help"
+DEFAULT_OUTPUT_DIR = ANALYSIS_HELP_HTML_PATH.parent / "analysis_help_media"
+#: The view modes the page shows, each with a short id and class prefix so
+#: the figures can share the page.
+FIGURE_PREFIXES = {"intensity": "i", "second_derivative": "sd", "fastest_change": "fc"}
+#: matplotlib's text font, kept as one rule per figure instead of on every
+#: label.
+MPL_FONT_FAMILY = re.compile(r"font-family: [^;\"]*(; )?")
+#: Splits markup into tags and the text between them.
+SVG_TAG_TOKEN = re.compile(r"(<[^>]+>)")
 N_IMAGES = 30
 INTERVAL_S = 10
 #: (name, midpoint s, rise steepness s, baseline, plateau)
@@ -135,17 +145,16 @@ def make_session(paths):
 
 
 def inline_svg(svg, prefix):
-    """Make a matplotlib SVG embeddable in the offline help page.
+    """Make a matplotlib SVG embeddable in the offline tutorial page.
 
     Drops the XML prolog, metadata and namespace URLs (HTML parses inline
-    SVG without them), rounds coordinates to 0.1 pt, and prefixes ids so
-    several figures can share one page.
+    SVG without them), rounds coordinates to 0.1 pt and collapses the
+    layout whitespace, then compacts it (see ``compact_svg``).
     """
     svg = svg[svg.index("<svg") :]
     svg = re.sub(r"\s*<metadata>.*?</metadata>", "", svg, flags=re.S)
     svg = re.sub(r'\s+xmlns(:\w+)?="[^"]*"', "", svg)
     svg = re.sub(r'\s+(width|height)="[\d.]+pt"', "", svg, count=2)
-    svg = svg.replace("<svg ", '<svg class="mpl" role="img" ', 1)
 
     # Round inside tags only: text content (tick labels, coordinates)
     # must keep the app's own formatting.
@@ -159,13 +168,73 @@ def inline_svg(svg, prefix):
         svg,
     )
 
-    svg = re.sub(r'id="([^"]+)"', rf'id="{prefix}-\1"', svg)
-    svg = re.sub(r"url\(#([^)]+)\)", rf"url(#{prefix}-\1)", svg)
-    svg = re.sub(r'href="#([^"]+)"', rf'href="#{prefix}-\1"', svg)
     svg = re.sub(r"\s*\n\s*", " ", svg)
     svg = svg.replace("> <", "><")
 
-    return svg.strip() + "\n"
+    return compact_svg(svg.strip(), prefix) + "\n"
+
+
+def compact_svg(svg, prefix):
+    """Shrink an inlined matplotlib figure without changing how it draws.
+
+    Every ``style`` attribute becomes a class in one sheet scoped to the
+    figure (root class ``prefix``), which also carries matplotlib's own
+    defaults and its text font; only referenced ids are kept, renamed
+    ``<prefix><n>``; identity rotations and bare ``<g>`` wrappers go. The
+    page's tutorial kit styles ``svg text``, so the sheet sets the text
+    colour and font the figure was drawn with.
+    """
+    svg = re.sub(r"<defs><style[^>]*>.*?</style></defs>", "", svg, flags=re.S)
+    svg = re.sub(r' transform="rotate\(-0 [\d.]+ [\d.]+\)"', "", svg)
+    font = MPL_FONT_FAMILY.search(svg)
+    svg = MPL_FONT_FAMILY.sub("", svg)
+    svg = svg.replace("xlink:href=", "href=")
+
+    referenced = re.findall(r'(?:url\(#|href="#)([^)"]+)', svg)
+    ids = {old: f"{prefix}{n}" for n, old in enumerate(dict.fromkeys(referenced))}
+    svg = re.sub(
+        r' id="([^"]+)"',
+        lambda m: f' id="{ids[m[1]]}"' if m[1] in ids else "",
+        svg,
+    )
+    svg = re.sub(r'(url\(#|href="#)([^)"]+)', lambda m: m[1] + ids[m[2]], svg)
+
+    classes = {}
+
+    def classed(match):
+        css = match[1].strip().rstrip(";").replace(": ", ":").replace("; ", ";")
+
+        if not css:
+            return ""
+
+        return f' class="{classes.setdefault(css, f"{prefix}s{len(classes)}")}"'
+
+    svg = re.sub(r' style="([^"]*)"', classed, svg)
+
+    kept = []
+    bare = []
+
+    for token in SVG_TAG_TOKEN.split(svg):
+        if token.startswith("<g") and token[2] in " >":
+            bare.append(token == "<g>")
+
+            if token == "<g>":
+                continue
+
+        elif token == "</g>" and bare.pop():
+            continue
+
+        kept.append(token)
+
+    rules = [
+        f".{prefix} *{{stroke-linejoin:round;stroke-linecap:butt}}",
+        f".{prefix} text{{fill:#000;{font[0].rstrip('; ').replace(': ', ':')}}}",
+        *(f".{name}{{{css}}}" for css, name in classes.items()),
+    ]
+    svg = "".join(kept).replace("<svg ", f'<svg class="{prefix}" ', 1)
+    root_end = svg.index(">") + 1
+
+    return f"{svg[:root_end]}<style>{''.join(rules)}</style>{svg[root_end:]}"
 
 
 def main():
@@ -188,7 +257,7 @@ def main():
         canvas.show()
         app.processEvents()
 
-        for mode in VIEW_MODES:
+        for mode in FIGURE_PREFIXES:
             figure.view_mode = mode
 
             # The d² markers belong to the d² view; on the intensity
@@ -205,19 +274,16 @@ def main():
                 canvas.figure.axes[0].set_xticks(range(len(names)), names)
 
             canvas.figure.tight_layout()
-            target = out / f"view_{mode}.svg"
-            canvas.figure.savefig(target, format="svg", metadata={"Date": None})
-            canvas.figure.savefig(out / f"view_{mode}.png", dpi=80)
+            drawn = io.StringIO()
+            canvas.figure.savefig(drawn, format="svg", metadata={"Date": None})
 
-            inline = out / f"view_{mode}.inline.svg"
-            inline.write_text(
-                inline_svg(target.read_text(encoding="utf-8"), mode),
+            target = out / f"view_{mode}.svg"
+            target.write_text(
+                inline_svg(drawn.getvalue(), FIGURE_PREFIXES[mode]),
                 encoding="utf-8",
+                newline="\n",
             )
-            logger.info(
-                f"{target}: {target.stat().st_size} bytes, "
-                f"inline {inline.stat().st_size} bytes"
-            )
+            logger.info(f"{target}: {target.stat().st_size} bytes")
 
         canvas.detach()
 
