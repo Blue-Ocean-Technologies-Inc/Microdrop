@@ -231,7 +231,11 @@ grid = VGroup(
 # Temperatures, humidity, and the heater/fan that regulate them.
 environment = VGroup(
     HGroup(
-        UItem("show_environment", editor=IconToggleEditor()),
+        UItem(
+            "show_environment",
+            editor=IconToggleEditor(),
+            tooltip="Show or hide the temperature, humidity, heater and fan readings",
+        ),
         Label("Environment"),
     ),
     VGrid(
@@ -249,7 +253,11 @@ environment = VGroup(
 # Connection/Status tab shows them.
 board_status = VGroup(
     HGroup(
-        UItem("show_board_status", editor=IconToggleEditor()),
+        UItem(
+            "show_board_status",
+            editor=IconToggleEditor(),
+            tooltip="Show or hide the signal board's status fields",
+        ),
         Label("Board Status"),
     ),
     VGrid(
@@ -269,7 +277,11 @@ board_status = VGroup(
 # instead of growing the pane.
 alarms = VGroup(
     HGroup(
-        UItem("show_alarms", editor=IconToggleEditor()),
+        UItem(
+            "show_alarms",
+            editor=IconToggleEditor(),
+            tooltip="Show or hide recent alarms and errors",
+        ),
         Label("Alarms"),
     ),
     VGroup(

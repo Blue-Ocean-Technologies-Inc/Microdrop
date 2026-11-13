@@ -17,8 +17,11 @@ from contextlib import contextmanager
 
 # Enthought library imports.
 from pyface.qt.QtCore import (
+    QEvent,
     QItemSelectionModel,
     QModelIndex,
+    QPersistentModelIndex,
+    QPoint,
     Qt,
     Signal,
 )
@@ -106,6 +109,17 @@ class _ProtocolTreeView(QTreeView):
     #: Whether rows may be moved by drag and drop (not during a run).
     _rows_draggable = False
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        #: The selected row a plain press landed on; its selection change
+        #: waits for the release (see selectionCommand).
+        self._deferred_press = None
+
+        #: Whether a context menu opened on the deferred press, and so took
+        #: its release: the selection then stays as the menu acted on it.
+        self._press_taken_by_menu = False
+
     def set_rows_draggable(self, draggable):
         """Allow or forbid moving rows by drag and drop."""
         self._rows_draggable = bool(draggable)
@@ -114,6 +128,48 @@ class _ProtocolTreeView(QTreeView):
             if self._rows_draggable
             else QAbstractItemView.NoDragDrop
         )
+
+    def forget_pending_press(self):
+        """A context menu is opening on the current press: whatever release
+        reaches the tree afterwards leaves the selection alone."""
+        self._press_taken_by_menu = self._deferred_press is not None
+
+    def selectionCommand(self, index, event=None):
+        """A plain left press on an already-selected row waits for the
+        release, so a long-press there opens the menu for the whole
+        selection (the menu takes the release). In MultiSelection the
+        release then toggles the row, as the press otherwise would."""
+
+        if event is None or not index.isValid():
+            return super().selectionCommand(index, event)
+
+        if event.type() == QEvent.Type.MouseButtonPress:
+            self._deferred_press = None
+            self._press_taken_by_menu = False
+
+            plain_left_press = (
+                event.button() == Qt.LeftButton and event.modifiers() == Qt.NoModifier
+            )
+
+            if plain_left_press and self.selectionModel().isSelected(index):
+                self._deferred_press = QPersistentModelIndex(index)
+
+                return QItemSelectionModel.NoUpdate
+
+        elif event.type() == QEvent.Type.MouseButtonRelease:
+            deferred, self._deferred_press = self._deferred_press, None
+            taken, self._press_taken_by_menu = self._press_taken_by_menu, False
+
+            if taken:
+                return QItemSelectionModel.NoUpdate
+
+            if (
+                deferred is not None
+                and self.selectionMode() == QAbstractItemView.MultiSelection
+            ):
+                return QItemSelectionModel.Toggle | QItemSelectionModel.Rows
+
+        return super().selectionCommand(index, event)
 
     def _clear_to_free_mode(self):
         """Drop the selection AND the current index. The invalid current
@@ -173,6 +229,10 @@ class ProtocolTreeWidget(QWidget):
     # connects to this via the pane's relay.
     run_selected_requested = Signal(list)
 
+    # Emitted with the new state when the structural (row menu) lock flips,
+    # so a control opening the row menu can follow it.
+    structural_editable_changed = Signal(bool)
+
     def __init__(self, row_manager: RowManager, preferences=None, parent=None):
         super().__init__(parent)
         self._manager = row_manager
@@ -201,6 +261,9 @@ class ProtocolTreeWidget(QWidget):
         # separately from cell-value editing: Advanced Mode reopens value
         # editing during a run but never the structural menu (#434).
         self._structural_editable = True
+        # Touch Select mode: taps toggle rows into the selection and never
+        # open a cell editor.
+        self._multi_select = False
         self.tree.setEditTriggers(self._default_edit_triggers)
         self.tree.delete_pressed.connect(self._delete_selection)
         layout.addWidget(self.tree)
@@ -361,12 +424,40 @@ class ProtocolTreeWidget(QWidget):
         value edits while keeping structural changes locked (advanced mode
         during a run)."""
         self._editable = bool(editable)
-        self._structural_editable = bool(editable if structural is None else structural)
-        self.tree.set_rows_draggable(self._structural_editable)
+        structural_editable = bool(editable if structural is None else structural)
+        structural_changed = structural_editable != self._structural_editable
+        self._structural_editable = structural_editable
+        self._apply_edit_triggers()
+        self._apply_row_dragging()
+
+        if structural_changed:
+            self.structural_editable_changed.emit(structural_editable)
+
+    def set_multi_select(self, enabled):
+        """Touch Select mode on or off: while on, a tap toggles its row in
+        the selection instead of replacing it, and never opens a cell
+        editor or starts a row move. The selection is kept either way."""
+        self._multi_select = bool(enabled)
+        self.tree.setSelectionMode(
+            QAbstractItemView.MultiSelection
+            if enabled
+            else QAbstractItemView.ExtendedSelection
+        )
+        self._apply_edit_triggers()
+        self._apply_row_dragging()
+
+    def _apply_row_dragging(self):
+        # Select mode builds a selection; a drag there (a mouse sweep) must
+        # not move the rows it is collecting.
+        self.tree.set_rows_draggable(
+            self._structural_editable and not self._multi_select
+        )
+
+    def _apply_edit_triggers(self):
+        editing = self._editable and not self._multi_select
+
         self.tree.setEditTriggers(
-            self._default_edit_triggers
-            if editable
-            else QAbstractItemView.NoEditTriggers
+            self._default_edit_triggers if editing else QAbstractItemView.NoEditTriggers
         )
 
     def _expand_ancestors(self, idx):
@@ -418,12 +509,43 @@ class ProtocolTreeWidget(QWidget):
 
     # --- context menu actions ---
 
+    def can_show_row_menu(self):
+        """Whether the row menu has anything to offer: no structural edits
+        while a run is in progress (issue #471) — not even in Advanced Mode,
+        which only reopens cell-value editing (#434)."""
+        return self._structural_editable
+
     def _on_context_menu(self, pos):
-        # No structural edits while a run is in progress (issue #471) — not
-        # even in Advanced Mode, which only reopens cell-value editing (#434).
-        if not self._structural_editable:
+        menu = self.build_row_menu(self.tree.indexAt(pos))
+
+        if menu is None:
             return
-        idx = self.tree.indexAt(pos)
+
+        # A touch long-press opens this while the finger is still down; its
+        # release must not then collapse the selection the menu acts on.
+        self.tree.forget_pending_press()
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def show_row_menu_above(self, anchor):
+        """Open the row menu for the selection just above the ``anchor``
+        widget (the touch More button), anchored at the current row."""
+        menu = self.build_row_menu(self.tree.currentIndex())
+
+        if menu is None:
+            return
+
+        # Right-aligned with the button, which sits at the pane's right edge.
+        top_right = anchor.mapToGlobal(QPoint(anchor.width(), 0))
+        size = menu.sizeHint()
+        menu.exec(top_right - QPoint(size.width(), size.height()))
+
+    def build_row_menu(self, idx):
+        """Return the row context menu for ``idx`` and the selection, or None
+        when it has nothing to offer (see can_show_row_menu)."""
+
+        if not self.can_show_row_menu():
+            return None
+
         menu = QMenu()
         # Run-selected sits first, and deliberately far from Delete — a
         # misclick between "run this subset" and "delete this subset" is the
@@ -461,7 +583,8 @@ class ProtocolTreeWidget(QWidget):
         )
         delete = menu.addAction(delete_label, self._delete_selection)
         delete.setEnabled(selected_count > 0)
-        menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+        return menu
 
     def _on_header_context_menu(self, pos):
         """Header right-click --> menu listing every column with a

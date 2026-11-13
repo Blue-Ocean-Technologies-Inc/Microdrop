@@ -168,11 +168,22 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
 
     #: Which span the exposure sliders cover: a narrow range makes the 0.1 s
     #: notches easy to hit, a wide one reaches long exposures.
-    exposure_range = Enum(DEFAULT_PMT_EXPOSURE_RANGE, tuple(PMT_EXPOSURE_RANGES))
+    exposure_range = Enum(
+        DEFAULT_PMT_EXPOSURE_RANGE,
+        tuple(PMT_EXPOSURE_RANGES),
+        desc="Span of the Exposure sliders; a narrow one makes 0.1 s steps easy",
+    )
 
     # ---- Shared live-stream / acquire settings --------------------------
     #: PMT gain (MCP41010 wiper), used by both the live stream and acquire.
-    gain = Range(*PMT_GAIN_BOUNDS, DEFAULT_PMT_GAIN)
+    gain = Range(
+        *PMT_GAIN_BOUNDS,
+        DEFAULT_PMT_GAIN,
+        desc=(
+            "PMT gain for the live stream and buffered acquire, "
+            f"{PMT_GAIN_BOUNDS[0]}–{PMT_GAIN_BOUNDS[1]}"
+        ),
+    )
     #: Gain quick picks, from the Portable DropBot Settings preferences.
     gain_presets = List(Int)
     #: Settings gain_presets is parsed from; the dock pane binds it to the
@@ -218,11 +229,18 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
     acquire_button = Button("Buffered acquire")
     #: The spot the PMT is moved to (0 = park, where homing ends); it moves
     #: as soon as this changes.
-    live_spot = Int(0)
+    live_spot = Int(
+        0, desc="Spot the PMT moves to when picked; a live stream keeps running"
+    )
     #: live_spot's dropdown: park plus the board's configured spots.
     live_spot_labels = Property(Dict, observe="rows.items.position_um")
     home_pmt_button = Button("Home PMT")
-    live_units = Enum("Current", "Volts", "Counts")
+    live_units = Enum(
+        "Current",
+        "Volts",
+        "Counts",
+        desc="Units of the live plot and readout; current is converted with Rf",
+    )
     #: Rolling window of raw counts, trimmed to PMT_LIVE_WINDOW_SAMPLES.
     live_counts = Array
     live_packets = Int(0)

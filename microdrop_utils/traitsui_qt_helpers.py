@@ -480,6 +480,7 @@ class _SteppedSpinEditor(QtEditor):
 
         # Connect the Qt signal to update the Trait value
         self.control.valueChanged.connect(self.update_object)
+        self.set_tooltip()
 
     def update_object(self, value):
         """Handles the user changing the value in the GUI."""
@@ -744,6 +745,7 @@ class _DoubleSpinBoxEditor(QtEditor):
 
         # When the user clicks the arrows, update the Trait
         self.control.valueChanged.connect(self.update_object)
+        self.set_tooltip()
 
     def update_object(self, value):
         """Sync UI changes back to the Python model."""
@@ -775,6 +777,7 @@ class _KeySequenceEditor(QtEditor):
         self.control.setClearButtonEnabled(True)
 
         self.control.keySequenceChanged.connect(self.update_object)
+        self.set_tooltip()
 
     def update_object(self, sequence):
         """Sync the recorded chord back to the trait."""
@@ -847,6 +850,7 @@ class _DictFloatTableEditor(QtEditor):
         )
         self.control.verticalHeader().setVisible(False)
         self._updating_object = False
+        self.set_tooltip()
         # No update_editor() call here — TraitsUI invokes it right after
         # init. A manual extra pass left the replaced cell spinboxes
         # orphaned (undeleted, stacked over the first cell).
@@ -1269,6 +1273,8 @@ class StatusIconEditor(QtEditor):
         else:
             self.control = _ScalingPixmapLabel()
 
+        self.set_tooltip()
+
         # Load initial image
         self._load_pixmap(self.value)
 
@@ -1336,7 +1342,7 @@ class _HtmlLabelEditor(QtEditor):
     controls colour/weight/style/size via inline CSS without a web engine."""
 
     #: The tooltip synced from the factory's ``tooltip_name``, if any.
-    tooltip_text = Str()
+    named_tooltip = Str()
 
     def init(self, parent):
         self.control = QLabel()
@@ -1363,7 +1369,9 @@ class _HtmlLabelEditor(QtEditor):
             self.control.setSizePolicy(policy)
 
         if self.factory.tooltip_name:
-            self.sync_value(self.factory.tooltip_name, "tooltip_text", "from")
+            self.sync_value(self.factory.tooltip_name, "named_tooltip", "from")
+        else:
+            self.set_tooltip()
 
         self.update_editor()
 
@@ -1372,8 +1380,8 @@ class _HtmlLabelEditor(QtEditor):
             value = "" if self.value is None else str(self.value)
             self.control.setText(self.factory.template.format(html.escape(value)))
 
-    @observe("tooltip_text")
-    def _tooltip_text_updated(self, event):
+    @observe("named_tooltip")
+    def _named_tooltip_updated(self, event):
         if self.control is None:
             return
 
@@ -1789,6 +1797,8 @@ class _IconToggleEditor(QtEditor):
         self.control.setFont(font)
         if self.factory.tooltip:
             self.control.setToolTip(self.factory.tooltip)
+        else:
+            self.set_tooltip()
         self.control.setChecked(self._checked())
         self.control.clicked.connect(self._on_click)
         self._refresh()
@@ -1856,7 +1866,7 @@ class _IconButtonEditor(QtEditor):
     that fires a Button/Event trait on click."""
 
     #: The tooltip synced from the factory's ``tooltip_name``, if any.
-    tooltip_text = Str()
+    named_tooltip = Str()
 
     #: The checked look synced from the factory's ``checked_name``, if any.
     checked = Bool(False)
@@ -1872,11 +1882,13 @@ class _IconButtonEditor(QtEditor):
 
         if self.factory.tooltip:
             self.control.setToolTip(self.factory.tooltip)
+        else:
+            self.set_tooltip()
 
         self.control.clicked.connect(self._on_click)
 
         if self.factory.tooltip_name:
-            self.sync_value(self.factory.tooltip_name, "tooltip_text", "from")
+            self.sync_value(self.factory.tooltip_name, "named_tooltip", "from")
 
         if self.factory.checked_name:
             self.control.setCheckable(True)
@@ -1887,8 +1899,8 @@ class _IconButtonEditor(QtEditor):
             self.sync_value(self.factory.checked_name, "checked", "from")
             self.control.setChecked(self.checked)
 
-    @observe("tooltip_text")
-    def _tooltip_text_updated(self, event):
+    @observe("named_tooltip")
+    def _named_tooltip_updated(self, event):
         if self.control is None:
             return
 
@@ -1955,6 +1967,8 @@ class _ToggleButtonEditor(QtEditor):
         self.control.setCheckable(True)
         if self.factory.tooltip:
             self.control.setToolTip(self.factory.tooltip)
+        else:
+            self.set_tooltip()
         self.control.clicked.connect(self._on_click)
         self.update_editor()
 
@@ -2079,6 +2093,8 @@ class _PresetButtonsEditor(QtEditor):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
+        # On the row: its buttons carry none, so their help is the row's.
+        self.set_tooltip()
         self.update_editor()
 
     def _apply(self, value, *_):
@@ -2118,10 +2134,15 @@ class _PresetButtonsEditor(QtEditor):
         for value, label in zip(self.value, labels):
             button = QPushButton(label)
             button.setFixedWidth(width)
-            button.setMinimumHeight(BUTTON_MIN_HEIGHT)
             button.clicked.connect(partial(self._apply, value))
 
             layout.addWidget(button)
+
+            # A floor below what the label needs lets a short pane squeeze
+            # the button instead of scrolling.
+            button.setMinimumHeight(
+                max(BUTTON_MIN_HEIGHT, button.minimumSizeHint().height())
+            )
 
 
 class PresetButtonsEditor(BasicEditorFactory):

@@ -117,6 +117,7 @@ from pluggable_protocol_tree.views.protocol_validator_presenter import (
 )
 from pluggable_protocol_tree.views.quick_action_bar import QuickActionBar
 from pluggable_protocol_tree.views.timeline_bar import TimelineBar
+from pluggable_protocol_tree.views.touch_tree_tools import TouchTreeTools
 from pluggable_protocol_tree.views.tree_widget import ProtocolTreeWidget
 
 # Microdrop style imports.
@@ -268,6 +269,9 @@ class ProtocolTreePane(QWidget):
         else:
             self.quick_action_bar = None
         self.quick_actions_controller = None
+
+        # Touch Select / More for the tree: empty unless Touch mode is on.
+        self.touch_tree_tools = TouchTreeTools(self.widget, parent=self)
 
         self._build_layout()
 
@@ -479,8 +483,18 @@ class ProtocolTreePane(QWidget):
         layout.addWidget(self.status_bar)
         layout.addWidget(make_separator())
         layout.addWidget(self.widget)
+
+        # The touch tools sit beside the quick actions, outside their
+        # scrolling row, so they never scroll out of reach.
+        actions_row = QHBoxLayout()
+        actions_row.setContentsMargins(0, 0, 0, 0)
+        actions_row.setSpacing(0)
+
         if self.quick_action_bar is not None:
-            layout.addWidget(self.quick_action_bar)
+            actions_row.addWidget(self.quick_action_bar, 1)
+
+        actions_row.addWidget(self.touch_tree_tools)
+        layout.addLayout(actions_row)
 
     # --- thin view ops (driven by the dock-pane controller) ----------
     # The dock pane owns the executor, the status controller, and all run

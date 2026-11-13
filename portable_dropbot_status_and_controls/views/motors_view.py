@@ -41,7 +41,11 @@ _mm_spin_box = DoubleSpinBoxEditor(
 )
 
 select_motor = VGroup(
-    Item("selected_motor", label="Target Motor"),
+    Item(
+        "selected_motor",
+        label="Target Motor",
+        tooltip="Motor the macros, Home and manual moves act on",
+    ),
     label="Select Motor",
     show_border=True,
     enabled_when="connected",
@@ -59,15 +63,35 @@ macros = VGroup(
             editor=ButtonEditor(label_value="macro_button_1_label"),
             visible_when="macro_button_1_label",
             enabled_when=_MAGNET_NEEDS_CHIP,
+            tooltip=(
+                "Tray in, magnet engage (needs a chip), previous filter "
+                "position or press both pogo pads, for the selected motor"
+            ),
         ),
         UItem(
             "macro_button_2",
             editor=ButtonEditor(label_value="macro_button_2_label"),
             visible_when="macro_button_2_label",
             enabled_when=_MAGNET_NEEDS_CHIP,
+            tooltip=(
+                "Tray out, magnet disengage (needs a chip), next filter "
+                "position or release both pogo pads, for the selected motor"
+            ),
         ),
-        UItem("home_button"),
-        UItem("home_all_button"),
+        UItem(
+            "home_button",
+            tooltip=(
+                "Home only the selected motor; macros still need Home All "
+                "after a motor-board power-up"
+            ),
+        ),
+        UItem(
+            "home_all_button",
+            tooltip=(
+                "Home every mechanism (takes tens of seconds); macros need "
+                "it after a motor-board power-up"
+            ),
+        ),
     ),
     # On the item, not a group: a group-level condition wraps the row
     # in its own QWidget with Qt's default 9px margins.
@@ -75,6 +99,10 @@ macros = VGroup(
         "tray_only",
         label="Tray only (pogo pads stay put)",
         visible_when="selected_motor == 'tray'",
+        tooltip=(
+            "Move the tray without releasing and re-pressing the pogo "
+            "pads; the magnet still drops out of the way"
+        ),
     ),
     label="Macros",
     show_border=True,
@@ -83,8 +111,13 @@ macros = VGroup(
 
 manual_move = VGroup(
     HGroup(
-        Item("move_by_mm", label="Move By (mm)", editor=_mm_spin_box),
-        UItem("move_by_button"),
+        Item(
+            "move_by_mm",
+            label="Move By (mm)",
+            editor=_mm_spin_box,
+            tooltip="Distance for a relative move; negative moves the other way",
+        ),
+        UItem("move_by_button", tooltip="Move the selected motor by that distance"),
     ),
     # In an HGroup: a bare item among groups gets a wrapper QWidget with
     # Qt's default 9px margins, indenting the row.
@@ -98,13 +131,34 @@ manual_move = VGroup(
                 decimals=3,
                 signed=True,
             ),
+            tooltip=(
+                "Move the selected motor by this distance at once; set the "
+                "values in the Portable DropBot Settings preferences"
+            ),
         ),
     ),
     HGroup(
-        Item("move_to_mm", label="Move To (mm)", editor=_mm_spin_box),
-        UItem("move_to_button"),
+        Item(
+            "move_to_mm",
+            label="Move To (mm)",
+            editor=_mm_spin_box,
+            tooltip="Absolute target position, within the motor's soft limits",
+        ),
+        UItem("move_to_button", tooltip="Move the selected motor to that position"),
     ),
-    HGroup(Item("speed_um_per_s", label="Speed (μm/s)"), UItem("set_speed_button")),
+    HGroup(
+        Item(
+            "speed_um_per_s",
+            label="Speed (μm/s)",
+            tooltip="Run speed for the selected motor; homing uses it too",
+        ),
+        UItem(
+            "set_speed_button",
+            tooltip=(
+                "Apply the speed to the selected motor until the motor board reboots"
+            ),
+        ),
+    ),
     label="Manual Move",
     show_border=True,
     enabled_when="connected",

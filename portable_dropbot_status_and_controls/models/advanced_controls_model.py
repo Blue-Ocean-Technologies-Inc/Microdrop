@@ -41,28 +41,47 @@ class PortableDropbotAdvancedControlsModel(BaseStatusModel):
     #: Requested buzzer state, not read back from the device — the
     #: toggle shows what was last asked for. (The fan toggle lives
     #: in the main status pane's mechanism quick controls.)
-    buzzer_state = Bool()
+    buzzer_state = Bool(
+        desc="power-system buzzer state as last requested, not read back"
+    )
 
     # ---- Motor params ------------------------------------------------
-    selected_motor = Enum(*MOTOR_IDS)
+    selected_motor = Enum(
+        *MOTOR_IDS, desc="motor whose params are shown; switching re-reads them"
+    )
 
     # ---- The param struct fields, named exactly as on the wire ------
-    nl_pos = Float()
-    pl_pos = Float()
-    round_len = Float()
-    origin_offset = Float()
-    origin_area = Float()
-    step_len = Float()
-    motor_polarity = Int()
-    I_hold = Int()
-    I_run = Int()
-    subdiv = Int()
-    run_sgt = Int()
-    rst_sgt = Int()
-    bspd = Int()
-    rspd = Int()
-    acc_run = Int()
-    acc_rst = Int()
+    nl_pos = Float(desc="negative soft limit (µm)")
+    pl_pos = Float(desc="positive soft limit (µm)")
+    round_len = Float(desc="lead per motor revolution (µm)")
+    origin_offset = Float(desc="home offset (µm)")
+    origin_area = Float(desc="home flag length (µm)")
+    step_len = Float(desc="distance per microstep (µm)")
+    motor_polarity = Int(
+        desc=(
+            "direction polarity, 1 = as wired, 0 = mirrored; changing it "
+            "alone can send homing away from the home flag"
+        )
+    )
+    I_hold = Int(desc="hold current, 0–31")
+    I_run = Int(desc="run current, 0–31")
+    subdiv = Int(desc="microsteps per full step")
+    run_sgt = Int(desc="StallGuard threshold while running")
+    rst_sgt = Int(desc="StallGuard threshold while homing")
+    bspd = Int(
+        desc=(
+            "homing speed as stored: µm/s on layout-2.0 motor firmware, "
+            "1.398× the real µm/s on older"
+        )
+    )
+    rspd = Int(
+        desc=(
+            "default run speed as stored: µm/s on layout-2.0 motor firmware, "
+            "1.398× the real µm/s on older"
+        )
+    )
+    acc_run = Int(desc="acceleration ramp factor while running (0 or less means 6)")
+    acc_rst = Int(desc="acceleration ramp factor while homing (0 or less means 6)")
 
     #: The fields the last read actually returned (old firmware stops
     #: at rspd) — a write sends back exactly these, and Write stays

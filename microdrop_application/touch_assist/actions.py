@@ -14,10 +14,11 @@ the user decides what is on screen."""
 
 # Enthought library imports.
 from pyface.action.api import Action
-from pyface.tasks.action.api import SMenu
+from pyface.tasks.action.api import SGroup, SMenu
 from traits.api import Str
 
 # Local imports.
+from ..touch_mode.help_controls import help_mode_action
 from .consts import PKG, TOOL_DPAD, TOOL_KEYBOARD, TOOL_MOUSE, TOOL_NUMPAD
 from .manager import touch_assist_manager
 
@@ -53,6 +54,7 @@ def touch_assist_menu():
         TouchAssistAction(
             id=f"{PKG}.virtual_mouse", name="Virtual &Mouse", tool=TOOL_MOUSE
         ),
+        SGroup(help_mode_action(), id="HelpModeGroup"),
         id="TouchAssist",
         name="Touch &Assist",
     )
