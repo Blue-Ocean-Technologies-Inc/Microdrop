@@ -265,10 +265,12 @@ moved, copied and repeated together.</p>
   <h3>Add, insert, copy, move and delete rows</h3>
   <p>Everything the tree's right-click menu does, and its keys.</p>
   <figure class="clip">
-  <video data-clip muted loop playsinline controls preload="metadata" width="548" height="418" poster="protocol_tree_media/context-menu.webp" aria-label="Screen recording of the tree's right-click menu">
-  <source src="protocol_tree_media/context-menu.webm" type="video/webm">
+  <video data-clip muted loop playsinline controls preload="metadata" width="548" height="370" poster="protocol_tree_media/menu-add-insert.webp" aria-label="Screen recording: Add Step from the tree's right-click menu adds a step at the end; Insert Step Above adds one above the right-clicked row">
+  <source src="protocol_tree_media/menu-add-insert.webm" type="video/webm">
   </video>
-  <figcaption><strong>Real clip.</strong> The right-click menu, top to bottom as in the table.</figcaption>
+  <figcaption><strong>Real clip (two moments joined).</strong> The menu, top to bottom as in the table. <span class="ui">Add
+  Step</span> puts an empty step 4 at the end. Later, right-clicking step 3 ▸ <span class="ui">Insert Step Above</span>
+  puts an empty step above it, and the step with two routes becomes step 4.</figcaption>
   </figure>
   <div class="table-wrap">
   <table class="small">
@@ -284,7 +286,7 @@ moved, copied and repeated together.</p>
       <tr><td class="lbl">Copy / Cut / Paste</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd></td><td>Copy puts the selected rows (with groups' children) on the clipboard; Cut also removes them. Paste inserts them after the last selected row, inside a selected group at its end, or at the end of the protocol when nothing is selected. Pasted rows are new rows.</td></tr>
       <tr><td class="lbl">Bulk Set Values…</td><td></td><td>One value into one or more columns of every selected step: <a href="#bulk-set">Bulk Set Values</a>.</td></tr>
       <tr><td class="lbl">Fill Pattern…</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td>A ramp or alternating values down a column: <a href="#fill-pattern">Fill Pattern</a>.</td></tr>
-      <tr><td class="lbl">Delete Selected Row(s)</td><td><kbd>Delete</kbd></td><td>Removes the selected rows, groups with everything in them. There is no confirmation, and no undo in the tree.</td></tr>
+      <tr><td class="lbl">Delete Selected Row(s)</td><td><kbd>Delete</kbd></td><td>Removes the selected rows, groups with everything in them. There is no confirmation; <a href="#quick-actions">Undo</a> (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) brings them back.</td></tr>
     </tbody>
   </table>
   </div>
@@ -765,11 +767,12 @@ group's <a href="#reps">Reps</a>, the step's own Reps, and the step's phases × 
   rows cannot be added, moved or deleted, and cells cannot be edited, unless <span class="ui">Edit ▸ Advanced Mode</span>
   is on: then cells (not rows) can be edited mid-run, and an edit to the running step is applied to the hardware at once.</p>
   <figure class="clip">
-  <video data-clip muted loop playsinline controls preload="metadata" width="548" height="471" poster="protocol_tree_media/running.webp" aria-label="Screen recording of a run: the running row turns blue step by step and the timers count">
-  <source src="protocol_tree_media/running.webm" type="video/webm">
+  <video style="max-width:min(700px, 100%)" data-clip muted loop playsinline controls preload="metadata" width="700" height="482" poster="protocol_tree_media/run-routes.webp" aria-label="Screen recording of a four-step run: Preparing protocol run, three electrode steps, then a step whose two loop routes run phase by phase while the droplets follow">
+  <source src="protocol_tree_media/run-routes.webm" type="video/webm">
   </video>
-  <figcaption><strong>Real clip.</strong> A run of one-phase steps: watch the blue row move down and <em>Phase 1/1</em>
-  count to its 1.0 s Duration.</figcaption>
+  <figcaption><strong>Real clip (2× speed).</strong> Play, <em>Preparing protocol run…</em>, then the blue row moves
+  through steps 1 to 3. Step 4 has two loop routes: the status row counts <em>Phase 1/17</em> to 17/17 while the Device
+  Viewer (left) shows the droplets going round.</figcaption>
   </figure>
 </section>
 
@@ -867,11 +870,12 @@ group's <a href="#reps">Reps</a>, the step's own Reps, and the step's phases × 
   <i data-glyph="summarize" data-inline></i>. Saving, opening and experiment files are covered in the Protocol Files &amp;
   Experiments tutorial.</p></div>
   <figure class="clip">
-  <video class="tall" data-clip muted loop playsinline controls preload="metadata" width="546" height="770" poster="protocol_tree_media/finish.webp" aria-label="Screen recording of a protocol run to the end, then the Create New Experiment and Run Summary Generated dialogs">
-  <source src="protocol_tree_media/finish.webm" type="video/webm">
+  <video data-clip muted loop playsinline controls preload="metadata" width="550" height="396" poster="protocol_tree_media/run-summary.webp" aria-label="Screen recording of the end of a run: Create New Experiment answered Yes, Generating Run Report, then Run Summary Generated naming the report file">
+  <source src="protocol_tree_media/run-summary.webm" type="video/webm">
   </video>
-  <figcaption><strong>Real clip (3× speed, waits cut).</strong> A run to the end, then <em>Create New Experiment?</em> and
-  <em>Run Summary Generated</em>.</figcaption>
+  <figcaption><strong>Real clip (real speed).</strong> The run in <a href="#running">While it runs</a> ends:
+  <em>Create New Experiment?</em> answered <span class="ui">Yes</span>, <em>Generating Run Report...</em>, then
+  <em>Run Summary Generated</em> with the report's file name as a link.</figcaption>
   </figure>
 </section>
 </section>
@@ -890,6 +894,8 @@ protocol pane has focus.</p>
       <tr><td class="icons"><i data-glyph="ICON_DELETE"></i></td><td class="lbl">Delete last step</td><td><kbd>Ctrl</kbd>+<kbd>Backspace</kbd>. Removes the protocol's last step (the deepest, last one), or a trailing empty group. To delete particular rows, select them and press <kbd>Delete</kbd>.</td></tr>
       <tr><td class="icons"><i data-glyph="playlist_add"></i></td><td class="lbl">Add group</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd>. A new empty group, placed like Add step.</td></tr>
       <tr><td class="icons"><i data-glyph="ICON_STACKED_LINE_CHART"></i></td><td class="lbl">Fill a column with a ramp or alternating pattern (Ctrl+Shift+F)</td><td><a href="#fill-pattern">Fill Pattern</a>; the key works in the tree.</td></tr>
+      <tr><td class="icons"><i data-glyph="undo"></i></td><td class="lbl">Undo &lt;edit&gt; (Ctrl+Z)</td><td>Takes back the last protocol edit the tooltip names: a cell value, added, deleted, moved or pasted rows, a bulk set, a fill pattern, electrodes or parameters committed from the device viewer. Greyed when there is nothing to undo.</td></tr>
+      <tr><td class="icons"><i data-glyph="redo"></i></td><td class="lbl">Redo &lt;edit&gt; (Ctrl+Y / Ctrl+Shift+Z)</td><td>Puts back the last undone edit. A new edit clears what is left to redo.</td></tr>
       <tr><td class="icons"><i data-glyph="unarchive"></i></td><td class="lbl">Import protocol into selected group</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>. Adds the top-level rows of a saved protocol into the one selected group. Greyed unless exactly one group is selected.</td></tr>
       <tr><td class="icons"><i data-glyph="file_open"></i></td><td class="lbl">Open Protocol</td><td><kbd>Ctrl</kbd>+<kbd>O</kbd>. Asks first if there are unsaved changes.</td></tr>
       <tr><td class="icons"><i data-glyph="save"></i></td><td class="lbl">Save Protocol</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd>. Asks for a name the first time.</td></tr>
@@ -1051,7 +1057,9 @@ electrodes off, then shows its dialogs.</p>
     show it with a header right-click.</li>
     <li><strong>Hardware columns come with their plugin.</strong> Voltage, Frequency, Force, Check Droplets, Volume Threshold,
     Video, Record, Capture, heater, magnet and fluorescence columns appear only when their plugin is loaded.</li>
-    <li><strong>No undo in the tree.</strong> Delete and Cut cannot be taken back; save first, or copy the rows elsewhere.</li>
+    <li><strong>Undo covers protocol edits only.</strong> It remembers the last 100 edits until you open or start a new
+    protocol, and does nothing while a protocol runs; edits made during a run are not recorded. While a cell is being edited,
+    <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes typing in that cell instead.</li>
     <li><strong>Next Step on the last step adds a step.</strong> Use Last Step to just go to the end.</li>
     <li><strong>Preview runs skip the hardware columns</strong>, so they say nothing about whether voltages or droplet checks
     will work.</li>

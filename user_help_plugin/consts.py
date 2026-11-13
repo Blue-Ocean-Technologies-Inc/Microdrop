@@ -27,6 +27,12 @@ GETTING_STARTED_TUTORIAL_HTML_PATH = (
     Path(__file__).parent / "resources" / "getting_started.html"
 )
 GETTING_STARTED_TUTORIAL_TITLE = "Getting Started with MicroDrop"
+
+#: Help > Tutorials page, built from resources/help_logs_storage.src.html.
+HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "help_logs_storage.html"
+)
+HELP_LOGS_STORAGE_TUTORIAL_TITLE = "Help, Logs & Saved Files Tutorial"
 MICRODROP_LAUNCHER_README_URL = "https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/blob/main/README.md"
 
 FEEDBACK_URL = "https://blueoceantechnologies.ca/feedback"

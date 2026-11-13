@@ -30,6 +30,7 @@ import json
 from pathlib import Path
 
 # Enthought library imports.
+from pyface.api import GUI
 from pyface.qt.QtCore import (
     QEventLoop,
     QModelIndex,
@@ -41,6 +42,7 @@ from pyface.qt.QtCore import (
 )
 from pyface.qt.QtGui import QFont, QKeySequence, QShortcut
 from pyface.qt.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -77,7 +79,10 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED,
     PROTOCOL_FILE_DIALOG_FILTER,
+    PROTOCOL_REDO_SHORTCUTS,
+    PROTOCOL_UNDO_SHORTCUT,
 )
+from pluggable_protocol_tree.models.protocol_autosave import ProtocolAutosaveModel
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.legacy_protocol_import import (
@@ -91,10 +96,15 @@ from pluggable_protocol_tree.services.persistence import (
     _RESERVED_ROW_METADATA_FIELDS,
 )
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
+from pluggable_protocol_tree.services.protocol_autosave_controller import (
+    ProtocolAutosaveController,
+)
+from pluggable_protocol_tree.services.protocol_history import ProtocolHistory
 from pluggable_protocol_tree.services.protocol_state_tracker import (
     PluggableProtocolStateTracker,
 )
 from pluggable_protocol_tree.services.protocol_validator import validate_protocol
+from pluggable_protocol_tree.views.autosave_checkbox import AutosaveCheckbox
 from pluggable_protocol_tree.views.experiment_label import ExperimentLabel
 from pluggable_protocol_tree.views.legacy_import_dialog import LegacyImportDialog
 from pluggable_protocol_tree.views.navigation_bar import (
@@ -181,6 +191,7 @@ class ProtocolTreePane(QWidget):
         preferences=None,
         quick_actions=None,
         protocol_state_tracker=None,
+        protocol_history=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -202,6 +213,14 @@ class ProtocolTreePane(QWidget):
 
         self.protocol_state_tracker = (
             protocol_state_tracker or PluggableProtocolStateTracker()
+        )
+
+        # Undo/redo of protocol edits (#967). The dock pane hands in the one it
+        # owns; standalone panes get their own.
+        self.protocol_history = protocol_history or ProtocolHistory(
+            manager=self.manager,
+            protocol_state_tracker=self.protocol_state_tracker,
+            schedule_flush=GUI.invoke_later,
         )
 
         self.widget = ProtocolTreeWidget(
@@ -231,6 +250,8 @@ class ProtocolTreePane(QWidget):
         self._build_status_bar()
         self._build_navigation_bar()
         self._install_navigation_shortcuts()
+        self._install_history_shortcuts()
+        self._build_autosave()
         self.timeline_bar = TimelineBar()
         self.timeline_controls = self._build_timeline_controls()
         self._build_experiment_bar()
@@ -320,6 +341,23 @@ class ProtocolTreePane(QWidget):
         for btn in (nb.btn_play, nb.btn_resume):
             self._append_shortcut_to_tooltip(btn, "Ctrl+R")
 
+    def _install_history_shortcuts(self):
+        """Undo/redo protocol edits from anywhere in the protocol pane (#967).
+
+        Bound once, here, never also on the tree: a key bound by two
+        shortcuts whose contexts overlap is ambiguous and fires neither
+        (#961). Pane-scoped, so the device viewer keeps its own Ctrl+Z, and
+        an open cell editor keeps Ctrl+Z for its text (see ``undo``)."""
+        bindings = [(PROTOCOL_UNDO_SHORTCUT, self.undo)]
+        bindings += [(seq, self.redo) for seq in PROTOCOL_REDO_SHORTCUTS]
+        self._history_shortcuts = []  # keep refs (PySide6 GCs stray QShortcuts)
+
+        for seq, slot in bindings:
+            shortcut = QShortcut(QKeySequence(seq), self)
+            shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(slot)
+            self._history_shortcuts.append(shortcut)
+
     def _add_shortcut(self, seq, slot):
         sc = QShortcut(QKeySequence(seq), self)
         sc.setContext(Qt.WidgetWithChildrenShortcut)
@@ -357,9 +395,10 @@ class ProtocolTreePane(QWidget):
             btn.setToolTip(f"{base} ({hint})")
 
     def _build_timeline_controls(self):
-        """Step-rep and phase-rep selectors (side by side) + a 'show full
-        timeline' toggle, shown beneath the timeline when the current step has
-        repetitions. The dock-pane controller populates, shows/hides, wires."""
+        """Step-rep and phase-rep selectors (side by side) + the 'show full
+        timeline', 'phase navigation' and AutoSave toggles, shown beneath the
+        timeline when the current step has repetitions or the protocol is
+        idle. The dock-pane controller populates, shows/hides, wires."""
         row = QWidget()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(8, 0, 8, 0)
@@ -386,6 +425,7 @@ class ProtocolTreePane(QWidget):
             "the protocol (synced with the device viewer sidebar)"
         )
         layout.addWidget(self.phase_nav_check)
+        layout.addWidget(self.autosave_checkbox.control)
         layout.addStretch()
         row.setVisible(False)
         return row
@@ -415,6 +455,19 @@ class ProtocolTreePane(QWidget):
         self.navigation_bar.add_widget_to_left_slot(self.btn_new_exp)
         self.navigation_bar.add_widget_to_left_slot(self.experiment_label)
         self.navigation_bar.add_widget_to_left_slot(self.btn_new_note)
+
+    def _build_autosave(self):
+        """AutoSave (#966): the controller writes debounced changes through
+        ``autosave_protocol``. Its checkbox sits right of "Phase navigation"
+        in the timeline controls row; the dock pane adds the app status-bar
+        glyph, which follows the same model."""
+        self.autosave_controller = ProtocolAutosaveController(
+            model=ProtocolAutosaveModel(tracker=self.protocol_state_tracker),
+            manager=self.manager,
+            preferences=self.preferences,
+            write_protocol=self.autosave_protocol,
+        )
+        self.autosave_checkbox = AutosaveCheckbox(model=self.autosave_controller.model)
 
     def _build_layout(self):
         layout = QVBoxLayout(self)
@@ -558,6 +611,24 @@ class ProtocolTreePane(QWidget):
         take effect on the next run without re-wiring."""
         return float(self.preferences.logs_settling_time_s)
 
+    # --- undo / redo -----------------------------------------------
+    def _is_editing_cell(self):
+        """True while a cell editor is open in the tree; it owns Ctrl+Z/Y
+        then, for its own text."""
+        return self.widget.tree.state() == QAbstractItemView.State.EditingState
+
+    def undo(self):
+        """Undo the newest protocol edit (ignored mid-run and while a cell
+        is being edited)."""
+        if not self._is_editing_cell():
+            self.protocol_history.undo()
+
+    def redo(self):
+        """Redo the newest undone protocol edit (ignored mid-run and while a
+        cell is being edited)."""
+        if not self._is_editing_cell():
+            self.protocol_history.redo()
+
     # --- save / load -----------------------------------------------
     def _default_protocol_dir(self) -> str:
         """Default directory for the protocol save AND load/import dialogs:
@@ -576,12 +647,20 @@ class ProtocolTreePane(QWidget):
             logger.debug(f"default protocol save dir unavailable: {e}")
             return ""
 
+    def _dump_protocol_json(self, path):
+        """Write the manager's JSON state to ``path``; raise on failure."""
+        # Serialize before opening, so a payload that fails to encode never
+        # truncates the existing file.
+        text = json.dumps(self.manager.to_json(), indent=2)
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+
     def _write_protocol_json(self, path, parent=None) -> bool:
         """Persist the manager's JSON state to ``path``. Returns True on
         success; shows the save-error dialog and returns False on failure."""
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(self.manager.to_json(), f, indent=2)
+            self._dump_protocol_json(path)
         except Exception as e:
             error_dialog(parent=parent or self, title="Save error", message=str(e))
             return False
@@ -656,6 +735,10 @@ class ProtocolTreePane(QWidget):
         loaded file no longer exists on disk. Returns False if the user
         picks NO.
         """
+        # With AutoSave on, edits still inside the debounce window are
+        # written first rather than prompted about.
+        self.autosave_controller.flush()
+
         tracker = self.protocol_state_tracker
         if tracker.is_modified:
             logger.warning("Attempting to overwrite unsaved protocol.")
@@ -697,6 +780,7 @@ class ProtocolTreePane(QWidget):
         # default step. Seed before reseeding so it's the clean baseline.
         self.manager.seed_default_step_if_empty()
         self.protocol_state_tracker.reseed_baseline(self.manager)
+        self.protocol_history.reset()
 
     def _seed_default_step_if_empty(self) -> None:
         """When no protocol is loaded, start with one default step (legacy
@@ -705,6 +789,7 @@ class ProtocolTreePane(QWidget):
         Used by the full-app dock pane on startup."""
         if self.manager.seed_default_step_if_empty():
             self.protocol_state_tracker.reseed_baseline(self.manager)
+            self.protocol_history.reset()
 
     @attempt_func_execution_with_error_dialog
     def save_protocol_dialog(self):
@@ -715,6 +800,15 @@ class ProtocolTreePane(QWidget):
         if not self._write_protocol_json(known_path):
             return
         self.protocol_state_tracker.set_saved(known_path)
+        self.protocol_state_tracker.reseed_baseline(self.manager)
+
+    def autosave_protocol(self):
+        """Save to the current protocol file without prompting; raise on
+        failure (the AutoSave controller reports it)."""
+        path = self.protocol_state_tracker.loaded_protocol_path
+
+        self._dump_protocol_json(path)
+        self.protocol_state_tracker.set_saved(path)
         self.protocol_state_tracker.reseed_baseline(self.manager)
 
     @attempt_func_execution_with_error_dialog
@@ -737,6 +831,7 @@ class ProtocolTreePane(QWidget):
         if path:
             self.protocol_state_tracker.set_loaded(path)
             self.protocol_state_tracker.reseed_baseline(self.manager)
+            self.protocol_history.reset()
 
     @attempt_func_execution_with_error_dialog
     def import_legacy_protocol_dialog(self):
@@ -825,6 +920,7 @@ class ProtocolTreePane(QWidget):
         self.manager.set_state_from_json(
             payload, columns=columns, report_findings=False
         )
+        self.protocol_history.reset()
 
         saved_path = self._save_imported_protocol(protocol_path, device_name)
         if saved_path:

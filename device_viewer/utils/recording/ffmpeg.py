@@ -366,6 +366,13 @@ class RawFFMPEGVideoRecorder(VideoRecorderBase):
 
             self._frames_written += 1
 
+            # ffmpeg stamps each frame as it reads it off the pipe and the
+            # file starts at the first stamp, so file time 0 is this first
+            # write's return — not the frame's arrival, which precedes it by
+            # ffmpeg's start-up.
+            if self._frames_written == 1:
+                self._mark_overlay_time_origin()
+
     def stop(self):
         if not self.is_recording:
             return

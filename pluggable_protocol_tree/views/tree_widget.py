@@ -9,7 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """Qt widget: QTreeView over a RowManager, with context menu for add /
-insert above / remove / copy / cut / paste / group."""
+insert above / remove / copy / cut / paste / group, and drag-and-drop to
+move rows."""
 
 # Standard library imports.
 from contextlib import contextmanager
@@ -21,18 +22,23 @@ from pyface.qt.QtCore import (
     Qt,
     Signal,
 )
-from pyface.qt.QtGui import QKeySequence, QShortcut
+from pyface.qt.QtGui import QInputDevice, QKeySequence, QPalette, QPen, QShortcut
 from pyface.qt.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QMenu,
+    QProxyStyle,
+    QStyle,
     QTreeView,
     QVBoxLayout,
     QWidget,
 )
 
 # Microdrop package imports.
-from pluggable_protocol_tree.consts import STEP_PATTERN_SHORTCUT
+from pluggable_protocol_tree.consts import (
+    DROP_AUTO_EXPAND_DELAY_MS,
+    STEP_PATTERN_SHORTCUT,
+)
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
@@ -52,6 +58,30 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
+class _DropIndicatorStyle(QProxyStyle):
+    """Draw the row drop indicator 2 px wide in the palette's highlight
+    colour: a line between rows, a frame round a group a drop goes into. The
+    platform styles draw it 1 px in the painter's pen, easily lost on the
+    dark theme."""
+
+    def drawPrimitive(self, element, option, painter, widget=None):
+        if element != QStyle.PrimitiveElement.PE_IndicatorItemViewItemDrop:
+            super().drawPrimitive(element, option, painter, widget)
+
+            return
+
+        rect = option.rect
+        painter.save()
+        painter.setPen(QPen(option.palette.color(QPalette.ColorRole.Highlight), 2))
+
+        if rect.height() == 0:
+            painter.drawLine(rect.topLeft(), rect.topRight())
+        else:
+            painter.drawRect(rect.adjusted(1, 1, -1, -1))
+
+        painter.restore()
+
+
 class _ProtocolTreeView(QTreeView):
     """QTreeView subclass that emits a Qt signal on Delete keypress.
 
@@ -69,6 +99,21 @@ class _ProtocolTreeView(QTreeView):
     """
 
     delete_pressed = Signal()
+
+    #: Emitted after a drop has moved rows (the model moves them).
+    rows_dropped = Signal()
+
+    #: Whether rows may be moved by drag and drop (not during a run).
+    _rows_draggable = False
+
+    def set_rows_draggable(self, draggable):
+        """Allow or forbid moving rows by drag and drop."""
+        self._rows_draggable = bool(draggable)
+        self.setDragDropMode(
+            QAbstractItemView.InternalMove
+            if self._rows_draggable
+            else QAbstractItemView.NoDragDrop
+        )
 
     def _clear_to_free_mode(self):
         """Drop the selection AND the current index. The invalid current
@@ -98,7 +143,27 @@ class _ProtocolTreeView(QTreeView):
                 self._clear_to_free_mode()
                 event.accept()
                 return
+
+        # A finger moved across the tree scrolls it on the touchscreen (its
+        # kinetic scroller), so only a mouse press may start a row drag.
+        device = event.pointingDevice()
+        from_touch = (
+            device is not None and device.type() == QInputDevice.DeviceType.TouchScreen
+        )
+        self.setDragEnabled(self._rows_draggable and not from_touch)
+
         super().mousePressEvent(event)
+
+    def dropEvent(self, event):
+        super().dropEvent(event)
+
+        if not event.isAccepted():
+            return
+
+        # The model has already moved the rows. Reporting the drop as ignored
+        # keeps Qt from then removing the dragged rows, as a move drop does.
+        event.setDropAction(Qt.IgnoreAction)
+        self.rows_dropped.emit()
 
 
 class ProtocolTreeWidget(QWidget):
@@ -139,6 +204,17 @@ class ProtocolTreeWidget(QWidget):
         self.tree.setEditTriggers(self._default_edit_triggers)
         self.tree.delete_pressed.connect(self._delete_selection)
         layout.addWidget(self.tree)
+
+        # Drag selected rows to move them (#982): onto a group, between rows
+        # at any level. Hovering a collapsed group opens it so a drop can
+        # land between its children.
+        self.tree.set_rows_draggable(True)
+        self.tree.setAutoExpandDelay(DROP_AUTO_EXPAND_DELAY_MS)
+        # A widget does not own the style it is given; parenting it does.
+        self._drop_indicator_style = _DropIndicatorStyle()
+        self._drop_indicator_style.setParent(self.tree)
+        self.tree.setStyle(self._drop_indicator_style)
+        self.tree.rows_dropped.connect(self._on_rows_dropped)
 
         self.model = MvcTreeModel(row_manager, parent=self.tree)
         self.tree.setModel(self.model)
@@ -286,6 +362,7 @@ class ProtocolTreeWidget(QWidget):
         during a run)."""
         self._editable = bool(editable)
         self._structural_editable = bool(editable if structural is None else structural)
+        self.tree.set_rows_draggable(self._structural_editable)
         self.tree.setEditTriggers(
             self._default_edit_triggers
             if editable
@@ -316,6 +393,15 @@ class ProtocolTreeWidget(QWidget):
         for idx in self.tree.selectionModel().selectedRows(0):
             paths.append(self._index_to_path(idx))
         self._manager.select(paths, mode="set")
+
+    def _on_rows_dropped(self):
+        """The moved rows stay selected (the model carried the selection
+        along); give the manager their new paths and show them inside a
+        collapsed target group."""
+        self._sync_selection()
+
+        for index in self.tree.selectionModel().selectedRows(0):
+            self._expand_ancestors(index)
 
     def _index_to_path(self, index):
         if not index.isValid():
@@ -545,9 +631,11 @@ class ProtocolTreeWidget(QWidget):
         position (#518), then select the new group so the user can rename
         it (F2 / double-click) and subsequent actions target it."""
         try:
-            group_path = self._manager.fold_into_group(
-                [tuple(p) for p in self._manager.selection]
-            )
+            with self._manager.named_edit("Fold into Group"):
+                group_path = self._manager.fold_into_group(
+                    [tuple(p) for p in self._manager.selection]
+                )
+
             if group_path is None:
                 return
             idx = self._node_to_index(self._manager.get_row(group_path))
@@ -567,9 +655,11 @@ class ProtocolTreeWidget(QWidget):
         """Dissolve the selected group, moving its children up into the parent
         at the group's position (#529), then select all the unfolded rows."""
         try:
-            child_paths = self._manager.unfold_group(
-                [tuple(p) for p in self._manager.selection]
-            )
+            with self._manager.named_edit("Unfold Group"):
+                child_paths = self._manager.unfold_group(
+                    [tuple(p) for p in self._manager.selection]
+                )
+
             if not child_paths:
                 return
             indexes = [
@@ -621,7 +711,8 @@ class ProtocolTreeWidget(QWidget):
 
     def _cut(self):
         try:
-            self._manager.cut()
+            with self._manager.named_edit("Cut"):
+                self._manager.cut()
         except Exception:
             logger.exception("Cut failed")
 
@@ -629,7 +720,9 @@ class ProtocolTreeWidget(QWidget):
         try:
             idxs = self.tree.selectionModel().selectedRows(0)
             target = self._index_to_path(idxs[-1]) if idxs else None
-            self._manager.paste(target_path=target)
+
+            with self._manager.named_edit("Paste"):
+                self._manager.paste(target_path=target)
         except Exception:
             logger.exception("Paste failed")
 
@@ -651,9 +744,12 @@ class ProtocolTreeWidget(QWidget):
             return
         # set_values runs each column's handler over the whole batch, so a
         # mode handoff (Route Reps Dur) prompts once, not per row. The pane's
-        # cell_changed reconciliation still runs for derived columns.
-        for col_id, value in updates.items():
-            self._manager.set_values(targets, col_id, value)
+        # cell_changed reconciliation still runs for derived columns. One
+        # history entry, even when a handler's prompt runs the event loop.
+        with self._manager.named_edit("Bulk Set"):
+            for col_id, value in updates.items():
+                self._manager.set_values(targets, col_id, value)
+
         logger.info(
             f"Bulk set {list(updates)} on {len(targets)} step(s) "
             f"(nested={dialog.apply_nested})"

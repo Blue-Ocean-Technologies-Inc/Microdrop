@@ -40,6 +40,7 @@ from electrode_controller.consts import (
     ELECTRODES_STATE_CHANGE,
 )
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
+from microdrop_status_bar.consts import ICON_PRIORITY_DEFAULT
 from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeAddStepPublisher,
     ProtocolTreeRowSelectedPublisher,
@@ -72,6 +73,13 @@ PROTOCOL_MENU_ID = f"{PKG}.protocol_menu"
 # Clipboard MIME type for copy/cut/paste of protocol rows
 PROTOCOL_ROWS_MIME = "application/x-microdrop-rows+json"
 
+# Drag MIME type for moving rows within the protocol tree: the dragged rows'
+# paths, never their contents — a drop moves the live rows.
+PROTOCOL_ROW_PATHS_DRAG_MIME = "application/x-microdrop-row-paths+json"
+
+# How long a row drag hovers a collapsed group before the tree expands it.
+DROP_AUTO_EXPAND_DELAY_MS = 700
+
 # QFileDialog name filter shared by save / load / import dialogs
 PROTOCOL_FILE_DIALOG_FILTER = "Protocol JSON (*.json)"
 
@@ -82,6 +90,16 @@ DEFAULT_LOGS_SETTLING_SECONDS = 3.0
 # Slider bounds for those preference fields.
 SETTLING_TIME_MIN_S = 0.5
 SETTLING_TIME_MAX_S = 15.0
+
+# Quiet period after the last protocol edit before AutoSave writes the file
+# (#966): long enough to batch a burst of edits into one write.
+PROTOCOL_AUTOSAVE_DEBOUNCE_S = 1.5
+
+# The AutoSave glyph sits right of the status bar's device glyphs.
+PROTOCOL_AUTOSAVE_STATUS_BAR_PRIORITY = ICON_PRIORITY_DEFAULT + 1
+
+# Tooltip of the AutoSave glyph and checkbox while AutoSave is off.
+PROTOCOL_AUTOSAVE_INACTIVE_TOOLTIP = "Click to <b>enable</b> AutoSave"
 
 # Bounds for the per-column acknowledgement-wait times configured in the
 # Protocol Settings tab (#427). 0 = don't wait for the ack; no upper
@@ -154,6 +172,13 @@ STEP_PATTERN_MAX_STEPS = 500
 # Tree-scoped shortcut opening the dialog; shown in its menu entry and on the
 # quick-action button's tooltip.
 STEP_PATTERN_SHORTCUT = "Ctrl+Shift+F"
+
+# Protocol edit history (undo/redo): pane-scoped shortcuts, bound once on the
+# protocol pane and shown on the quick-action buttons' tooltips, and how many
+# edits the history keeps before forgetting the oldest.
+PROTOCOL_UNDO_SHORTCUT = "Ctrl+Z"
+PROTOCOL_REDO_SHORTCUTS = ("Ctrl+Y", "Ctrl+Shift+Z")
+PROTOCOL_HISTORY_MAX_ENTRIES = 100
 
 # Topic constants (no executor topics yet — added in PPT-2)
 # Reserved namespace for future use:

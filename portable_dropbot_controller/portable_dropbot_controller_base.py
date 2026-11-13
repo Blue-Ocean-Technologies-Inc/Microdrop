@@ -232,7 +232,8 @@ class PortableDropbotControllerBase(HasTraits):
         """Run one driver call; an OS/serial-level failure means the
         device is gone (disconnect + rescan), anything else is
         reported as an error signal rather than a traceback. Returns
-        (ok, result)."""
+        (ok, result); a failed call's result is the exception it raised,
+        so a caller can relay the driver's reason."""
         if self.proxy is None:
             logger.warning(f"Portable Dropbot not connected: ignoring {context}.")
             return False, None
@@ -242,23 +243,20 @@ class PortableDropbotControllerBase(HasTraits):
         except OSError as error:
             logger.warning(f"Portable Dropbot vanished during {context}: {error}")
             self.on_disconnected_signal("")
-            return False, None
+            return False, error
         except Exception as error:
             self._publish_error(context, error)
-            return False, None
+            return False, error
 
     # ------------------------------------------------------------------ #
     # Status / motor snapshots                                             #
     # ------------------------------------------------------------------ #
-    #: Raw u16 status fields carried as value × 100 on the wire (the
-    #: driver's own SysStatusSignalBoard.to_dict scaling).
-    _SCALED_STATUS_FIELDS = ("cur_temp", "target_temp", "hv_vol", "dev_temp", "dev_hum")
-
     def _publish_status_snapshot(self):
         """One driver status read fans out to both panes: the signal
         board's readings (HV, temps, chip detect...) on STATUS_UPDATED
-        and the motor picture on MOTORS_UPDATED. Scaled to engineering
-        units here, so the panes never learn the wire encoding."""
+        and the motor picture on MOTORS_UPDATED. The driver already
+        reports engineering units (°C, %RH, V), so they pass through
+        as-is."""
         ok, status = self._proxy_call("status read", lambda: self.proxy.status)
         if not ok or not isinstance(status, dict) or not status:
             # The driver answers {} when neither board replied — a
@@ -280,9 +278,7 @@ class PortableDropbotControllerBase(HasTraits):
         self._status_failures = 0
         self._publish_capacitance(status.get("signal", {}))
         signal = dict(status.get("signal", {}))
-        for field in self._SCALED_STATUS_FIELDS:
-            if field in signal:
-                signal[field] = signal[field] / 100.0
+
         if "chip_on_pad" in signal:
             # A contact mask, not a flag: the chip-detect preference decides
             # whether partial pogo contact (3 or 5) counts as a chip. The raw
@@ -291,6 +287,7 @@ class PortableDropbotControllerBase(HasTraits):
             signal["chip_on_pad"] = chip_seated(
                 signal["chip_pad_contacts"], self.preferences.chip_detect_rule
             )
+
         publish_message(topic=STATUS_UPDATED, message=json.dumps(signal))
         self._publish_motors(mechanisms=status.get("motor", {}), poll=False)
 

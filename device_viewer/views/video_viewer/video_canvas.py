@@ -20,20 +20,30 @@ and edits the model's region-of-interest keyframes (the Edit Region
 mode): dragging in edit mode sets the region at the current playback
 position.
 """
+
+# Standard library imports.
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt, QTimer, QUrl
-from PySide6.QtGui import QColor, QPainter, QPen, QTransform
-from PySide6.QtMultimedia import QMediaPlayer
-from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
-from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsView
+# Enthought library imports.
+from pyface.qt.QtCore import QPointF, QRectF, QSizeF, Qt, QTimer, QUrl
+from pyface.qt.QtGui import QColor, QPainter, QPen, QTransform
+from pyface.qt.QtMultimedia import QMediaPlayer
+from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
+from pyface.qt.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsView
 
-from logger.logger_service import get_logger
-
-from ...consts import RECORDING_TRANSFORM_SIDECAR_SUFFIX
+# Local imports.
+from ...consts import (
+    RECORDING_OVERLAY_SIDECAR_SUFFIX,
+    RECORDING_TRANSFORM_SIDECAR_SUFFIX,
+)
+from ...models.recording_overlay import RecordingOverlayTimeline
 from ...preferences import DeviceViewerPreferences
 from ...utils.camera import qtransform_deserialize
+from .recording_overlay_item import RecordingOverlayItem
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -49,6 +59,9 @@ VIEW_STATE_SAVE_DEBOUNCE_MS = 500
 #: Regions smaller than this (scene units) are treated as stray clicks.
 MIN_ROI_SIZE = 4.0
 
+#: The device overlay stacks above the video and below the ROI outline.
+OVERLAY_Z_VALUE = 5
+
 
 class VideoPlaybackCanvas(QGraphicsView):
     """Renders the model's current recording; follows its playback,
@@ -62,6 +75,7 @@ class VideoPlaybackCanvas(QGraphicsView):
         self._syncing_position = False
         self._restoring_view = False
         self._roi_drag_origin = None
+        self._overlay_item = None
         self._preferences = DeviceViewerPreferences()
 
         self.setScene(QGraphicsScene(self))
@@ -102,6 +116,16 @@ class VideoPlaybackCanvas(QGraphicsView):
         model.observe(self._on_active_roi_changed, "active_roi")
         model.observe(self._on_roi_edit_mode_changed, "roi_edit_mode")
         model.observe(self._on_fit_requested, "fit_request")
+        model.observe(self._on_overlay_changed, "overlay")
+        model.observe(
+            self._on_overlay_display_changed,
+            [
+                "aligned",
+                "outline_opacity",
+                "actuations_opacity",
+                "overlay_actuated_channels",
+            ],
+        )
 
     # ------------------------------------------------------------------ #
     # Model -> player                                                      #
@@ -109,7 +133,17 @@ class VideoPlaybackCanvas(QGraphicsView):
     def _on_current_path_changed(self, event):
         path = event.new
         self._player.stop()
-        self._sidecar = self._read_sidecar(path) if path else None
+        self._sidecar = overlay_sidecar = None
+
+        if path:
+            self._sidecar = self._read_sidecar(path, RECORDING_TRANSFORM_SIDECAR_SUFFIX)
+            overlay_sidecar = self._read_sidecar(path, RECORDING_OVERLAY_SIDECAR_SUFFIX)
+
+        self._model.overlay = (
+            RecordingOverlayTimeline.from_dict(overlay_sidecar)
+            if overlay_sidecar
+            else None
+        )
         self._model.has_transform = self._sidecar is not None
         if not self._model.has_transform:
             self._model.aligned = False
@@ -150,13 +184,12 @@ class VideoPlaybackCanvas(QGraphicsView):
     def _on_position_changed(self, position):
         self._syncing_position = True
         try:
-            self._model.position_ms = min(int(position),
-                                          self._model.duration_ms)
+            self._model.position_ms = min(int(position), self._model.duration_ms)
         finally:
             self._syncing_position = False
 
     def _on_playback_state(self, state):
-        self._model.playing = (state == QMediaPlayer.PlaybackState.PlayingState)
+        self._model.playing = state == QMediaPlayer.PlaybackState.PlayingState
 
     def _on_native_size(self, size):
         if not self._model.aligned and not size.isEmpty():
@@ -167,15 +200,14 @@ class VideoPlaybackCanvas(QGraphicsView):
     # Raw vs device-aligned rendering                                      #
     # ------------------------------------------------------------------ #
     @staticmethod
-    def _read_sidecar(video_path):
-        sidecar_path = Path(video_path).with_suffix(
-            RECORDING_TRANSFORM_SIDECAR_SUFFIX)
+    def _read_sidecar(video_path, suffix):
+        sidecar_path = Path(video_path).with_suffix(suffix)
         if not sidecar_path.is_file():
             return None
         try:
             return json.loads(sidecar_path.read_text())
         except Exception as e:
-            logger.warning(f"Unreadable transform sidecar {sidecar_path}: {e}")
+            logger.warning(f"Unreadable recording sidecar {sidecar_path}: {e}")
             return None
 
     def _apply_view(self):
@@ -184,8 +216,7 @@ class VideoPlaybackCanvas(QGraphicsView):
         framed on the recorded scene rect. Raw: identity at native size.
         Framing comes from the persisted zoom/pan when set, else a fit."""
         if self._model.aligned and self._sidecar is not None:
-            transform = qtransform_deserialize(
-                json.dumps(self._sidecar["transform"]))
+            transform = qtransform_deserialize(json.dumps(self._sidecar["transform"]))
             bounding = self._sidecar["bounding_rect"]
             scene_bounding = self._sidecar["scene_bounding_rect"]
             # Reproduce the live item's content rect EXACTLY: the recorded
@@ -194,15 +225,13 @@ class VideoPlaybackCanvas(QGraphicsView):
             # alignment transform was calibrated against. Content at (0,0)
             # lands the warp over a thousand scene units off. Fill the rect
             # like the live pipeline's drawImage did (no re-letterboxing).
-            self._video_item.setAspectRatioMode(
-                Qt.AspectRatioMode.IgnoreAspectRatio)
+            self._video_item.setAspectRatioMode(Qt.AspectRatioMode.IgnoreAspectRatio)
             self._video_item.setOffset(QPointF(bounding[0], bounding[1]))
             self._video_item.setSize(QSizeF(bounding[2], bounding[3]))
             self._video_item.setTransform(transform)
             frame_rect = QRectF(*scene_bounding)
         else:
-            self._video_item.setAspectRatioMode(
-                Qt.AspectRatioMode.KeepAspectRatio)
+            self._video_item.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
             self._video_item.setOffset(QPointF(0, 0))
             self._video_item.setTransform(QTransform())
             native = self._video_item.nativeSize()
@@ -213,9 +242,35 @@ class VideoPlaybackCanvas(QGraphicsView):
             return
         # Margin so an out-of-bounds warp can still be panned into view.
         margin = max(frame_rect.width(), frame_rect.height())
-        self.scene().setSceneRect(
-            frame_rect.adjusted(-margin, -margin, margin, margin))
+        self.scene().setSceneRect(frame_rect.adjusted(-margin, -margin, margin, margin))
         self._restore_view_state(frame_rect)
+
+    # ------------------------------------------------------------------ #
+    # Device overlay (scene space: shown only in the aligned view)         #
+    # ------------------------------------------------------------------ #
+    def _on_overlay_changed(self, event):
+        if self._overlay_item is not None:
+            self.scene().removeItem(self._overlay_item)
+            self._overlay_item = None
+
+        if event.new is not None:
+            self._overlay_item = RecordingOverlayItem(event.new)
+            self._overlay_item.setZValue(OVERLAY_Z_VALUE)
+            self.scene().addItem(self._overlay_item)
+
+        self._on_overlay_display_changed()
+
+    def _on_overlay_display_changed(self, event=None):
+        if self._overlay_item is None:
+            return
+
+        model = self._model
+        self._overlay_item.setVisible(model.aligned)
+        self._overlay_item.set_display(
+            model.overlay_actuated_channels,
+            model.outline_opacity,
+            model.actuations_opacity,
+        )
 
     # ------------------------------------------------------------------ #
     # Zoom / pan, persisted to preferences                                 #
@@ -226,8 +281,10 @@ class VideoPlaybackCanvas(QGraphicsView):
             zoom = self._preferences.video_viewer_zoom
             if zoom > 0:
                 self.setTransform(QTransform.fromScale(zoom, zoom))
-                self.centerOn(self._preferences.video_viewer_center_x,
-                              self._preferences.video_viewer_center_y)
+                self.centerOn(
+                    self._preferences.video_viewer_center_x,
+                    self._preferences.video_viewer_center_y,
+                )
             else:
                 self.fitInView(frame_rect, Qt.AspectRatioMode.KeepAspectRatio)
         finally:
@@ -244,8 +301,9 @@ class VideoPlaybackCanvas(QGraphicsView):
             self._view_state_timer.start()
 
     def wheelEvent(self, event):
-        factor = (ZOOM_STEP_FACTOR if event.angleDelta().y() > 0
-                  else 1.0 / ZOOM_STEP_FACTOR)
+        factor = (
+            ZOOM_STEP_FACTOR if event.angleDelta().y() > 0 else 1.0 / ZOOM_STEP_FACTOR
+        )
         self.scale(factor, factor)
         self._view_state_timer.start()
         event.accept()
@@ -259,8 +317,10 @@ class VideoPlaybackCanvas(QGraphicsView):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         # Only refit automatically while no user framing is persisted.
-        if (self._preferences.video_viewer_zoom == 0
-                and not self._video_item.sceneBoundingRect().isEmpty()):
+        if (
+            self._preferences.video_viewer_zoom == 0
+            and not self._video_item.sceneBoundingRect().isEmpty()
+        ):
             self._restore_view_state(self._video_item.sceneBoundingRect())
 
     # ------------------------------------------------------------------ #
@@ -278,14 +338,16 @@ class VideoPlaybackCanvas(QGraphicsView):
 
     def _on_roi_edit_mode_changed(self, event):
         # Rubber-banding needs the drag, panning otherwise.
-        self.setDragMode(QGraphicsView.DragMode.NoDrag if event.new
-                         else QGraphicsView.DragMode.ScrollHandDrag)
+        self.setDragMode(
+            QGraphicsView.DragMode.NoDrag
+            if event.new
+            else QGraphicsView.DragMode.ScrollHandDrag
+        )
 
     def mousePressEvent(self, event):
         if self._model.roi_edit_mode and event.button() == Qt.LeftButton:
             self._roi_drag_origin = self.mapToScene(event.position().toPoint())
-            self._roi_item.setRect(QRectF(self._roi_drag_origin,
-                                          self._roi_drag_origin))
+            self._roi_item.setRect(QRectF(self._roi_drag_origin, self._roi_drag_origin))
             self._roi_item.setVisible(True)
             event.accept()
             return
@@ -294,8 +356,7 @@ class VideoPlaybackCanvas(QGraphicsView):
     def mouseMoveEvent(self, event):
         if self._roi_drag_origin is not None:
             current = self.mapToScene(event.position().toPoint())
-            self._roi_item.setRect(
-                QRectF(self._roi_drag_origin, current).normalized())
+            self._roi_item.setRect(QRectF(self._roi_drag_origin, current).normalized())
             event.accept()
             return
         super().mouseMoveEvent(event)
@@ -304,17 +365,17 @@ class VideoPlaybackCanvas(QGraphicsView):
         if self._roi_drag_origin is not None:
             region = self._roi_item.rect().normalized()
             self._roi_drag_origin = None
-            if (region.width() >= MIN_ROI_SIZE
-                    and region.height() >= MIN_ROI_SIZE):
+            if region.width() >= MIN_ROI_SIZE and region.height() >= MIN_ROI_SIZE:
                 # Keyframe the region at the CURRENT playback position —
                 # drawing at different times makes the crop dynamic. The
                 # region is recorded in the displayed view's space.
                 self._model.set_roi_keyframe(
                     self._model.position_ms,
                     (region.x(), region.y(), region.width(), region.height()),
-                    aligned=self._model.aligned)
+                    aligned=self._model.aligned,
+                )
             else:
-                self._on_active_roi_changed(None)   # stray click: restore
+                self._on_active_roi_changed(None)  # stray click: restore
             event.accept()
             return
         super().mouseReleaseEvent(event)

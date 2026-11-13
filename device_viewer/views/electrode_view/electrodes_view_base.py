@@ -322,7 +322,7 @@ class ElectrodeView(QGraphicsPathItem):
         self.path.closeSubpath()
         self.setPath(self.path)
 
-        self._inner_path = self._create_inner_path(self.path, scale_factor=0.8)
+        self._inner_path = self.create_inner_path(self.path)
 
         # Pen for the outline
         self.pen_color = QColor(ELECTRODE_LINE)
@@ -359,9 +359,11 @@ class ElectrodeView(QGraphicsPathItem):
     # electrode view protected methods
     ##################################################################################
 
-    def _create_inner_path(self, original_path, scale_factor):
+    @staticmethod
+    def create_inner_path(original_path, scale_factor=0.8):
         """
-        Creates a scaled-down and centered version of the original path.
+        Creates a scaled-down and centered version of the original path: the
+        actuation fill. Shared with the recording overlay so it matches.
         """
         center = original_path.boundingRect().center()
         transform = QTransform()

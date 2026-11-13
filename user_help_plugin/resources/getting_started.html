@@ -970,13 +970,21 @@ one behind.</p>
     <tr><td><kbd>F1</kbd></td><td>Show every keyboard shortcut.</td></tr>
   </tbody>
 </table>
+<p>No keyboard at the bench? <span class="ui">Tools ▸ Touch Assist ▸ Virtual D-pad</span> opens a small
+<strong>D-pad</strong> window: its arrows are the arrow keys, and ⇧, ctrl and alt stay latched (green) until tapped again.</p>
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="528" height="448" aria-label="Screen recording: the on-screen D-pad&#x27;s arrows tapped and the droplet stepping up, right, down and left">
+<source src="getting_started_media/dpad-step.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example, 1.5×.</strong> ▲, ▶, ▼ and ◀ tapped on the D-pad: each tap steps the switched-on electrodes one place and the droplet follows.</figcaption>
+</figure>
 <p>Right-click the chip for more: <span class="ui">Clear Electrodes</span>, <span class="ui">Find Liquid</span>,
 <span class="ui">Disable Electrode</span> (for a damaged one) and the two calibration measurements.</p>
 <figure class="clip loop">
-<video data-clip muted loop playsinline controls preload="auto" width="596" height="344" aria-label="Screen recording: the right-click menu on the chip with its electrode tools">
-<source src="getting_started_media/chip-menu.webm" type="video/webm">
+<video data-clip muted loop playsinline controls preload="auto" width="380" height="640" aria-label="Screen recording: Find Liquid chosen from the chip&#x27;s right-click menu and the electrodes under two droplets switching on">
+<source src="getting_started_media/find-liquid.webm" type="video/webm">
 </video>
-<figcaption><strong>Real example.</strong> Right-click on the chip opens the electrode tools; here the menu is closed again without choosing.</figcaption>
+<figcaption><strong>Real example.</strong> Right-click ▸ <span class="ui">Find Liquid</span>: a moment later the electrodes under both droplets come on (here also one just right of the top droplet).</figcaption>
 </figure>
 
 <h3>How much liquid is that?</h3>
@@ -1207,6 +1215,12 @@ MicroDrop's own rules.</div>
     line is the route, the blue tint its Route Shape, the dashed outline the electrodes on in this phase. Playback runs at up to
     1.8 s per phase whatever the Duration; the readout shows the real times.</figcaption>
   </figure>
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="524" height="362" aria-label="Screen recording: a loop run with Overlay 0 leaves the droplet behind at a corner; with Overlay 1 it follows the loop">
+<source src="getting_started_media/overlay-fix.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example, 2×, edited.</strong> Length 2, Overlay 0: the phases count on but the droplet stays at the corner. Stopped, Overlay set to 1 and run again: now it follows the loop.</figcaption>
+</figure>
 </article>
 </section>
 
@@ -1252,6 +1266,12 @@ off the middle ones; the middle thins and snaps. With the keyboard: switch on th
 <kbd>Ctrl</kbd>+<kbd>Shift</kbd> and press <kbd>→</kbd> (or <kbd>↓</kbd>) repeatedly to push them apart from the middle; ←/↑
 brings them back. A droplet keeps its volume: a split shares it out, a merge adds it up, and a droplet on a single electrode is
 too small to split.</div>
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="510" height="442" aria-label="Screen recording: a droplet split in two with the on-screen D-pad, ⇧ and ctrl latched">
+<source src="getting_started_media/dpad-split.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example, on the D-pad.</strong> ⇧ and ctrl latched, then ▲ tapped: the ends are pushed apart and the neck snaps. Which arrow pushes apart follows the view's rotation; ▶ then moves both droplets.</figcaption>
+</figure>
 </section>
 
 <!-- ============================================================ -->
@@ -1511,7 +1531,13 @@ can repeat it exactly, as often as you like.</p>
     <li><strong>Before running</strong>, check a step move by move: select it and tick <span class="ui">Phase navigation</span>.
     <span class="tbtn tbtn-inline" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-previous_phase"/></svg></span> and <span class="tbtn tbtn-inline" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-next_phase"/></svg></span> appear beside Play
     (<kbd>Ctrl</kbd>+<kbd>←</kbd> / <kbd>Ctrl</kbd>+<kbd>→</kbd>). With Realtime on, the DropBot follows each phase, so you can
-    walk a droplet through slowly.</li>
+    walk a droplet through slowly. The thin phase strip under the timeline can be dragged too.
+<figure class="clip loop">
+<video data-clip muted loop playsinline controls preload="auto" width="550" height="620" aria-label="Screen recording: Phases ticked, Phase navigation ticking with it, and the phase strip dragged while the droplets follow phase by phase">
+<source src="getting_started_media/phase-nav.webm" type="video/webm">
+</video>
+<figcaption><strong>Real example.</strong> <span class="ui">Phases</span> ticked in the Device Viewer ticks <span class="ui">Phase navigation</span> too; the phase strip is dragged and the droplets follow, <em>Phase: 1/17</em> to 4/17 and back.</figcaption>
+</figure></li>
     <li>The same switch sits in the Device Viewer: the <span class="ui">Phases</span> checkbox under Paths, with
     <span class="tbtn tbtn-inline" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-chevron_left"/></svg></span> / <span class="tbtn tbtn-inline" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-chevron_right"/></svg></span> and a counter like
     <em>Phase: 3/5</em>. The two are kept in step with each other.

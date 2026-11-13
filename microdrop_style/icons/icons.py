@@ -50,6 +50,7 @@ ICON_STOP = "\ue047"  # stop
 ICON_NEXT = "\ue01f"  # next
 ICON_LAST = "\ue044"  # last
 ICON_STACKED_LINE_CHART = "stacked_line_chart"  # fill a column with a pattern
+ICON_SAVE_CLOCK = ""  # save_clock (protocol AutoSave status-bar toggle)
 
 ICON_MENU = "\ue5d2"
 

@@ -31,6 +31,7 @@ from traits.api import Any, Bool, List, Str, observe
 
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
+from user_help_plugin.consts import TUTORIALS, TutorialEntry
 
 # Microdrop utils imports.
 from microdrop_utils.environment_update import IExternalPluginsProvider
@@ -38,7 +39,7 @@ from microdrop_utils.tasks_runtime_helpers import restore_saved_task_layout
 
 # Local imports.
 from . import package_installer
-from .consts import PKG, PKG_name
+from .consts import PKG, PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH, PKG_name
 from .i_plugin_group_manager import IPluginGroupManager
 from .update_controller import show_update_dialog
 from .update_model import compute_update_report
@@ -60,6 +61,9 @@ class PluginManagementPlugin(Plugin):
 
     my_service_offers = List(contributes_to=SERVICE_OFFERS)
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
+
+    #: Help > Tutorials entry for the Manage Plugins window.
+    tutorials = List(contributes_to=TUTORIALS)
 
     #: Cached singleton group manager (lazily built by the service factory).
     _manager = Any()
@@ -128,6 +132,14 @@ class PluginManagementPlugin(Plugin):
         return self._manager
 
     # --- menu contribution ----------------------------------------------
+
+    def _tutorials_default(self):
+        return [
+            TutorialEntry(
+                title="Plugin Management Tutorial",
+                path=PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH,
+            ),
+        ]
 
     def _contributed_task_extensions_default(self):
         return [

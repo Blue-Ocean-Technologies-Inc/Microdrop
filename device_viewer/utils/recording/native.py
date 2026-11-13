@@ -169,6 +169,10 @@ class NativeVideoRecorder(VideoRecorderBase):
     def _on_recorder_state_changed(self, state):
         if state == QMediaRecorder.RecorderState.RecordingState:
             self._was_recording = True
+            # QMediaRecorder exposes no per-frame hook: entering the
+            # recording state is the closest it tells us to the first
+            # encoded frame.
+            self._mark_overlay_time_origin()
             self.recording_started.emit(self._recorder.actualLocation().toLocalFile())
         elif state == QMediaRecorder.RecorderState.StoppedState and self._was_recording:
             self._was_recording = False

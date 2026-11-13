@@ -1,0 +1,1059 @@
+<!--
+  (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>Help, Logs &amp; Saved Files Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+kbd { white-space: nowrap; }
+code.path { word-break: break-all; }
+figure.step-panel svg.sch { font-size: 10px; fill: var(--ink); }
+figure.step-panel svg.sch text { font-size: inherit; fill: inherit; font-family: inherit; font-weight: inherit; }
+.table-wrap { overflow-x: auto; }
+table.small td code { font-size: .8rem; }
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 10px 0; }
+@media (max-width: 860px) { .three { grid-template-columns: minmax(0, 1fr); } }
+.place { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.place h4 { margin: 0 0 4px; }
+.place p { margin: 4px 0; font-size: .9rem; }
+.place.data { border-top: 4px solid var(--accent); }
+.place.settings { border-top: 4px solid var(--blue); }
+.place.memory { border-top: 4px solid var(--orange); }
+.tree { font-size: .88rem; }
+.tree details { margin: 2px 0 2px 1.1em; }
+.tree > details { margin-left: 0; }
+.tree summary { cursor: pointer; }
+.tree summary code, .tree li code { font-weight: 600; }
+.tree ul { list-style: none; margin: 2px 0 4px 1.1em; padding: 0; }
+.tree li { margin: 2px 0; }
+.tree .by { color: var(--muted); }
+.lookup-out { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 10px 0 4px; font-size: .9rem; }
+.lookup-out dt { font-weight: 700; color: var(--muted); }
+.lookup-out dd { margin: 0; }
+.lookup-out dd code { word-break: break-all; }
+.check-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 14px; margin: 8px 0; font-size: .9rem; }
+.check-list label { display: flex; gap: 6px; align-items: flex-start; }
+ol.send-list { padding-left: 1.4em; font-size: .9rem; }
+ol.send-list li { margin: 4px 0; }
+ol.send-list code { word-break: break-all; }
+.sim-log { width: 100%; border-collapse: collapse; font-family: "Cascadia Mono", Consolas, monospace; font-size: .78rem;
+  background: #1e1f22; color: #abb2bf; border-radius: 6px; overflow: hidden; }
+.sim-log td, .sim-log th { padding: 2px 8px; text-align: left; white-space: nowrap; }
+.sim-log th { color: #e5e5e5; font-weight: 600; }
+.sim-log td.msg { white-space: normal; color: #f9fafb; }
+.sim-log .DEBUG { color: #875fff; } .sim-log .INFO { color: #00cd00; } .sim-log .WARNING { color: #ff8700; }
+.sim-log .ERROR { color: #cd0000; } .sim-log .CRITICAL { color: #ff0000; }
+.sim-log tr.empty td { color: #abb2bf; font-style: italic; }
+</style>
+
+<header data-hero>
+  <h1>Help, Logs &amp; Saved Files</h1>
+  <p>Where to get help inside MicroDrop, how to read its log, and where MicroDrop keeps every file it writes: your
+  experiments, devices and protocols, your settings, and the log file support will ask you for.</p>
+  <p>Start with the short walkthrough. The rest is a reference. Near the end are two lookups:
+  <a href="#where-lookup">Where is my …?</a> and <a href="#support-checklist">What to send support</a>.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">MicroDrop keeps what it writes in three places. Knowing which is which tells you what to back up, what is
+safe to reset, and what is gone when MicroDrop closes.</p>
+
+<div class="three">
+  <div class="place data">
+    <h4>Your MicroDrop documents</h4>
+    <p>Experiments (logs, run reports, data, pictures, videos), device files and protocols. <strong>Your data: back it
+    up.</strong></p>
+    <p>In your home folder: <code>Documents\Sci-Bots\Microdrop</code> (with <code>/</code> instead of
+    <code>\</code> on macOS, Linux and the Pi).</p>
+  </div>
+  <div class="place settings">
+    <h4>The settings folder</h4>
+    <p>Preferences, window layout, layout presets, camera alignment. <strong>Safe to reset</strong>, with MicroDrop
+    closed.</p>
+    <p>Windows: <code>%APPDATA%\Sci-Bots\Microdrop</code>. macOS, Linux and the Pi: in your home folder,
+    <code>.sci-bots/Microdrop</code> (hidden: the name starts with a dot).</p>
+  </div>
+  <div class="place memory">
+    <h4>Memory only</h4>
+    <p>Live values the parts of MicroDrop share while it runs, such as which experiment is open. <strong>Not
+    saved</strong>: gone when MicroDrop closes.</p>
+  </div>
+</div>
+
+<p><code>&lt;home&gt;</code> is your home folder: <code>C:\Users\&lt;your user name&gt;</code> on Windows,
+<code>/Users/&lt;your user name&gt;</code> on macOS, <code>/home/&lt;your user name&gt;</code> on Linux and on the
+Raspberry Pi instrument. On Windows, <code>%APPDATA%</code> is <code>&lt;home&gt;\AppData\Roaming</code>.</p>
+
+<p>The program itself sits in the MicroDrop launcher folder, wherever MicroDrop was installed. Plugins you install go there
+too. Do not keep your own files in it.</p>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<p class="intro">Five steps: find help, read the log, find the log file, report a problem, and open the folders.</p>
+<ol class="steps">
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 250" role="img" aria-label="The Help menu open below the menu bar, listing Send Feedback, Report an Issue, Sci-Bots Website, Contact Support, Changelog, Tutorials, About MicroDrop, the image viewer entries and Download MicroDrop Launcher">
+      <rect x="0.5" y="0.5" width="299" height="249" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <rect x="1" y="1" width="298" height="22" rx="5" fill="var(--surface-2)"/>
+      <g font-size="11" fill="var(--ink)">
+        <text x="10" y="16">File</text><text x="40" y="16">Edit</text><text x="72" y="16">Tools</text><text x="108" y="16">View</text>
+        <rect x="136" y="4" width="34" height="17" rx="3" fill="var(--accent-soft)"/><text x="142" y="16" style="font-weight:700">Help</text>
+      </g>
+      <rect x="136" y="24" width="158" height="220" rx="4" fill="var(--surface)" stroke="var(--line)"/>
+      <g font-size="10" fill="var(--ink)">
+        <text x="146" y="40">Send Feedback...</text>
+        <text x="146" y="55">Report an Issue...</text>
+        <text x="146" y="70">Sci-Bots Website</text>
+        <text x="146" y="85">Contact Support</text><text x="284" y="85" text-anchor="end">▸</text>
+        <text x="146" y="100" style="font-weight:700">Changelog...</text>
+        <text x="146" y="115">Tutorials</text><text x="284" y="115" text-anchor="end">▸</text>
+        <text x="146" y="130" style="font-weight:700">About MicroDrop...</text>
+        <line x1="142" y1="139" x2="288" y2="139" stroke="var(--line)"/>
+        <text x="146" y="154">Image Viewer Keyboard</text>
+        <text x="146" y="166">  Shortcuts…</text>
+        <text x="146" y="181">Install AI ROI Support...</text>
+        <line x1="142" y1="190" x2="288" y2="190" stroke="var(--line)"/>
+        <text x="146" y="205">Download MicroDrop</text>
+        <text x="146" y="217">  Launcher...</text>
+      </g>
+      <text x="10" y="60" style="font-size:10;fill:var(--muted)">Lines split the</text>
+      <text x="10" y="73" style="font-size:10;fill:var(--muted)">menu into groups;</text>
+      <text x="10" y="86" style="font-size:10;fill:var(--muted)">their order can vary.</text>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">1</span>Tour the Help menu</h4>
+    <p>Click <span class="ui">Help</span>, the last menu in the menu bar. Open <span class="ui">Changelog...</span>: the
+    window <em>MicroDrop Changelog</em> lists the changes in each release, newest first. The first heading is the newest
+    release your copy contains; quote it when you ask for support. Close it and open <span class="ui">About
+    MicroDrop...</span>, an illustrated overview of how MicroDrop is built.</p>
+    <p><span class="ui">Tutorials ▸</span> lists these pages. Each entry is described in
+    <a href="#part-help">The Help menu</a>.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="The Microdrop Console Logs pane: level tick boxes and a search box on top, a dark table of log lines, and Reset Logs, Buffer, Open Log File and Copy Log to Clipboard at the bottom">
+      <rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="8" y="15" style="font-size:10;fill:var(--ink);font-weight:700">Microdrop Console Logs</text>
+      <g font-size="9" fill="var(--ink)">
+        <text x="8" y="32">Log Filters:</text>
+        <rect x="60" y="24" width="8" height="8" fill="none" stroke="var(--muted)"/><text x="71" y="32">Debug</text>
+        <rect x="100" y="24" width="8" height="8" fill="none" stroke="var(--muted)"/><text x="111" y="32">Info</text>
+        <rect x="132" y="24" width="8" height="8" fill="var(--accent)"/><text x="143" y="32">Warning</text>
+        <rect x="180" y="24" width="8" height="8" fill="var(--accent)"/><text x="191" y="32">Error</text>
+        <rect x="220" y="23" width="72" height="11" rx="2" fill="var(--surface-2)" stroke="var(--line)"/><text x="224" y="31" style="fill:var(--muted)">Search logs...</text>
+      </g>
+      <rect x="8" y="40" width="284" height="96" rx="3" fill="#1e1f22"/>
+      <g font-size="8.5" font-family="Consolas, monospace">
+        <text x="12" y="52" style="fill:#e5e5e5">Time</text><text x="74" y="52" style="fill:#e5e5e5">Level</text><text x="118" y="52" style="fill:#e5e5e5">Source</text><text x="196" y="52" style="fill:#e5e5e5">Message</text>
+        <text x="12" y="68" style="fill:#abb2bf">10:42:07.512</text><text x="74" y="68" style="fill:#cd0000">ERROR</text><text x="118" y="68" style="fill:#1e90ff">device_viewer…</text><text x="196" y="68" style="fill:#f9fafb">Could not crea…</text>
+        <text x="12" y="82" style="fill:#abb2bf">10:41:55.020</text><text x="74" y="82" style="fill:#ff8700">WARNING</text><text x="118" y="82" style="fill:#00cd00">image_viewer…</text><text x="196" y="82" style="fill:#f9fafb">No images fol…</text>
+        <text x="12" y="96" style="fill:#abb2bf">10:40:12.884</text><text x="74" y="96" style="fill:#ff8700">WARNING</text><text x="118" y="96" style="fill:#cd00cd">pluggable_pr…</text><text x="196" y="96" style="fill:#f9fafb">protocol auto…</text>
+      </g>
+      <g font-size="9" fill="var(--ink)">
+        <rect x="8" y="144" width="52" height="16" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="14" y="155">Reset Logs</text>
+        <text x="66" y="155">Buffer</text><rect x="96" y="144" width="34" height="16" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="101" y="155">1000</text>
+        <rect x="150" y="144" width="62" height="16" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="155" y="155">Open Log File</text>
+        <rect x="216" y="144" width="76" height="16" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="220" y="155">Copy Log to Clipb…</text>
+      </g>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">2</span>Open the console log and show only problems</h4>
+    <p>Click <span class="ui">View ▸ Microdrop Console Logs</span>. The pane is not part of the default layout; ticking
+    it docks it in the window. The newest line is on top.</p>
+    <p>Untick <span class="ui">Debug</span> and <span class="ui">Info</span>: only warnings and errors are left (critical
+    lines always show). Set <span class="ui">Buffer</span> to 1000 so older lines stay in the pane; it starts at 10.
+    Double-click a line to read it whole.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="An experiment folder named by date and time holding a logs folder, which holds one log file">
+      <rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <g font-size="10" fill="var(--ink)" font-family="Consolas, monospace">
+        <text x="14" y="26">Experiments</text>
+        <text x="28" y="46">2026_05_25-14_03_11</text>
+        <text x="42" y="66" style="font-weight:700">logs</text>
+        <text x="56" y="86" style="fill:var(--accent)">microdrop.frontend.</text>
+        <text x="56" y="99" style="fill:var(--accent)">  &lt;computer&gt;-&lt;process&gt;.log</text>
+        <text x="42" y="119">data</text>
+        <text x="42" y="135">reports</text>
+        <text x="42" y="151">captures …</text>
+      </g>
+      <g stroke="var(--muted)" fill="none"><path d="M18 32 V46 H26"/><path d="M32 52 V66 H40"/><path d="M32 66 V151"/><path d="M46 72 V86 H54"/></g>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">3</span>Find the log file</h4>
+    <p>Click <span class="ui">Open Log File</span> at the bottom of the pane: the file MicroDrop is writing right now
+    opens in the program your computer uses for <code>.log</code> files.</p>
+    <p>To see it in its folder, use <span class="ui">File ▸ Experiments ▸ Open Experiment Folder</span>, or click the
+    underlined experiment name after <span class="ui">Experiment:</span> above the protocol tree. The log is in
+    <code>logs</code>.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="Three ways to reach the team: Send Feedback for ideas, Report an Issue for public bug reports, Contact Support for private email">
+      <rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <g font-size="10" fill="var(--ink)">
+        <rect x="12" y="16" width="276" height="40" rx="5" fill="var(--surface-2)" stroke="var(--line)"/>
+        <text x="22" y="32" style="font-weight:700">Send Feedback...</text><text x="22" y="47" style="fill:var(--muted)">Ideas and opinions: a form, in a MicroDrop window</text>
+        <rect x="12" y="64" width="276" height="40" rx="5" fill="var(--surface-2)" stroke="var(--line)"/>
+        <text x="22" y="80" style="font-weight:700">Report an Issue...</text><text x="22" y="95" style="fill:var(--muted)">A bug anyone can see and follow: GitHub, in your browser</text>
+        <rect x="12" y="112" width="276" height="40" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+        <text x="22" y="128" style="font-weight:700">Contact Support ▸ Technical Support</text><text x="22" y="143" style="fill:var(--muted)">Private: a new email to the support address</text>
+      </g>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">4</span>Report a problem</h4>
+    <p><span class="ui">Help ▸ Report an Issue...</span> opens MicroDrop's GitHub Issues page in your web browser.
+    <span class="ui">Help ▸ Contact Support ▸ Technical Support</span> opens a new email to
+    <code>support@sci-bots.com</code> in your email program.</p>
+    <p>Either way, attach the log file from step 3, the protocol, the run report if there was a run, and a screenshot.
+    The <a href="#support-checklist">checklist</a> builds the list of files for you.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="The documents folder with Experiments, Devices and Protocols, beside the settings folder with preferences.ini and the layout and camera files">
+      <rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+      <rect x="10" y="12" width="134" height="146" rx="5" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <rect x="156" y="12" width="134" height="146" rx="5" fill="none" stroke="var(--blue)" stroke-width="2"/>
+      <g font-size="10" fill="var(--ink)">
+        <text x="18" y="30" style="font-weight:700">Documents\Sci-Bots\</text>
+        <text x="18" y="43" style="font-weight:700">Microdrop</text>
+        <text x="26" y="66">Experiments</text><text x="26" y="86">Devices</text><text x="26" y="106">Protocols</text>
+        <text x="18" y="146" style="fill:var(--muted)">your data</text>
+        <text x="164" y="30" style="font-weight:700">Settings folder</text>
+        <text x="172" y="56">preferences.ini</text><text x="172" y="76">tasks\qt\ (layout)</text>
+        <text x="172" y="96">.device_viewer_cache</text><text x="172" y="116">…</text>
+        <text x="164" y="146" style="fill:var(--muted)">safe to reset</text>
+      </g>
+    </svg></figure>
+    <div class="step-text"><h4><span class="step-n">5</span>Open the Experiments folder and the settings folder</h4>
+    <p>Open the experiment folder as in step 3, then go up one level: that is <code>Experiments</code>, one folder per
+    experiment. One more level up are <code>Devices</code> and <code>Protocols</code>.</p>
+    <p>No menu item opens the settings folder. On Windows, type <code>%APPDATA%\Sci-Bots\Microdrop</code> in the address
+    bar of File Explorer. On Linux and the Pi, open your home folder, press <kbd>Ctrl</kbd>+<kbd>H</kbd> to show hidden
+    folders, then open <code>.sci-bots</code> ▸ <code>Microdrop</code>. On macOS, in Finder choose
+    <span class="ui">Go ▸ Go to Folder…</span> and type <code>~/.sci-bots/Microdrop</code>.</p></div>
+  </li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-help">
+<h2>The Help menu</h2>
+<p class="intro">Everything under <span class="ui">Help</span>, top to bottom within each group. Lines split the menu into
+groups that come from different parts of MicroDrop, so the order of the groups can vary.</p>
+
+<div class="table-wrap">
+<table class="small">
+  <thead><tr><th>Entry</th><th>What it does</th><th>Needs internet</th></tr></thead>
+  <tbody>
+    <tr><td class="ui">Send Feedback...</td><td>Opens the feedback form in a MicroDrop window.</td><td>Yes</td></tr>
+    <tr><td class="ui">Report an Issue...</td><td>Opens MicroDrop's GitHub Issues page in your web browser.</td><td>Yes</td></tr>
+    <tr><td class="ui">Sci-Bots Website</td><td>Opens sci-bots.com in your web browser.</td><td>Yes</td></tr>
+    <tr><td class="ui">Contact Support ▸ Technical Support</td><td>Starts a new email to <code>support@sci-bots.com</code> in your email program.</td><td>To send it</td></tr>
+    <tr><td class="ui">Contact Support ▸ General Inquiries</td><td>Starts a new email to <code>info@sci-bots.com</code>.</td><td>To send it</td></tr>
+    <tr><td class="ui">Changelog...</td><td>Shows the list of changes in each release, newest first.</td><td>No. Online it is formatted by GitHub, offline plainly.</td></tr>
+    <tr><td class="ui">Tutorials ▸</td><td>One entry per tutorial page, by title; plugins add their own.</td><td>No</td></tr>
+    <tr><td class="ui">About MicroDrop...</td><td>An illustrated overview of how MicroDrop is built: its parts and how they talk.</td><td>No (its fonts look best online)</td></tr>
+    <tr><td class="ui">Image Viewer Keyboard Shortcuts…</td><td>Lists the keys the image viewer answers to while it has focus.</td><td>No</td></tr>
+    <tr><td class="ui">Install AI ROI Support...</td><td>Installs the optional AI shape finder for image analysis (the <em>osam</em> package).</td><td>Yes</td></tr>
+    <tr><td class="ui">Download MicroDrop Launcher...</td><td>Shows the MicroDrop Launcher's read-me, with download instructions. Always last.</td><td>Yes</td></tr>
+  </tbody>
+</table>
+</div>
+
+<section data-term id="help-contact" data-where="Help ▸ Send Feedback / Report an Issue / Contact Support">
+  <h3>Feedback, issue or support email</h3>
+  <p>Three ways to reach the people who make MicroDrop. Pick by who should see it.</p>
+  <div data-what><p><span class="ui">Send Feedback...</span> is a form for ideas and opinions.
+  <span class="ui">Report an Issue...</span> files a bug or a feature request on GitHub, where anyone can read and follow
+  it; posting needs a free GitHub account. <span class="ui">Technical Support</span> is a private email to the support
+  team; <span class="ui">General Inquiries</span> is for anything else.</p></div>
+  <div data-when><p>A bug you can describe without private data: Report an Issue. A problem with your instrument, your
+  results, or files you cannot share in public: Technical Support. A suggestion: Send Feedback.</p></div>
+  <div data-read><p>Report an Issue and Contact Support do not attach anything for you. Add the files yourself: see
+  <a href="#support-checklist">What to send support</a>.</p></div>
+</section>
+
+<section data-term id="help-changelog" data-where="Help ▸ Changelog... and the What's New? window at start">
+  <h3>Changelog and What's New</h3>
+  <p>What changed in each release of MicroDrop.</p>
+  <div data-what><p><span class="ui">Changelog...</span> opens the whole list in the window <em>MicroDrop
+  Changelog</em>. At start, when MicroDrop has been updated since you last ran it, a <em>What's New?</em> window shows only
+  the sections added since then.</p></div>
+  <div data-when><p>After an update, to see what is different. Before asking for support, to read which release you
+  have.</p></div>
+  <div data-read><p>Newest release first. The first heading is the newest release your copy contains.</p></div>
+  <div data-typical><p>The very first start shows no <em>What's New?</em>: MicroDrop only notes the list then. It keeps
+  that copy as <code>.previous_changelog</code> in the settings folder.</p></div>
+</section>
+
+<section data-term id="help-tutorials" data-where="Help ▸ Tutorials ▸">
+  <h3>Tutorials</h3>
+  <p>Plain-language pages like this one, one per part of MicroDrop.</p>
+  <div data-what><p>Each loaded plugin can add its pages; the submenu lists them by title and follows plugins switched
+  on or off while MicroDrop runs. The pages work offline. A tutorial opens in its own window, or in your web browser on
+  computers where MicroDrop cannot show web pages itself.</p></div>
+  <div data-read><p>The image-analysis terms (ROI, trend fits and so on) are in <em>Image Analysis Tutorial</em>.</p></div>
+</section>
+
+<section data-term id="help-startup" data-where="Shown once, at the first start">
+  <h3>Beta notice</h3>
+  <p>A one-time notice at first start: MicroDrop is open-source beta software, provided without warranty.</p>
+  <div data-what><p>It asks you to check results in your own workflows and to back up your data. Once you have seen it,
+  MicroDrop writes the marker file <code>.beta_disclaimer_accepted</code> in the settings folder and does not show it
+  again.</p></div>
+  <div data-typical><p>Delete the marker file to see the notice again.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-logs">
+<h2>The console log</h2>
+<p class="intro">MicroDrop keeps a running diary of what it does: the <em>log</em>. You read it live in the
+<span class="ui">Microdrop Console Logs</span> pane, and every line also goes into a log file inside the current
+experiment folder.</p>
+
+<section data-term id="logs-pane" data-where="View ▸ Microdrop Console Logs">
+  <h3>Microdrop Console Logs pane</h3>
+  <p>The log, live, newest line first.</p>
+  <div data-what><p>A table with <span class="ui">Time</span>, <span class="ui">Level</span>, <span class="ui">Source</span>
+  and <span class="ui">Message</span>. Above it are the level tick boxes and a search box; below it
+  <span class="ui">Reset Logs</span>, <span class="ui">Buffer</span>, <span class="ui">Open Log File</span> and
+  <span class="ui">Copy Log to Clipboard</span>. The table is dark in both light and dark themes.</p></div>
+  <div data-when><p>When something looks wrong, when a message flashes by, or when support asks what happened.</p></div>
+  <div data-read><p><span class="ui">Level</span> is coloured: Debug purple, Info green, Warning orange, Error red,
+  Critical bright red. <span class="ui">Source</span> names the part of MicroDrop that wrote the line, such as
+  <code>device_viewer…</code> or <code>pluggable_protocol_tree…</code>. Hover over a message to see all of it.
+  Double-click a line to open <em>Log Details</em>, where web links and the paths of files that exist become
+  clickable.</p></div>
+  <div data-typical><p>Closed. Tick it in the <span class="ui">View</span> menu; the window remembers it next time.</p></div>
+</section>
+
+<section data-term id="logs-filters" data-where="Log Filters: Debug, Info, Warning, Error">
+  <h3>Level filters</h3>
+  <p>Which kinds of line the pane keeps.</p>
+  <div data-what><p>One tick box per level. Critical lines always show; there is no box for them.</p></div>
+  <div data-when><p>Untick Debug and Info to see only problems. Tick Debug only when support asks for detail.</p></div>
+  <div data-read><p>Unticking a level <strong>removes</strong> its lines from the pane, and ticking it again shows only
+  new ones. The log file is not affected: it keeps every line at the <a href="#logs-level">Level</a> set in
+  Preferences.</p></div>
+  <div data-typical><p>Debug off; Info, Warning and Error on. Your choice is remembered.</p></div>
+  <figure data-demo="console" aria-label="A copy of the Console Logs pane: tick boxes, a buffer size and buttons that add log lines">
+    <div class="controls">
+      <label><input type="checkbox" id="cl-debug"> Debug</label>
+      <label><input type="checkbox" id="cl-info" checked> Info</label>
+      <label><input type="checkbox" id="cl-warning" checked> Warning</label>
+      <label><input type="checkbox" id="cl-error" checked> Error</label>
+      <label>Buffer <select id="cl-buffer"><option value="5">5</option><option value="10" selected>10</option><option value="1000">1000</option></select></label>
+    </div>
+    <div class="controls">
+      <button type="button" id="cl-add">Something happens (5 lines)</button>
+      <button type="button" id="cl-reset">Reset Logs</button>
+    </div>
+    <div class="table-wrap"><table class="sim-log"><thead><tr><th>Time</th><th>Level</th><th>Message</th></tr></thead><tbody></tbody></table></div>
+    <p class="status" id="cl-status" aria-live="polite"></p>
+    <figcaption>Click <em>Something happens</em> a few times, then untick Info and tick it again: the Info lines do not come
+    back. With Buffer at 5 or 10 the oldest lines fall off the bottom. The log file keeps every line at the Info level and above.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="logs-search" data-where="Search logs... box and the All / Source / Message list">
+  <h3>Search</h3>
+  <p>Shows only the lines that contain some text.</p>
+  <div data-what><p>Type in <span class="ui">Search logs...</span>; capitals do not matter. The list beside it picks
+  where to look: <span class="ui">All</span> (source, message and level), <span class="ui">Source</span> or
+  <span class="ui">Message</span>.</p></div>
+  <div data-when><p>To follow one part of MicroDrop (search a source), or one word such as <code>error</code> or a file
+  name.</p></div>
+  <div data-read><p>Searching only hides lines. Clear the box and they are all back.</p></div>
+  <div data-typical><p>Empty, All.</p></div>
+</section>
+
+<section data-term id="logs-buffer" data-where="Buffer, bottom row">
+  <h3>Buffer</h3>
+  <p>How many lines the pane keeps. When a new line arrives and the pane is full, the oldest is dropped.</p>
+  <div data-when><p>Raise it before you watch a problem happen, so the lines that lead up to it are still there.</p></div>
+  <div data-read><p>Only the pane is trimmed; the log file keeps every line.</p></div>
+  <div data-typical><p><strong>10</strong>, the smallest allowed, so out of the box the pane shows only the last ten
+  lines. Anything from 10 to 100,000; 1000 is a comfortable working value. Remembered.</p></div>
+</section>
+
+<section data-term id="logs-buttons" data-where="Bottom row of the pane">
+  <h3>Reset Logs, Open Log File, Copy Log to Clipboard</h3>
+  <p>The three buttons under the table.</p>
+  <div data-what>
+  <table class="small">
+    <tbody>
+      <tr><td class="ui">Reset Logs</td><td>Empties the pane. The log file is not touched.</td></tr>
+      <tr><td class="ui">Open Log File</td><td>Opens the file MicroDrop is writing now, in the program your computer
+      uses for <code>.log</code> files.</td></tr>
+      <tr><td class="ui">Copy Log to Clipboard</td><td>Copies <strong>the one line you last clicked</strong>, with its
+      time, level and source, ready to paste into an email. Click a line first.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div data-when><p>To send the whole log, attach the file (Open Log File shows you which one) rather than copying lines.</p></div>
+</section>
+
+<section data-term id="logs-level" data-where="Edit ▸ Preferences... ▸ Microdrop General ▸ Logger Settings ▸ Level">
+  <h3>Log level</h3>
+  <p>How much MicroDrop writes, to the pane and to the file.</p>
+  <div data-what><p>Debug, Info, Warning, Error or Critical. Each level also writes the ones after it: Info writes info,
+  warnings, errors and critical lines; Debug writes everything.</p></div>
+  <div data-when><p>Set Debug when support asks for more detail, reproduce the problem, then set it back: Debug lines are
+  many and the file grows fast. To see them in the pane, tick <span class="ui">Debug</span> there too.</p></div>
+  <div data-read><p>It takes effect when you click Apply or OK.</p></div>
+  <div data-typical><p>Info.</p></div>
+</section>
+
+<section data-term id="logs-file" data-where="Experiment folder ▸ logs">
+  <h3>The log file</h3>
+  <p>A plain-text copy of the log, kept with the experiment it belongs to.</p>
+  <div data-what><p>Its name is <code>microdrop.frontend.&lt;computer number&gt;-&lt;process number&gt;.log</code>. The
+  computer number identifies the machine; the process number changes every time MicroDrop starts. A backend started on
+  its own (a remote set-up) writes its own <code>microdrop.backend.…</code> file the same way.</p></div>
+  <div data-when><p>Attach it to every bug report and support email.</p></div>
+  <div data-read><p>One line per entry: date and time, <code>[LEVEL:source]</code>, the message, then the program file
+  and line that wrote it. Search the file for <code>ERROR</code> and <code>WARNING</code>.</p></div>
+  <div data-typical><p>A new file each time MicroDrop starts (it starts a new experiment folder), and each time you start a
+  new experiment: the log moves on to the new folder's <code>logs</code>. MicroDrop never splits or trims a log file.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-storage">
+<h2>Where things are saved</h2>
+<p class="intro">The folders in detail. Open a folder in the map to see what is inside and what writes it; the cards below
+say when each matters and whether it is safe to delete.</p>
+
+<figure class="tree" aria-label="Folder map">
+<details open><summary><code>&lt;home&gt;\Documents\Sci-Bots\Microdrop</code> <span class="by">your MicroDrop documents</span></summary>
+  <details><summary><code>Experiments</code> <span class="by">one folder per experiment</span></summary>
+    <details><summary><code>2026_05_25-14_03_11</code> <span class="by">an experiment, named by its UTC start time</span></summary>
+      <ul>
+        <li><code>logs</code> <span class="by">log files, always</span></li>
+        <li><code>data</code> <span class="by">the readings of each run, .json and .csv</span></li>
+        <li><code>reports</code> <span class="by">the run reports, .html</span></li>
+        <li><code>protocols</code> <span class="by">a copy of the protocol, saved at the end of each run</span></li>
+        <li><code>captures</code> <span class="by">camera pictures (.png); <code>16bit_raw</code> and <code>pmt</code> inside on some instruments</span></li>
+        <li><code>recordings</code> <span class="by">camera videos</span></li>
+        <li><code>analysis</code> <span class="by">image viewer regions and results</span></li>
+        <li><code>Notes</code> <span class="by">sticky notes</span></li>
+      </ul>
+    </details>
+  </details>
+  <details><summary><code>Devices</code> <span class="by">device files (.svg)</span></summary>
+    <ul>
+      <li><code>90_pin_array.svg</code>, <code>pin_map.svg</code> <span class="by">copied from MicroDrop at first start</span></li>
+      <li><code>&lt;your devices&gt;.svg</code> <span class="by">copied here when you load them, or saved here</span></li>
+    </ul>
+  </details>
+  <details><summary><code>Protocols</code> <span class="by">where the protocol Save and Load dialogs start</span></summary>
+    <ul><li><code>&lt;device name&gt;</code> <span class="by">one folder per device file; <code>Null</code> when no device is loaded</span></li></ul>
+  </details>
+  <details><summary><code>Remote-Experiments</code> <span class="by">only if you sync experiments from an instrument</span></summary>
+    <ul><li><code>&lt;instrument&gt;</code> <span class="by">copied by Tools ▸ Remote Controls ▸ Sync Remote Experiments...</span></li></ul>
+  </details>
+</details>
+<details><summary><code>%APPDATA%\Sci-Bots\Microdrop</code> or <code>&lt;home&gt;/.sci-bots/Microdrop</code> <span class="by">the settings folder</span></summary>
+  <ul>
+    <li><code>preferences.ini</code> <span class="by">every setting</span></li>
+    <li><code>tasks\qt\application_memento</code> <span class="by">the window layout at the last close</span></li>
+    <li><code>tasks\qt\layout_presets</code> <span class="by">your layout presets</span></li>
+    <li><code>.device_viewer_cache\camera_endpoints.json</code> <span class="by">camera alignment endpoints</span></li>
+    <li><code>.previous_changelog</code> <span class="by">the changelog as of the last start</span></li>
+    <li><code>.beta_disclaimer_accepted</code> <span class="by">the beta notice has been shown</span></li>
+    <li><code>plugin_index.json</code> <span class="by">the list of plugins last fetched by Manage Plugins</span></li>
+    <li><code>.libcamera_tuning</code> <span class="by">Raspberry Pi only: a camera tuning copy with autofocus off</span></li>
+  </ul>
+</details>
+</figure>
+
+<section data-term id="store-user-data" data-where="&lt;home&gt;\Documents\Sci-Bots\Microdrop">
+  <h3>Your MicroDrop documents folder</h3>
+  <p>The folder for everything you make: experiments, device files and protocols.</p>
+  <div data-what><p>MicroDrop creates it, with <code>Experiments</code>, <code>Devices</code> and <code>Protocols</code>
+  inside, the first time it starts. <code>Remote-Experiments</code> appears if you sync experiments from an instrument
+  over the network.</p></div>
+  <div data-when><p>Back this folder up. Copy it when you move to a new computer.</p></div>
+  <div data-read><p>MicroDrop builds the path from your home folder, so it is always
+  <code>&lt;home&gt;\Documents</code>, even if your Documents library has been moved elsewhere, for example into
+  OneDrive. No menu item opens it; open the experiment folder (File ▸ Experiments ▸ Open Experiment Folder) and go up two
+  levels.</p></div>
+  <div data-typical><p><code>C:\Users\&lt;you&gt;\Documents\Sci-Bots\Microdrop</code>,
+  <code>/home/&lt;you&gt;/Documents/Sci-Bots/Microdrop</code> on Linux and the Pi.</p></div>
+</section>
+
+<section data-term id="store-experiments" data-where="Documents\Sci-Bots\Microdrop\Experiments">
+  <h3>Experiment folders</h3>
+  <p>One folder per experiment, holding everything that experiment wrote.</p>
+  <div data-what><p>The name is the date and time it began in UTC, as
+  <code>YYYY_MM_DD-HH_MM_SS</code>. MicroDrop starts a new one each time it starts, and when you click
+  <i data-glyph="note_add" data-inline data-label="New Experiment"></i> <span class="ui">New Experiment</span> above the
+  protocol tree or choose <span class="ui">File ▸ Experiments ▸ New Experiment</span>. The current one is named after
+  <span class="ui">Experiment:</span> above the protocol tree; click the name to open the folder.</p></div>
+  <div data-when><p>To find a run's report, data, pictures or log. To send support the files of one experiment.</p></div>
+  <div data-read>
+  <table class="small">
+    <thead><tr><th>Inside</th><th>What</th><th>Written</th></tr></thead>
+    <tbody>
+      <tr><td><code>logs</code></td><td>The log files</td><td>From the moment the experiment starts</td></tr>
+      <tr><td><code>data</code></td><td><code>data_&lt;run start&gt;.json</code> and <code>.csv</code>: the readings of one run</td><td>At the end of each run that is not a Preview</td></tr>
+      <tr><td><code>reports</code></td><td><code>report_&lt;time&gt;.html</code>: the run report, opens in a web browser</td><td>At the end of a finished run; after a stopped run only if you answer Yes to <em>Generate Run Summary?</em></td></tr>
+      <tr><td><code>protocols</code></td><td><code>protocol_&lt;UTC time&gt;.json</code>: the protocol as it was run</td><td>At the end of each run that is not a Preview</td></tr>
+      <tr><td><code>captures</code></td><td>Camera pictures (.png). Cameras that give raw frames add <code>16bit_raw</code>; the Portable DropBot's PMT adds <code>pmt</code></td><td>On each capture</td></tr>
+      <tr><td><code>recordings</code></td><td>Camera videos</td><td>On each recording</td></tr>
+      <tr><td><code>analysis</code></td><td>Image viewer regions (<code>roi_config.json</code>), results (<code>roi_stats.json</code>) and fits (<code>fit_equations.json</code>)</td><td>When you analyse pictures</td></tr>
+      <tr><td><code>Notes</code></td><td>Sticky notes, <code>1.html</code>, <code>2.html</code>…</td><td>When you save a note from <i data-glyph="sticky_note" data-inline data-label="New Note"></i> <span class="ui">New Note</span></td></tr>
+    </tbody>
+  </table>
+  <p>Run-file times (<code>&lt;run start&gt;</code>, <code>&lt;time&gt;</code>) are local time,
+  <code>YYYYMMDD_HHMMSS</code>; folder names and protocol copies are UTC.</p>
+  </div>
+  <div data-typical><p>Many folders hold only <code>logs</code>: MicroDrop was started and nothing was run.
+  <span class="ui">File ▸ Experiments ▸ Prune Experiments…</span> moves every such folder, never the current one, to the
+  Recycle Bin (Trash on macOS and Linux), after asking.</p></div>
+</section>
+
+<section data-term id="store-devices" data-where="Documents\Sci-Bots\Microdrop\Devices">
+  <h3>Device files and the default device</h3>
+  <p>The device (chip) drawings MicroDrop can load, as <code>.svg</code> files.</p>
+  <div data-what><p>At first start MicroDrop copies its two bundled files here, <code>90_pin_array.svg</code> and
+  <code>pin_map.svg</code>, if they are missing. Loading a device file from somewhere else copies it here; if a file of
+  that name exists, MicroDrop asks whether to <em>Overwrite</em> it or <em>Save As...</em> a new name. Saving a device
+  starts here too.</p></div>
+  <div data-when><p>Copy a device file from here to share it, or to send it to support with a problem that involves the
+  chip drawing.</p></div>
+  <div data-read><p>The last device you load becomes the default for the next start, shown as
+  <span class="ui">Default Device Layout</span> in Edit ▸ Preferences... ▸ Device Viewer ▸ Main View.</p></div>
+  <div data-typical><p><code>Devices\90_pin_array.svg</code>. When the default is empty or its file is missing, MicroDrop
+  goes back to this file and, if it differs from the bundled one, <strong>overwrites it</strong> with the bundled copy.
+  Do not edit <code>90_pin_array.svg</code> in place: save your changes under a new name.</p></div>
+</section>
+
+<section data-term id="store-protocols" data-where="Documents\Sci-Bots\Microdrop\Protocols\&lt;device name&gt;">
+  <h3>Protocol files</h3>
+  <p>Where the protocol <span class="ui">Save</span>, <span class="ui">Load</span> and import dialogs start.</p>
+  <div data-what><p>A folder per device: the name of the loaded device file without <code>.svg</code>, or
+  <code>Null</code> when no device is loaded. MicroDrop creates it when a dialog opens. You can save a protocol anywhere;
+  this is only the starting point.</p></div>
+  <div data-read><p>A protocol is a <code>.json</code> file. Each experiment also keeps the copy made at the end of each run,
+  in its own <code>protocols</code> folder.</p></div>
+  <div data-typical><p><code>Protocols\90_pin_array</code>.</p></div>
+</section>
+
+<section data-term id="store-autosave" data-where="Status bar glyph, and the AutoSave box above the protocol tree">
+  <h3>AutoSave</h3>
+  <p>Writes the open protocol back to its own file shortly after you stop editing.</p>
+  <div data-what><p>About 1.5 seconds after your last change, AutoSave saves the protocol to the file it was last saved
+  to or loaded from. It never picks a file for you: a protocol that has never been saved is not written. It waits while a
+  protocol runs and saves held-back changes when the run ends, and it saves pending changes before the window
+  closes.</p></div>
+  <div data-when><p>Leave it on. Turn it off to try edits you might not keep, then use Save As if you want them.</p></div>
+  <div data-read><p>The <i data-glyph="ICON_SAVE_CLOCK" data-inline data-label="AutoSave"></i> glyph in the status bar is
+  green when AutoSave is on and grey when it is off; it and the <span class="ui">AutoSave</span> tick box above the
+  protocol tree switch the same setting. Hover for its state: <em>save the protocol once to start</em>, <em>changes are
+  saved to &lt;file&gt; automatically</em>, <em>paused while the protocol runs</em>, or <em>the last save failed</em>. If
+  a save fails, an <em>AutoSave Failed</em> warning appears once; your changes stay in MicroDrop, the next change tries
+  again, and Save As lets you pick another place.</p></div>
+  <div data-typical><p>On (remembered).</p></div>
+</section>
+
+<section data-term id="store-app-home" data-where="%APPDATA%\Sci-Bots\Microdrop or &lt;home&gt;/.sci-bots/Microdrop">
+  <h3>The settings folder</h3>
+  <p>MicroDrop's own files: your settings and what it remembers between sessions. Nothing here is experiment data.</p>
+  <div data-what>
+  <table class="small">
+    <thead><tr><th>File</th><th>What</th><th>Safe to delete?</th></tr></thead>
+    <tbody>
+      <tr><td><code>preferences.ini</code></td><td>Every setting (<a href="#store-prefs">more</a>)</td><td>Yes, with MicroDrop closed: <strong>all</strong> settings go back to their defaults</td></tr>
+      <tr><td><code>tasks\qt\application_memento</code></td><td>The window layout at the last close</td><td>Yes: the default layout comes back</td></tr>
+      <tr><td><code>tasks\qt\layout_presets\</code></td><td>Your layout presets</td><td>Only if you no longer want them</td></tr>
+      <tr><td><code>.device_viewer_cache\camera_endpoints.json</code></td><td>Camera alignment endpoints, one per device file</td><td>Yes, but every saved endpoint is lost</td></tr>
+      <tr><td><code>.previous_changelog</code></td><td>The changelog as of the last start, for <em>What's New?</em></td><td>Yes: rewritten at the next start, without a <em>What's New?</em></td></tr>
+      <tr><td><code>.beta_disclaimer_accepted</code></td><td>The beta notice has been shown</td><td>Yes: the notice shows again</td></tr>
+      <tr><td><code>plugin_index.json</code></td><td>The plugin list last fetched by Tools ▸ Manage Plugins…</td><td>Yes: fetched again</td></tr>
+      <tr><td><code>.libcamera_tuning\</code></td><td>Raspberry Pi only: a camera tuning copy with autofocus off</td><td>Yes: made again at start</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div data-when><p>To reset MicroDrop's memory without touching your data, or to send support your settings.</p></div>
+  <div data-read><p>On macOS, Linux and the Pi the folder name starts with a dot, so file browsers hide it until you show
+  hidden files. The walkthrough's <a href="#walkthrough">step 5</a> shows how to get there.</p></div>
+  <div data-typical><p>Windows: <code>%APPDATA%\Sci-Bots\Microdrop</code>. Elsewhere:
+  <code>&lt;home&gt;/.sci-bots/Microdrop</code>.</p></div>
+</section>
+
+<section data-term id="store-prefs" data-where="Settings folder ▸ preferences.ini">
+  <h3>preferences.ini</h3>
+  <p>Your settings, in one text file.</p>
+  <div data-what><p>Everything in Edit ▸ Preferences..., plus choices MicroDrop remembers for you: the console log
+  filters and buffer, the protocol tree's columns, AutoSave on or off, the default device, camera settings, the
+  capacitance calibration, zone types, and which plugin groups are switched on.</p></div>
+  <div data-when><p>Send it to support when a problem might come from a setting. Delete or rename it to start again from
+  the defaults.</p></div>
+  <div data-read><p>Plain text, <code>[section]</code> headings with <code>name = value</code> lines. You do not need to
+  edit it by hand.</p></div>
+  <div data-typical><p>MicroDrop writes most settings into it when it closes normally, so change it only while MicroDrop is
+  closed: otherwise your edit is overwritten.</p></div>
+</section>
+
+<section data-term id="store-bundled" data-where="MicroDrop program folder ▸ microdrop_application ▸ preferences.ini">
+  <h3>Bundled defaults</h3>
+  <p>The starting values that ship with MicroDrop.</p>
+  <div data-what><p>A second, small <code>preferences.ini</code> inside the program. It sets which screen MicroDrop opens
+  on and that the last window layout is restored at start. Your own <code>preferences.ini</code> in the settings folder
+  overrides it.</p></div>
+  <div data-read><p>Part of the program: an update replaces it. Do not edit it.</p></div>
+</section>
+
+<section data-term id="store-layout" data-where="Settings folder ▸ tasks ▸ qt">
+  <h3>Window layout and layout presets</h3>
+  <p>Where each pane sits, and the arrangements you saved.</p>
+  <div data-what><p><code>application_memento</code> holds the layout as it was when you last closed MicroDrop; it is
+  restored at start unless <span class="ui">Always Use Default Layout</span> is ticked (Edit ▸ Preferences... ▸
+  Microdrop General ▸ Application Startup). Presets made with <span class="ui">View ▸ Layout Presets ▸ Save Current
+  Layout...</span> are files in <code>layout_presets</code>, one per preset, with <code>shortcuts.json</code> for their
+  keys and <code>default_preset.txt</code> naming the one Reset Layout uses.</p></div>
+  <div data-when><p>A pane you cannot find: <span class="ui">View ▸ Reset Layout</span>, or tick it in the
+  <span class="ui">View</span> menu. A window that opens broken: close MicroDrop and delete
+  <code>application_memento</code>.</p></div>
+  <div data-read><p>If MicroDrop cannot restore the saved layout at start, it opens with the default one and ticks
+  Always Use Default Layout for you; untick it to have your layout restored again.</p></div>
+</section>
+
+<section data-term id="store-camera" data-where="Settings folder ▸ .device_viewer_cache ▸ camera_endpoints.json">
+  <h3>Camera alignment cache</h3>
+  <p>The saved camera alignment endpoints, kept per device file name.</p>
+  <div data-what><p>Each endpoint is the four corners where the device drawing should land on the camera picture. They
+  survive restarts and device switches. The <em>Camera &amp; Alignment Tutorial</em> covers how to make them.</p></div>
+  <div data-typical><p>Deleting the folder or the file drops every saved endpoint; you place them again.</p></div>
+</section>
+
+<section data-term id="store-plugins" data-where="MicroDrop launcher folder ▸ microdrop-py">
+  <h3>Installed plugins</h3>
+  <p>Plugins you add with <span class="ui">Tools ▸ Manage Plugins…</span>.</p>
+  <div data-what><p>MicroDrop installs them with <em>pixi</em> into its own environment: the plugin is added to
+  <code>pyproject.toml</code> and <code>pixi.lock</code> in the launcher's <code>microdrop-py</code> folder, and its files
+  go into <code>microdrop-py\.pixi</code>. Which plugin groups are switched on is kept in
+  <code>preferences.ini</code>.</p></div>
+  <div data-when><p>Add, update and remove plugins only through Manage Plugins; never delete their files.</p></div>
+</section>
+
+<section data-term id="store-memory" data-where="Message server memory (Redis)">
+  <h3>What is not saved</h3>
+  <p>A shared notice board the parts of MicroDrop use while it runs.</p>
+  <div data-what><p>The message server keeps live values such as the current experiment folder, the loaded device file,
+  the electrode areas and the camera captures of the current run. The server MicroDrop starts keeps nothing on disk and
+  stops when MicroDrop closes.</p></div>
+  <div data-read><p>MicroDrop fills it again from your files and settings at the next start. What you notice: a new
+  experiment folder at each start rather than the last one. In the same way, <em>Browse session reports</em> lists only
+  the reports made since MicroDrop started.</p></div>
+</section>
+
+<section data-term id="where-lookup" data-where="Interactive">
+  <h3>Where is my …?</h3>
+  <p>Pick a thing and your computer: see where it lives, what writes it, how to open it, and whether you may delete it.</p>
+  <figure data-demo="where" aria-label="Lookup: where a kind of file lives">
+    <div class="controls">
+      <label>Thing <select id="wh-thing"></select></label>
+      <label>Computer <select id="wh-os">
+        <option value="win" selected>Windows</option>
+        <option value="mac">macOS</option>
+        <option value="linux">Linux</option>
+        <option value="pi">Raspberry Pi instrument</option>
+      </select></label>
+    </div>
+    <dl class="lookup-out" aria-live="polite">
+      <dt>Where</dt><dd id="wh-path"></dd>
+      <dt>Written by</dt><dd id="wh-by"></dd>
+      <dt>Open it</dt><dd id="wh-open"></dd>
+      <dt>Delete?</dt><dd id="wh-delete"></dd>
+    </dl>
+    <figcaption><code>&lt;home&gt;</code> is your home folder. Paths are patterns: names in angle brackets stand for the
+    real ones.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="support-checklist" data-where="Interactive">
+  <h3>What to send support</h3>
+  <p>Tick what applies to your problem; the list below says which files to attach and where they are.</p>
+  <figure data-demo="support" aria-label="Checklist of files to attach to a support request">
+    <div class="controls">
+      <label>Computer <select id="sp-os">
+        <option value="win" selected>Windows</option>
+        <option value="mac">macOS</option>
+        <option value="linux">Linux</option>
+        <option value="pi">Raspberry Pi instrument</option>
+      </select></label>
+    </div>
+    <div class="check-list">
+      <label><input type="checkbox" id="sp-run" checked> It happened during or after a run</label>
+      <label><input type="checkbox" id="sp-device"> It involves the chip drawing or electrodes</label>
+      <label><input type="checkbox" id="sp-camera"> It involves the camera or pictures</label>
+      <label><input type="checkbox" id="sp-setting"> It may come from a setting</label>
+      <label><input type="checkbox" id="sp-layout"> The window or panes look wrong</label>
+    </div>
+    <ol class="send-list" aria-live="polite"></ol>
+    <figcaption>Then send it with <span class="ui">Help ▸ Contact Support ▸ Technical Support</span> (private) or attach
+    it to a <span class="ui">Help ▸ Report an Issue...</span> post (public).</figcaption>
+  </figure>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-toolbar">
+<h2>Toolbar icons</h2>
+<p class="intro">The buttons that lead to the files on this page. Hover over a button in MicroDrop to see its tooltip.</p>
+<section data-term id="tb-main" data-where="Status bar, protocol tree, image viewer">
+  <h3>Buttons</h3>
+  <table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Button</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_SAVE_CLOCK" data-on></i></td><td class="lbl">AutoSave (status bar)</td><td>Switches <a href="#store-autosave">AutoSave</a> on or off; green when on. Its tooltip says what AutoSave is doing.</td></tr>
+      <tr><td class="icons"><i data-glyph="note_add"></i></td><td class="lbl">New Experiment</td><td>Starts a new experiment folder. New captures, reports and the log go there.</td></tr>
+      <tr><td class="icons"><span class="ui">Experiment:</span></td><td class="lbl">Active Experiment (Click to open folder)</td><td>Shows the current experiment's name; a click opens its folder.</td></tr>
+      <tr><td class="icons"><i data-glyph="sticky_note"></i></td><td class="lbl">New Note</td><td>Opens a sticky note for the current experiment, saved in its <code>Notes</code> folder.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_OPEN_IN_NEW"></i></td><td class="lbl">Open the shown images' folder in the file browser</td><td>In the image viewer: opens the folder of the picture on screen.</td></tr>
+    </tbody>
+  </table>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>Logs live inside the experiment folder.</strong> Each start and each New Experiment begins a new log
+    file in a new folder. Send the log of the experiment in which the problem happened.</li>
+    <li><strong>Experiment folder names are in UTC</strong>, not your local time; run reports and data files use local
+    time.</li>
+    <li><strong>The Console Logs pane keeps only 10 lines</strong> until you raise <span class="ui">Buffer</span>.</li>
+    <li><strong>Unticking a level in the pane throws its lines away</strong>; the log file still has them.</li>
+    <li><strong>Copy Log to Clipboard copies one line</strong>, the last one you clicked. Attach the file instead.</li>
+    <li><strong>Log files are never trimmed.</strong> A long session at the Debug level makes a large file.</li>
+    <li><strong>Check before you post in public.</strong> Log lines, reports and file names carry folder paths, which can
+    include your user name, and the log file's name carries a number that identifies the computer. Use Technical
+    Support for anything private.</li>
+    <li><strong>Deleting <code>preferences.ini</code> resets every preference</strong>, along with the remembered
+    choices (default device, column layout, calibration, plugin groups). Do it with MicroDrop closed: it rewrites the
+    file as it closes.</li>
+    <li><strong>Deleting <code>.device_viewer_cache</code> drops all camera endpoints.</strong></li>
+    <li><strong>Settings are written when MicroDrop closes normally.</strong> If it crashes, settings changed in that
+    session can be lost.</li>
+    <li><strong>Do not edit <code>Devices\90_pin_array.svg</code> in place</strong>: MicroDrop may replace it with the
+    bundled copy. Save changes under a new name.</li>
+    <li><strong>No menu item opens the settings folder, <code>Devices</code> or <code>Protocols</code>.</strong> Use the
+    paths on this page; the device and protocol file dialogs start in their folders.</li>
+    <li><strong>Paths differ by computer.</strong> On macOS, Linux and the Pi the settings folder is the hidden
+    <code>&lt;home&gt;/.sci-bots/Microdrop</code>; folder separators are <code>/</code> instead of <code>\</code>.</li>
+  </ul>
+</div>
+</section>
+
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Log</dt><dd>MicroDrop's running diary of what it does, one line per event.</dd>
+  <dt>Log level</dt><dd>How serious a line is: Debug, Info, Warning, Error, Critical.</dd>
+  <dt>Buffer</dt><dd>How many log lines the Console Logs pane keeps.</dd>
+  <dt>Experiment</dt><dd>A folder that collects one session's logs, run reports, data, pictures and videos.</dd>
+  <dt>UTC</dt><dd>Coordinated Universal Time: the world reference clock, without your time zone.</dd>
+  <dt>Documents folder</dt><dd><code>&lt;home&gt;/Documents/Sci-Bots/Microdrop</code>: your experiments, devices and
+  protocols.</dd>
+  <dt>Settings folder</dt><dd>Where MicroDrop keeps its own files: <code>%APPDATA%\Sci-Bots\Microdrop</code> on Windows,
+  <code>&lt;home&gt;/.sci-bots/Microdrop</code> elsewhere.</dd>
+  <dt>Preferences</dt><dd>Your settings, edited in Edit ▸ Preferences... and kept in <code>preferences.ini</code>.</dd>
+  <dt>Device file</dt><dd>An <code>.svg</code> drawing of a chip's electrodes.</dd>
+  <dt>Endpoint</dt><dd>A saved camera alignment: where the device drawing lands on the camera picture.</dd>
+  <dt>Layout preset</dt><dd>A saved arrangement of the panes, applied from View ▸ Layout Presets.</dd>
+  <dt>AutoSave</dt><dd>Saving the open protocol to its file automatically, shortly after each change.</dd>
+  <dt>Message server</dt><dd>The part of MicroDrop (Redis) that passes messages and live values between its parts; it
+  keeps nothing after MicroDrop closes.</dd>
+  <dt>Plugin</dt><dd>An add-on part of MicroDrop, such as support for a heater or a camera.</dd>
+</dl>
+</section>
+
+<script>
+Tutorial.demo("console", function (figure, T) {
+  /* Mirrors logger_ui/model.py: newest first, a line of an unticked level is
+     never kept, unticking drops kept lines, the buffer trims the oldest, and
+     CRITICAL always passes. */
+  var EVENTS = [
+    ["DEBUG", "Electrode state change published"],
+    ["INFO", "Protocol step 3 started"],
+    ["DEBUG", "Camera frame received"],
+    ["INFO", "Capture saved to captures"],
+    ["WARNING", "Droplet check found 1 missing droplet"],
+    ["INFO", "Protocol step 4 started"],
+    ["DEBUG", "Heartbeat"],
+    ["ERROR", "Could not write the report"],
+    ["INFO", "Run finished"]
+  ];
+  var boxes = {
+    DEBUG: figure.querySelector("#cl-debug"),
+    INFO: figure.querySelector("#cl-info"),
+    WARNING: figure.querySelector("#cl-warning"),
+    ERROR: figure.querySelector("#cl-error")
+  };
+  var buffer = figure.querySelector("#cl-buffer");
+  var body = figure.querySelector("tbody");
+  var status = figure.querySelector("#cl-status");
+  var logs = [], next = 0, written = 0, clock = 10 * 3600 + 40 * 60;
+
+  function allowed(level) {
+    return level === "CRITICAL" || boxes[level].checked;
+  }
+
+  function stamp() {
+    clock += 3;
+    var h = Math.floor(clock / 3600), m = Math.floor(clock / 60) % 60, s = clock % 60;
+    return [h, m, s].map(function (n) { return (n < 10 ? "0" : "") + n; }).join(":");
+  }
+
+  function draw() {
+    T.clear(body);
+
+    if (!logs.length) {
+      var empty = document.createElement("tr");
+      empty.className = "empty";
+      empty.innerHTML = "<td colspan='3'>(empty)</td>";
+      body.appendChild(empty);
+    }
+
+    logs.forEach(function (log) {
+      var row = document.createElement("tr");
+      row.innerHTML = "<td>" + log.time + "</td><td class='" + log.level + "'>" + log.level +
+        "</td><td class='msg'>" + log.message + "</td>";
+      body.appendChild(row);
+    });
+
+    status.innerHTML = "Pane: <strong>" + logs.length + "</strong> line(s). Log file: <strong>" + written +
+      "</strong> line(s) at the Info level and above.";
+  }
+
+  figure.querySelector("#cl-add").addEventListener("click", function () {
+    for (var i = 0; i < 5; i++) {
+      var event = EVENTS[next % EVENTS.length];
+      next += 1;
+
+      if (event[0] !== "DEBUG") {
+        written += 1;
+      }
+
+      if (allowed(event[0])) {
+        logs.unshift({ time: stamp(), level: event[0], message: event[1] });
+      }
+    }
+
+    logs = logs.slice(0, +buffer.value);
+    draw();
+  });
+
+  figure.querySelector("#cl-reset").addEventListener("click", function () {
+    logs = [];
+    draw();
+  });
+
+  Object.keys(boxes).forEach(function (level) {
+    boxes[level].addEventListener("change", function () {
+      logs = logs.filter(function (log) { return allowed(log.level); });
+      draw();
+    });
+  });
+
+  buffer.addEventListener("change", function () {
+    logs = logs.slice(0, +buffer.value);
+    draw();
+  });
+
+  draw();
+});
+
+/* Path patterns per computer: d = documents folder, s = settings folder. */
+var HELP_LOGS_ROOTS = {
+  win: { d: "<home>\\Documents\\Sci-Bots\\Microdrop", s: "%APPDATA%\\Sci-Bots\\Microdrop", sep: "\\" },
+  mac: { d: "<home>/Documents/Sci-Bots/Microdrop", s: "<home>/.sci-bots/Microdrop", sep: "/" },
+  linux: { d: "<home>/Documents/Sci-Bots/Microdrop", s: "<home>/.sci-bots/Microdrop", sep: "/" },
+  pi: { d: "<home>/Documents/Sci-Bots/Microdrop", s: "<home>/.sci-bots/Microdrop", sep: "/" }
+};
+
+function helpLogsPath(os, root, parts) {
+  var r = HELP_LOGS_ROOTS[os];
+
+  return [r[root]].concat(parts).join(r.sep);
+}
+
+function helpLogsEscape(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+Tutorial.demo("where", function (figure, T) {
+  var EXP = ["Experiments", "<experiment>"];
+  var THINGS = [
+    { name: "The log file", root: "d", parts: EXP.concat(["logs", "microdrop.frontend.<computer>-<process>.log"]),
+      by: "MicroDrop, from the moment an experiment starts.",
+      open: "Console Logs pane ▸ Open Log File.",
+      del: "Yes, once you no longer need it for support. Prune Experiments clears folders holding only logs." },
+    { name: "A run report", root: "d", parts: EXP.concat(["reports", "report_<YYYYMMDD_HHMMSS>.html"]),
+      by: "The end of a run (not a Preview).",
+      open: "The link in the Run Summary Generated window, Browse session reports, or the experiment folder.",
+      del: "Your results: keep it." },
+    { name: "A run's data (.json, .csv)", root: "d", parts: EXP.concat(["data", "data_<YYYYMMDD_HHMMSS>.csv"]),
+      by: "The end of each run (not a Preview).",
+      open: "The Data Files links in the run report, or the experiment folder.",
+      del: "Your results: keep it." },
+    { name: "Camera pictures", root: "d", parts: EXP.concat(["captures"]),
+      by: "Each capture, from the camera button or a protocol step.",
+      open: "Image viewer ▸ open-folder button, or the experiment folder.",
+      del: "Your results: keep them." },
+    { name: "Camera videos", root: "d", parts: EXP.concat(["recordings"]),
+      by: "Each recording.",
+      open: "The experiment folder.",
+      del: "Your results: keep them." },
+    { name: "The protocol as it was run", root: "d", parts: EXP.concat(["protocols", "protocol_<UTC time>.json"]),
+      by: "The end of each run (not a Preview).",
+      open: "The Protocol Path link in the run report, or the experiment folder.",
+      del: "Keep it with the run's results." },
+    { name: "Sticky notes", root: "d", parts: EXP.concat(["Notes", "<n>.html"]),
+      by: "Saving a note opened with New Note.",
+      open: "The experiment folder.",
+      del: "Your notes: keep them." },
+    { name: "Image analysis regions and results", root: "d", parts: EXP.concat(["analysis"]),
+      by: "The image viewer's region (ROI) tools.",
+      open: "The experiment folder.",
+      del: "Only if you want to lose that analysis." },
+    { name: "My protocol files", root: "d", parts: ["Protocols", "<device name>", "<protocol>.json"],
+      by: "You, with Save or Save As; then AutoSave keeps the file current.",
+      open: "File ▸ Protocol ▸ Load… starts in this folder.",
+      del: "Your work: keep it." },
+    { name: "My device files", root: "d", parts: ["Devices", "<device>.svg"],
+      by: "The first start (two bundled files), loading a device from elsewhere, or saving a device.",
+      open: "The device viewer's load and save dialogs start here.",
+      del: "Your work: keep it. 90_pin_array.svg and pin_map.svg are copied again if missing." },
+    { name: "Experiments synced from an instrument", root: "d", parts: ["Remote-Experiments", "<instrument>"],
+      by: "Tools ▸ Remote Controls ▸ Sync Remote Experiments...",
+      open: "No menu item: browse to it.",
+      del: "Copies of the instrument's experiments: delete only if the instrument still has them." },
+    { name: "Preferences", root: "s", parts: ["preferences.ini"],
+      by: "MicroDrop, mostly when it closes.",
+      open: "No menu item: browse to the settings folder (walkthrough step 5).",
+      del: "Yes, with MicroDrop closed: every setting goes back to its default." },
+    { name: "The window layout", root: "s", parts: ["tasks", "qt", "application_memento"],
+      by: "MicroDrop, when it closes.",
+      open: "Not meant to be opened.",
+      del: "Yes, with MicroDrop closed: the default layout comes back." },
+    { name: "Layout presets", root: "s", parts: ["tasks", "qt", "layout_presets"],
+      by: "View ▸ Layout Presets ▸ Save Current Layout... and Manage Layout Presets...",
+      open: "Use View ▸ Layout Presets ▸ Manage Layout Presets...",
+      del: "Only if you no longer want your presets." },
+    { name: "Camera alignment endpoints", root: "s", parts: [".device_viewer_cache", "camera_endpoints.json"],
+      by: "Saving an endpoint in the camera alignment tools.",
+      open: "Not meant to be opened.",
+      del: "Yes, but every saved endpoint is lost." },
+    { name: "What's New memory", root: "s", parts: [".previous_changelog"],
+      by: "Each start.",
+      open: "Not meant to be opened.",
+      del: "Yes: rewritten at the next start." },
+    { name: "Beta notice marker", root: "s", parts: [".beta_disclaimer_accepted"],
+      by: "The first start, after the notice.",
+      open: "Not meant to be opened.",
+      del: "Yes: the notice shows again." },
+    { name: "Installed plugins", root: null,
+      path: "MicroDrop launcher folder: microdrop-py (pyproject.toml, pixi.lock) and microdrop-py/.pixi",
+      by: "Tools ▸ Manage Plugins…",
+      open: "Tools ▸ Manage Plugins…",
+      del: "Remove plugins with Manage Plugins, never by deleting files." },
+    { name: "The current experiment and live values", root: null,
+      path: "Memory only (the message server)",
+      by: "MicroDrop while it runs.",
+      open: "Not on disk.",
+      del: "Gone when MicroDrop closes." }
+  ];
+  var thing = figure.querySelector("#wh-thing"), os = figure.querySelector("#wh-os");
+
+  THINGS.forEach(function (item, index) {
+    var option = document.createElement("option");
+    option.value = index;
+    option.textContent = item.name;
+    thing.appendChild(option);
+  });
+
+  function draw() {
+    var item = THINGS[+thing.value];
+    var path = item.root ? helpLogsPath(os.value, item.root, item.parts) : item.path;
+
+    if (!item.root && os.value === "win") {
+      path = path.replace(/\//g, "\\");
+    }
+
+    figure.querySelector("#wh-path").innerHTML = "<code>" + helpLogsEscape(path) + "</code>";
+    figure.querySelector("#wh-by").textContent = item.by;
+    figure.querySelector("#wh-open").textContent = item.open;
+    figure.querySelector("#wh-delete").textContent = item.del;
+  }
+
+  thing.addEventListener("change", draw);
+  os.addEventListener("change", draw);
+  draw();
+});
+
+Tutorial.demo("support", function (figure, T) {
+  var EXP = ["Experiments", "<experiment>"];
+  var os = figure.querySelector("#sp-os"), list = figure.querySelector("ol.send-list");
+  var ticks = ["run", "device", "camera", "setting", "layout"].reduce(function (all, key) {
+    all[key] = figure.querySelector("#sp-" + key);
+    return all;
+  }, {});
+
+  function item(what, root, parts) {
+    var path = root ? helpLogsPath(os.value, root, parts) : "";
+
+    return "<li>" + what + (path ? "<br><code>" + helpLogsEscape(path) + "</code>" : "") + "</li>";
+  }
+
+  function draw() {
+    var items = [
+      item("What you did, what you expected, what happened, and when (the time helps to find it in the log).", null),
+      item("The log file of that experiment.", "d", EXP.concat(["logs", "microdrop.frontend.<computer>-<process>.log"])),
+      item("A screenshot of MicroDrop showing the problem.", null),
+      item("The release you run: the first heading in Help ▸ Changelog...", null)
+    ];
+
+    if (ticks.run.checked) {
+      items.push(item("The protocol as it was run.", "d", EXP.concat(["protocols", "protocol_<UTC time>.json"])));
+      items.push(item("The run report, if one was made.", "d", EXP.concat(["reports", "report_<YYYYMMDD_HHMMSS>.html"])));
+      items.push(item("The run's data files.", "d", EXP.concat(["data", "data_<YYYYMMDD_HHMMSS>.json"])));
+    }
+
+    if (ticks.device.checked) {
+      items.push(item("The device file that was loaded.", "d", ["Devices", "<device>.svg"]));
+    }
+
+    if (ticks.camera.checked) {
+      items.push(item("One or two of the pictures or videos.", "d", EXP.concat(["captures"])));
+      items.push(item("The camera alignment endpoints.", "s", [".device_viewer_cache", "camera_endpoints.json"]));
+    }
+
+    if (ticks.setting.checked) {
+      items.push(item("Your preferences.", "s", ["preferences.ini"]));
+    }
+
+    if (ticks.layout.checked) {
+      items.push(item("The saved window layout.", "s", ["tasks", "qt", "application_memento"]));
+    }
+
+    list.innerHTML = items.join("");
+  }
+
+  os.addEventListener("change", draw);
+  Object.keys(ticks).forEach(function (key) { ticks[key].addEventListener("change", draw); });
+  draw();
+});
+</script>

@@ -66,6 +66,7 @@ from microdrop_utils.pyside_helpers import (
 # Local imports.
 from ..consts import (
     ALIGNMENT_DEVICE_RENDER_WIDTH_PX,
+    AUTO_COMMIT_DEBOUNCE_MS,
     DEVICE_VIEWER_LAYERS,
     KEYBOARD_SHORTCUT_GROUPS,
     KEYBOARD_SHORTCUTS,
@@ -198,6 +199,10 @@ class DeviceViewerDockPane(TraitsDockPane):
     #: ``loaded_path`` and ``modified``.
     svg_persistence = Instance(SvgPersistenceService)
 
+    #: Restarted by each sidebar edit while auto-commit is due; commits the
+    #: edits once they settle.
+    _auto_commit_timer = Instance(QTimer)
+
     # --------- Device View trait initializers -------------
     def traits_init(self):
         ###############################################################################################################
@@ -220,6 +225,13 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.undo_manager = UndoManager(active_stack=CommandStack())
         self.undo_manager.active_stack.undo_manager = self.undo_manager
+
+        ################ Auto-commit debounce ##################################
+        # Before the model: its auto_commit_due observer drives this timer.
+        self._auto_commit_timer = QTimer()
+        self._auto_commit_timer.setSingleShot(True)
+        self._auto_commit_timer.setInterval(AUTO_COMMIT_DEBOUNCE_MS)
+        self._auto_commit_timer.timeout.connect(self._auto_commit_sidebar_params)
 
         ################ Create Model ##########################################
         self.model = DeviceViewMainModel(
@@ -431,12 +443,15 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.model.routes.apply_execution_params(message_model.execution_params)
             return
 
-        if (
-            step_changed
-            and message_model.execution_params
-            and not self.model.protocol_running
-        ):
-            self._check_unsaved_execution_params()
+        if step_changed and not self.model.protocol_running:
+            if self.model.auto_commit_due:
+                # The pending edits belong to the step being left: commit
+                # them there now, before the new step's values replace them.
+                self._auto_commit_timer.stop()
+                self._commit_sidebar_params(self._last_applied_step_id)
+
+            elif message_model.execution_params:
+                self._check_unsaved_execution_params()
 
         if message_model.uuid == self.model.uuid:
             return  # Ignore messages that are from the same model
@@ -569,30 +584,43 @@ class DeviceViewerDockPane(TraitsDockPane):
                     logger.debug("Discarding unsaved route execution settings")
 
                 elif choice == OK:
-                    prev_id = self._last_applied_step_id
-                    params = self.model.routes._current_params()
-                    logger.info(
-                        f"Sending protocol step: {prev_id} execution settings: {params}"
-                    )
-                    commit_msg = StepParamsCommitMessage(step_id=prev_id, **params)
-                    publish_message(
-                        topic=STEP_PARAMS_COMMIT, message=commit_msg.serialize()
-                    )
+                    self._commit_sidebar_params(self._last_applied_step_id)
 
-    @observe("model:routes:commit_to_step_btn")
-    def _on_commit_to_step_btn_fired(self, event):
-        step_id = self._last_applied_step_id
+    def _commit_sidebar_params(self, step_id):
+        """Publish the sidebar's settings to ``step_id`` and rebaseline, so
+        the commit button goes back to disabled."""
         if not step_id:
-            # No step selected — shouldn't happen because the button is disabled,
-            # but guard anyway.
+            # No step selected: the button is disabled and auto-commit is not
+            # due, so only a stray call lands here.
             return
 
         params = self.model.routes._current_params()
-        msg = StepParamsCommitMessage(step_id=step_id, **params)
-        publish_message(topic=STEP_PARAMS_COMMIT, message=msg.serialize())
+        logger.info(f"Committing execution settings to step {step_id}: {params}")
 
-        # Re-baseline so the button goes back to disabled.
+        message = StepParamsCommitMessage(step_id=step_id, **params)
+        publish_message(topic=STEP_PARAMS_COMMIT, message=message.serialize())
+
         self.model.routes.mark_params_committed()
+
+    @observe("model:commit_requested")
+    def _on_commit_requested(self, event):
+        self._commit_sidebar_params(self._last_applied_step_id)
+
+    @observe("model:auto_commit_due")
+    def _schedule_auto_commit(self, event):
+        """Restart the quiet period on each edit while auto-commit is due;
+        drop a pending commit once it is not (protocol started, toggle off,
+        values back to the step's)."""
+        if event.new:
+            self._auto_commit_timer.start()
+        else:
+            self._auto_commit_timer.stop()
+
+    def _auto_commit_sidebar_params(self):
+        # The gate is read again: the step or the run state may have changed
+        # since the edit that started the timer.
+        if self.model.auto_commit_due:
+            self._commit_sidebar_params(self._last_applied_step_id)
 
     # --------------UI view content creation / configuration helpers ---------
     def set_interaction_service(self, new_model):

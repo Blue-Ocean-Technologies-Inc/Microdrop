@@ -26,6 +26,7 @@ from traits.api import Either, Instance, List, Str, on_trait_change
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
+from microdrop_status_bar.consts import STATUS_BAR_ICONS
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
@@ -139,6 +140,10 @@ class PluggableProtocolTreePlugin(Plugin):
     # pulls traitsui).
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+
+    #: The AutoSave switch, added by the dock pane when it mounts; the
+    #: microdrop_status_bar plugin places it in the app status bar.
+    status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
 
     #: Device-viewer sync controller and the row manager it wraps, built at
     #: plugin start and handed to the dock pane when it mounts.

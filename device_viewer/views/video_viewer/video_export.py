@@ -13,23 +13,30 @@
 Decodes the recording with ffmpeg, optionally warps every frame through
 the sidecar's alignment transform (the same ``get_transformed_frame`` the
 live pipeline used — skipped for raw-space exports and recordings with no
-sidecar), crops to the model's region-of-interest keyframes (stepwise
-over playback time, so the crop can follow the action), and re-encodes.
-Runs on a background thread; the GUI only receives progress strings.
+sidecar), paints the recording's device overlay (outline and actuated
+electrodes, by frame time) onto the warped frame, crops to the model's
+region-of-interest keyframes (stepwise over playback time, so the crop can
+follow the action), and re-encodes. Runs on a background thread; the GUI
+only receives progress strings.
 """
+
+# Standard library imports.
 import json
-import re
 import shutil
 import subprocess
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QRect, QRectF, Qt, Signal
-from PySide6.QtGui import QImage
+# Enthought library imports.
+from pyface.qt.QtCore import QObject, QRect, QRectF, Qt, Signal
+from pyface.qt.QtGui import QImage, QPainter
 
-from logger.logger_service import get_logger
-
+# Local imports.
 from ...utils.camera import get_transformed_frame, qtransform_deserialize
+from .recording_overlay_item import RecordingOverlayItem
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -66,19 +73,34 @@ class AlignedVideoExporter(QObject):
     keyframes -> the aligned and/or cropped video next to the source.
     ``aligned`` says which space the rendition (and its regions) live in:
     the device-aligned scene (warps every frame through the sidecar's
-    transform) or the raw frame (no warp — works for ANY video)."""
+    transform) or the raw frame (no warp — works for ANY video).
+    ``overlay`` (a RecordingOverlayTimeline, aligned exports only) is
+    painted at ``outline_opacity`` / ``actuations_opacity`` (0-1, 0 skips
+    the layer)."""
 
     progress = Signal(str)
     finished = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, input_path, sidecar, roi_keyframes, aligned=True,
-                 ffmpeg_binary="ffmpeg", parent=None):
+    def __init__(
+        self,
+        input_path,
+        sidecar,
+        roi_keyframes,
+        aligned=True,
+        overlay=None,
+        outline_opacity=0.0,
+        actuations_opacity=0.0,
+        ffmpeg_binary="ffmpeg",
+        parent=None,
+    ):
         super().__init__(parent)
         self._input_path = str(input_path)
         self._aligned = bool(aligned) and sidecar is not None
-        suffix = (ALIGNED_EXPORT_SUFFIX if self._aligned
-                  else CROPPED_EXPORT_SUFFIX)
+        self._overlay = overlay if self._aligned else None
+        self._outline_opacity = outline_opacity
+        self._actuations_opacity = actuations_opacity
+        suffix = ALIGNED_EXPORT_SUFFIX if self._aligned else CROPPED_EXPORT_SUFFIX
         self._output_path = str(Path(input_path).with_suffix("")) + suffix
         self._sidecar = sidecar
         self._roi_keyframes = sorted(roi_keyframes, key=lambda kf: kf[0])
@@ -88,8 +110,9 @@ class AlignedVideoExporter(QObject):
         if not shutil.which(self._ffmpeg):
             self.failed.emit("FFmpeg binary not found.")
             return
-        threading.Thread(target=self._run, daemon=True,
-                         name="aligned-video-export").start()
+        threading.Thread(
+            target=self._run, daemon=True, name="aligned-video-export"
+        ).start()
 
     # ------------------------------------------------------------------ #
     # Worker thread                                                        #
@@ -103,13 +126,25 @@ class AlignedVideoExporter(QObject):
         export's duration equal to the source's."""
         ffprobe = str(Path(shutil.which(self._ffmpeg)).with_name("ffprobe"))
         result = subprocess.run(
-            [ffprobe, "-v", "error", "-select_streams", "v:0",
-             "-count_frames", "-show_entries",
-             "stream=width,height,nb_read_frames : format=duration",
-             "-of", "default=noprint_wrappers=1", self._input_path],
-            capture_output=True, text=True)
-        values = dict(line.split("=", 1)
-                      for line in result.stdout.splitlines() if "=" in line)
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-count_frames",
+                "-show_entries",
+                "stream=width,height,nb_read_frames : format=duration",
+                "-of",
+                "default=noprint_wrappers=1",
+                self._input_path,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        values = dict(
+            line.split("=", 1) for line in result.stdout.splitlines() if "=" in line
+        )
         try:
             width = int(values["width"])
             height = int(values["height"])
@@ -117,9 +152,9 @@ class AlignedVideoExporter(QObject):
             duration_s = float(values["duration"])
         except (KeyError, ValueError) as e:
             raise RuntimeError(
-                f"Could not probe the recording ({e}): {result.stderr.strip()}")
-        fps = (frame_count / duration_s if duration_s > 0
-               else FALLBACK_EXPORT_FPS)
+                f"Could not probe the recording ({e}): {result.stderr.strip()}"
+            )
+        fps = frame_count / duration_s if duration_s > 0 else FALLBACK_EXPORT_FPS
         return width, height, fps
 
     def _run(self):
@@ -128,13 +163,13 @@ class AlignedVideoExporter(QObject):
             width, height, fps = self._probe()
             if self._aligned:
                 transform = qtransform_deserialize(
-                    json.dumps(self._sidecar["transform"]))
+                    json.dumps(self._sidecar["transform"])
+                )
                 bounding = QRectF(*self._sidecar["bounding_rect"])
                 scene_rect = QRectF(*self._sidecar["scene_bounding_rect"])
                 # Warp canvas at 1:1 scene scale, so ROI scene coordinates
                 # map directly onto warped pixels (minus the scene origin).
-                warp_size = (_even(scene_rect.width()),
-                             _even(scene_rect.height()))
+                warp_size = (_even(scene_rect.width()), _even(scene_rect.height()))
             else:
                 # Raw space: no warp — regions are in frame pixels, the
                 # "warp" IS the decoded frame.
@@ -150,23 +185,67 @@ class AlignedVideoExporter(QObject):
                 output_size = (_even(warp_size[0]), _even(warp_size[1]))
 
             decode = subprocess.Popen(
-                [self._ffmpeg, "-hide_banner", "-loglevel", "error",
-                 "-i", self._input_path,
-                 # Emit each REAL frame exactly once: without passthrough,
-                 # ffmpeg pads the VFR stream up to its (wrong) container
-                 # rate hint with duplicates, stretching the export.
-                 "-fps_mode", "passthrough",
-                 "-f", "rawvideo", "-pix_fmt", "rgba", "-"],
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                [
+                    self._ffmpeg,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    self._input_path,
+                    # Emit each REAL frame exactly once: without passthrough,
+                    # ffmpeg pads the VFR stream up to its (wrong) container
+                    # rate hint with duplicates, stretching the export.
+                    "-fps_mode",
+                    "passthrough",
+                    "-f",
+                    "rawvideo",
+                    "-pix_fmt",
+                    "rgba",
+                    "-",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
             encode = subprocess.Popen(
-                [self._ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-                 "-f", "rawvideo", "-vcodec", "rawvideo",
-                 "-s", f"{output_size[0]}x{output_size[1]}",
-                 "-pix_fmt", "rgba", "-r", f"{fps}", "-i", "-",
-                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                 "-preset", "medium", "-crf", "18", self._output_path],
-                stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE)
+                [
+                    self._ffmpeg,
+                    "-y",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "rawvideo",
+                    "-vcodec",
+                    "rawvideo",
+                    "-s",
+                    f"{output_size[0]}x{output_size[1]}",
+                    "-pix_fmt",
+                    "rgba",
+                    "-r",
+                    f"{fps}",
+                    "-i",
+                    "-",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-preset",
+                    "medium",
+                    "-crf",
+                    "18",
+                    self._output_path,
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+
+            overlay_item = (
+                RecordingOverlayItem(self._overlay)
+                if self._overlay is not None
+                and (self._outline_opacity or self._actuations_opacity)
+                else None
+            )
 
             frame_bytes = width * height * 4
             frame_index = 0
@@ -174,23 +253,32 @@ class AlignedVideoExporter(QObject):
                 chunk = decode.stdout.read(frame_bytes)
                 if len(chunk) < frame_bytes:
                     break
-                source = QImage(chunk, width, height,
-                                QImage.Format_RGBA8888)
+                source = QImage(chunk, width, height, QImage.Format_RGBA8888)
+                position_ms = frame_index * 1000.0 / fps
                 if self._aligned:
                     warped = get_transformed_frame(
-                        source, scene_rect, bounding, transform, warp_size)
+                        source, scene_rect, bounding, transform, warp_size
+                    )
                 else:
                     warped = source
-                frame = self._crop_frame(warped, scene_rect, warp_size,
-                                         output_size,
-                                         frame_index * 1000.0 / fps)
+
+                # Overlay before the crop, so the crop keeps it registered.
+                if overlay_item is not None:
+                    self._paint_overlay(
+                        overlay_item, warped, scene_rect, warp_size, position_ms
+                    )
+
+                frame = self._crop_frame(
+                    warped, scene_rect, warp_size, output_size, position_ms
+                )
                 frame_data = frame.constBits()
                 expected_bytes = output_size[0] * output_size[1] * 4
                 if frame_data is None or len(frame_data) != expected_bytes:
                     raise RuntimeError(
                         f"Frame {frame_index} produced "
                         f"{0 if frame_data is None else len(frame_data)} "
-                        f"bytes (expected {expected_bytes})")
+                        f"bytes (expected {expected_bytes})"
+                    )
                 try:
                     encode.stdin.write(frame_data)
                 except OSError:
@@ -205,20 +293,20 @@ class AlignedVideoExporter(QObject):
                         detail = ""
                     raise RuntimeError(
                         f"Encoder exited at frame {frame_index}"
-                        + (f": {detail}" if detail
-                           else " (no error output captured)"))
+                        + (f": {detail}" if detail else " (no error output captured)")
+                    )
                 frame_index += 1
                 if frame_index % 60 == 0:
-                    self.progress.emit(
-                        f"Exporting… {frame_index / fps:.0f}s processed")
+                    self.progress.emit(f"Exporting… {frame_index / fps:.0f}s processed")
 
             decode.stdout.close()
             encode.stdin.close()
             encode.wait()
             if encode.returncode != 0:
                 _, err = encode.communicate()
-                raise RuntimeError(err.decode("utf-8", errors="ignore")
-                                   or "ffmpeg encode failed")
+                raise RuntimeError(
+                    err.decode("utf-8", errors="ignore") or "ffmpeg encode failed"
+                )
             logger.info(f"Export complete: {self._output_path}")
             self.finished.emit(self._output_path)
         except Exception as e:
@@ -229,8 +317,25 @@ class AlignedVideoExporter(QObject):
                 if process is not None and process.poll() is None:
                     process.kill()
 
-    def _crop_frame(self, warped, scene_rect, warp_size, output_size,
-                    position_ms):
+    def _paint_overlay(self, overlay_item, warped, scene_rect, warp_size, position_ms):
+        """Paint the device overlay, with the channels actuated at
+        ``position_ms``, onto the warped frame (scene coords -> warp
+        pixels, as the warp itself maps them)."""
+        overlay_item.set_display(
+            self._overlay.channels_at(position_ms),
+            self._outline_opacity,
+            self._actuations_opacity,
+        )
+
+        painter = QPainter(warped)
+        painter.scale(
+            warp_size[0] / scene_rect.width(), warp_size[1] / scene_rect.height()
+        )
+        painter.translate(-scene_rect.x(), -scene_rect.y())
+        overlay_item.paint(painter)
+        painter.end()
+
+    def _crop_frame(self, warped, scene_rect, warp_size, output_size, position_ms):
         """Crop the warped frame to the region holding at ``position_ms``
         (scene coords -> warp pixels), scaled to the constant output size."""
         region = roi_at(self._roi_keyframes, position_ms)
@@ -251,12 +356,16 @@ class AlignedVideoExporter(QObject):
                 # WHOLE image.
                 raise RuntimeError(
                     f"Region of interest {tuple(region)} lies outside the "
-                    "aligned frame — redraw it in the viewer")
+                    "aligned frame — redraw it in the viewer"
+                )
             frame = warped.copy(pixel_rect)
         if (frame.width(), frame.height()) != output_size:
-            frame = frame.scaled(output_size[0], output_size[1],
-                                 Qt.AspectRatioMode.IgnoreAspectRatio,
-                                 Qt.TransformationMode.SmoothTransformation)
+            frame = frame.scaled(
+                output_size[0],
+                output_size[1],
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
         if frame.format() != QImage.Format_RGBA8888:
             frame = frame.convertToFormat(QImage.Format_RGBA8888)
         return frame

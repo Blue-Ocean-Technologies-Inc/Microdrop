@@ -65,6 +65,7 @@ from ...controllers.camera_controller import CameraController
 from ...default_settings import video_key
 from ...models.camera import CameraModel
 from ...models.media import MediaType
+from ...models.recording_overlay import RecordingOverlayTimeline
 from ...utils.capture import ImageSaver, get_transformed_frame
 from ...utils.frame_luma import frame_centre_luma
 from ...utils.recording.factory import build_recorder
@@ -1303,6 +1304,7 @@ class CameraControlWidget(QWidget):
         # to the actual camera resolution and frame rate.
         def start_recorder(sync_button=False):
             self.recorder = self._build_recorder(_resolution, fps)
+            self.recorder.overlay_timeline = self._recording_overlay_timeline()
             self.recorder.start(recording_path, _resolution, fps)
             self.camera_device.hold_restarts = True
             self.controller.recording_started()
@@ -1319,6 +1321,26 @@ class CameraControlWidget(QWidget):
             return
 
         start_recorder()
+
+    def _recording_overlay_timeline(self):
+        """A fresh device outline + actuation timeline for the recording
+        about to start, already started — on the GUI thread, before the
+        recorder can mark its time origin; None while no device is loaded."""
+        interaction_service = self.scene.interaction_service
+
+        if (
+            interaction_service is None
+            or interaction_service.electrode_view_layer is None
+        ):
+            return None
+
+        timeline = RecordingOverlayTimeline(
+            electrodes=self.model.electrodes,
+            path_scale=interaction_service.electrode_view_layer.path_scale,
+        )
+        timeline.start()
+
+        return timeline
 
     def video_record_stop(self):
         logger.info("Stopping video recorder...")

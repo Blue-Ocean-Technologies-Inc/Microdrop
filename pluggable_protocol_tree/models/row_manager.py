@@ -18,6 +18,7 @@ active column set.
 """
 
 # Standard library imports.
+from contextlib import contextmanager
 from typing import Iterator, List, Optional, Tuple
 
 # Enthought library imports.
@@ -95,6 +96,13 @@ class RowManager(RowManagerPersistenceMixin, RowManagerClipboardMixin, HasTraits
         "tracker observes this for per-cell diff bookkeeping."
     )
 
+    #: Brackets one user action's edits for the edit history: fired with the
+    #: action's name ("Paste", "Bulk Set") before its first mutation and with
+    #: "" after its last, so the history records the action as one named
+    #: entry. Fire it through ``named_edit``; unbracketed edits get a name
+    #: inferred from what changed.
+    edit_action = Event(Str)
+
     #: Per-row cell values stashed (keyed by row uuid) when a column set is
     #: removed at runtime (see ``rebuild_columns``), so a later re-add of the
     #: same columns restores the values a rebuilt tree would otherwise reset
@@ -124,6 +132,17 @@ class RowManager(RowManagerPersistenceMixin, RowManagerClipboardMixin, HasTraits
             base=GroupRow,
             name="ProtocolGroupRow",
         )
+
+    @contextmanager
+    def named_edit(self, name):
+        """Record the edits made inside the block as one history entry
+        called ``name``."""
+        self.edit_action = name
+
+        try:
+            yield
+        finally:
+            self.edit_action = ""
 
     # --- tree lookup ---
 
@@ -221,6 +240,78 @@ class RowManager(RowManagerPersistenceMixin, RowManagerClipboardMixin, HasTraits
         for offset, row in enumerate(rows):
             target.insert_row(target_index + offset, row)
         self.rows_changed = True
+
+    def _resolve_move_rows(self, paths, target_parent_path, target_index):
+        """The ``(paths, index)`` that ``move_rows`` hands to ``move``, or None
+        when the move is refused or would change nothing.
+
+        ``paths`` is normalized like a scoped run (stale paths skipped, rows
+        under another moved row dropped, tree order), and ``target_index`` —
+        a position among the target's children as they are now — becomes the
+        position once the moved rows have left."""
+        paths = self.run_scope_roots(paths)
+        target_parent_path = tuple(target_parent_path)
+
+        if not paths:
+            return None
+
+        # A group cannot move into itself or below one of its own rows.
+        if any(target_parent_path[: len(p)] == p for p in paths):
+            return None
+
+        try:
+            target = self._parent_for_path(target_parent_path)
+        except (IndexError, ValueError):
+            return None
+
+        child_count = len(target.children)
+
+        if target_index is None or not 0 <= target_index <= child_count:
+            target_index = child_count
+
+        rows = [self.get_row(p) for p in paths]
+        rows_above_target = sum(
+            1
+            for row in rows
+            if row.parent is target and target.children.index(row) < target_index
+        )
+        final_index = target_index - rows_above_target
+
+        landing = target.children[final_index : final_index + len(rows)]
+
+        if len(landing) == len(rows) and all(a is b for a, b in zip(landing, rows)):
+            return None
+
+        return paths, final_index
+
+    def can_move_rows(self, paths, target_parent_path, target_index):
+        """True when ``move_rows`` with the same arguments would act."""
+        return (
+            self._resolve_move_rows(paths, target_parent_path, target_index) is not None
+        )
+
+    def move_rows(self, paths, target_parent_path, target_index=None):
+        """Move the rows at ``paths`` as one block, in tree order, to sit
+        before child ``target_index`` of the group at ``target_parent_path``
+        (``None`` appends). The index counts the target's children as they
+        are before the move — what a drop between two rows points at.
+
+        A row selected together with its own group moves with the group,
+        once. Refused (None, nothing fires) for a move into one of the moved
+        groups or below one, and for a move that leaves every row where it
+        is. Re-parents the live row objects through ``move``. Returns the
+        rows' new paths."""
+        resolved = self._resolve_move_rows(paths, target_parent_path, target_index)
+
+        if resolved is None:
+            return None
+
+        paths, final_index = resolved
+        rows = [self.get_row(p) for p in paths]
+
+        self.move(paths, tuple(target_parent_path), final_index)
+
+        return [tuple(row.path) for row in rows]
 
     def _normalize_fold_paths(self, paths: List[Path]) -> Optional[List[Path]]:
         """The subset of ``paths`` that ``fold_into_group`` would wrap:

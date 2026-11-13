@@ -150,6 +150,17 @@ PHASE_NAVIGATION_STATE = "ui/device_viewer/phase_navigation_state"
 # device_viewer/models/step_params_commit.py.
 STEP_PARAMS_COMMIT = "ui/device_viewer/step_params_commit"
 
+# Every sidebar setting a step stores: the commit message's fields bar the
+# step id. The sidebar's dirty check, step load, and commit all read this,
+# so a setting added to the message is covered by each (#969).
+STEP_PARAM_NAMES = tuple(
+    name for name in StepParamsCommitMessage.model_fields if name != "step_id"
+)
+
+# Quiet period after the last sidebar edit before auto-commit writes it to
+# the selected step, so a held spinner publishes once, not per tick.
+AUTO_COMMIT_DEBOUNCE_MS = 300
+
 # Ask the Device viewer to load an SVG. Lets other plugins (e.g. the legacy
 # protocol import) switch devices without reaching into this one.
 DEVICE_VIEWER_LOAD_SVG_REQUEST = "ui/device_viewer/load_svg_request"
@@ -352,6 +363,14 @@ GAMEPAD_PREFERENCES_MOVED_KEY = "gamepad_preferences_moved"
 # item's alignment geometry, letting viewers reproduce the device-aligned
 # (perspective-warped) view of the raw camera file on demand.
 RECORDING_TRANSFORM_SIDECAR_SUFFIX = ".transform.json"
+
+# Sidecar written next to every recording alongside the transform sidecar:
+# the device's electrode geometry in scene coordinates plus the timeline of
+# actuated channels, letting the recording viewer redraw the device viewer's
+# outline and actuations over the device-aligned video. Bump the version on
+# any incompatible schema change.
+RECORDING_OVERLAY_SIDECAR_SUFFIX = ".overlay.json"
+RECORDING_OVERLAY_SIDECAR_VERSION = 1
 
 # ---------------------------------------------------------------------------
 # Video recording preferences (camera preferences node). The recorder is
@@ -1031,3 +1050,11 @@ VOLUME_READOUT_NOISE_UL = 0.1
 CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH = (
     Path(__file__).parent / "resources" / "camera_alignment.html"
 )
+
+#: Help > Tutorials page, built from resources/device_viewer_basics.src.html.
+DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "device_viewer_basics.html"
+)
+
+#: Help > Tutorials page, built from resources/zones.src.html.
+ZONES_TUTORIAL_HTML_PATH = Path(__file__).parent / "resources" / "zones.html"
