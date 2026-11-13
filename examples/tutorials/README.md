@@ -19,7 +19,7 @@ its own plugin.
 From `microdrop-py/src` (`QT_QPA_PLATFORM=offscreen` traces glyphs headless):
 
 ```bash
-pixi run python -m examples.tutorials.new_tutorial <plugin_package> <slug> "<Title>"
+pixi run python -m examples.tutorials.new_tutorial <plugin_package> <slug> "<Title>" --section <section>
 # edit <plugin_package>/resources/<slug>.src.html, then
 pixi run python -m examples.tutorials.build_tutorial <plugin_package>/resources/<slug>.src.html
 pixi run python -m examples.tutorials.build_tutorial <src> --check   # is the built file current?
@@ -33,7 +33,8 @@ The scaffolder is idempotent. It:
 3. adds `<SLUG>_TUTORIAL_HTML_PATH` to `<plugin>/consts.py`;
 4. makes `<plugin>/plugin.py` contribute the page to the Help menu (see
    below): it adds the `tutorials` trait and `_tutorials_default` the first
-   time, and one more `TutorialEntry` for each later tutorial.
+   time, and one more `TutorialEntry` for each later tutorial, with the
+   `order` of the `--section` you picked (see below).
 
 Run `ruff check --fix` and `ruff format` on the touched `consts.py` and
 `plugin.py` before committing; the pre-commit hooks finish import order and
@@ -43,24 +44,49 @@ section headers.
 
 `user_help_plugin` offers the `TUTORIALS` extension point. A plugin
 contributes `TutorialEntry` records to it, and Help ▸ Tutorials lists every
-contribution sorted by title. The menu follows plugins that are loaded or
+contribution in learning order. The menu follows plugins that are loaded or
 unloaded while the app runs. `user_help_plugin` never imports the
 contributing plugins.
 
 ```python
 from traits.api import List
-from user_help_plugin.consts import TUTORIALS, TutorialEntry   # the only import needed
+from user_help_plugin.consts import TUTORIAL_ORDER_HARDWARE, TUTORIALS, TutorialEntry
 from .consts import HEATER_TUTORIAL_HTML_PATH
 
 class HeaterPlugin(Plugin):
     tutorials = List(contributes_to=TUTORIALS)
 
     def _tutorials_default(self):
-        return [TutorialEntry(title="Heater Tutorial", path=HEATER_TUTORIAL_HTML_PATH)]
+        return [
+            TutorialEntry(
+                title="Heater Tutorial",
+                path=HEATER_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_HARDWARE + 10,
+            )
+        ]
 ```
 
 The title is both the menu label (with `...` appended; a `&` shows as
 written) and the dialog title.
+
+The `order` places the entry on the learning path. `user_help_plugin.consts`
+names one section per hundred, and the menu puts a separator between
+sections:
+
+| Section | Constant | Bundled tutorials |
+|---|---|---|
+| Start here | `TUTORIAL_ORDER_START` (0) | Getting Started with MicroDrop |
+| Device | `TUTORIAL_ORDER_DEVICE` (100) | Device Viewer, Camera & Alignment, Recording Viewer, Zones |
+| Protocols | `TUTORIAL_ORDER_PROTOCOLS` (200) | Protocol Tree |
+| Hardware | `TUTORIAL_ORDER_HARDWARE` (300) | Dropbot Status & Controls |
+| Analysis | `TUTORIAL_ORDER_ANALYSIS` (400) | Image Analysis |
+| Managing the app | `TUTORIAL_ORDER_MANAGEMENT` (500) | Plugin Management |
+| Reference | `TUTORIAL_ORDER_REFERENCE` (600) | Shortcuts, Gamepad & Touch Assist; Help, Logs & Saved Files |
+
+Add an offset to slot an entry within its section (the Device section uses
++0, +10, +15, +20); entries with the same order are sorted by title. An entry
+that sets no `order` gets `TUTORIAL_ORDER_DEFAULT` (1000): a section of its
+own after all of these, sorted by title, so older plugins need no change.
 
 ## Commit both files
 

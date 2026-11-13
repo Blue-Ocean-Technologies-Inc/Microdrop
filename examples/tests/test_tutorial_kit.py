@@ -31,6 +31,7 @@ from envisage.api import Application
 from device_viewer.consts import (
     CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
+    RECORDING_VIEWER_TUTORIAL_HTML_PATH,
     ZONES_TUTORIAL_HTML_PATH,
 )
 from device_viewer.plugin import DeviceViewerPlugin
@@ -47,6 +48,7 @@ from examples.tutorials.build_tutorial import (
     render_tutorial,
 )
 from examples.tutorials.new_tutorial import (
+    SECTIONS,
     SRC_ROOT,
     _add_imports,
     scaffold_tutorial,
@@ -61,6 +63,7 @@ from plugin_management.plugin import PluginManagementPlugin
 from user_help_plugin.consts import (
     GETTING_STARTED_TUTORIAL_HTML_PATH,
     HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
+    TUTORIAL_ORDER_HARDWARE,
 )
 from user_help_plugin.plugin import UserHelpPlugin
 
@@ -88,6 +91,9 @@ PLUGIN_MANAGEMENT_SOURCE = PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH.with_name(
     "plugin_management.src.html"
 )
 ZONES_SOURCE = ZONES_TUTORIAL_HTML_PATH.with_name("zones.src.html")
+RECORDING_VIEWER_SOURCE = RECORDING_VIEWER_TUTORIAL_HTML_PATH.with_name(
+    "recording_viewer.src.html"
+)
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
 #: A plugin.py with no tutorials yet, as new_tutorial.py first meets it.
@@ -200,6 +206,27 @@ def test_scaffold_adds_a_second_tutorial_to_the_same_plugin(scaffold_root):
     ]
 
 
+def test_scaffold_places_tutorials_in_a_section(scaffold_root):
+    for slug in ("demo", "more"):
+        scaffold_tutorial(
+            FIXTURE_PLUGIN, slug, slug.title(), scaffold_root, False, "hardware"
+        )
+
+    plugin_module = importlib.import_module(f"{FIXTURE_PLUGIN}.plugin")
+    orders = [entry.order for entry in plugin_module.FixturePlugin().tutorials]
+
+    assert SECTIONS == [
+        "start",
+        "device",
+        "protocols",
+        "hardware",
+        "analysis",
+        "management",
+        "reference",
+    ]
+    assert orders == [TUTORIAL_ORDER_HARDWARE, TUTORIAL_ORDER_HARDWARE]
+
+
 def test_scaffold_adds_to_a_list_without_a_trailing_comma(scaffold_root):
     package = scaffold_root / FIXTURE_PLUGIN
     (package / "consts.py").write_text(CONSTS_WITH_TUTORIAL_FIXTURE)
@@ -292,17 +319,20 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
     application.stop()
 
+    # The learning path: start here, device, protocols, hardware, analysis,
+    # managing the app, reference.
     assert [entry.title for entry in entries] == [
-        "Camera & Alignment Tutorial",
-        "Device Viewer Tutorial",
-        "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
-        "Help, Logs & Saved Files Tutorial",
+        "Device Viewer Tutorial",
+        "Camera & Alignment Tutorial",
+        "Recording Viewer Tutorial",
+        "Zones Tutorial",
+        "Protocol Tree Tutorial",
+        "Dropbot Status & Controls Tutorial",
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
-        "Protocol Tree Tutorial",
         "Shortcuts, Gamepad & Touch Assist Tutorial",
-        "Zones Tutorial",
+        "Help, Logs & Saved Files Tutorial",
     ]
 
     for entry in entries:
@@ -346,6 +376,10 @@ def test_device_viewer_tutorial_rebuilds_identically():
 
 def test_zones_tutorial_rebuilds_identically():
     assert is_up_to_date(ZONES_SOURCE)
+
+
+def test_recording_viewer_tutorial_rebuilds_identically():
+    assert is_up_to_date(RECORDING_VIEWER_SOURCE)
 
 
 def _clip_page(clip="t_media/a.webm", poster=""):
@@ -548,8 +582,8 @@ def test_build_standalone_writes_a_second_file(tmp_path):
     out.parent.mkdir()
 
     assert main([str(source), "--standalone", str(out)]) == 0
-    assert 'src="t_media/a.webp"' in (tmp_path / "t.html").read_text()
-    assert 'src="data:image/webp;base64,' in out.read_text()
+    assert 'src="t_media/a.webp"' in (tmp_path / "t.html").read_text(encoding="utf-8")
+    assert 'src="data:image/webp;base64,' in out.read_text(encoding="utf-8")
 
 
 def test_a_page_over_budget_fails_the_build(tmp_path):
