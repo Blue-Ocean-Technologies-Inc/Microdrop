@@ -728,7 +728,7 @@ MIGRATED_ENDPOINT_PRESET_SUFFIX = "endpoint"
 ALIGNMENT_QUAD_TOLERANCE = 0.01
 
 #: Height of the window's Presets strip.
-ALIGNMENT_PRESETS_STRIP_HEIGHT_PX = 180
+ALIGNMENT_PRESETS_STRIP_HEIGHT_PX = 230
 
 #: How a preset's save time shows in the table (local time).
 ALIGNMENT_PRESET_SAVED_AT_FORMAT = "%Y-%m-%d %H:%M"
