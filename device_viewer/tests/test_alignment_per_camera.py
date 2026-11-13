@@ -471,3 +471,43 @@ def test_presets_table_follows_a_camera_switch(controller, model, cameras):
 
     assert "shape differs" in row.warning
     assert table.setup_notice == ""
+
+
+# ---------------------------------------------------------------------- #
+# Review of #988: regressions
+# ---------------------------------------------------------------------- #
+def _scene(points):
+    return [list(point.toTuple()) for point in points]
+
+
+def _land_glide(controller):
+    """Run the Go To Endpoint glide to its end without a timer."""
+
+    while controller._align_timer is not None and controller._align_timer.isActive():
+        controller._on_align_animation_tick()
+
+
+def test_apply_keeps_a_working_alignment_only_last_used_holds(
+    controller, model, cameras
+):
+    controller.endpoint_store.save("2x3device", ENDPOINT)
+    _take_charge(controller, model, cameras)
+    preset = controller.preset_store.save_named(
+        "bench", _camera_preset(CAM_A, "camera_device")
+    )
+
+    controller.apply_preset(preset)
+    _land_glide(controller)
+
+    # The working alignment survives as a "Before" preset, although the
+    # last-used record held it until the glide landed.
+    (kept,) = [
+        preset
+        for preset in controller.preset_store.named_for("2x3device")
+        if preset.name.startswith('Before "bench"')
+    ]
+
+    assert kept.scene_quad == _scene(SCENE_A)
+    assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
+        _scene(SCENE_B)
+    )

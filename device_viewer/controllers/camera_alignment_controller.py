@@ -75,6 +75,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
 # Local imports.
 from ..consts import (
     ALIGNMENT_PRESET_KIND_LAST_USED,
+    ALIGNMENT_PRESET_KIND_NAMED,
     ALIGNMENT_PRESET_SAVED_AT_FORMAT,
     ALIGNMENT_PRESET_SCOPE_CAMERA,
     ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE,
@@ -788,8 +789,10 @@ class CameraAlignmentWorkflowController(HasTraits):
         return self.preset_store.save_named(name, snapshot)
 
     def _held_by_a_preset(self, snapshot):
-        """Whether a preset of the device holds ``snapshot``'s endpoint and,
-        when it has one, its camera alignment too."""
+        """Whether a named preset of the device holds ``snapshot``'s
+        endpoint and, when it has one, its camera alignment too. A last-used
+        record does not count: it is overwritten once the applied preset
+        lands."""
         return any(
             quads_close(preset.endpoint_quad, snapshot.endpoint_quad)
             and (
@@ -801,7 +804,8 @@ class CameraAlignmentWorkflowController(HasTraits):
                 )
             )
             for preset in self.preset_store.presets
-            if preset.device_key == snapshot.device_key
+            if preset.kind == ALIGNMENT_PRESET_KIND_NAMED
+            and preset.device_key == snapshot.device_key
         )
 
     def _preset_camera_quad_now(self, preset, saved_frame=False):
