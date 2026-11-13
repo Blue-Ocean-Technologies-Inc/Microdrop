@@ -73,6 +73,13 @@ PROTOCOL_MENU_ID = f"{PKG}.protocol_menu"
 # Clipboard MIME type for copy/cut/paste of protocol rows
 PROTOCOL_ROWS_MIME = "application/x-microdrop-rows+json"
 
+# Drag MIME type for moving rows within the protocol tree: the dragged rows'
+# paths, never their contents — a drop moves the live rows.
+PROTOCOL_ROW_PATHS_DRAG_MIME = "application/x-microdrop-row-paths+json"
+
+# How long a row drag hovers a collapsed group before the tree expands it.
+DROP_AUTO_EXPAND_DELAY_MS = 700
+
 # QFileDialog name filter shared by save / load / import dialogs
 PROTOCOL_FILE_DIALOG_FILTER = "Protocol JSON (*.json)"
 

@@ -17,13 +17,16 @@ rowsInserted/dataChanged can be added when performance matters.
 """
 
 # Standard library imports.
+import json
+from contextlib import contextmanager
 from functools import partial
 
 # Enthought library imports.
-from pyface.qt.QtCore import QAbstractItemModel, QModelIndex, Qt, Signal
+from pyface.qt.QtCore import QAbstractItemModel, QMimeData, QModelIndex, Qt, Signal
 from pyface.qt.QtGui import QBrush, QColor
 
 # Microdrop package imports.
+from pluggable_protocol_tree.consts import PROTOCOL_ROW_PATHS_DRAG_MIME
 from pluggable_protocol_tree.models.row import GroupRow
 
 # Microdrop style imports.
@@ -191,22 +194,142 @@ class MvcTreeModel(QAbstractItemModel):
         return False
 
     def flags(self, index):
+        # Empty space is the protocol itself: rows dropped there go to its end.
         if not index.isValid():
-            return Qt.NoItemFlags
+            return Qt.ItemIsDropEnabled
         col = self._manager.columns[index.column()]
         row = index.internalPointer()
-        flags = col.view.get_flags(row)
+        flags = col.view.get_flags(row) | Qt.ItemIsDragEnabled
         # Per-row column locks (issue #541): while any owner holds a
         # lock on this col_id, the cell is inert. Both flags must go —
         # checkbox cells are ItemIsUserCheckable, never ItemIsEditable.
         if row.is_column_locked(col.model.col_id):
             flags &= ~(Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
+
+        # Only a group takes rows dropped onto it; on a step the drop lands
+        # above or below it.
+        if isinstance(row, GroupRow):
+            flags |= Qt.ItemIsDropEnabled
+
         return flags
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
             return self._manager.columns[section].model.col_name
         return None
+
+    # ------------ drag and drop: moving rows ------------
+
+    def supportedDragActions(self):
+        return Qt.MoveAction
+
+    def supportedDropActions(self):
+        return Qt.MoveAction
+
+    def mimeTypes(self):
+        return [PROTOCOL_ROW_PATHS_DRAG_MIME]
+
+    def mimeData(self, indexes):
+        """Carry the dragged rows' paths, one per row — Qt passes every
+        selected cell."""
+        paths = sorted(
+            {
+                tuple(index.internalPointer().path)
+                for index in indexes
+                if index.isValid()
+            }
+        )
+        data = QMimeData()
+        data.setData(PROTOCOL_ROW_PATHS_DRAG_MIME, json.dumps(paths).encode())
+
+        return data
+
+    def canDropMimeData(self, data, action, row, column, parent):
+        """Whether the drop moves anything; False shows the forbidden cursor
+        (a group dropped into itself, rows dropped where they already are)."""
+        paths = self._dragged_paths(data)
+
+        if paths is None:
+            return False
+
+        return self._manager.can_move_rows(
+            paths, self._path_of(parent), self._drop_index(row)
+        )
+
+    def dropMimeData(self, data, action, row, column, parent):
+        """Move the dragged rows to the drop position as one named edit —
+        onto a group appends them to it, between rows inserts them there."""
+        if action == Qt.IgnoreAction:
+            return True
+
+        paths = self._dragged_paths(data)
+        parent_path = self._path_of(parent)
+        index = self._drop_index(row)
+
+        if paths is None or not self._manager.can_move_rows(paths, parent_path, index):
+            return False
+
+        with (
+            self._manager.named_edit(self._move_edit_name(paths)),
+            self._keeping_persistent_indexes(),
+        ):
+            self._manager.move_rows(paths, parent_path, index)
+
+        return True
+
+    @staticmethod
+    def _dragged_paths(data):
+        """The row paths a drag carries, or None for a foreign drag."""
+        if not data.hasFormat(PROTOCOL_ROW_PATHS_DRAG_MIME):
+            return None
+
+        raw = bytes(data.data(PROTOCOL_ROW_PATHS_DRAG_MIME)).decode()
+
+        return [tuple(path) for path in json.loads(raw)]
+
+    @staticmethod
+    def _path_of(index):
+        return tuple(index.internalPointer().path) if index.isValid() else ()
+
+    @staticmethod
+    def _drop_index(row):
+        # Qt passes -1 for a drop onto a group or onto empty space: append.
+        return row if row >= 0 else None
+
+    def _move_edit_name(self, paths):
+        """'Move Step', 'Move Group', 'Move Steps', or 'Move Rows' for a mix."""
+        rows = [self._manager.get_row(p) for p in self._manager.run_scope_roots(paths)]
+        groups = sum(1 for row in rows if isinstance(row, GroupRow))
+
+        if len(rows) == 1:
+            return "Move Group" if groups else "Move Step"
+
+        return "Move Rows" if groups else "Move Steps"
+
+    @contextmanager
+    def _keeping_persistent_indexes(self):
+        """Bracket a structural edit of the manager so every persistent index
+        — the view's selection, current index and expanded groups — follows
+        its row to the row's new position, instead of the bare
+        ``layoutChanged`` a ``rows_changed`` emits, which leaves them on
+        stale positions."""
+        self.layoutAboutToBeChanged.emit()
+
+        old_indexes = self.persistentIndexList()
+        pinned = [(index.internalPointer(), index.column()) for index in old_indexes]
+        self._suppress_rows_changed = True
+
+        try:
+            yield
+        finally:
+            self._suppress_rows_changed = False
+            self.changePersistentIndexList(
+                old_indexes,
+                [self._index_for_cell(row, column) for row, column in pinned],
+            )
+            self._wire_row_observers()
+            self.layoutChanged.emit()
+            self.structure_changed.emit()
 
     # ------------ helpers ------------
 
