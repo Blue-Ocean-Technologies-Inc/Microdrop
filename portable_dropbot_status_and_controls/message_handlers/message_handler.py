@@ -13,11 +13,13 @@ import json
 from datetime import datetime
 
 # Enthought library imports.
+from pyface.api import GUI
 from traits.api import Instance
 
 # Microdrop package imports.
 from device_viewer.consts import VolumeEstimateMessage
-from portable_dropbot_controller.consts import FLUORESCENCE_LED_RAW_MAX
+from microdrop_application.dialogs.pyface_wrapper import error, warning
+from portable_dropbot_controller.consts import FLUORESCENCE_LED_RAW_MAX, ChipLockFailed
 from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
@@ -180,7 +182,9 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
             # pogo pads report 1 while pressed (chip locked).
             self.model.tray_out_reported = mechanisms.get("cabin") == 1
             self.model.magnet_engaged_reported = mechanisms.get("mag") == 1
-            self.model.chip_locked_reported = (
+            # lpush/rpush are not known to follow a smart engage, so the
+            # backend reports that separately.
+            self.model.chip_locked_reported = data.get("pads_smart_engaged", False) or (
                 mechanisms.get("lpush") == 1 and mechanisms.get("rpush") == 1
             )
 
@@ -195,6 +199,28 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         self._record_alarm(
             f"{data.get('context', 'operation')}: {data.get('error', 'failed')}"
         )
+
+    def _on_chip_lock_failed_triggered(self, body):
+        """Tell the operator a smart lock or pad retract failed, and put the
+        lock toggle back on the reported state."""
+        failure = ChipLockFailed.model_validate_json(body)
+        message = f"Chip {failure.action} failed: {failure.error}."
+
+        self._record_alarm(message)
+        self.model.chip_locked = self.model.chip_locked_reported
+
+        if failure.pads_may_be_pressed:
+            GUI.invoke_later(
+                warning,
+                None,
+                f"{message}\n\nThe pogo pads may still be pressing the chip. Check "
+                "the instrument, then unlock the chip to retract them once it is "
+                "safe.",
+                title="Chip Pads May Still Be Pressed",
+                cancel=False,
+            )
+        else:
+            GUI.invoke_later(error, None, message, title="Chip Lock Failed")
 
     def _record_alarm(self, text):
         """Show text as the last alarm and push it, timestamped, onto the

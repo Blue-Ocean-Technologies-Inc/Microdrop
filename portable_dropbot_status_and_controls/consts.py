@@ -24,6 +24,8 @@ from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 from portable_dropbot_controller.consts import (
     CHIP_DETECT_RULE_ANY_POGO,
     CHIP_DETECT_RULE_BOTH_POGOS,
+    CHIP_ENGAGE_MODE_CLASSIC,
+    CHIP_ENGAGE_MODE_SMART,
     FLUORESCENCE_CAPTURE_DONE,
     FLUORESCENCE_CAPTURE_PROGRESS,
     MAGNET_ENGAGE_UPDATED,
@@ -61,6 +63,10 @@ FAN_BOARD_LABELS = {
 CHIP_DETECT_RULE_LABELS = {
     CHIP_DETECT_RULE_BOTH_POGOS: "Both pogo pads touching the chip",
     CHIP_DETECT_RULE_ANY_POGO: "At least one pogo pad touching the chip",
+}
+CHIP_ENGAGE_MODE_LABELS = {
+    CHIP_ENGAGE_MODE_CLASSIC: "Classic",
+    CHIP_ENGAGE_MODE_SMART: "Smart",
 }
 #: Magnet engage position preference until a value is read from the board
 #: or entered (mm); the vendor's bench box engages at 14 mm.

@@ -9,10 +9,10 @@
 # Thanks for using Microdrop open source!
 
 """The Portable DropBot Settings preferences tab: which board the status
-pane's fan toggle drives, which pogo contacts count as a chip, the droplet
-detection threshold, the magnet engage position with its board Read /
-Write / Preset to flash, and the preset quick-pick values for PMT gain,
-heater target and motor moves."""
+pane's fan toggle drives, which pogo contacts count as a chip, how a chip
+lock presses the pads, the droplet detection threshold, the magnet engage
+position with its board Read / Write / Preset to flash, and the preset
+quick-pick values for PMT gain, heater target and motor moves."""
 
 # Third-party imports.
 from pydantic import ValidationError
@@ -28,7 +28,9 @@ from microdrop_application.dialogs.pyface_wrapper import YES, confirm
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from portable_dropbot_controller.consts import (
     CHIP_DETECT_RULES,
+    CHIP_ENGAGE_MODES,
     DEFAULT_CHIP_DETECT_RULE,
+    DEFAULT_CHIP_ENGAGE_MODE,
     DEFAULT_FAN_BOARD,
     DROPLET_DETECTION_THRESHOLD_PF,
     DROPLET_DETECTION_THRESHOLD_PF_BOUNDS,
@@ -49,6 +51,7 @@ from microdrop_utils.traitsui_qt_helpers import HoverScrollEnumEditor
 # Local imports.
 from .consts import (
     CHIP_DETECT_RULE_LABELS,
+    CHIP_ENGAGE_MODE_LABELS,
     DEFAULT_GAIN_PRESETS,
     DEFAULT_MAGNET_ENGAGE_MM,
     DEFAULT_MOVE_PRESETS,
@@ -91,6 +94,13 @@ class PortableDropbotSettingsPreferences(PreferencesHelper):
         desc="Which pogo pad contacts count as a chip on the pad",
     )
 
+    #: How a chip lock presses the pogo pads.
+    chip_engage_mode = Enum(
+        DEFAULT_CHIP_ENGAGE_MODE,
+        CHIP_ENGAGE_MODES,
+        desc="How a chip lock presses the pogo pads",
+    )
+
     #: Default capacitance (pF) a channel must read for droplet detection
     #: to count it as holding liquid.
     droplet_detection_threshold_pf = Range(
@@ -114,7 +124,9 @@ class PortableDropbotSettingsPreferences(PreferencesHelper):
     #: Relative motor moves (mm, signed) offered below Move By.
     move_presets = Str(DEFAULT_MOVE_PRESETS)
 
-    @observe("fan_board, chip_detect_rule, droplet_detection_threshold_pf")
+    @observe(
+        "fan_board, chip_detect_rule, chip_engage_mode, droplet_detection_threshold_pf"
+    )
     def _publish_to_app_globals(self, event):
         """Mirror applied changes into app_globals for readers."""
         # The preferences pane edits a copy detached from the node until
@@ -196,6 +208,23 @@ class PortableDropbotSettingsPreferencesPane(PreferencesPane):
             editor=HoverScrollEnumEditor(
                 values=list(CHIP_DETECT_RULES),
                 format_func=CHIP_DETECT_RULE_LABELS.get,
+            ),
+            width=260,
+        ),
+        Item("_"),
+        create_item_label_group(
+            "chip_engage_mode",
+            label_text="Chip engage mode",
+            tooltip=(
+                "How locking the chip presses the pogo pads. Classic presses both "
+                "pads to their fixed position. Smart lowers each pad until it "
+                "touches the chip, then presses a little further; it needs both "
+                "pads homed. Unlocking always releases the pads, whichever mode "
+                "locked them."
+            ),
+            editor=HoverScrollEnumEditor(
+                values=list(CHIP_ENGAGE_MODES),
+                format_func=CHIP_ENGAGE_MODE_LABELS.get,
             ),
             width=260,
         ),
