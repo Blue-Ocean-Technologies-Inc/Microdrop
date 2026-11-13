@@ -26,10 +26,21 @@ from traits.api import List
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
-from user_help_plugin.consts import TUTORIALS, TutorialEntry
+from user_help_plugin.consts import (
+    TUTORIAL_ORDER_MANAGEMENT,
+    TUTORIAL_ORDER_REFERENCE,
+    TUTORIALS,
+    TutorialEntry,
+)
 
 # Local imports.
-from .consts import ACTOR_TOPIC_DICT, PKG, SHORTCUTS_TUTORIAL_HTML_PATH, PKG_name
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    PKG,
+    PREFERENCES_TUTORIAL_HTML_PATH,
+    SHORTCUTS_TUTORIAL_HTML_PATH,
+    PKG_name,
+)
 
 
 class MicrodropPlugin(Plugin):
@@ -55,7 +66,8 @@ class MicrodropPlugin(Plugin):
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
-    #: Help > Tutorials entries for the app-wide keys and touch tools.
+    #: Help > Tutorials entries for the app-wide keys, touch tools and
+    #: preferences.
     tutorials = List(contributes_to=TUTORIALS)
 
     ###########################################################################
@@ -95,7 +107,13 @@ class MicrodropPlugin(Plugin):
             TutorialEntry(
                 title="Shortcuts, Gamepad & Touch Assist Tutorial",
                 path=SHORTCUTS_TUTORIAL_HTML_PATH,
-            )
+                order=TUTORIAL_ORDER_REFERENCE,
+            ),
+            TutorialEntry(
+                title="Preferences Tutorial",
+                path=PREFERENCES_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_MANAGEMENT + 10,
+            ),
         ]
 
     ########################################################################
