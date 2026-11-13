@@ -515,7 +515,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         """Reset Camera Perspective threw the live alignment away: the
         camera has no last-used alignment on the device any more."""
         self._live_owned = True
-        self._remember_live_alignment()
+        self._forget_live_alignment()
 
     @observe("model:camera_perspective:transformation")
     def _on_live_alignment_changed(self, event):
@@ -1344,8 +1344,10 @@ class CameraAlignmentWorkflowController(HasTraits):
     def _remember_live_alignment(self):
         """Keep the live alignment as the one last used with its camera on
         its device — only when it is theirs (restored, or changed since by
-        the user). No alignment at all forgets it; one that cannot be
-        converted to camera pixels (no frame) leaves the record alone."""
+        the user). Rects that are incomplete (Align Camera Perspective is
+        placing new ones) or cannot be converted to camera pixels (no
+        frame) leave the record alone; only Reset Camera Perspective
+        forgets it."""
         camera, device_key = self._live_camera, self._live_device_key
 
         if camera is None or not camera.is_known or not device_key:
@@ -1354,34 +1356,45 @@ class CameraAlignmentWorkflowController(HasTraits):
         if not self._live_owned:
             return
 
-        perspective = self.model.camera_perspective
-        has_rects = (
-            len(perspective.reference_rect) == 4
-            and len(perspective.transformed_reference_rect) == 4
+        camera_quad = self._current_camera_quad()
+        scene_quad = self._live_scene_quad()
+
+        if camera_quad is None or scene_quad is None:
+            return
+
+        record = AlignmentPreset(
+            kind=ALIGNMENT_PRESET_KIND_LAST_USED,
+            scope=ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE,
+            device_key=device_key,
+            camera_id=camera.camera_id,
+            camera_label=camera.label,
+            frame_size=self._frame_size(),
+            camera_quad=camera_quad,
+            scene_quad=scene_quad,
+            endpoint_quad=self.endpoint_store.load(device_key),
         )
-        camera_quad = self._current_camera_quad() if has_rects else None
-        scene_quad = self._live_scene_quad() if has_rects else None
 
         try:
-            if not has_rects:
-                self.preset_store.forget_last_used(camera, device_key)
-            elif camera_quad is not None and scene_quad is not None:
-                self.preset_store.remember_last_used(
-                    AlignmentPreset(
-                        kind=ALIGNMENT_PRESET_KIND_LAST_USED,
-                        scope=ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE,
-                        device_key=device_key,
-                        camera_id=camera.camera_id,
-                        camera_label=camera.label,
-                        frame_size=self._frame_size(),
-                        camera_quad=camera_quad,
-                        scene_quad=scene_quad,
-                        endpoint_quad=self.endpoint_store.load(device_key),
-                    )
-                )
+            self.preset_store.remember_last_used(record)
         except (OSError, ValueError) as exc:
             logger.error(
                 f"Could not remember the camera alignment of {camera.label} on "
+                f"{device_key}: {exc}"
+            )
+
+    def _forget_live_alignment(self):
+        """Drop the last-used alignment of the live camera on the live
+        device: Reset Camera Perspective threw it away."""
+        camera, device_key = self._live_camera, self._live_device_key
+
+        if camera is None or not camera.is_known or not device_key:
+            return
+
+        try:
+            self.preset_store.forget_last_used(camera, device_key)
+        except (OSError, ValueError) as exc:
+            logger.error(
+                f"Could not forget the camera alignment of {camera.label} on "
                 f"{device_key}: {exc}"
             )
 

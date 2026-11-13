@@ -511,3 +511,29 @@ def test_apply_keeps_a_working_alignment_only_last_used_holds(
     assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
         _scene(SCENE_B)
     )
+
+
+def test_align_mode_then_a_camera_switch_keeps_the_last_used(
+    controller, model, cameras
+):
+    _take_charge(controller, model, cameras)
+
+    # Align Camera Perspective clears the rects to place new ones.
+    model.mode = "camera-place"
+    _switch(cameras, CAM_B)
+
+    assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
+        _scene(SCENE_A)
+    )
+
+
+def test_align_mode_then_a_device_load_keeps_the_last_used(controller, model, cameras):
+    _take_charge(controller, model, cameras)
+
+    model.mode = "camera-place"
+    model.electrodes.set_electrodes_from_svg_file(str(DEVICES / "90_pin_array.svg"))
+    controller.device_loaded()
+
+    assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
+        _scene(SCENE_A)
+    )
