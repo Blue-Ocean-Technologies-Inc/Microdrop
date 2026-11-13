@@ -292,17 +292,19 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
     application.stop()
 
+    # The learning path: start here, device, protocols, hardware, analysis,
+    # managing the app, reference.
     assert [entry.title for entry in entries] == [
-        "Camera & Alignment Tutorial",
-        "Device Viewer Tutorial",
-        "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
-        "Help, Logs & Saved Files Tutorial",
+        "Device Viewer Tutorial",
+        "Camera & Alignment Tutorial",
+        "Zones Tutorial",
+        "Protocol Tree Tutorial",
+        "Dropbot Status & Controls Tutorial",
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
-        "Protocol Tree Tutorial",
         "Shortcuts, Gamepad & Touch Assist Tutorial",
-        "Zones Tutorial",
+        "Help, Logs & Saved Files Tutorial",
     ]
 
     for entry in entries:
