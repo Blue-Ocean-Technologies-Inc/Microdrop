@@ -1,3 +1,99 @@
+## [v1.44.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.44.0) (2026-11-13)
+
+### Feat
+
+- **portable**: chip engage mode preference and alerts ([`cab4504`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cab4504dd540c9ff2cb7599b80c1da26ba7ca34f))
+- **portable**: smart chip engage in the backend ([`34d3899`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/34d38998d3920b57cb5095b005fe4684aead001a))
+- **demos**: add a Touch mode demo ([`dd28ff4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/dd28ff4315c953cd6428b1477ea7a5c6ebdb7688))
+- **portable**: describe the portable controls ([`9c0a39a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9c0a39af67a664724372eb89dbec76b46dc12f25))
+- **portable**: show Portable DropBot Settings second ([`04b5478`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/04b54780c6c2eb335635bec5fc307664fe90f379))
+- **touch**: scroll tab bars by drag, with larger arrows ([`c188fb4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c188fb44775daff0c064edd8d5a17f2a4e806381))
+- **protocol-tree**: add touch Select mode and a menu button ([`e9eb4b9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e9eb4b9e5cc108201b2492bffc5f469bddee5e06))
+- **touch**: add Help mode to read controls by touch ([`f515d3c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f515d3c697bc42bec4fdf023bdde08a33b9d95e3))
+- **touch**: add Touch mode with steppers and a number pad ([`f7ae6b4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f7ae6b45f3935d03e00306109388c59d3c30fc00))
+- **device_viewer**: overlay device on aligned video ([`bcdd1b1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bcdd1b16227448f32e01cdaeb9a4ab7e97970275))
+- **device_viewer**: record overlay sidecar with video ([`2d9d3ce`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2d9d3ce074e9484b655d8290a8e84a5a9412c187))
+- **protocol-tree**: drag selected rows to move them ([`0bcfc49`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0bcfc491755a3f1d9f1390713f72df94323bcc85))
+- **protocol-tree**: add RowManager.move_rows block move ([`76e3572`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/76e3572a675a48d4bd59aa89f76e9cd8f03ecb28))
+- **device_viewer**: list the Device Viewer tutorial under Help ([`1885a5a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1885a5a20cd98d28e40a7f04237580126f07c67b))
+- **portable**: find droplets with the driver's finder ([`2ed771d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2ed771d958eedde4522a7fedcc634f79cdb97d3c))
+- **protocol-tree**: AutoSave checkbox on the navigation bar ([`b84bd2a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b84bd2adf406a7693e1842792195cc45669ceec7))
+- **quick-actions**: add Undo and Redo toolbar buttons ([`3c56aea`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3c56aea271383b863870fd2bff95868e847a8e3c))
+- **protocol-tree**: let quick actions refresh their tooltips ([`c54da70`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c54da70806d38da34c6acd6c915ae6641c4815d4))
+- **protocol-tree**: undo/redo protocol edits from the pane ([`2959645`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2959645fde1a602e277c55e7040cd347158103a0))
+- **protocol-tree**: record protocol edits in an undo history ([`e53b7f3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e53b7f3f140aa0d555af4bc58d8d30b394886525))
+- **device_viewer**: make Commit to Step a tri-state button ([`1288104`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1288104c5d812d7479edeb56c7bfd01e9c9744c4))
+- **device_viewer**: auto-commit sidebar settings to the step ([`cfedb30`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cfedb306aa142538651fc6e3d7fe6eebdc7e53a6))
+- **protocol-tree**: AutoSave glyph in the status bar, on by default ([`d84da33`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d84da3317875c60e39dbc68ccf6160115fb51ad9))
+- **style**: add the save_clock glyph constant ([`297f77b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/297f77b49412b30edc09f06ccaa97875a20ae0b0))
+- **protocol-tree**: AutoSave toggle on the quick-actions toolbar ([`523f45f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/523f45ffbd3e04343e98c81c3a1159b94e106fdb))
+- **protocol-tree**: add the AutoSave decision model ([`96fd4c1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/96fd4c1eaa8c3722c516681f6d83d7e56d851ce1))
+- **zone_protocol_controls**: zone target protocol column ([`52cf156`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/52cf156ce018876a53f533a91b249a5ac1621668))
+- **pluggable_protocol_tree**: let columns add step electrodes ([`fb2d163`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fb2d163842620e730ff7f1e2114e03dea87573d9))
+- **device_viewer**: rescale saved camera quads to the live frame ([`0c5601e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0c5601ece42b529b19d7a65f9ec6f5a50326cff8))
+- **device_viewer**: save and apply camera-alignment presets ([`6bfc291`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6bfc2914fc1cd26e6f7aabf8a6ec94563d229e61))
+- **device_viewer**: presets strip in the Camera Alignment window ([`839e7ba`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/839e7bafc1d478dfde4ceab4f5c1d57744a52fe9))
+- **device_viewer**: presets table and naming models ([`4957539`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4957539f741f67fe0e75f290c7c5c83c1dd747ba))
+- **device_viewer**: store named camera-alignment presets ([`f7c5f72`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f7c5f72d289260dc34bb81a443991d004b83f16e))
+
+### Fix
+
+- **utils**: keep preset buttons from being squeezed ([`9a99b2b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9a99b2bd3e98d7ac9bd0991766927b267df7f16f))
+- **utils**: apply item tooltips in custom TraitsUI editors ([`ba0db23`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ba0db23749a5d8b7b7419fcd0f03133db360926c))
+- **protocol-tree**: AutoSave checkbox beside Phase navigation ([`a254871`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a25487195e37cfd7889f71e52e7b68ada4756f39))
+- **portable**: stop rescaling driver status values ([`2cc289d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2cc289d38ad3f0ef52ee442c484686b9a5cbdc40))
+- **portable**: drop removed driver commands module ([`71e365e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/71e365e66961bf6adc76995b7c84e5fe369aaf41))
+- **device_viewer**: enable Commit to Step for every setting ([`904ef9a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/904ef9a127f2daf216982366012d51a507ae332a))
+- **device_viewer**: stop replaced service redrawing zones ([`b23fd53`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b23fd534a127b661db6e581c72033a3bcb57f25c))
+- **device_viewer**: make applying and saving presets lossless ([`83c7f4d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/83c7f4de05b1acd08241edf21373bedacec3f609))
+- **device_viewer**: truthful endpoint Reset prompt with a default preset ([`b6f35a7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b6f35a7bc3ef17312790e3b92a17a84f2be894c8))
+- **device_viewer**: say when presets are read-only or cannot fully apply ([`dcd5bc9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/dcd5bc90facbd96ba3628b087045aa129affd7df))
+- **device_viewer**: keep presets files the store cannot handle ([`536e4c9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/536e4c99df648fd279c6502b9644fcf8b52bb789))
+- **device_viewer**: never write over an unreadable endpoint cache ([`3740da4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3740da4ae95478c81f0a333160507192433888b6))
+- **microdrop_utils**: harden the atomic file write ([`9865556`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9865556cef9f8453d5addd9a306e58730d3835ee))
+- **device_viewer**: keep the presets highlight on the selected row ([`9eea7af`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9eea7af85705e6590d188af744fb2983e5d85011))
+
+### Refactor
+
+- **style**: share the stylesheet block helper ([`caf0d82`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/caf0d829082bd4fe0ac8a080b8128e1a3c16229e))
+- **portable**: return the error from _proxy_call ([`06d4990`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/06d4990ecf145c87138452b06bc7fd6a364ad417))
+- **device_viewer**: pure camera-to-item alignment geometry ([`8e7a18a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8e7a18a9533b41259286c3523cc9d5677eeae164))
+- **microdrop_utils**: share the atomic file write ([`ea7a144`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ea7a144b2bf23cde0aa029a85e92c66dd25b6514))
+
+### Docs
+
+- **user_help_plugin**: list the help and logs tutorial ([`4f9bb9a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4f9bb9aadf2dfcd82ad320ac384a7ece3bea4e0c))
+- **user_help_plugin**: help, logs and saved files tutorial page ([`3365042`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/336504260d952be3f6783df5fcc3f5f9681fa8be))
+- **microdrop_application**: add shortcuts and touch assist tutorial ([`bbd593f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bbd593f02a3853b7ed54367ddd016aaf5336ae61))
+- **device_viewer**: Zones tutorial ([`3615754`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3615754bfe37842865af3ebb43a4659de292e1d8))
+- **device_viewer**: add Zones tutorial clips ([`6a9d51b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6a9d51b2d962f090935a5032200320e8b5963fdc))
+- **device_viewer**: show the Unsaved Free Mode Changes prompt ([`936c31a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/936c31a2acf0e6ea85e7859315aaa8a488cebdc3))
+- **device_viewer**: add real footage to the Device Viewer tutorial ([`f03aaf1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f03aaf1c04576ab736b97567c8ca252dcd7e3115))
+- **device_viewer**: add the Device Viewer tutorial ([`23ee5c0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/23ee5c08d852940c1cd0c60b78cd0b1c9712d94c))
+- **pluggable_protocol_tree**: real clips from the new user takes ([`a005dff`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a005dffb0dae56ad98b92c6a0a944c1e01272337))
+- **user_help_plugin**: real clips from the new user takes ([`91fce1a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/91fce1a457a61f3dbae82cf3be6873eeba357e4c))
+- **plugin_management**: list the tutorial under Help > Tutorials ([`e7d8853`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e7d8853ed7903101e563861695be5d575bb4e02e))
+- **plugin_management**: add the plugin management tutorial ([`ef63d41`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ef63d41bcf765b0175dce91e7bba2beb29ac169c))
+- **protocol-tree**: document undo and redo in the tree guide ([`f6c1e03`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f6c1e0381c5caffe3a2732c4611273892a072b29))
+- document the zone target column flow ([`bb9289c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bb9289cb77a5bd29eb64dea908a962eb59d45135))
+- **examples**: presets strip in the camera alignment demo ([`9a35b03`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9a35b03e9e6f3f341631544d0ce27459e16d71d5))
+
+### Test
+
+- **user_help_plugin**: cover the help and logs tutorial ([`5dbfa2c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5dbfa2c91b73d2c5ba151e35a967ddcae2b2a155))
+- **microdrop_application**: keep the shortcut finder in step with code ([`18649db`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/18649db326eb5e3ec01509137a051ade318cb1a0))
+- **device_viewer**: cover the Zones tutorial ([`a3733ae`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a3733ae2a32fc079534f2815f47bf9cbeec6c3ce))
+- **examples**: cover the Device Viewer tutorial ([`a0f29e9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a0f29e9edf1596a9fd99e1504d5fb4d1fc47b84f))
+- **examples**: cover the plugin management tutorial ([`d3b8af9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d3b8af968e687fe49d926385dd47af1a3312beb5))
+- **protocol-tree**: undo after an AutoSave is saved again ([`97ae4a2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/97ae4a2374bf0b2e836d5639c335b2c20c166d6e))
+- **protocol-tree**: cover the protocol edit history ([`c71ac0d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c71ac0da86501881ae486808be5e309b169d75c2))
+- **device_viewer**: cover camera-alignment presets ([`e7a50a6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e7a50a6395391015e667c176d928b61dc13dd91f))
+
+### Style
+
+- **portable**: ruff-format calibration and advanced views ([`7bdc94c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7bdc94c6f3b0edbdc59bf7663fdf382fe753edc7))
+- **protocol-tree**: bring navigation_bar.py ruff-clean ([`b260106`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b2601060f9403c22f25f8c4adc6056a80c9744df))
+
 ## [v1.43.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.43.0) (2026-11-12)
 
 ### Feat
