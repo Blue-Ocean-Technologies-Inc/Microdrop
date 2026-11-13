@@ -548,8 +548,8 @@ def test_build_standalone_writes_a_second_file(tmp_path):
     out.parent.mkdir()
 
     assert main([str(source), "--standalone", str(out)]) == 0
-    assert 'src="t_media/a.webp"' in (tmp_path / "t.html").read_text()
-    assert 'src="data:image/webp;base64,' in out.read_text()
+    assert 'src="t_media/a.webp"' in (tmp_path / "t.html").read_text(encoding="utf-8")
+    assert 'src="data:image/webp;base64,' in out.read_text(encoding="utf-8")
 
 
 def test_a_page_over_budget_fails_the_build(tmp_path):
