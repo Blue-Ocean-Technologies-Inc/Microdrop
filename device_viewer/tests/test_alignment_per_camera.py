@@ -658,3 +658,72 @@ def test_restore_falls_through_an_endpoint_only_default(controller, model, camer
     assert _live(model) == (_tuples(REFERENCE_B), _tuples(SCENE_B))
     assert "'mount'" in _status(controller)
     assert controller.endpoint_store.load("2x3device") == OLD_ENDPOINT
+
+
+def test_no_camera_at_start_up_leaves_adoption_to_the_first_camera(controller, model):
+    cameras = CameraModel()
+    _set_live(model, REFERENCE_A, SCENE_A)
+
+    # "<No Camera>" at start-up decides nothing...
+    controller.camera_model = cameras
+
+    assert model.preferences.preferences.get(LIVE_ALIGNMENT_SETUP_PREFERENCE) is None
+
+    # ...the first camera selected adopts the alignment.
+    _switch(cameras, CAM_A)
+
+    assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == (
+        _scene(SCENE_A)
+    )
+    assert _live(model) == (_tuples(REFERENCE_A), _tuples(SCENE_A))
+
+
+def _last_session(model, camera, owned=True):
+    model.preferences.preferences.set(
+        LIVE_ALIGNMENT_SETUP_PREFERENCE,
+        json.dumps(
+            {
+                "camera_id": camera.camera_id,
+                "camera_label": camera.label,
+                "device_key": "2x3device",
+                "owned": owned,
+            }
+        ),
+    )
+
+
+def test_start_up_with_another_camera_keeps_the_last_sessions_tuning(
+    controller, model, cameras
+):
+    # Last session: camera B, recorded once, then hand-tuned to A's rects
+    # before quitting.
+    controller.preset_store.remember_last_used(_camera_preset(CAM_B, "camera_device"))
+    _last_session(model, CAM_B)
+    _set_live(model, REFERENCE_A, SCENE_A)
+
+    controller.camera_model = cameras
+
+    # Camera B keeps the hand tuning (converted through its 640x480 frame).
+    kept = controller.preset_store.last_used_for(CAM_B, "2x3device")
+
+    assert kept.scene_quad == _scene(SCENE_A)
+    assert kept.camera_quad == [
+        [10.0, 10.0],
+        [110.0, 10.0],
+        [110.0, 100.0],
+        [10.0, 100.0],
+    ]
+
+
+def test_start_up_does_not_keep_an_alignment_the_last_camera_did_not_own(
+    controller, model, cameras
+):
+    controller.preset_store.remember_last_used(_camera_preset(CAM_B, "camera_device"))
+    _last_session(model, CAM_B, owned=False)
+    _set_live(model, REFERENCE_A, SCENE_A)
+
+    controller.camera_model = cameras
+
+    assert controller.preset_store.last_used_for(CAM_B, "2x3device").scene_quad == (
+        _scene(SCENE_B)
+    )

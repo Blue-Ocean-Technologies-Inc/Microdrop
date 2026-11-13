@@ -1162,12 +1162,14 @@ class CameraAlignmentWorkflowController(HasTraits):
     def _take_charge_of_live_alignment(self):
         """At start-up, decide whose the live alignment (the preferences
         loaded at start-up) is. Made with this camera on this device: keep
-        it. Made with another setup: restore this one's. Never recorded
-        (the first start with per-camera memory): adopt it as this setup's
-        and keep it."""
+        it. Made with another camera: keep it as that camera's, then restore
+        this one's. Never recorded (the first start with per-camera
+        memory): adopt it as this setup's and keep it. Without a camera
+        selected nothing is decided yet — the first camera selected takes
+        charge."""
         camera, device_key = self._camera(), self.model.device_key
 
-        if not device_key:
+        if not device_key or not camera.is_known:
             return
 
         owner = self._read_live_setup()
@@ -1180,15 +1182,28 @@ class CameraAlignmentWorkflowController(HasTraits):
 
         owner_camera, owner_device_key, owned = owner
 
-        self._set_live_setup(camera, device_key, owned=False)
-
         if owned and owner_device_key == device_key and owner_camera.matches(camera):
-            self._live_owned = True
-            self._write_live_setup()
+            self._set_live_setup(camera, device_key, owned=True)
 
             return
 
+        if owned and owner_device_key == device_key:
+            self._keep_for_previous_camera(owner_camera, device_key)
+
+        self._set_live_setup(camera, device_key, owned=False)
         self._restore_live_alignment(saved_frame=True)
+
+    def _keep_for_previous_camera(self, owner_camera, device_key):
+        """Record the live rects (hand tuning included) as the last session's
+        camera's, before this camera's alignment replaces them. No frame is
+        shown yet: the camera side converts through that camera's last
+        recorded frame size; without one it cannot be kept."""
+        self._refresh_presets_quietly()
+
+        last = self.preset_store.last_used_for(owner_camera, device_key)
+        frame_size = last.frame_size if last is not None else None
+
+        self._record_live_alignment_for(owner_camera, device_key, frame_size)
 
     def _on_setup_changed(self):
         """The selected camera or the loaded device changed: remember the
@@ -1245,10 +1260,7 @@ class CameraAlignmentWorkflowController(HasTraits):
 
             return
 
-        try:
-            self.preset_store.refresh()
-        except OSError as exc:
-            logger.error(f"Camera-alignment presets unavailable: {exc}")
+        self._refresh_presets_quietly()
 
         last_used = self.preset_store.last_used_for(camera, device_key)
         candidates = [(last_used, RESTORED_LAST_USED_TEMPLATE)] if last_used else []
@@ -1326,6 +1338,14 @@ class CameraAlignmentWorkflowController(HasTraits):
         finally:
             perspective.restoring = False
 
+    def _refresh_presets_quietly(self):
+        """Reread the presets for a restore, logging (not showing) a file
+        that cannot be read: the alignment window reports it when opened."""
+        try:
+            self.preset_store.refresh()
+        except OSError as exc:
+            logger.error(f"Camera-alignment presets unavailable: {exc}")
+
     def _stop_glide(self):
         """Stop a running Go To Endpoint glide where it is, leaving the
         alignment mode it entered."""
@@ -1343,18 +1363,24 @@ class CameraAlignmentWorkflowController(HasTraits):
         placing new ones) or cannot be converted to camera pixels (no
         frame) leave the record alone; only Reset Camera Perspective
         forgets it."""
-        camera, device_key = self._live_camera, self._live_device_key
+        if self._live_owned:
+            self._record_live_alignment_for(
+                self._live_camera, self._live_device_key, self._frame_size()
+            )
+
+    def _record_live_alignment_for(self, camera, device_key, frame_size):
+        """Keep the live rects as the alignment last used with ``camera`` on
+        ``device_key``, converting the camera side to pixels of a
+        ``frame_size`` frame; nothing when either is missing."""
 
         if camera is None or not camera.is_known or not device_key:
             return
 
-        if not self._live_owned:
-            return
-
-        camera_quad = self._current_camera_quad()
+        perspective = self.model.camera_perspective
+        mapping = self._item_mapping_for(frame_size) if frame_size else None
         scene_quad = self._live_scene_quad()
 
-        if camera_quad is None or scene_quad is None:
+        if mapping is None or len(perspective.reference_rect) != 4 or not scene_quad:
             return
 
         record = AlignmentPreset(
@@ -1363,8 +1389,11 @@ class CameraAlignmentWorkflowController(HasTraits):
             device_key=device_key,
             camera_id=camera.camera_id,
             camera_label=camera.label,
-            frame_size=self._frame_size(),
-            camera_quad=camera_quad,
+            frame_size=frame_size,
+            camera_quad=[
+                item_point_to_camera([point.x(), point.y()], mapping)
+                for point in perspective.reference_rect
+            ],
             scene_quad=scene_quad,
             endpoint_quad=self.endpoint_store.load(device_key),
         )
