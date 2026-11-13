@@ -47,6 +47,11 @@ svg.rv-screen.edit { cursor: crosshair; }
 .rv-preview { background: #000000; border-radius: 6px; padding: 6px; min-height: 60px; display: flex; align-items: center; justify-content: center; }
 figure.demo .rv-preview svg { display: block; width: auto; max-width: 100%; height: auto; }
 p.rv-msg { font-family: Consolas, "Courier New", monospace; font-size: .82rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; overflow-wrap: anywhere; margin: 6px 0 0; }
+img[data-media] { display: block; max-width: 100%; height: auto; border-radius: 6px; }
+figure.real-pane img[data-media] { max-width: 460px; width: 100%; }
+figure.clip video { height: auto; }
+ol.steps li.step.wide { grid-template-columns: minmax(0, 1fr); }
+ol.steps li.step.wide figure.clip video { max-width: 640px; width: 100%; }
 </style>
 
 <header data-hero>
@@ -55,8 +60,9 @@ p.rv-msg { font-family: Consolas, "Courier New", monospace; font-size: .82rem; b
   the Device Viewer showed them at the time: lined up with the chip drawing, with the electrode outlines and the switched-on
   electrodes drawn on top. You can also mark the part of the picture you care about and save a new, cropped video.</p>
   <p>This tutorial covers the <strong>Recording Viewer</strong> pane. Making a recording is covered in the
-  <span class="ui">Camera &amp; Alignment Tutorial</span>. There is no real footage of this pane yet: the pictures are
-  schematics, and the interactive player below is a mock-up that follows the same rules as the real one.</p>
+  <span class="ui">Camera &amp; Alignment Tutorial</span>. The screenshots and short clips are real, from one 37-second
+  recording of two droplets. Drawing regions and saving have no footage yet, so those steps use schematics, and the
+  interactive player below is a mock-up that follows the same rules as the real one.</p>
 </header>
 
 <!-- ============================================================ -->
@@ -65,42 +71,14 @@ p.rv-msg { font-family: Consolas, "Courier New", monospace; font-size: .82rem; b
 <p class="intro">Open it with <span class="ui">View ▸ Recording Viewer</span>. It is not part of the default layout, so it
 stays hidden until you tick it there.</p>
 
-<figure class="step-panel"><svg class="sch" viewBox="0 0 560 300" role="img" aria-label="Schematic of the Recording Viewer pane: a row of toolbar buttons, a Recording drop-down list, a black video area showing a chip, and a play button, a position slider and a time read-out at the bottom">
-<rect class="frame" x="0.5" y="0.5" width="559" height="299" rx="6"/>
-<rect class="box" x="10" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-folder_open" x="13" y="13" width="20" height="20"/>
-<rect class="box" x="40" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-home" x="43" y="13" width="20" height="20"/>
-<rect class="box" x="70" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-refresh" x="73" y="13" width="20" height="20"/>
-<rect class="box" x="100" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-fit_screen" x="103" y="13" width="20" height="20"/>
-<rect class="on" x="134" y="10" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-transform" x="137" y="13" width="20" height="20"/>
-<rect class="on" x="164" y="10" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-contour" x="167" y="13" width="20" height="20"/>
-<rect class="box" x="193" y="13" width="34" height="20" rx="2"/><text x="198" y="27">100</text>
-<rect class="on" x="232" y="10" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-drop_ec" x="235" y="13" width="20" height="20"/>
-<rect class="box" x="261" y="13" width="34" height="20" rx="2"/><text x="266" y="27">100</text>
-<rect class="box" x="302" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-crop" x="305" y="13" width="20" height="20"/>
-<rect class="box" x="332" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-delete" x="335" y="13" width="20" height="20"/>
-<rect class="box" x="362" y="10" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-save" x="365" y="13" width="20" height="20"/>
-<text x="396" y="27" class="muted">Saved free_mode_…_aligned.mkv</text>
-<text x="10" y="58">Recording</text>
-<rect class="box" x="66" y="45" width="300" height="20" rx="2"/><text x="72" y="59">free_mode_2026_11_11-16_20_02.mp4</text><text x="354" y="59">▾</text>
-<rect class="screen" x="10" y="72" width="540" height="182" rx="3"/>
-<rect x="150" y="96" width="260" height="134" fill="#8d9296"/>
-<g fill="none" stroke="#cfd2d4" stroke-width="1">
-<rect x="166" y="110" width="28" height="28"/><rect x="198" y="110" width="28" height="28"/><rect x="230" y="110" width="28" height="28"/><rect x="262" y="110" width="28" height="28"/><rect x="294" y="110" width="28" height="28"/><rect x="326" y="110" width="28" height="28"/><rect x="358" y="110" width="28" height="28"/>
-<rect x="166" y="142" width="28" height="28"/><rect x="198" y="142" width="28" height="28"/><rect x="230" y="142" width="28" height="28"/><rect x="262" y="142" width="28" height="28"/><rect x="294" y="142" width="28" height="28"/><rect x="326" y="142" width="28" height="28"/><rect x="358" y="142" width="28" height="28"/>
-<rect x="166" y="174" width="28" height="28"/><rect x="198" y="174" width="28" height="28"/><rect x="230" y="174" width="28" height="28"/><rect x="262" y="174" width="28" height="28"/><rect x="294" y="174" width="28" height="28"/><rect x="326" y="174" width="28" height="28"/><rect x="358" y="174" width="28" height="28"/>
-</g>
-<rect x="232" y="144" width="24" height="24" fill="#546692"/>
-<circle cx="244" cy="156" r="12" fill="#4e9a63" fill-opacity=".85"/>
-<rect class="roi" x="190" y="104" width="110" height="74"/>
-<rect class="box" x="10" y="264" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-play" x="13" y="267" width="20" height="20"/>
-<rect x="46" y="275" width="380" height="4" rx="2" fill="var(--line)"/><rect x="46" y="275" width="133" height="4" rx="2" fill="var(--accent)"/><circle cx="179" cy="277" r="6" fill="var(--accent)"/>
-<text x="440" y="281">0:07 / 0:20</text>
-</svg>
-<figcaption>The Recording Viewer, device-aligned, with Device Outline and Actuations on and a region (dashed yellow box)
-drawn. Top row,
-left to right: choose folder, back to the experiment, re-scan, fit, Device-Aligned, Device Outline and its opacity,
-Actuations and its opacity, Edit Region, clear the regions, save, and the save status. Then the
-<span class="ui">Recording</span> list, the video, and the play controls.</figcaption>
+<figure class="real-pane"><img data-media src="recording_viewer_media/pane.webp" width="720" height="926" alt="Real screenshot of the Recording Viewer pane, device-aligned and paused at 0:17: the toolbar with Device-Aligned, Device Outline and Actuations switched on (pink) and their opacity boxes at 100 and 43, the Recording list showing free_mode_2026_11_13-00_55_17.mp4, the straightened chip with electrode outlines, a magenta and a green droplet and two blue-grey squares beside the green one, and the play row: Play, the slider from 0 to 37247, the box 17227 and 0:17 / 0:37">
+<figcaption><strong>Real screenshot.</strong> Paused at 0:17 of a 37-second recording, device-aligned, with Device Outline
+(opacity 100) and Actuations (opacity 43) on: the two blue-grey squares beside the green droplet are the electrodes that
+were on at that moment. Top row, left to right: choose folder, back to the experiment, re-scan, fit, Device-Aligned, Device
+Outline and its opacity, Actuations and its opacity, Edit Region, clear the regions (greyed out: no regions yet) and save;
+after a save, its status text appears to the right. Then the <span class="ui">Recording</span> list, the video, and the play
+row: play, the position slider (from 0 to the length in milliseconds), the position in milliseconds, and the time
+read-out.</figcaption>
 </figure>
 
 <ul class="uses">
@@ -112,7 +90,7 @@ Actuations and its opacity, Edit Region, clear the regions, save, and the save s
   <li><strong>What it saves.</strong> A <a href="#rendition">rendition</a>: a new video next to the recording, lined up and/or
   cropped to your <a href="#roi-keyframe">regions</a>. The original recording is never changed.</li>
 </ul>
-<div class="callout">The pane is deliberately small: play, pause and a position slider. It has no speed control, frame
+<div class="callout">The pane is deliberately small: play, pause, a position slider and a box for the position in milliseconds. It has no speed control, frame
 stepping, looping, markers or keyboard shortcuts; see <a href="#part-not">What it does not do</a>.</div>
 </section>
 
@@ -157,46 +135,33 @@ stepping, looping, markers or keyboard shortcuts; see <a href="#part-not">What i
     <p>If the folder is empty or does not exist yet, the <span class="ui">Recording</span> list is empty, the video area
     stays black and the play controls are greyed out.</p></div>
   </li>
-  <li class="step">
-    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="The Recording list, and below the video the Play button, the position slider and the time read-out 0:07 / 0:20">
-    <rect class="frame" x="0.5" y="0.5" width="299" height="169" rx="6"/>
-    <text x="14" y="28">Recording</text>
-    <rect class="box" x="70" y="15" width="216" height="20" rx="2"/><text x="76" y="29">free_mode_…16_20_02.mp4</text><text x="274" y="29">▾</text>
-    <rect class="screen" x="14" y="44" width="272" height="80" rx="3"/>
-    <rect class="box" x="14" y="134" width="26" height="26" rx="3"/><use class="ic-use" href="#ic-play" x="17" y="137" width="20" height="20"/>
-    <rect x="48" y="145" width="160" height="4" rx="2" fill="var(--line)"/><rect x="48" y="145" width="56" height="4" rx="2" fill="var(--accent)"/><circle cx="104" cy="147" r="6" fill="var(--accent)"/>
-    <text x="218" y="151">0:07 / 0:20</text>
-    </svg></figure>
+  <li class="step wide">
     <div class="step-text"><h4><span class="step-n">3</span>Pick a recording and play it</h4>
     <p>Choose a file in the <span class="ui">Recording</span> list. Click <i data-glyph="ICON_PLAY" data-inline
     data-label="Play / pause"></i> to play; it turns into <i data-glyph="ICON_PAUSE" data-inline data-label="Play /
-    pause"></i> while playing. Drag the slider to jump to another moment. The read-out shows
-    <em>position / length</em> in minutes and seconds.</p>
+    pause"></i> while playing. Drag the slider to jump to another moment; the picture follows as you drag. The slider is
+    labelled <code>0</code> and the recording's length in milliseconds; the box after it shows the position in milliseconds,
+    and you can type one there and press <kbd>Enter</kbd> to jump to it. The read-out shows <em>position / length</em> in
+    minutes and seconds.</p>
     <p>Scroll the mouse wheel over the video to zoom, and drag to move the picture.</p></div>
+    <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="640" height="524" poster="recording_viewer_media/seek-play.webp" aria-label="The lower part of the Recording Viewer: the position slider is dragged from 0:33 down to 0:04 and up to 0:17 while the chip picture follows, then Play is clicked and the green droplet moves along the electrodes"><source src="recording_viewer_media/seek-play.webm" type="video/webm"></video>
+    <figcaption><strong>Real clip, 1×.</strong> Cropped to the lower part of the pane. The slider is dragged back from 0:33 to
+    0:04 and up to 0:17, and the picture follows it; the box beside the slider shows the position in milliseconds. Then Play:
+    the green droplet moves along the electrodes.</figcaption></figure>
   </li>
-  <li class="step">
-    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="Left: the raw camera frame with a slanted chip. Right: the device-aligned view with the chip straight and electrode outlines on top">
-    <rect class="frame" x="0.5" y="0.5" width="299" height="169" rx="6"/>
-    <text x="14" y="20">Raw</text><text x="156" y="20">Device-Aligned</text>
-    <rect class="screen" x="14" y="28" width="130" height="96" rx="3"/>
-    <polygon points="40,42 128,50 122,112 28,104" fill="#8d9296"/>
-    <circle cx="70" cy="76" r="9" fill="#4e9a63"/>
-    <rect class="screen" x="156" y="28" width="130" height="96" rx="3"/>
-    <rect x="168" y="40" width="106" height="72" fill="#8d9296"/>
-    <g fill="none" stroke="#cfd2d4"><rect x="176" y="50" width="22" height="22"/><rect x="200" y="50" width="22" height="22"/><rect x="224" y="50" width="22" height="22"/><rect x="248" y="50" width="22" height="22"/><rect x="176" y="80" width="22" height="22"/><rect x="200" y="80" width="22" height="22"/><rect x="224" y="80" width="22" height="22"/><rect x="248" y="80" width="22" height="22"/></g>
-    <rect x="202" y="52" width="18" height="18" fill="#546692"/>
-    <circle cx="211" cy="61" r="9" fill="#4e9a63" fill-opacity=".85"/>
-    <rect class="on" x="156" y="134" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-transform" x="159" y="137" width="20" height="20"/>
-    <rect class="on" x="186" y="134" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-contour" x="189" y="137" width="20" height="20"/>
-    <rect class="on" x="216" y="134" width="26" height="26" rx="3"/><use class="on-ic" href="#ic-drop_ec" x="219" y="137" width="20" height="20"/>
-    </svg></figure>
+  <li class="step wide">
     <div class="step-text"><h4><span class="step-n">4</span>Line it up with the chip</h4>
     <p>Click <i data-glyph="ICON_TRANSFORM" data-inline data-label="Device-Aligned"></i> to switch to the
     <a href="#aligned">device-aligned view</a>: the picture is turned and straightened the way the Device Viewer showed it
-    while recording.</p>
+    while recording. Each switch refits the picture to the pane; zoom in again with the mouse wheel.</p>
     <p>In that view, <i data-glyph="ICON_CONTOUR" data-inline data-label="Device Outline"></i> draws the electrode outlines
     and <i data-glyph="ICON_DROP_EC" data-inline data-label="Actuations"></i> fills the electrodes that were on at the
-    current moment. The number box after each sets its opacity in percent.</p></div>
+    current moment. The number box after each sets its opacity in percent. In the raw view both are greyed out.</p></div>
+    <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="640" height="610" poster="recording_viewer_media/aligned-toggle.webp" aria-label="While the recording plays, Device-Aligned is switched off: the raw camera picture shows the chip upside down and at an angle, and Device Outline, Actuations, their opacity boxes and Save grey out; switched on again, the straightened picture returns, fitted small in the pane"><source src="recording_viewer_media/aligned-toggle.webm" type="video/webm"></video>
+    <figcaption><strong>Real clip, 1×.</strong> Playing, device-aligned, with Device Outline and Actuations on. Device-Aligned
+    is switched off: the raw camera picture shows the chip upside down and at an angle, and Device Outline, Actuations, their
+    opacity boxes and Save grey out. Switched on again, the straightened picture comes back refitted, with the chip small in
+    the middle (see <a href="#fit">Fit vs saved zoom</a>).</figcaption></figure>
   </li>
   <li class="step">
     <figure class="step-panel"><svg class="sch" viewBox="0 0 300 170" role="img" aria-label="Edit Region switched on and a dashed yellow box dragged around the droplet on the video">
@@ -321,7 +286,9 @@ the condition in the last column.</p>
       <tr><td class="icons"><i data-glyph="ICON_PLAY"></i><i data-glyph="ICON_PAUSE"></i></td><td class="lbl">Play / pause</td><td>Starts
       or pauses playback; shows Pause while playing.</td></tr>
       <tr><td class="icons"></td><td class="lbl">Position slider</td><td>Shows where you are, and moves there when you drag it. It
-      runs from 0 to the recording's length.</td></tr>
+      runs from 0 to the recording's length; the numbers at its ends are in milliseconds.</td></tr>
+      <tr><td class="icons"></td><td class="lbl">Position box</td><td>The position in milliseconds. Type a number and press
+      <kbd>Enter</kbd> to jump to that exact moment.</td></tr>
       <tr><td class="icons"></td><td class="lbl"><code>m:ss / m:ss</code></td><td>Position and length, in minutes and whole seconds.</td></tr>
     </tbody>
   </table>
@@ -374,14 +341,18 @@ the condition in the last column.</p>
   save a lined-up video.</p></div>
   <div data-read><p>The button is greyed out when the recording has no <code>.transform.json</code> (for example a file copied
   in from elsewhere, or a saved rendition). The result is only as good as the alignment was: set it up first with the
-  <span class="ui">Camera &amp; Alignment Tutorial</span>. Switching the view refits the picture.</p></div>
+  <span class="ui">Camera &amp; Alignment Tutorial</span>. Switching the view refits the picture; in the device-aligned view
+  that shows the whole straightened camera frame, so zoom in to see the chip (<a href="#fit">Fit vs saved zoom</a>). The raw
+  view greys out Device Outline and Actuations, and Save too while there are no regions.</p></div>
   <div data-typical><p>Off: each recording opens in the raw view.</p></div>
   <figure>
   <div class="side-grid">
-    <div><p class="pane-title">Raw (as recorded)</p><svg class="sch" viewBox="0 0 160 110" role="img" aria-label="Raw camera frame: the chip appears slanted and turned"><rect class="screen" x="0" y="0" width="160" height="110" rx="4"/><polygon points="30,14 142,26 132,98 16,84" fill="#8d9296"/><g fill="none" stroke="#a9adb0"><polygon points="44,28 64,30 62,50 42,48"/><polygon points="68,31 88,33 86,53 66,51"/><polygon points="92,34 112,36 110,56 90,54"/><polygon points="40,54 60,56 58,76 38,74"/><polygon points="64,57 84,59 82,79 62,77"/><polygon points="88,60 108,62 106,82 86,80"/></g><circle cx="76" cy="43" r="8" fill="#4e9a63"/></svg></div>
-    <div><p class="pane-title">Device-aligned</p><svg class="sch" viewBox="0 0 160 110" role="img" aria-label="Device-aligned view: the chip is straight, with crisp electrode outlines on top"><rect class="screen" x="0" y="0" width="160" height="110" rx="4"/><rect x="20" y="15" width="120" height="80" fill="#8d9296"/><g fill="none" stroke="#cfd2d4"><rect x="34" y="24" width="24" height="24"/><rect x="62" y="24" width="24" height="24"/><rect x="90" y="24" width="24" height="24"/><rect x="34" y="56" width="24" height="24"/><rect x="62" y="56" width="24" height="24"/><rect x="90" y="56" width="24" height="24"/></g><rect x="64" y="26" width="20" height="20" fill="#546692"/><circle cx="74" cy="36" r="9" fill="#4e9a63" fill-opacity=".85"/></svg></div>
+    <div><p class="pane-title">Raw (as recorded)</p><img data-media src="recording_viewer_media/raw.webp" width="560" height="314" alt="Real raw camera frame: the chip seen upside down and at an angle in its holder on the dark bench, with a green and a magenta droplet"></div>
+    <div><p class="pane-title">Device-aligned</p><img data-media src="recording_viewer_media/aligned.webp" width="560" height="576" alt="The same moment device-aligned: the chip straight, with thin electrode outlines drawn over it and two blue-grey squares on the electrodes that were on, beside the green droplet"></div>
   </div>
-  <figcaption>The same frame, raw and device-aligned with the Device Outline and Actuations on.</figcaption>
+  <figcaption><strong>Real screenshots</strong> of the same moment (0:17), raw and device-aligned with Device Outline and
+  Actuations (opacity 43 %) on. This camera sees the chip upside down and at an angle; the alignment turns it to match the
+  chip drawing.</figcaption>
   </figure>
 </section>
 
@@ -399,6 +370,14 @@ the condition in the last column.</p>
   layers that are on.</p></div>
   <div data-typical><p>Both off; opacity 100 % each. At 100 % the Actuations fill hides what is under it: lower it to see
   the droplet through the fill (try it in the <a href="#part-try">mock player</a>).</p></div>
+  <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="720" height="562" poster="recording_viewer_media/overlay-opacity.webp" aria-label="While the recording plays, the Actuations opacity box changes between 7 and 100 and the blue squares on the switched-on electrodes fade and darken; then the Device Outline opacity goes down to 0, the electrode outlines vanish, and it goes back to 100"><source src="recording_viewer_media/overlay-opacity.webm" type="video/webm"></video>
+  <figcaption><strong>Real clip, sped up 2×.</strong> While the recording plays, the Actuations opacity box is changed between
+  7 and 100: the blue squares on the switched-on electrodes fade and darken as they step along with the droplets. Then the
+  Device Outline opacity goes down to 0 (the outlines vanish) and back up to 100.</figcaption></figure>
+  <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="720" height="646" poster="recording_viewer_media/overlay-toggles.webp" aria-label="Zoomed in on the electrodes: Actuations is switched off and the blue squares disappear, then Device Outline is switched off and on again"><source src="recording_viewer_media/overlay-toggles.webm" type="video/webm"></video>
+  <figcaption><strong>Real clip, 1×.</strong> Zoomed in, playing. Actuations is switched off (the blue squares go, and its
+  opacity box greys out), then Device Outline is switched off, leaving only the chip's own electrode edges, and on
+  again.</figcaption></figure>
 </section>
 
 <section data-term id="roi-keyframe" data-where="Edit Region toggle; drag on the video">
@@ -440,11 +419,16 @@ the condition in the last column.</p>
   <div data-what><p>Once you zoom or pan, MicroDrop remembers the zoom and the centre point and reuses them, also for the next
   recording and after a restart. <span class="ui">Fit</span> means the whole frame fills the pane.</p></div>
   <div data-when><p>Click <i data-glyph="ICON_FIT_SCREEN" data-inline data-label="Fit"></i> when the picture has drifted out of
-  sight or is zoomed too far. The device-aligned picture can land partly outside the pane, so a saved framing is often what
-  you want while you work on one chip.</p></div>
+  sight or is zoomed too far. In the device-aligned view, Fit shows the whole straightened camera frame, which is much larger
+  than the chip, so the chip comes out small: zoom in once and the saved framing keeps it that way while you work on one
+  chip.</p></div>
   <div data-read><p>While no framing is saved, the picture refits whenever the pane is resized. Switching Device-Aligned on or
   off also clears the saved framing and refits.</p></div>
   <div data-typical><p>Fit (nothing saved).</p></div>
+  <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="480" height="602" poster="recording_viewer_media/zoom-pan.webp" aria-label="The fitted device-aligned picture: the whole straightened camera frame with the chip small in the middle; it is zoomed in and moved, passing over the dark bench, until the electrodes and droplets fill the pane"><source src="recording_viewer_media/zoom-pan.webm" type="video/webm"></video>
+  <figcaption><strong>Real clip, sped up 1.5×.</strong> Just after Device-Aligned was switched back on: the fitted picture is
+  the whole straightened camera frame, so the chip is small. The mouse wheel zooms in and the picture is moved (passing over
+  the dark bench) until the electrodes fill the pane. That zoom and centre are now kept.</figcaption></figure>
 </section>
 </section>
 
@@ -482,7 +466,7 @@ folder and are not shown here.</p>
 <h2>What it does not do</h2>
 <ul class="uses">
   <li>No playback speed, frame-by-frame stepping, looping or keyboard shortcuts. Very small slider moves (under about a third
-  of a second) are ignored.</li>
+  of a second) are ignored; to land on an exact moment, type it in milliseconds in the box after the slider.</li>
   <li>No markers for protocol steps or phases on the timeline; the only thing drawn from the run is the device overlay.</li>
   <li>No still-frame export, no clip trimming by time, no deleting or renaming files. Use the file browser for those.</li>
   <li>No list of region keyframes and no deleting a single region; Clear removes them all.</li>
