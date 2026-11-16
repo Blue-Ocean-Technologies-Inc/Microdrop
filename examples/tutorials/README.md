@@ -121,7 +121,7 @@ these elements explicitly):
 
 | Source | Built |
 |---|---|
-| `<title>` | page title |
+| `<title>` | page title (an SVG's own `<title>` stays in the SVG) |
 | `<nav data-contents>` | sidebar (and narrow-screen dropdown) listing every part's `h2` and its terms' `h3`; parts and terms then need an `id` |
 | `<header data-hero>` | `header.hero` |
 | `<section data-part>` | `section.part` |

@@ -53,6 +53,7 @@ from examples.tutorials.new_tutorial import (
     _add_imports,
     scaffold_tutorial,
 )
+from image_viewer.consts import ANALYSIS_HELP_HTML_PATH
 from image_viewer.plugin import ImageViewerPlugin
 from microdrop_application.consts import (
     PREFERENCES_TUTORIAL_HTML_PATH,
@@ -86,6 +87,7 @@ DEVICE_VIEWER_SOURCE = DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH.with_name(
 GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
     "getting_started.src.html"
 )
+IMAGE_ANALYSIS_SOURCE = ANALYSIS_HELP_HTML_PATH.with_name("analysis_help.src.html")
 HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
     "help_logs_storage.src.html"
 )
@@ -364,6 +366,10 @@ def test_dropbot_tutorial_rebuilds_identically():
 
 def test_getting_started_tutorial_rebuilds_identically():
     assert is_up_to_date(GETTING_STARTED_SOURCE)
+
+
+def test_image_analysis_tutorial_rebuilds_identically():
+    assert is_up_to_date(IMAGE_ANALYSIS_SOURCE)
 
 
 def test_help_logs_storage_tutorial_rebuilds_identically():
@@ -710,6 +716,14 @@ def test_term_facts_become_a_definition_list(tmp_path):
     assert '<h3>A <span class="where">here</span></h3>' in page
     assert '<dl class="facts"><dt>What it is</dt><dd>x</dd>' in page
     assert "<dt>Typical value</dt><dd>y</dd></dl></article>" in page
+
+
+def test_an_svg_title_stays_in_its_svg(tmp_path):
+    source = "<title>T</title><svg><title>Drawing</title></svg>"
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert "<title>T</title>" in page
+    assert "<svg><title>Drawing</title></svg>" in page
 
 
 def test_glyph_tracer_outlines_an_icon_constant():
