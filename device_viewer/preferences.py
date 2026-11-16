@@ -9,7 +9,6 @@
 # Thanks for using Microdrop open source!
 
 # Standard library imports.
-import filecmp
 from pathlib import Path
 
 # Enthought library imports.
@@ -224,7 +223,9 @@ class DeviceViewerPreferences(PreferencesHelper):
     _auto_fit_margin_scale = Property(observe="AUTO_FIT_MARGIN_SCALE")
     _zoom_scale = Property(observe="ZOOM_SENSITIVITY")
 
-    DEFAULT_SVG_FILE = File
+    #: The device loaded at start-up. It is changed through the Device menu
+    #: (Load… / Load Default Device), so the dialog's Revert leaves it alone.
+    DEFAULT_SVG_FILE = File(no_revert=True)
 
     DEVICE_REPO_DIR = Directory()
 
@@ -252,47 +253,7 @@ class DeviceViewerPreferences(PreferencesHelper):
         return default_dir
 
     def _DEFAULT_SVG_FILE_default(self):
-        # --- Define Master File Path (local to the script) ---
-        logger.debug(f"Master default device svg is located at: {MASTER_SVG_FILE}")
-
-        if not MASTER_SVG_FILE.exists():
-            logger.error("Master default device svg not found!.")
-            raise FileNotFoundError("Master default device svg not found!.")
-
-        # --- Ensure User's File is a Copy of Master on First Run ---
-        default_user_file = Path(self.DEVICE_REPO_DIR) / MASTER_SVG_FILE.name
-        logger.debug(
-            f"Checking for user's default device svg file: {default_user_file}"
-        )
-
-        should_overwrite = True
-
-        if default_user_file.exists():
-            # If the user's file exists, check if it's different from master
-
-            if filecmp.cmp(MASTER_SVG_FILE, default_user_file, shallow=False):
-                logger.info(
-                    "User's default device svg file already exists and matches master."
-                )
-                should_overwrite = False
-
-            else:
-                logger.info(
-                    "User's default device svg file exists but is different "
-                    "from master. Overwriting..."
-                )
-
-        else:
-            logger.info(
-                "User's default device svg file not found, creating it from master..."
-            )
-
-        if should_overwrite:
-            default_user_file = safe_copy_file(
-                str(MASTER_SVG_FILE), str(default_user_file)
-            )
-
-        return str(default_user_file)
+        return str(MASTER_SVG_FILE)
 
     def _get__auto_fit_margin_scale(self) -> float:
         return self.AUTO_FIT_MARGIN_SCALE / 100

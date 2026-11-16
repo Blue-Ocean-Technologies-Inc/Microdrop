@@ -553,6 +553,7 @@ pre.svg-src { font-size: .8rem; background: var(--surface-2); border: 1px solid 
     <ol>
       <li><a href="#t-repo">Devices folder</a></li>
       <li><a href="#t-load">Load…</a></li>
+      <li><a href="#t-load-default">Load Default Device</a></li>
       <li><a href="#t-load-errors">Load errors and warnings</a></li>
       <li><a href="#t-save">Save and Save As</a></li>
       <li><a href="#t-modified">(modified) and Unsaved Device SVG Changes</a></li>
@@ -685,10 +686,11 @@ the view settings (<span class="ui">Device Viewer Tutorial</span>), rotating the
 file is wrong or missing.</p>
 <ol class="steps">
   <li class="step">
-    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: File menu, Device submenu with Load, Save, Save As, Generate Connections and Edit Connections"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="12" y="12" width="56" height="24" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="40" y="28" text-anchor="middle">File</text><rect x="74" y="12" width="78" height="24" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="113" y="28" text-anchor="middle">Device ▸</text><rect x="158" y="12" width="136" height="128" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><rect x="160" y="16" width="132" height="20" rx="2" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="168" y="30">Load…</text><text x="168" y="52">Save</text><text x="168" y="72">Save As…</text><line x1="164" y1="82" x2="288" y2="82" stroke="var(--line)"/><text x="168" y="100">Generate Connections</text><text x="168" y="120">Edit Connections</text></svg></figure>
+    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="Schematic: File menu, Device submenu with Load, Load Default Device, Save, Save As, Generate Connections and Edit Connections"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="12" y="12" width="56" height="24" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="40" y="28" text-anchor="middle">File</text><rect x="74" y="12" width="78" height="24" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="113" y="28" text-anchor="middle">Device ▸</text><rect x="158" y="12" width="136" height="148" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><rect x="160" y="16" width="132" height="20" rx="2" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="168" y="30">Load…</text><text x="168" y="52">Load Default Device</text><text x="168" y="72">Save</text><text x="168" y="92">Save As…</text><line x1="164" y1="102" x2="288" y2="102" stroke="var(--line)"/><text x="168" y="120">Generate Connections</text><text x="168" y="140">Edit Connections</text></svg></figure>
     <div class="step-text"><h4><span class="step-n">1</span>Load the device file</h4>
     <p>Choose <span class="ui">File ▸ Device ▸ Load…</span> and pick the <code>.svg</code> file. A file from outside your
-    <a href="#t-repo">Devices folder</a> is copied into it first, and the copy is what MicroDrop opens and saves.</p>
+    <a href="#t-repo">Devices folder</a> is copied into it first, and the copy is what MicroDrop opens and saves. A
+    <a href="#t-default">bundled device</a> is opened where it is.</p>
     <p>The chip appears in the Device Viewer, and the pane's title shows the file name. Next time MicroDrop starts, it opens
     this device again.</p></div>
   </li>
@@ -734,7 +736,8 @@ file is wrong or missing.</p>
     <p>Channel, connection and area changes add <span class="ui">(modified)</span> to the pane's title. Choose
     <span class="ui">File ▸ Device ▸ Save</span> to write them into the file; the tag goes away.</p>
     <p><span class="ui">Save As…</span> writes a copy under a new name, but MicroDrop keeps the original file open: load the
-    copy if you want to go on working on it. Zone edits are not tracked by the tag, so save after drawing zones too.</p></div>
+    copy if you want to go on working on it. A bundled device cannot be saved over: Save opens Save As instead, and
+    MicroDrop carries on with the copy. Zone edits are not tracked by the tag, so save after drawing zones too.</p></div>
   </li>
 </ol>
 </section>
@@ -866,9 +869,9 @@ folder and opens the last one you loaded.</p>
   <dl class="facts"><dt>What it is</dt><dd><p><code>Devices</code> inside MicroDrop's data folder in your <em>Documents</em>
   (<code>Documents/Sci-Bots/Microdrop/Devices</code>). Whenever they are missing, MicroDrop puts two files there:
   <code>90_pin_array.svg</code> and <code>pin_map.svg</code> (one electrode for each channel, 0 to 119, and no
-  connections).</p></dd>
-  <dt>When to use it</dt><dd><p>Save As opens here; Load opens at the current device's file. A device loaded from anywhere else is
-  copied in first.</p></dd>
+  connections). These are your copies: MicroDrop never changes them, and the default device is not read from here.</p></dd>
+  <dt>When to use it</dt><dd><p>Save As opens here; Load opens at the current device's file, or here when that is a bundled device. A
+  device loaded from anywhere else is copied in first, except a bundled one.</p></dd>
   <dt>How to read it</dt><dd><p>There is no setting for this folder in the Preferences window; it is always this one.</p></dd>
 </dl></article>
 
@@ -876,7 +879,8 @@ folder and opens the last one you loaded.</p>
   <h3>Load… <span class="where">File ▸ Device ▸ Load…</span></h3>
   <p>Open a device file and show it in the Device Viewer.</p>
   <dl class="facts"><dt>What it is</dt><dd><p>If the current device has unsaved changes, you are asked first (<a href="#t-modified">Unsaved Device SVG
-  Changes</a>). A file already in the Devices folder is opened as it is. A file from elsewhere is copied into the Devices
+  Changes</a>). A file already in the Devices folder, or a <a href="#t-default">bundled device</a>, is opened as it is.
+  A file from elsewhere is copied into the Devices
   folder under the same name and the copy is opened. If a file of that name is already there, you see
   <span class="ui">Warning: File Already Exists</span>:</p>
   <table class="small">
@@ -890,6 +894,13 @@ folder and opens the last one you loaded.</p>
   </table></dd>
   <dt>How to read it</dt><dd><p>Loading clears the switched-on electrodes and the routes, closes the Edit Connections and Camera Alignment
   windows, and empties the Undo list. The loaded file becomes the <a href="#t-default">Default Device Layout</a>.</p></dd>
+</dl></article>
+
+<article class="term" id="t-load-default">
+  <h3>Load Default Device <span class="where">File ▸ Device ▸ Load Default Device</span></h3>
+  <p>Go back to the <a href="#t-default">bundled 90_pin_array.svg</a>.</p>
+  <dl class="facts"><dt>What it is</dt><dd><p>Loads the copy that ships with MicroDrop, after the same unsaved-changes question as Load…. It
+  then becomes the Default Device Layout again.</p></dd>
 </dl></article>
 
 <article class="term" id="t-load-errors">
@@ -922,7 +933,11 @@ folder and opens the last one you loaded.</p>
   <p><span class="ui">Save As…</span> opens in the Devices folder and writes the same things into a new file, adding
   <code>.svg</code> if you leave it off.</p></dd>
   <dt>How to read it</dt><dd><p>After Save As, MicroDrop still has the <em>original</em> file open: the title keeps its name, a later Save
-  writes to it, and next start opens it. To carry on in the copy, load the copy.</p></dd>
+  writes to it, and next start opens it. To carry on in the copy, load the copy.</p>
+  <p>A <a href="#t-default">bundled device</a> is read-only. Save on one says so and opens Save As, suggesting
+  <code>&lt;name&gt; - Copy</code>; a name in the bundled folder is refused and the dialog opens again. Once the copy is
+  written, MicroDrop carries on with it, with routes and switched-on electrodes kept: the title, later Saves and the next
+  start all use the copy.</p></dd>
   <dt>When to use it</dt><dd><p>After changing channels, connections, the area scale or zones.</p></dd>
 </dl></article>
 
@@ -941,12 +956,13 @@ folder and opens the last one you loaded.</p>
   <h3>Default Device Layout and the bundled 90_pin_array.svg <span class="where">Preferences ▸ Device Viewer ▸ Main View ▸ Default Device Layout</span></h3>
   <p>The device MicroDrop opens when it starts.</p>
   <dl class="facts"><dt>What it is</dt><dd><p>Every successful load sets it, so MicroDrop reopens the last device you loaded. You can also pick a file
-  in the Preferences window; it is used the next time MicroDrop starts.</p></dd>
-  <dt>How to read it</dt><dd><p>If the setting is empty, or the file it names has been moved or deleted, MicroDrop falls back to
-  <code>90_pin_array.svg</code> in the Devices folder. Before it does, it <strong>replaces that file with the original that
-  ships with MicroDrop</strong> whenever the two differ. Edits saved into <code>90_pin_array.svg</code> are then lost, so
-  keep your own versions under another name (Save As, then load the copy).</p></dd>
-  <dt>Typical value</dt><dd><p><code>Devices/90_pin_array.svg</code> on a new installation.</p></dd>
+  in the Preferences window; it is used the next time MicroDrop starts. <span class="ui">Revert</span> in the Preferences
+  window leaves it alone: change it with Load… or <a href="#t-load-default">Load Default Device</a>.</p></dd>
+  <dt>How to read it</dt><dd><p>If the setting is empty, or the file it names has been moved or deleted, MicroDrop falls back to the
+  bundled <code>90_pin_array.svg</code>: the copy that ships with MicroDrop, kept current by every update and read-only
+  (<a href="#t-save">Save As</a> to keep edits). The <code>90_pin_array.svg</code> in the Devices folder is a separate
+  copy that belongs to you.</p></dd>
+  <dt>Typical value</dt><dd><p>The bundled <code>90_pin_array.svg</code> on a new installation.</p></dd>
 </dl></article>
 </section>
 
@@ -1326,8 +1342,7 @@ values. If the areas are wrong, the volume is wrong by the same factor, even aft
 <div class="callout warn">
   <ul class="uses">
     <li><strong>Save As keeps the original open.</strong> Load the copy to work on it; a later Save writes to the original.</li>
-    <li><strong>Do not keep your edits in <code>90_pin_array.svg</code>.</strong> When the Default Device Layout is empty or
-    names a missing file, MicroDrop overwrites that file with the bundled original.</li>
+    <li><strong>Bundled devices are read-only.</strong> Save on one opens Save As; MicroDrop then works on the copy.</li>
     <li><strong>Zone edits are not tracked</strong> by <span class="ui">(modified)</span>, and nothing asks you to save when
     MicroDrop closes.</li>
     <li><strong>The scale needs a <code>&lt;metadata&gt;</code> element</strong> in the file, or it is lost on Save without a
