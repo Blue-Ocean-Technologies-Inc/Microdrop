@@ -39,6 +39,8 @@ from .consts import (
     TUTORIAL_SIMULATIONS_DOCK_PANE_NAME,
     TutorialEntry,
 )
+from .launcher import is_launcher_executable, start_launcher
+from .preferences import UserHelpPreferences
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -178,6 +180,53 @@ class ContactSupportAction(Action):
         webbrowser.open(f"mailto:{self.email}")
 
 
+class OpenMicrodropLauncherAction(Action):
+    """Start the installed MicroDrop setup and launcher, asking for its
+    executable the first time (or when the remembered one is gone)."""
+
+    name = Str("&Open MicroDrop Setup and Launcher...")
+    tooltip = "Start the MicroDrop setup and launcher installed on this computer"
+
+    def perform(self, event):
+        from microdrop_application.dialogs.pyface_wrapper import (
+            OK,
+            error,
+            file_dialog,
+            warning,
+        )
+
+        preferences = UserHelpPreferences()
+        path = preferences.launcher_executable_path
+
+        if not is_launcher_executable(path):
+            answer = warning(
+                None,
+                "MicroDrop does not know where the MicroDrop setup and launcher "
+                "is installed. Locate its executable (microdrop_setup) to open "
+                "it; MicroDrop will remember the location.",
+                title="MicroDrop Launcher Not Found",
+                ok_label="Browse...",
+                cancel_label="Cancel",
+            )
+
+            if answer != OK:
+                return
+
+            path = file_dialog(None, action="open")
+
+            if not is_launcher_executable(path):
+                return
+
+            preferences.launcher_executable_path = path
+
+        try:
+            start_launcher(path)
+
+        except OSError as e:
+            logger.error(f"Could not start the MicroDrop launcher {path}: {e}")
+            error(None, f"Could not start the MicroDrop launcher:\n{path}\n\n{e}")
+
+
 class ShowTutorialSimulationsAction(TaskAction):
     """Show and raise the Tutorial Simulations dock pane."""
 
@@ -305,5 +354,6 @@ def launcher_menu_factory():
             source=MICRODROP_LAUNCHER_README_URL,
             window_title="Download MicroDrop Launcher",
         ),
+        OpenMicrodropLauncherAction(),
         id="microdrop_launcher_actions",
     )
