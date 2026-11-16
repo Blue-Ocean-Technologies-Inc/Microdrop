@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 # Enthought library imports.
 from pyface.qt.QtCore import QPointF
 from pyface.qt.QtGui import QTransform
-from traits.api import HasTraits, Instance, List, observe
+from traits.api import Bool, Event, HasTraits, Instance, List, observe
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -40,6 +40,14 @@ class PerspectiveModel(HasTraits):
     #: set it by hand. A trait rather than a Property so it can be observed;
     #: it must stay invertible because its inverse is used.
     transformation = Instance(QTransform, QTransform())
+
+    #: Fires after reset(): the user threw the alignment away.
+    alignment_reset = Event()
+
+    #: True while a saved alignment is put back on the rects (a camera or
+    #: device switch restores one): not a user edit, so it stays off the
+    #: undo stack.
+    restoring = Bool(False)
 
     # -------------------- Methods ------------------------
     def get_closest_point(self, point: QPointF) -> Tuple[Optional[QPointF], int]:
@@ -128,6 +136,7 @@ class PerspectiveModel(HasTraits):
         """Reset the perspective model to its initial state."""
         self.reset_rects()
         self.transformation = QTransform()
+        self.alignment_reset = True
 
     def rotate_output(self, angle_degrees):
         """Spin the video feed by 'angle_degrees' about its own centre."""

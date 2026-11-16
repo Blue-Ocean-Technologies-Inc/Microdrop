@@ -79,6 +79,7 @@ from ..consts import (
 from ..interfaces.i_camera_device import ICameraDevice
 from ..models.autofocus import ContrastAutofocus, laplacian_variance
 from ..models.camera import CameraImageSetting, CameraModel
+from ..models.camera_identity import CameraIdentity, normalise_camera_id
 from ..models.media import MediaType
 from ..services.media_capture_cache import _cache_media_capture
 from ..utils.capture import media_filename
@@ -216,6 +217,7 @@ class CameraController(HasTraits):
         v4l2_device_path=None,
         v4l2_focus_device_path=None,
         v4l2_focus_lens_map=(),
+        camera_id="",
     ):
         """Record the selected source.
 
@@ -224,7 +226,8 @@ class CameraController(HasTraits):
         leaves the preference alone. ``v4l2_device_path`` is the camera's
         ``/dev/videoN`` node, ``v4l2_focus_device_path`` the node its focus
         fallback drives and ``v4l2_focus_lens_map`` that lens's calibration
-        (see CameraModel).
+        (see CameraModel). ``camera_id`` is the backend's stable id of the
+        camera, "" when it gives none (see CameraIdentity).
         """
         self.cancel_autofocus("camera changed")
         self.focus_edits.cancel()
@@ -235,6 +238,12 @@ class CameraController(HasTraits):
             self.preferences.selected_camera = remembered_as
 
         self.model.selected_camera = label
+
+        identity = CameraIdentity(camera_id=normalise_camera_id(camera_id), label=label)
+
+        if not identity.same_as(self.model.camera_identity):
+            self.model.camera_identity = identity
+
         self.model.provider_selected = provider
         self.model.v4l2_device_path = v4l2_device_path
 
