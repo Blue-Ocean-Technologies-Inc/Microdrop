@@ -104,9 +104,11 @@ Receiving: (Via handlers)
 - PHASE_NAVIGATION_REQUEST "ui/device_viewer/phase_navigation_request"
 - DEVICE_VIEWER_CAMERA_SELECT_SOURCE "ui/device_viewer/camera/select_source" (see the camera source selection flow below)
 - DEVICE_VIEWER_CAMERA_APPLY_SETTINGS "ui/device_viewer/camera/apply_settings" (a step's capture setup; see the per-step capture camera settings flow below)
+- DISABLED_CHANNELS_CHANGED "hardware/signals/disabled_channels_changed" (replaces the hardware-disabled set only; see the disabled channels flow below)
 
 Sending: (Via publish_method)
 - ELECTRODES_STATE_CHANGE "dropbot/requests/electrodes_state_change"
+- DETECT_DROPLETS "dropbot/requests/detect_droplets" (Find Liquid: the device's channels minus every disabled one; nothing when all are disabled)
 - START_DEVICE_MONITORING "dropbot/requests/start_device_monitoring"
 - SET_REALTIME_MODE "hardware/requests/set_realtime_mode" (T shortcut, via keyboard_shortcut_service)
 - DEVICE_VIEWER_STATE_CHANGED "ui/device_viewer/state_changed"
@@ -263,6 +265,20 @@ Plugin panes that author a protocol column (fluorescence capture chain, PMT, mag
 **Subscriber side**
 - Column-owning plugin panes (e.g. the fluorescence plugin's `fluorescence_controls_ui`) — load their editor from `cells`; a pane writing to several steps (`selected_step_ids`) sends one set_cell per step and sees one echo, for the current step.
 
+### Disabled channels: user vs hardware
+
+The device viewer keeps two disabled sets on `Electrodes`; `disabled_channels` is their read-only union (click blocking, Find Liquid, the recording overlay). Hardware-disabled channels are drawn red (`ELECTRODE_DISABLED`), user-disabled ones grey (`ELECTRODE_USER_DISABLED`); a channel in both is red, and the electrode tooltip names the kind.
+
+**Hardware-disabled (`hardware_disabled_channels`)**
+- `DISABLED_CHANNELS_CHANGED` — `{"channels": [...]}` from the DropBot backend (halt, actuation discrepancy) or `microdrop_application/task.py` (shorts the user declined to keep). `_on_disabled_channels_changed_triggered` replaces the hardware set only (when the `allow_hardware_disables` advanced preference is on); the user set is untouched. The firmware's `disabled_channels_mask` enforces these, so the electrode menu cannot re-enable them (it shows a disabled "Electrode Disabled by Hardware" item).
+
+**User-disabled (`user_disabled_channels`)**
+- Set from the electrode context menu: Disable/Enable Electrode, Disable All, and Enable All (clears the user set only). Undoable like other edits.
+- `USER_DISABLED_CHANNELS_KEY` (app_globals, owned by `device_viewer`) — sorted channel list, written by the `Electrodes` model at construction, on every device load and on every change of the user set (`user_disabled_channels_mirror` in `device_viewer/consts.py`), so a previous session's list never lingers.
+- Every `ELECTRODES_STATE_CHANGE` handler drops these channels before actuating, logging what it dropped: the DropBot (`electrode_controller`; its actuation-discrepancy check compares against the filtered request), the portable, the mock and OpenDrop. Protocol phases and replays of the last request are covered, not only clicks.
+- A change of the user set republishes `ELECTRODES_STATE_CHANGE` through `publish_electrode_update` (same realtime/connected/mode gating as a click), after the app_globals write, so a newly disabled actuated channel stops being driven at once and a re-enabled one resumes.
+- `DETECT_DROPLETS` — the DropBot and portable backends drop user-disabled channels (the DropBot also its `disabled_channels_mask`); an empty request means "every channel minus the disabled", and a request left empty by the filter replies `{"success": true, "detected_channels": []}` without scanning. The mock answers with its (already filtered) actuated channels.
+
 ### Backend → Microdrop task: shorts detected
 
 One topic carries both the spontaneous hardware shorts signal and the answer to an explicit user check, so the payload has to say which one it is: an empty channel list means "no shorts", and only the publisher knows whether the user is waiting to hear that.
@@ -408,13 +424,13 @@ The magnet's engage height is `z_up` (µm), the first int32 of the motor board's
 The portable answers `DETECT_DROPLETS` with the driver's own drop finder, `DropBotSession.find_drops()`: a per-channel capacitance scan (CHANNEL_CAPACITANCES, pF, at the current V/F) whose channels reading at least their threshold count as holding liquid. The default threshold is the Portable DropBot Settings preference `droplet_detection_threshold_pf` (`DROPLET_DETECTION_THRESHOLD_PF`, 5 pF); per channel, the driver's saved overrides and a fresh chip baseline replace it and the active chip's electrode weights scale it.
 
 **Topics**
-- `DETECT_DROPLETS` / `DROPLETS_DETECTED` — the DropBot's shared topics (`dropbot_controller/consts.py`), so Find liquid and the droplet-check / volume-threshold columns work unchanged. Request: JSON list of channels (empty = the session's used channels, all of them without a chip definition); reply `{"success", "detected_channels", "error"}`.
+- `DETECT_DROPLETS` / `DROPLETS_DETECTED` — the DropBot's shared topics (`dropbot_controller/consts.py`), so Find liquid and the droplet-check / volume-threshold columns work unchanged. Request: JSON list of channels (empty = the session's used channels, all of them without a chip definition), less the user-disabled channels (see the disabled channels flow); reply `{"success", "detected_channels", "error"}`.
 
 **Frontend (`portable_dropbot_status_and_controls`, Preferences > Portable DropBot Settings)**
 - "Droplet detection threshold (pF)" mirrors applied changes to the `DROPLET_DETECTION_THRESHOLD_PF_KEY` app_globals key; the backend's `PortableDropbotPreferences` seeds it at start.
 
 **Backend (`portable_dropbot_controller/services/portable_dropbot_droplet_detection_mixin_service.py`)**
-- `on_detect_droplets_request` reads the threshold key, sets it as the session's default drop threshold, runs `find_drops` through `_proxy_call` and replies with its sorted liquid channels.
+- `on_detect_droplets_request` reads the threshold key, sets it as the session's default drop threshold, runs `find_drops` through `_proxy_call` and replies with its sorted liquid channels. User-disabled channels are dropped first; when that leaves none, nothing is scanned and the reply is a success with no channels.
 - `find_drops` never actuates an electrode and leaves V/F alone; it switches HV on for the scan only when HV is off and the pads are engaged, and back off afterwards. With HV off and no device on the pads it refuses, and the reply's `error` carries the driver's reason; a scan with no readings at all also replies with an error.
 
 ### Protocol Zone Target column: first zone region with / without a droplet (#965)
