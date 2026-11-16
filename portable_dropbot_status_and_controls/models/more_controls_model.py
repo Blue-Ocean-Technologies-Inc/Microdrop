@@ -63,10 +63,15 @@ class PortableDropbotMoreControlsModel(BaseStatusModel):
 
     # ---- PID tuning (chevron-collapsed) ------------------------------
     show_pid = Bool(False)
-    pid_kp = Range(*TEMP_PID_GAIN_BOUNDS, 0.0)
-    pid_ki = Range(*TEMP_PID_GAIN_BOUNDS, 0.0)
-    pid_kd = Range(*TEMP_PID_GAIN_BOUNDS, 0.0)
-    pid_period_ms = Range(*TEMP_PID_PERIOD_MS_BOUNDS, 1000, mode="spinner")
+    pid_kp = Range(*TEMP_PID_GAIN_BOUNDS, 0.0, desc="Heater PID proportional gain")
+    pid_ki = Range(*TEMP_PID_GAIN_BOUNDS, 0.0, desc="Heater PID integral gain")
+    pid_kd = Range(*TEMP_PID_GAIN_BOUNDS, 0.0, desc="Heater PID derivative gain")
+    pid_period_ms = Range(
+        *TEMP_PID_PERIOD_MS_BOUNDS,
+        1000,
+        mode="spinner",
+        desc="Heater PID control period (ms)",
+    )
     read_pid_button = Button("Read PID")
     apply_pid_button = Button("Apply PID")
 
