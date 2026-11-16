@@ -45,6 +45,7 @@ restores.
 # Standard library imports.
 import json
 from datetime import datetime
+from pathlib import Path
 
 # Enthought library imports.
 from pyface.qt.QtCore import QPointF, Qt, QTimer
@@ -1181,6 +1182,29 @@ class CameraAlignmentWorkflowController(HasTraits):
         afterwards, then ``device_loaded`` restores)."""
         self._remember_live_alignment()
         self._stop_glide()
+
+    @observe("model:electrodes:svg_model:filename")
+    def _on_device_renamed(self, event):
+        """The loaded device carries on under another file (Save As of a
+        bundled device), same drawing: its endpoint and the live alignment
+        are copied to the new device key, so they restore on the copy. A
+        device load replaces ``svg_model`` instead and never fires here."""
+        old_key, new_key = Path(event.old).stem, self.model.device_key
+
+        if not old_key or old_key == new_key:
+            return
+
+        endpoint = self.endpoint_store.load(old_key)
+
+        if endpoint is not None:
+            try:
+                self.endpoint_store.save(new_key, endpoint)
+            except (OSError, ValueError) as exc:
+                logger.error(f"Could not copy the endpoint of {old_key}: {exc}")
+
+        if self._live_camera is not None and self._live_device_key == old_key:
+            self._set_live_setup(self._live_camera, new_key, owned=self._live_owned)
+            self._remember_live_alignment()
 
     def device_loaded(self):
         """Restore the live alignment for the newly loaded device: the pane
