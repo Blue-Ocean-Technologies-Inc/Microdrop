@@ -80,7 +80,7 @@ sections:
 | Protocols | `TUTORIAL_ORDER_PROTOCOLS` (200) | Protocol Tree, Protocol Files & Experiments |
 | Hardware | `TUTORIAL_ORDER_HARDWARE` (300) | Dropbot Status & Controls |
 | Analysis | `TUTORIAL_ORDER_ANALYSIS` (400) | Image Viewer, Image Analysis |
-| Managing the app | `TUTORIAL_ORDER_MANAGEMENT` (500) | Plugin Management, Preferences |
+| Managing the app | `TUTORIAL_ORDER_MANAGEMENT` (500) | Plugin Management, Preferences, SSH & Remote Backend |
 | Reference | `TUTORIAL_ORDER_REFERENCE` (600) | Shortcuts, Gamepad & Touch Assist; Help, Logs & Saved Files |
 
 Add an offset to slot an entry within its section (the Device section uses

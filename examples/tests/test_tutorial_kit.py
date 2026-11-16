@@ -67,6 +67,8 @@ from pluggable_protocol_tree.consts import (
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from plugin_management.consts import PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH
 from plugin_management.plugin import PluginManagementPlugin
+from ssh_controls_ui.consts import SSH_REMOTE_BACKEND_TUTORIAL_HTML_PATH
+from ssh_controls_ui.plugin import SSHUIPlugin
 from user_help_plugin.consts import (
     GETTING_STARTED_TUTORIAL_HTML_PATH,
     HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
@@ -102,6 +104,9 @@ SHORTCUTS_SOURCE = SHORTCUTS_TUTORIAL_HTML_PATH.with_name("shortcuts.src.html")
 PREFERENCES_SOURCE = PREFERENCES_TUTORIAL_HTML_PATH.with_name("preferences.src.html")
 PLUGIN_MANAGEMENT_SOURCE = PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH.with_name(
     "plugin_management.src.html"
+)
+SSH_REMOTE_BACKEND_SOURCE = SSH_REMOTE_BACKEND_TUTORIAL_HTML_PATH.with_name(
+    "ssh_remote_backend.src.html"
 )
 ZONES_SOURCE = ZONES_TUTORIAL_HTML_PATH.with_name("zones.src.html")
 RECORDING_VIEWER_SOURCE = RECORDING_VIEWER_TUTORIAL_HTML_PATH.with_name(
@@ -319,6 +324,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         DeviceViewerPlugin(),
         MicrodropPlugin(),
         PluginManagementPlugin(),
+        SSHUIPlugin(),
     ]
 
     # Added, not started: contributions resolve without the plugins running.
@@ -348,6 +354,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
         "Preferences Tutorial",
+        "SSH & Remote Backend Tutorial",
         "Shortcuts, Gamepad & Touch Assist Tutorial",
         "Help, Logs & Saved Files Tutorial",
     ]
@@ -357,6 +364,10 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
         assert find_network_references(page) == []
         assert len(page.encode("utf-8")) <= SIZE_BUDGET_BYTES
+
+
+def test_ssh_remote_backend_tutorial_rebuilds_identically():
+    assert is_up_to_date(SSH_REMOTE_BACKEND_SOURCE)
 
 
 def test_camera_alignment_tutorial_rebuilds_identically():
