@@ -91,7 +91,11 @@ def _filter_column():
 def _setting_columns():
     return [
         number_column("led_percent", "LED %", editor=_led_spinner),
-        tick_column("auto_exposure", "Auto exposure"),
+        tick_column(
+            "auto_exposure",
+            "Auto exposure",
+            tooltip="Let the camera pick this filter's exposure; the slider is ignored",
+        ),
         slider_column(
             "exposure_ms",
             "Exposure (ms)",
@@ -130,7 +134,11 @@ fluorescence_results_table = TableEditor(
 #: reads back what the camera actually took (for table captures too).
 manual_controls = VGroup(
     HGroup(
-        UItem("show_manual", editor=IconToggleEditor()),
+        UItem(
+            "show_manual",
+            editor=IconToggleEditor(),
+            tooltip="Show or hide the manual filter, exposure and frame controls",
+        ),
         Label("Manual controls"),
     ),
     VGroup(
@@ -163,6 +171,7 @@ manual_controls = VGroup(
         HGroup(
             UItem(
                 "manual_capture_button",
+                tooltip="Save one camera frame through the current filter",
                 enabled_when="connected and not manual_capture_request_id",
             ),
         ),

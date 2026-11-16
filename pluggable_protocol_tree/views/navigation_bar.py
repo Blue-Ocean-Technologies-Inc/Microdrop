@@ -503,6 +503,9 @@ class StatusBar(QScrollArea):
         self.edit_repeat_protocol.setFixedWidth(50)
         self.edit_repeat_protocol.setAlignment(Qt.AlignCenter)
         self.edit_repeat_protocol.setFixedHeight(20)
+        self.edit_repeat_protocol.setToolTip(
+            "How many times the whole protocol runs; read when a run starts"
+        )
 
         repeat_layout.addWidget(self.lbl_repeat_protocol)
         repeat_layout.addWidget(self.lbl_repeat_protocol_status)

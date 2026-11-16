@@ -8,19 +8,32 @@
 #
 # Thanks for using Microdrop open source!
 
-# This module's package.
+# Standard library imports.
 import os
+from pathlib import Path
 
+# Microdrop package imports.
 from ssh_controls.consts import (
-    SSH_KEYGEN_SUCCESS, SSH_KEYGEN_WARNING, SSH_KEYGEN_ERROR,
-    SSH_KEY_UPLOAD_SUCCESS, SSH_KEY_UPLOAD_ERROR,
-    SYNC_EXPERIMENTS_STARTED, SYNC_EXPERIMENTS_SUCCESS, SYNC_EXPERIMENTS_ERROR,
+    SSH_KEY_UPLOAD_ERROR,
+    SSH_KEY_UPLOAD_SUCCESS,
+    SSH_KEYGEN_ERROR,
+    SSH_KEYGEN_SUCCESS,
+    SSH_KEYGEN_WARNING,
+    SYNC_EXPERIMENTS_ERROR,
+    SYNC_EXPERIMENTS_STARTED,
+    SYNC_EXPERIMENTS_SUCCESS,
 )
 
-PKG = '.'.join(__name__.split('.')[:-1])
+# This module's package.
+PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 HELP_PATH = os.path.join(os.path.dirname(__file__), "help")
+
+#: Help > Tutorials page, built from resources/ssh_remote_backend.src.html.
+SSH_REMOTE_BACKEND_TUTORIAL_HTML_PATH = (
+    Path(__file__).parent / "resources" / "ssh_remote_backend.html"
+)
 
 # Listener for the SSH Key Portal dialog
 listener_name = f"{PKG}_listener"

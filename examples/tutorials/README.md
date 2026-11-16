@@ -19,7 +19,7 @@ its own plugin.
 From `microdrop-py/src` (`QT_QPA_PLATFORM=offscreen` traces glyphs headless):
 
 ```bash
-pixi run python -m examples.tutorials.new_tutorial <plugin_package> <slug> "<Title>"
+pixi run python -m examples.tutorials.new_tutorial <plugin_package> <slug> "<Title>" --section <section>
 # edit <plugin_package>/resources/<slug>.src.html, then
 pixi run python -m examples.tutorials.build_tutorial <plugin_package>/resources/<slug>.src.html
 pixi run python -m examples.tutorials.build_tutorial <src> --check   # is the built file current?
@@ -33,7 +33,8 @@ The scaffolder is idempotent. It:
 3. adds `<SLUG>_TUTORIAL_HTML_PATH` to `<plugin>/consts.py`;
 4. makes `<plugin>/plugin.py` contribute the page to the Help menu (see
    below): it adds the `tutorials` trait and `_tutorials_default` the first
-   time, and one more `TutorialEntry` for each later tutorial.
+   time, and one more `TutorialEntry` for each later tutorial, with the
+   `order` of the `--section` you picked (see below).
 
 Run `ruff check --fix` and `ruff format` on the touched `consts.py` and
 `plugin.py` before committing; the pre-commit hooks finish import order and
@@ -43,24 +44,49 @@ section headers.
 
 `user_help_plugin` offers the `TUTORIALS` extension point. A plugin
 contributes `TutorialEntry` records to it, and Help ▸ Tutorials lists every
-contribution sorted by title. The menu follows plugins that are loaded or
+contribution in learning order. The menu follows plugins that are loaded or
 unloaded while the app runs. `user_help_plugin` never imports the
 contributing plugins.
 
 ```python
 from traits.api import List
-from user_help_plugin.consts import TUTORIALS, TutorialEntry   # the only import needed
+from user_help_plugin.consts import TUTORIAL_ORDER_HARDWARE, TUTORIALS, TutorialEntry
 from .consts import HEATER_TUTORIAL_HTML_PATH
 
 class HeaterPlugin(Plugin):
     tutorials = List(contributes_to=TUTORIALS)
 
     def _tutorials_default(self):
-        return [TutorialEntry(title="Heater Tutorial", path=HEATER_TUTORIAL_HTML_PATH)]
+        return [
+            TutorialEntry(
+                title="Heater Tutorial",
+                path=HEATER_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_HARDWARE + 10,
+            )
+        ]
 ```
 
 The title is both the menu label (with `...` appended; a `&` shows as
 written) and the dialog title.
+
+The `order` places the entry on the learning path. `user_help_plugin.consts`
+names one section per hundred, and the menu puts a separator between
+sections:
+
+| Section | Constant | Bundled tutorials |
+|---|---|---|
+| Start here | `TUTORIAL_ORDER_START` (0) | Getting Started with MicroDrop |
+| Device | `TUTORIAL_ORDER_DEVICE` (100) | Device Viewer; Device Files, Channels & Connections; Camera & Alignment; Recording Viewer; Zones |
+| Protocols | `TUTORIAL_ORDER_PROTOCOLS` (200) | Protocol Tree, Protocol Files & Experiments |
+| Hardware | `TUTORIAL_ORDER_HARDWARE` (300) | Dropbot Status & Controls |
+| Analysis | `TUTORIAL_ORDER_ANALYSIS` (400) | Image Viewer, Image Analysis |
+| Managing the app | `TUTORIAL_ORDER_MANAGEMENT` (500) | Plugin Management, Preferences, SSH & Remote Backend |
+| Reference | `TUTORIAL_ORDER_REFERENCE` (600) | Shortcuts, Gamepad & Touch Assist; Help, Logs & Saved Files |
+
+Add an offset to slot an entry within its section (the Device section uses
++0, +5, +10, +15, +20); entries with the same order are sorted by title. An entry
+that sets no `order` gets `TUTORIAL_ORDER_DEFAULT` (1000): a section of its
+own after all of these, sorted by title, so older plugins need no change.
 
 ## Commit both files
 
@@ -95,7 +121,7 @@ these elements explicitly):
 
 | Source | Built |
 |---|---|
-| `<title>` | page title |
+| `<title>` | page title (an SVG's own `<title>` stays in the SVG) |
 | `<nav data-contents>` | sidebar (and narrow-screen dropdown) listing every part's `h2` and its terms' `h3`; parts and terms then need an `id` |
 | `<header data-hero>` | `header.hero` |
 | `<section data-part>` | `section.part` |
@@ -105,7 +131,7 @@ these elements explicitly):
 | `<i data-glyph="ICON_X">` or `<i data-glyph="ligature">` | a toolbar button showing that glyph; add `data-on` for the switched-on look, `data-inline` for text size, `data-label="…"` to announce it |
 | `<img src="figure.svg">`, `.png` | inlined as a data URI; `data-inline` on an SVG pastes its markup instead, so it can use the theme colours |
 | `<style>` / `<script>` | moved after the kit's CSS / JS; a `<style>` with attributes (`media="print"`) keeps its own element. Scripts must be inline: `<script src>` fails the build |
-| `<video data-clip poster="…"><source src="<slug>_media/clip.webm"></video>` | a real clip, left as a sidecar file (see *Clips* below); the `poster` is inlined |
+| `<video data-clip poster="…"><source src="<slug>_media/clip.webm"></video>` | a real clip, left as a sidecar file (see *Clips* below); the `poster` is inlined, or left as a sidecar too with `data-media` on the `<video>` |
 | `<img data-media src="<slug>_media/still.webp" alt="…">` | a large still, left as a sidecar file instead of inlined (see *Clips* below) |
 | `<a data-media href="<slug>_media/report.html">` | a link to a document shipped as a sidecar file (see *Linked documents* below) |
 
@@ -177,6 +203,12 @@ screenshot, see `data-media` below). A clip ships as a sidecar file in a folder 
   is, at a scale where the text the reader must read is at least about 11 px
   tall, rather than shrinking the whole screen; keep posters small (a third of
   the clip's size is enough), since they are inlined into the page.
+- A page short of room can keep a poster beside its clip instead: with
+  `data-media` on the `<video>`, the `poster` follows the clip rules (inside
+  the folder, present, counted in its budget) and is not inlined. Then the
+  page alone shows no still for that clip, so keep it for clips the page can
+  spare that way, such as a second player of a clip already shown inlined
+  elsewhere on the page, or a stand-in clip waiting for a recording.
 - The kit plays a `data-clip` only while it is on screen, never on its own
   under `prefers-reduced-motion`, and when the folder is missing it keeps the
   poster and says where the clip ships.

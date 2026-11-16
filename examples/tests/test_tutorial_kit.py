@@ -31,6 +31,7 @@ from envisage.api import Application
 from device_viewer.consts import (
     CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
+    RECORDING_VIEWER_TUTORIAL_HTML_PATH,
     ZONES_TUTORIAL_HTML_PATH,
 )
 from device_viewer.plugin import DeviceViewerPlugin
@@ -47,20 +48,31 @@ from examples.tutorials.build_tutorial import (
     render_tutorial,
 )
 from examples.tutorials.new_tutorial import (
+    SECTIONS,
     SRC_ROOT,
     _add_imports,
     scaffold_tutorial,
 )
+from image_viewer.consts import ANALYSIS_HELP_HTML_PATH, IMAGE_VIEWER_TUTORIAL_HTML_PATH
 from image_viewer.plugin import ImageViewerPlugin
-from microdrop_application.consts import SHORTCUTS_TUTORIAL_HTML_PATH
+from microdrop_application.consts import (
+    PREFERENCES_TUTORIAL_HTML_PATH,
+    SHORTCUTS_TUTORIAL_HTML_PATH,
+)
 from microdrop_application.plugin import MicrodropPlugin
-from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
+from pluggable_protocol_tree.consts import (
+    PROTOCOL_FILES_TUTORIAL_HTML_PATH,
+    PROTOCOL_TREE_TUTORIAL_HTML_PATH,
+)
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from plugin_management.consts import PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH
 from plugin_management.plugin import PluginManagementPlugin
+from ssh_controls_ui.consts import SSH_REMOTE_BACKEND_TUTORIAL_HTML_PATH
+from ssh_controls_ui.plugin import SSHUIPlugin
 from user_help_plugin.consts import (
     GETTING_STARTED_TUTORIAL_HTML_PATH,
     HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
+    TUTORIAL_ORDER_HARDWARE,
 )
 from user_help_plugin.plugin import UserHelpPlugin
 
@@ -77,17 +89,29 @@ DEVICE_VIEWER_SOURCE = DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH.with_name(
 GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
     "getting_started.src.html"
 )
+IMAGE_ANALYSIS_SOURCE = ANALYSIS_HELP_HTML_PATH.with_name("analysis_help.src.html")
 HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
     "help_logs_storage.src.html"
+)
+IMAGE_VIEWER_SOURCE = IMAGE_VIEWER_TUTORIAL_HTML_PATH.with_name("image_viewer.src.html")
+PROTOCOL_FILES_SOURCE = PROTOCOL_FILES_TUTORIAL_HTML_PATH.with_name(
+    "protocol_files.src.html"
 )
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
 )
 SHORTCUTS_SOURCE = SHORTCUTS_TUTORIAL_HTML_PATH.with_name("shortcuts.src.html")
+PREFERENCES_SOURCE = PREFERENCES_TUTORIAL_HTML_PATH.with_name("preferences.src.html")
 PLUGIN_MANAGEMENT_SOURCE = PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH.with_name(
     "plugin_management.src.html"
 )
+SSH_REMOTE_BACKEND_SOURCE = SSH_REMOTE_BACKEND_TUTORIAL_HTML_PATH.with_name(
+    "ssh_remote_backend.src.html"
+)
 ZONES_SOURCE = ZONES_TUTORIAL_HTML_PATH.with_name("zones.src.html")
+RECORDING_VIEWER_SOURCE = RECORDING_VIEWER_TUTORIAL_HTML_PATH.with_name(
+    "recording_viewer.src.html"
+)
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
 #: A plugin.py with no tutorials yet, as new_tutorial.py first meets it.
@@ -200,6 +224,27 @@ def test_scaffold_adds_a_second_tutorial_to_the_same_plugin(scaffold_root):
     ]
 
 
+def test_scaffold_places_tutorials_in_a_section(scaffold_root):
+    for slug in ("demo", "more"):
+        scaffold_tutorial(
+            FIXTURE_PLUGIN, slug, slug.title(), scaffold_root, False, "hardware"
+        )
+
+    plugin_module = importlib.import_module(f"{FIXTURE_PLUGIN}.plugin")
+    orders = [entry.order for entry in plugin_module.FixturePlugin().tutorials]
+
+    assert SECTIONS == [
+        "start",
+        "device",
+        "protocols",
+        "hardware",
+        "analysis",
+        "management",
+        "reference",
+    ]
+    assert orders == [TUTORIAL_ORDER_HARDWARE, TUTORIAL_ORDER_HARDWARE]
+
+
 def test_scaffold_adds_to_a_list_without_a_trailing_comma(scaffold_root):
     package = scaffold_root / FIXTURE_PLUGIN
     (package / "consts.py").write_text(CONSTS_WITH_TUTORIAL_FIXTURE)
@@ -279,6 +324,7 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         DeviceViewerPlugin(),
         MicrodropPlugin(),
         PluginManagementPlugin(),
+        SSHUIPlugin(),
     ]
 
     # Added, not started: contributions resolve without the plugins running.
@@ -292,17 +338,25 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
     application.stop()
 
+    # The learning path: start here, device, protocols, hardware, analysis,
+    # managing the app, reference.
     assert [entry.title for entry in entries] == [
-        "Camera & Alignment Tutorial",
-        "Device Viewer Tutorial",
-        "Dropbot Status & Controls Tutorial",
         "Getting Started with MicroDrop",
-        "Help, Logs & Saved Files Tutorial",
+        "Device Viewer Tutorial",
+        "Device Files, Channels & Connections Tutorial",
+        "Camera & Alignment Tutorial",
+        "Recording Viewer Tutorial",
+        "Zones Tutorial",
+        "Protocol Tree Tutorial",
+        "Protocol Files & Experiments Tutorial",
+        "Dropbot Status & Controls Tutorial",
+        "Image Viewer Tutorial",
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
-        "Protocol Tree Tutorial",
+        "Preferences Tutorial",
+        "SSH & Remote Backend Tutorial",
         "Shortcuts, Gamepad & Touch Assist Tutorial",
-        "Zones Tutorial",
+        "Help, Logs & Saved Files Tutorial",
     ]
 
     for entry in entries:
@@ -310,6 +364,10 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
 
         assert find_network_references(page) == []
         assert len(page.encode("utf-8")) <= SIZE_BUDGET_BYTES
+
+
+def test_ssh_remote_backend_tutorial_rebuilds_identically():
+    assert is_up_to_date(SSH_REMOTE_BACKEND_SOURCE)
 
 
 def test_camera_alignment_tutorial_rebuilds_identically():
@@ -324,8 +382,20 @@ def test_getting_started_tutorial_rebuilds_identically():
     assert is_up_to_date(GETTING_STARTED_SOURCE)
 
 
+def test_image_analysis_tutorial_rebuilds_identically():
+    assert is_up_to_date(IMAGE_ANALYSIS_SOURCE)
+
+
 def test_help_logs_storage_tutorial_rebuilds_identically():
     assert is_up_to_date(HELP_LOGS_STORAGE_SOURCE)
+
+
+def test_image_viewer_tutorial_rebuilds_identically():
+    assert is_up_to_date(IMAGE_VIEWER_SOURCE)
+
+
+def test_protocol_files_tutorial_rebuilds_identically():
+    assert is_up_to_date(PROTOCOL_FILES_SOURCE)
 
 
 def test_protocol_tree_tutorial_rebuilds_identically():
@@ -340,12 +410,20 @@ def test_plugin_management_tutorial_rebuilds_identically():
     assert is_up_to_date(PLUGIN_MANAGEMENT_SOURCE)
 
 
+def test_preferences_tutorial_rebuilds_identically():
+    assert is_up_to_date(PREFERENCES_SOURCE)
+
+
 def test_device_viewer_tutorial_rebuilds_identically():
     assert is_up_to_date(DEVICE_VIEWER_SOURCE)
 
 
 def test_zones_tutorial_rebuilds_identically():
     assert is_up_to_date(ZONES_SOURCE)
+
+
+def test_recording_viewer_tutorial_rebuilds_identically():
+    assert is_up_to_date(RECORDING_VIEWER_SOURCE)
 
 
 def _clip_page(clip="t_media/a.webm", poster=""):
@@ -364,6 +442,34 @@ def test_a_clip_in_the_media_folder_stays_a_sidecar(tmp_path):
 
     assert '<source src="t_media/a.webm">' in page
     assert 'poster="data:image/webp;base64,' in page
+
+
+def test_a_media_clip_keeps_its_poster_as_a_sidecar(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "a.webm").write_bytes(b"clip")
+    (tmp_path / "t_media" / "a.webp").write_bytes(b"still")
+    source = (
+        '<title>T</title><video data-clip data-media poster="t_media/a.webp">'
+        '<source src="t_media/a.webm"></video>'
+    )
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert '<video data-clip data-media poster="t_media/a.webp">' in page
+    assert "data:image/webp" not in page
+
+
+@pytest.mark.parametrize("poster", ["p.webp", "t_media/missing.webp"])
+def test_a_media_clip_poster_must_be_in_the_media_folder(tmp_path, poster):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "a.webm").write_bytes(b"clip")
+    (tmp_path / "p.webp").write_bytes(b"still")
+    source = (
+        f'<title>T</title><video data-clip data-media poster="{poster}">'
+        '<source src="t_media/a.webm"></video>'
+    )
+
+    with pytest.raises(TutorialBuildError, match="t_media|not found"):
+        render_tutorial(source, tmp_path, {}, "t.src.html")
 
 
 @pytest.mark.parametrize(
@@ -525,7 +631,8 @@ def test_the_standalone_copy_inlines_every_sidecar_file(tmp_path):
     (folder / "a.webp").write_bytes(b"still")
     (folder / "r.html").write_text("report")
     source = (
-        '<title>T</title><video data-clip><source src="t_media/a.webm"></video>'
+        '<title>T</title><video data-clip data-media poster="t_media/a.webp">'
+        '<source src="t_media/a.webm"></video>'
         '<img data-media src="t_media/a.webp" alt="A chip">'
         '<a data-media href="t_media/r.html">Open</a>'
         f"<p>{'x' * SIZE_BUDGET_BYTES}</p>"
@@ -536,6 +643,7 @@ def test_the_standalone_copy_inlines_every_sidecar_file(tmp_path):
     assert "t_media/" not in page
     assert '<source src="data:video/webm;base64,' in page
     assert 'src="data:image/webp;base64,' in page
+    assert 'poster="data:image/webp;base64,' in page
     assert 'href="data:text/html;base64,' in page
 
 
@@ -548,8 +656,8 @@ def test_build_standalone_writes_a_second_file(tmp_path):
     out.parent.mkdir()
 
     assert main([str(source), "--standalone", str(out)]) == 0
-    assert 'src="t_media/a.webp"' in (tmp_path / "t.html").read_text()
-    assert 'src="data:image/webp;base64,' in out.read_text()
+    assert 'src="t_media/a.webp"' in (tmp_path / "t.html").read_text(encoding="utf-8")
+    assert 'src="data:image/webp;base64,' in out.read_text(encoding="utf-8")
 
 
 def test_a_page_over_budget_fails_the_build(tmp_path):
@@ -656,6 +764,14 @@ def test_term_facts_become_a_definition_list(tmp_path):
     assert '<h3>A <span class="where">here</span></h3>' in page
     assert '<dl class="facts"><dt>What it is</dt><dd>x</dd>' in page
     assert "<dt>Typical value</dt><dd>y</dd></dl></article>" in page
+
+
+def test_an_svg_title_stays_in_its_svg(tmp_path):
+    source = "<title>T</title><svg><title>Drawing</title></svg>"
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert "<title>T</title>" in page
+    assert "<svg><title>Drawing</title></svg>" in page
 
 
 def test_glyph_tracer_outlines_an_icon_constant():

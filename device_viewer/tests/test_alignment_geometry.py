@@ -18,7 +18,9 @@ from device_viewer.utils.alignment_geometry import (
     camera_point_to_item,
     camera_quad_in_frame,
     camera_to_item_mapping,
+    device_render_rect,
     item_point_to_camera,
+    quad_between_scene_rects,
     quads_close,
     same_aspect_ratio,
     valid_frame_size,
@@ -112,3 +114,23 @@ def test_quads_close_within_tolerance_and_in_order():
     assert not quads_close(quad, quad[1:] + quad[:1])
     assert quads_close(None, None)
     assert not quads_close(quad, None)
+
+
+def test_device_render_rect_pads_by_the_larger_side():
+    # 2% of 200 = 4 on every side.
+    assert device_render_rect([10.0, 20.0, 200.0, 100.0]) == [6.0, 16.0, 208.0, 108.0]
+
+
+def test_quads_move_between_devices_by_their_scene_rects():
+    quad = [[10.0, 20.0], [110.0, 20.0], [110.0, 70.0], [10.0, 70.0]]
+
+    # The same relative place in a rect twice as large, elsewhere.
+    assert quad_between_scene_rects(
+        quad, [0.0, 0.0, 200.0, 100.0], [50.0, 50.0, 400.0, 200.0]
+    ) == [[70.0, 90.0], [270.0, 90.0], [270.0, 190.0], [70.0, 190.0]]
+    assert quad_between_scene_rects(quad, None, [0.0, 0.0, 1.0, 1.0]) is None
+    assert quad_between_scene_rects(quad, [0.0, 0.0, 1.0, 1.0], None) is None
+    assert (
+        quad_between_scene_rects(quad, [0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0])
+        is None
+    )

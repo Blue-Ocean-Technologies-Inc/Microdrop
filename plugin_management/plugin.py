@@ -31,7 +31,7 @@ from traits.api import Any, Bool, List, Str, observe
 
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
-from user_help_plugin.consts import TUTORIALS, TutorialEntry
+from user_help_plugin.consts import TUTORIAL_ORDER_MANAGEMENT, TUTORIALS, TutorialEntry
 
 # Microdrop utils imports.
 from microdrop_utils.environment_update import IExternalPluginsProvider
@@ -138,6 +138,7 @@ class PluginManagementPlugin(Plugin):
             TutorialEntry(
                 title="Plugin Management Tutorial",
                 path=PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_MANAGEMENT,
             ),
         ]
 
