@@ -88,6 +88,17 @@ Add an offset to slot an entry within its section (the Device section uses
 that sets no `order` gets `TUTORIAL_ORDER_DEFAULT` (1000): a section of its
 own after all of these, sorted by title, so older plugins need no change.
 
+## Tutorial Simulations pane
+
+**Help ▸ Tutorial Simulations...** opens a dock pane with every
+`<figure data-demo>` of every contributed tutorial: a tab per tutorial and,
+inside it, a tab per simulation. Nothing extra to build: the pane loads the
+built page once and shows one figure at a time
+(`user_help_plugin/resources/show_simulation.js`). A simulation's tab is
+named after the heading above its figure; give the figure a
+`data-title="…"` when that heading is ambiguous (several figures under one
+heading) or unclear on its own.
+
 ## Commit both files
 
 Commit the source **and** the built page. The page is what ships (no build
