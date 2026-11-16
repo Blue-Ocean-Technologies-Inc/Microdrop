@@ -8,12 +8,13 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Tutorial Simulations dock pane: every tutorial simulation, one tab each.
+"""Tutorial Simulations dock pane: every tutorial simulation, one at a time.
 
-An outer tab per tutorial and, inside it, a tab per simulation. Each
-tutorial page loads once, into one web view, when its tab is first shown
-while the pane is visible; switching simulations only changes which figure
-the page shows, so every simulation keeps its state.
+A contents tree on the left lists each tutorial with its simulations under
+it; the selected simulation shows on the right. Each tutorial page loads
+once, into one web view, when it is first selected while the pane is
+visible; switching simulations only changes which figure the page shows, so
+every simulation keeps its state.
 
 A web view is a raw Qt widget TraitsUI has no editor for, hence the raw Qt.
 """
@@ -40,14 +41,17 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
+#: Starting widths of the contents tree and the simulation view.
+SPLITTER_SIZES = [200, 600]
 
-def _tab_text(text):
-    """Return ``text`` for a Qt tab label, where a single & is a mnemonic."""
+
+def _escape_mnemonic(text):
+    """Return ``text`` for a Qt button label, where a single & is a mnemonic."""
     return text.replace("&", "&&")
 
 
-class TutorialSimulationsTab(QtWidgets.QWidget):
-    """One tutorial's simulations: a tab bar over a single web view."""
+class TutorialSimulationsPage(QtWidgets.QWidget):
+    """One tutorial page in a single web view, showing one simulation."""
 
     def __init__(self, record, parent=None):
         super().__init__(parent)
@@ -55,24 +59,16 @@ class TutorialSimulationsTab(QtWidgets.QWidget):
         self.record = record
         self._web_view = None
         self._page_ready = False
-
-        self._simulation_tabs = QtWidgets.QTabBar(self)
-        self._simulation_tabs.setDocumentMode(True)
-        self._simulation_tabs.setExpanding(False)
-        self._simulation_tabs.setUsesScrollButtons(True)
-
-        for index, simulation in enumerate(record.simulations):
-            self._simulation_tabs.addTab(_tab_text(simulation.title))
-            self._simulation_tabs.setTabToolTip(
-                index, f"{simulation.title} ({record.tutorial.title})"
-            )
-
-        self._simulation_tabs.currentChanged.connect(self._show_current_simulation)
+        self._simulation_index = 0
 
         self._layout = QtWidgets.QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(0)
-        self._layout.addWidget(self._simulation_tabs)
+
+    def select_simulation(self, index):
+        """Show the ``index``-th simulation, now or once the page is ready."""
+        self._simulation_index = index
+        self._show_current_simulation()
 
     def load(self):
         """Load the tutorial page on first use."""
@@ -108,7 +104,8 @@ class TutorialSimulationsTab(QtWidgets.QWidget):
         label.setWordWrap(True)
 
         button = QtWidgets.QPushButton(
-            f"Open {_tab_text(self.record.tutorial.title)} in the browser", fallback
+            f"Open {_escape_mnemonic(self.record.tutorial.title)} in the browser",
+            fallback,
         )
         button.clicked.connect(
             lambda: webbrowser.open(self.record.tutorial.path.as_uri())
@@ -135,18 +132,17 @@ class TutorialSimulationsTab(QtWidgets.QWidget):
         self._page_ready = True
         self._show_current_simulation()
 
-    def _show_current_simulation(self, *args):
+    def _show_current_simulation(self):
         if not self._page_ready:
             return
 
-        index = self._simulation_tabs.currentIndex()
-        demo = self.record.simulations[index].demo
+        demo = self.record.simulations[self._simulation_index].demo
 
         self._web_view.page().runJavaScript(f"microdropShowSim({json.dumps(demo)});")
 
 
 class TutorialSimulationsDockPane(DockPane):
-    """Every tutorial simulation, a tab per tutorial and per simulation."""
+    """Every tutorial simulation, picked from a tutorial/simulation tree."""
 
     #### 'ITaskPane' interface ################################################
 
@@ -165,59 +161,103 @@ class TutorialSimulationsDockPane(DockPane):
     #: The simulations to show, following the Help > Tutorials catalog.
     model = Instance(TutorialSimulationCatalog, ())
 
-    #: The outer, one-per-tutorial tab widget.
-    _tutorial_tabs = Instance(QtWidgets.QTabWidget)
+    #: The contents: a top-level item per tutorial, a child per simulation.
+    _contents_tree = Instance(QtWidgets.QTreeWidget)
+
+    #: One page per tutorial, in the same order as the tree's tutorials.
+    _pages = Instance(QtWidgets.QStackedWidget)
 
     def create_contents(self, parent):
-        self._tutorial_tabs = QtWidgets.QTabWidget(parent)
-        self._tutorial_tabs.setDocumentMode(True)
-        self._tutorial_tabs.setUsesScrollButtons(True)
-        self._tutorial_tabs.currentChanged.connect(self._load_current_tutorial)
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal, parent)
 
-        self._fill_tutorial_tabs()
+        self._contents_tree = QtWidgets.QTreeWidget(splitter)
+        self._contents_tree.setHeaderHidden(True)
+        self._contents_tree.currentItemChanged.connect(self._show_current)
 
-        return self._tutorial_tabs
+        self._pages = QtWidgets.QStackedWidget(splitter)
+
+        splitter.addWidget(self._contents_tree)
+        splitter.addWidget(self._pages)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes(SPLITTER_SIZES)
+
+        self._fill_contents()
+
+        return splitter
 
     @observe("model.tutorials")
     def _tutorials_changed(self, event):
-        if self._tutorial_tabs is not None:
-            self._fill_tutorial_tabs()
+        if self._contents_tree is not None:
+            self._fill_contents()
 
     @observe("visible")
     def _visibility_changed(self, event):
-        self._load_current_tutorial()
+        self._show_current()
 
-    def _fill_tutorial_tabs(self):
-        """Rebuild the tabs, keeping the shown tutorial selected if it stays."""
-        tabs = self._tutorial_tabs
-        current = tabs.currentWidget()
-        current_title = current.record.tutorial.title if current else None
+    def _fill_contents(self):
+        """Rebuild tree and pages, keeping the shown simulation if it stays."""
+        tree = self._contents_tree
+        pages = self._pages
 
-        tabs.blockSignals(True)
+        shown_page = pages.currentWidget()
+        shown_item = tree.currentItem()
+        shown_tutorial = shown_page.record.tutorial.title if shown_page else None
+        shown_simulation = shown_item.text(0) if shown_item else None
 
-        while tabs.count():
-            page = tabs.widget(0)
-            tabs.removeTab(0)
+        tree.blockSignals(True)
+        tree.clear()
+
+        while pages.count():
+            page = pages.widget(0)
+            pages.removeWidget(page)
             page.deleteLater()
 
+        selected = None
+
         for record in self.model.tutorials:
-            index = tabs.addTab(
-                TutorialSimulationsTab(record, tabs), _tab_text(record.label)
-            )
-            tabs.setTabToolTip(index, record.tutorial.title)
+            pages.addWidget(TutorialSimulationsPage(record, pages))
 
-            if record.tutorial.title == current_title:
-                tabs.setCurrentIndex(index)
+            tutorial_item = QtWidgets.QTreeWidgetItem(tree, [record.label])
+            tutorial_item.setToolTip(0, record.tutorial.title)
 
-        tabs.blockSignals(False)
+            for simulation in record.simulations:
+                item = QtWidgets.QTreeWidgetItem(tutorial_item, [simulation.title])
+                item.setToolTip(0, f"{simulation.title} ({record.tutorial.title})")
 
-        self._load_current_tutorial()
+                if (
+                    record.tutorial.title == shown_tutorial
+                    and simulation.title == shown_simulation
+                ):
+                    selected = item
 
-    def _load_current_tutorial(self, *args):
-        if not self.visible or self._tutorial_tabs is None:
+        if selected is None and tree.topLevelItemCount():
+            selected = tree.topLevelItem(0).child(0)
+
+        tree.expandAll()
+        tree.blockSignals(False)
+
+        if selected is not None:
+            tree.setCurrentItem(selected)
+
+    def _show_current(self, *args):
+        """Show the selected simulation; a tutorial keeps its last one shown."""
+        if self._contents_tree is None:
             return
 
-        page = self._tutorial_tabs.currentWidget()
+        item = self._contents_tree.currentItem()
 
-        if page is not None:
+        if item is None:
+            return
+
+        tutorial_item = item.parent() if item.parent() is not None else item
+        page = self._pages.widget(
+            self._contents_tree.indexOfTopLevelItem(tutorial_item)
+        )
+
+        self._pages.setCurrentWidget(page)
+
+        if item is not tutorial_item:
+            page.select_simulation(tutorial_item.indexOfChild(item))
+
+        if self.visible:
             page.load()
