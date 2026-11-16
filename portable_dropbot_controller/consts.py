@@ -303,6 +303,44 @@ CHIP_DETECT_RULE_ANY_POGO = "any_pogo"
 CHIP_DETECT_RULES = (CHIP_DETECT_RULE_BOTH_POGOS, CHIP_DETECT_RULE_ANY_POGO)
 DEFAULT_CHIP_DETECT_RULE = CHIP_DETECT_RULE_BOTH_POGOS
 
+#: Chip engage modes (Portable DropBot Settings preference): how a chip lock
+#: presses the pogo pads. Classic is the motor board's fixed-position press;
+#: smart is the signal board's PAD_ENGAGE, where each pad descends until its
+#: own contact sensor trips, then overdrives (both pads must be homed).
+CHIP_ENGAGE_MODE_CLASSIC = "classic"
+CHIP_ENGAGE_MODE_SMART = "smart"
+CHIP_ENGAGE_MODES = (CHIP_ENGAGE_MODE_CLASSIC, CHIP_ENGAGE_MODE_SMART)
+DEFAULT_CHIP_ENGAGE_MODE = CHIP_ENGAGE_MODE_CLASSIC
+
+#: PAD_ENGAGE (signal board, 0x1250) arguments. Retract is the vendor UI's
+#: way out of any engage: action 0 with mode 0.
+PAD_ENGAGE_CMD = 0x1250
+PAD_ENGAGE_ACTION_ENGAGE = 1
+PAD_ENGAGE_ACTION_RETRACT = 0
+PAD_ENGAGE_MODE_SMART = 1
+PAD_ENGAGE_MODE_CLASSIC = 0
+#: Smart descent at the vendor UI's defaults: step (µm, signed, the sign is
+#: the descent direction), the most steps before giving up, and the press
+#: past contact (µm).
+PAD_ENGAGE_STEP_UM = 200
+PAD_ENGAGE_MAX_STEPS = 18
+PAD_ENGAGE_OVERDRIVE_UM = 300
+#: PAD_ENGAGE reply status: 0 is done; every other status is a failure.
+#: A motor error is also how an engage with unhomed pads can end. Statuses
+#: 4 and 5 may leave the pads pressing the chip.
+PAD_ENGAGE_STATUS_OK = 0
+PAD_ENGAGE_STATUS_MOTOR_ERROR = 2
+PAD_ENGAGE_FAILURES = {
+    1: "no contact: the pads found no chip and retracted",
+    PAD_ENGAGE_STATUS_MOTOR_ERROR: "motor error: the pads retracted",
+    3: "busy: a pad engage is already running",
+    4: "the retract after a failed engage also failed",
+    5: "a motor E-STOP stopped it and nothing was retracted",
+}
+PAD_ENGAGE_PADS_MAY_BE_PRESSED = (4, 5)
+#: Smart engage's prerequisite (vendor UI), added to its refusals.
+SMART_ENGAGE_NEEDS = "smart engage needs both pads homed (Home All)"
+
 #: Boards whose fans the driver's setFan(on, board=...) drives, by the
 #: driver's own names: the MCU (signal) board fan or the motor board fans.
 FAN_BOARDS = ("signal", "motor")
@@ -329,6 +367,7 @@ DEFAULT_FREQUENCY_KEY = "default_frequency"
 DEFAULT_LIGHT_INTENSITY_KEY = "default_light_intensity"
 FAN_BOARD_KEY = "fan_board"
 CHIP_DETECT_RULE_KEY = "chip_detect_rule"
+CHIP_ENGAGE_MODE_KEY = "chip_engage_mode"
 DROPLET_DETECTION_THRESHOLD_PF_KEY = "droplet_detection_threshold_pf"
 
 PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
@@ -339,6 +378,7 @@ PORTABLE_DROPBOT_PREFERENCES_APP_GLOBALS_KEYS = (
     DEFAULT_LIGHT_INTENSITY_KEY,
     FAN_BOARD_KEY,
     CHIP_DETECT_RULE_KEY,
+    CHIP_ENGAGE_MODE_KEY,
     DROPLET_DETECTION_THRESHOLD_PF_KEY,
 )
 
@@ -400,6 +440,8 @@ MAGNET_APPLIED = "portable_dropbot/signals/magnet_applied"
 TEMPERATURE_REACHED = "portable_dropbot/signals/temperature_reached"
 ALARM_RAISED = "portable_dropbot/signals/alarm"
 ERROR_RAISED = "portable_dropbot/signals/error"
+#: A smart chip lock or a pad retract that did not finish (ChipLockFailed).
+CHIP_LOCK_FAILED = "portable_dropbot/signals/chip_lock_failed"
 
 # Request topics handled by this plugin.
 RETRY_CONNECTION = "portable_dropbot/requests/retry_connection"
@@ -862,6 +904,20 @@ class MoveTrayRequest(BaseModel):
 
 move_tray_publisher = ValidatedTopicPublisher(
     topic=MOVE_TRAY, validator_class=MoveTrayRequest
+)
+
+
+class ChipLockFailed(BaseModel):
+    """A chip lock or unlock through PAD_ENGAGE that did not finish, and why.
+    `pads_may_be_pressed` is set when the pads may still press the chip."""
+
+    action: Literal["lock", "unlock"]
+    error: str
+    pads_may_be_pressed: bool = False
+
+
+chip_lock_failed_publisher = ValidatedTopicPublisher(
+    topic=CHIP_LOCK_FAILED, validator_class=ChipLockFailed
 )
 
 # --------------------------------------------------------------------- #

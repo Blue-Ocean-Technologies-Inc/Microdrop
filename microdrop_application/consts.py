@@ -36,6 +36,11 @@ ADVANCED_MODE_CHANGE = "microdrop/advanced_mode_change"
 FILE_MENU_SUBMENUS_GROUP_ID = "SubmenusGroup"
 FILE_MENU_EXIT_GROUP_ID = "ExitGroup"
 
+#: QApplication dynamic property that is True while Touch mode is on. It
+#: flips together with the touch stylesheet block, so every widget gets a
+#: StyleChange event to re-read it on. Read it with helpers.is_touch_mode.
+TOUCH_MODE_APP_PROPERTY = "microdropTouchMode"
+
 
 # App-wide colour-scheme override (MicrodropPreferences.color_scheme). The
 # light/dark values match microdrop_style.helpers.QT_THEME_NAMES, which maps
