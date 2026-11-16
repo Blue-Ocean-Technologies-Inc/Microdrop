@@ -444,6 +444,34 @@ def test_a_clip_in_the_media_folder_stays_a_sidecar(tmp_path):
     assert 'poster="data:image/webp;base64,' in page
 
 
+def test_a_media_clip_keeps_its_poster_as_a_sidecar(tmp_path):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "a.webm").write_bytes(b"clip")
+    (tmp_path / "t_media" / "a.webp").write_bytes(b"still")
+    source = (
+        '<title>T</title><video data-clip data-media poster="t_media/a.webp">'
+        '<source src="t_media/a.webm"></video>'
+    )
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert '<video data-clip data-media poster="t_media/a.webp">' in page
+    assert "data:image/webp" not in page
+
+
+@pytest.mark.parametrize("poster", ["p.webp", "t_media/missing.webp"])
+def test_a_media_clip_poster_must_be_in_the_media_folder(tmp_path, poster):
+    (tmp_path / "t_media").mkdir()
+    (tmp_path / "t_media" / "a.webm").write_bytes(b"clip")
+    (tmp_path / "p.webp").write_bytes(b"still")
+    source = (
+        f'<title>T</title><video data-clip data-media poster="{poster}">'
+        '<source src="t_media/a.webm"></video>'
+    )
+
+    with pytest.raises(TutorialBuildError, match="t_media|not found"):
+        render_tutorial(source, tmp_path, {}, "t.src.html")
+
+
 @pytest.mark.parametrize(
     "clip",
     ["a.webm", "other_media/a.webm", "t_media/../a.webm", "file:///t_media/a.webm"],
@@ -603,7 +631,8 @@ def test_the_standalone_copy_inlines_every_sidecar_file(tmp_path):
     (folder / "a.webp").write_bytes(b"still")
     (folder / "r.html").write_text("report")
     source = (
-        '<title>T</title><video data-clip><source src="t_media/a.webm"></video>'
+        '<title>T</title><video data-clip data-media poster="t_media/a.webp">'
+        '<source src="t_media/a.webm"></video>'
         '<img data-media src="t_media/a.webp" alt="A chip">'
         '<a data-media href="t_media/r.html">Open</a>'
         f"<p>{'x' * SIZE_BUDGET_BYTES}</p>"
@@ -614,6 +643,7 @@ def test_the_standalone_copy_inlines_every_sidecar_file(tmp_path):
     assert "t_media/" not in page
     assert '<source src="data:video/webm;base64,' in page
     assert 'src="data:image/webp;base64,' in page
+    assert 'poster="data:image/webp;base64,' in page
     assert 'href="data:text/html;base64,' in page
 
 
