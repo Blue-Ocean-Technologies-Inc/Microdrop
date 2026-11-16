@@ -17,7 +17,13 @@ GUI-thread only; no Redis or dramatiq involvement."""
 from traits.api import Dict, HasTraits, Str
 
 # Local imports.
-from .consts import TOOL_DPAD, TOOL_KEYBOARD, TOOL_MOUSE, TOOL_NUMPAD
+from .consts import (
+    PAD_SCREEN_EDGE_GAP_PX,
+    TOOL_DPAD,
+    TOOL_KEYBOARD,
+    TOOL_MOUSE,
+    TOOL_NUMPAD,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -50,6 +56,36 @@ class TouchAssistManager(HasTraits):
         if visible:
             widget.raise_()
         logger.info(f"Touch Assist {tool}: {'shown' if visible else 'hidden'}")
+
+    def is_visible(self, tool):
+        """Whether ``tool`` is on screen."""
+        widget = self._widgets.get(tool)
+
+        return widget is not None and widget.isVisible()
+
+    def show_clear_of(self, tool, field_rect):
+        """Show ``tool`` centred along the screen edge away from
+        ``field_rect`` (global), so it never covers the field being typed
+        into, and tick its menu box."""
+        self.set_visible(tool, True)
+        widget = self._widgets.get(tool)
+
+        if widget is None:
+            return
+
+        widget.adjustSize()
+        area = widget.screen().availableGeometry()
+        y = area.bottom() + 1 - widget.height() - PAD_SCREEN_EDGE_GAP_PX
+
+        if field_rect.center().y() > area.center().y():
+            y = area.top() + PAD_SCREEN_EDGE_GAP_PX
+
+        widget.move(area.center().x() - widget.width() // 2, y)
+
+        action = self._actions.get(tool)
+
+        if action is not None:
+            action.checked = True
 
     def widget_closed(self, tool):
         """The widget's own close button: mirror it into the menu."""
