@@ -52,6 +52,36 @@ ol.send-list code { word-break: break-all; }
 .sim-log .DEBUG { color: #875fff; } .sim-log .INFO { color: #00cd00; } .sim-log .WARNING { color: #ff8700; }
 .sim-log .ERROR { color: #cd0000; } .sim-log .CRITICAL { color: #ff0000; }
 .sim-log tr.empty td { color: #abb2bf; font-style: italic; }
+.rp-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 760px) { .rp-grid { grid-template-columns: minmax(0, 1fr); } }
+.rp-page { background: #fff; color: #222; font: 12px/1.4 sans-serif; border: 1px solid var(--line); border-radius: 6px;
+  padding: 10px 12px; max-height: 640px; overflow: auto; }
+.rp-page h1 { font-size: 1.4rem; margin: 0 0 4px; }
+.rp-page h3 { font-size: .95rem; margin: 6px 0 2px; }
+.rp-page summary { cursor: pointer; font-weight: bold; margin: 8px 0 3px; }
+.rp-page summary > h2 { display: inline; font-size: 1.1rem; margin: 0; }
+.rp-page table { border-collapse: collapse; }
+.rp-page td, .rp-page th { border: 1px solid #ccc; padding: 2px 6px; text-align: left; font-weight: normal; }
+.rp-page thead th, .rp-page tr > th:first-child { font-weight: bold; }
+.rp-page a { color: #0645ad; }
+.rp-page ul { margin: 2px 0; padding-left: 1.4em; }
+.rp-page .footnote { color: #666; font-size: small; margin: 2px 0 6px; }
+figure.demo .rp-page svg { display: block; width: 100%; max-width: 420px; height: auto; }
+figure.demo .rp-page svg text { font: 9px sans-serif; fill: #222; }
+.rp-toggle { display: block; font-size: small; margin: 6px 0 0; }
+.rp-folded details { margin: 0; }
+.rp-media { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+.rp-play, .rp-thumb { width: 72px; height: 48px; border-radius: 3px; display: grid; place-items: center; }
+.rp-play { background: #000; color: #fff; font-size: 18px; }
+.rp-thumb { background: linear-gradient(135deg, #8a9aa6, #c9d3da); }
+.rp-page [data-rp] { cursor: pointer; }
+.rp-page [data-rp]:hover { outline: 2px dashed #17a2b8; outline-offset: 1px; }
+.rp-page .rp-on, .rp-page tr.rp-on > * { background: #fff3b0; }
+.rp-page .rp-on { outline: 2px solid #e0a000; outline-offset: 1px; }
+.rp-explain { position: sticky; top: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  padding: 10px 12px; font-size: .9rem; }
+.rp-explain .rp-count { margin: 0; color: var(--muted); font-size: .8rem; }
+.rp-explain h4 { margin: 2px 0 4px; }
 </style>
 
 <header data-hero>
@@ -657,6 +687,71 @@ say when each matters and whether it is safe to delete.</p>
   the reports made since MicroDrop started.</p></div>
 </section>
 
+<section data-term id="store-report" data-where="Experiment folder ▸ reports ▸ report_&lt;time&gt;.html">
+  <h3>The run report</h3>
+  <p>A copy of a real run report, shortened. Click any part of it, or use <strong>Next ▸</strong> for a tour: the panel
+  says what the part is, where its numbers come from and how to read it.</p>
+  <figure data-demo="report" data-title="Run report" aria-label="A copy of a run report: click a part to have it explained">
+    <div class="rp-grid">
+      <div class="rp-page">
+        <h1 data-rp="page" tabindex="0">Protocol Report</h1>
+        <details open><summary data-rp="fold" tabindex="0"><h2>Metadata</h2></summary>
+          <table>
+            <tr data-rp="exp" tabindex="0"><th>Experiment Directory</th><td><a href="#">2026_11_11-16_19_11</a></td></tr>
+            <tr data-rp="svg" tabindex="0"><th>Device SVG</th><td><a href="#">90_pin_array.svg</a></td></tr>
+            <tr data-rp="diel" tabindex="0"><th>Dielectric Material</th><td>Parylene C</td></tr>
+            <tr data-rp="diel"><th>Dielectric Constant</th><td>3.1</td></tr>
+            <tr data-rp="filler" tabindex="0"><th>Filler Capacitance Over Area (pF/mm^2)</th><td>0.61</td></tr>
+            <tr data-rp="steps" tabindex="0"><th>Steps</th><td>4 / 4</td></tr>
+            <tr data-rp="proto" tabindex="0"><th>Protocol Path</th><td><a href="#">protocol_2026_11_11-17_30_14.json</a></td></tr>
+            <tr data-rp="times" tabindex="0"><th>Start Time</th><td>2026-11-11 12:29:56</td></tr>
+            <tr data-rp="times"><th>Stop Time</th><td>2026-11-11 12:31:02</td></tr>
+            <tr data-rp="times"><th>Elapsed Time</th><td>0:01:06</td></tr>
+          </table>
+          <label class="rp-toggle" data-rp="outlier"><input type="checkbox" class="rp-outlier"> Exclude per-step outliers (1.5 × IQR)</label>
+        </details>
+        <details open><summary data-rp="fold"><h2>Data Files</h2></summary>
+          <ul data-rp="files" tabindex="0"><li><a href="#">data_20261111_122956.json</a></li><li><a href="#">data_20261111_122956.csv</a></li></ul>
+        </details>
+        <details open><summary data-rp="fold"><h2>Data Summary</h2></summary>
+          <table data-rp="summary" tabindex="0"><thead><tr><th>Column</th><th>mean</th><th>std</th><th>min</th><th>max</th></tr></thead>
+            <tbody class="rp-stats"></tbody></table>
+        </details>
+        <details open><summary data-rp="fold"><h2>Data Trends</h2></summary>
+          <details open data-rp="heatmap" tabindex="0"><summary>Device actuation heatmap</summary><svg class="rp-heat" viewBox="0 0 300 70" role="img" aria-label="Electrodes coloured by actuation time"></svg></details>
+          <details open data-rp="chart" tabindex="0"><summary>Capacitance (pF)</summary><svg class="rp-bars" data-col="0" viewBox="0 0 300 118" role="img" aria-label="Mean capacitance per step"></svg></details>
+          <div class="rp-folded" data-rp="folded" tabindex="0">
+            <details><summary>Voltage (V)</summary></details>
+            <details><summary>Force Over Unit Area (mN/mm^2)</summary></details>
+            <details><summary>Actuated Area (mm^2)</summary></details>
+            <details><summary>Capacitance Over Area (pF/mm^2)</summary></details>
+          </div>
+          <details open data-rp="chart"><summary>Dielectric Thickness (um)</summary><svg class="rp-bars" data-col="5" viewBox="0 0 300 118" role="img" aria-label="Mean dielectric thickness per step"></svg>
+            <p class="footnote" data-rp="footnote" tabindex="0">Thickness uses capacitance over area minus the filler calibration (0.61 pF/mm^2).</p></details>
+        </details>
+        <details open><summary data-rp="fold"><h2>Media Captures</h2></summary>
+          <h3>Video Captures</h3>
+          <div class="rp-media" data-rp="video" tabindex="0"><span class="rp-play">▶</span><a href="#">recording_20261111_123010.mkv</a></div>
+          <h3>Image Captures</h3>
+          <div class="rp-media" data-rp="image" tabindex="0"><span class="rp-thumb"></span><a href="#">capture_20261111_123001.png</a></div>
+        </details>
+      </div>
+      <div class="rp-explain" aria-live="polite">
+        <p class="rp-count"></p>
+        <h4 class="rp-name"></h4>
+        <dl class="lookup-out">
+          <dt>What it is</dt><dd class="rp-what"></dd>
+          <dt>Comes from</dt><dd class="rp-from"></dd>
+          <dt>How to read it</dt><dd class="rp-read"></dd>
+        </dl>
+        <div class="controls"><button type="button" class="rp-prev">◂ Prev</button><button type="button" class="rp-next">Next ▸</button></div>
+      </div>
+    </div>
+    <figcaption>Shortened copy: the real report draws its charts larger, with every chart open, and its links open the
+    files. The numbers are an example run of four steps.</figcaption>
+  </figure>
+</section>
+
 <section data-term id="where-lookup" data-where="Interactive">
   <h3>Where is my …?</h3>
   <p>Pick a thing and your computer: see where it lives, what writes it, how to open it, and whether you may delete it.</p>
@@ -1056,5 +1151,213 @@ Tutorial.demo("support", function (figure, T) {
   os.addEventListener("change", draw);
   Object.keys(ticks).forEach(function (key) { ticks[key].addEventListener("change", draw); });
   draw();
+});
+Tutorial.demo("report", function (figure, T) {
+  /* Mirrors pluggable_protocol_tree/services/logging/reporting.py: section
+     order, row names, the outlier toggle swapping summary rows and bars, and
+     Step 1 at the top of each chart. The numbers are a made-up four-step run. */
+  var STATS = [
+    ["col-cap", "Capacitance (pF)", ["49.63", "1.912", "38.24", "61.71"], ["49.67", "1.341", "46.12", "52.93"]],
+    ["col-v", "Voltage (V)", ["119.8", "1.874", "112", "121"], ["120", "0.6124", "118", "121"]],
+    ["col-force", "Force Over Unit Area (mN/mm^2)", ["4.227e+04", "1338", "3.694e+04", "4.312e+04"], ["4.24e+04", "424.1", "4.101e+04", "4.312e+04"]],
+    ["col-area", "Actuated Area (mm^2)", ["8.693", "1.905e-06", "8.693", "8.693"], ["8.693", "1.905e-06", "8.693", "8.693"]],
+    ["col-cpa", "Capacitance Over Area (pF/mm^2)", ["5.709", "0.22", "4.399", "7.099"], ["5.714", "0.1543", "5.305", "6.089"]],
+    ["col-thick", "Dielectric Thickness (um)", ["5.384", "0.2794", "4.23", "7.244"], ["5.36", "0.1661", "5.01", "5.846"]]
+  ];
+  /* Per step [mean, std], raw then kept; outliers are whole rows, so the
+     excluded count per step is shared by every chart. */
+  var STEPS = {
+    0: { label: "Capacitance (pF)", max: 56, raw: [[49.2, 1.1], [51.0, 0.9], [50.4, 3.8], [47.9, 1.4]], kept: [[49.2, 1.1], [50.9, 0.7], [50.1, 1.0], [47.9, 1.4]] },
+    5: { label: "Dielectric Thickness (um)", max: 6.4, raw: [[5.44, 0.12], [5.22, 0.09], [5.29, 0.42], [5.6, 0.16]], kept: [[5.44, 0.12], [5.23, 0.07], [5.3, 0.11], [5.6, 0.16]] }
+  };
+  var EXCLUDED = [0, 1, 2, 0];
+  var HEAT = [0, 4.1, 12.3, 20.5, 8.2, 0, 0, 3.0, 15.6, 33.4, 12.0, 2.2];
+  var INFO = {
+    page: ["Protocol Report", "One web page per protocol run: what ran, what was measured, and the pictures taken.",
+      "Written to the experiment's reports folder as report_<time>.html when a run finishes; after a stopped run only if you answer Yes to Generate Run Summary?",
+      "Open it in any web browser. The charts load their drawing library from the internet, so offline they stay blank; the tables and links still work."],
+    fold: ["Section headings", "Metadata, Data Files, Data Summary, Data Trends and Media Captures, each in a fold.",
+      "The report's layout.", "Click a heading to fold its section away, and again to open it."],
+    exp: ["Experiment Directory", "The experiment folder this run belongs to.",
+      "The experiment active when the run started. Starting a new experiment at the end-of-run question does not move this report.",
+      "Click it to open the folder: the data, protocol copy, captures and log of this run are inside."],
+    svg: ["Device SVG", "The device file (chip drawing) loaded when the run started.",
+      "The Device Viewer, at run start. None when no device was loaded.",
+      "The actuation heatmap below needs it: without a device there is no heatmap."],
+    diel: ["Dielectric Material and Constant", "The dielectric picked in the DropBot status pane, and its relative permittivity.",
+      "Read once, at run start: changing it during the run does not change this run.",
+      "not set when none was picked; then the run has no Dielectric Thickness column or chart."],
+    filler: ["Filler Capacitance Over Area", "The filler calibration, in pF/mm^2: the capacitance with only filler (oil or air) on the electrodes.",
+      "The Device Viewer's capacitance calibration, at run start.",
+      "Subtracted for the thickness estimate. not set when none was measured. A change during the run shows in the thickness footnote, not here."],
+    steps: ["Steps", "Steps that ran / steps in one pass of the protocol.",
+      "Counted as the run goes.",
+      "With Repeat above 1 the left number is larger (15 / 5 for three passes). Plugins can add rows after this one, such as PMT Captures Folder."],
+    proto: ["Protocol Path", "A copy of the protocol exactly as it ran.",
+      "Saved into the experiment's protocols folder at the end of the run.",
+      "Open it in MicroDrop to run the same protocol again, even after you have changed yours."],
+    times: ["Start, Stop and Elapsed Time", "When logging started and stopped, on this computer's clock, and the time in between.",
+      "Start is just before the settle wait; Stop is when you answered the end-of-run question.",
+      "So Elapsed also counts the settle wait and the time that question stayed open, not only the steps."],
+    outlier: ["Exclude per-step outliers", "Leaves out samples far from the rest of their step.",
+      "A sample is an outlier when it lies outside its step's quartiles ± 1.5 × IQR in any column; it then drops out of every column. A step with fewer than 4 samples is left alone.",
+      "Tick it (it works here): the Data Summary and the bar charts switch to the kept samples; the heatmap does not change. Hover a bar to see how many samples were left out."],
+    files: ["Data Files", "The run's raw data, twice: .json and .csv.",
+      "The experiment's data folder, named after the run's start time. The report is named after the time it was written, so the two times differ.",
+      "Open the .csv in a spreadsheet: one row per capacitance sample, with the step number, times, the electrodes that were on, and every column below."],
+    summary: ["Data Summary", "One row per measured column: mean, std (standard deviation), min and max.",
+      "Every sample of the whole run.",
+      "A column is listed only when it has numbers: Force needs a capacitance calibration, Dielectric Thickness a picked dielectric. std is the spread over the whole run, not per step. Click a row for its column."],
+    "col-cap": ["Capacitance (pF)", "The capacitance the DropBot measured across the electrodes that were on.",
+      "Every capacitance reading the DropBot sent while a step ran.",
+      "Liquid on the electrodes raises it. A step that reads near the empty value suggests the droplet did not follow."],
+    "col-v": ["Voltage (V)", "The actuation voltage the DropBot measured back.",
+      "Every capacitance reading carries the voltage measured with it.",
+      "Should sit close to each step's Voltage setting."],
+    "col-force": ["Force Over Unit Area", "An estimate of the force driving the droplet.",
+      "0.5 × (liquid − filler calibration) × voltage², for each sample.",
+      "Grows with the square of the voltage. Missing when no capacitance calibration was received during the run."],
+    "col-area": ["Actuated Area (mm^2)", "The total area of the electrodes that were on.",
+      "The device file's electrode areas, added up for the channels that were on.",
+      "Not a measurement. A tiny std, like 1.905e-06 here, is rounding. Routes change the area every phase, which shows as a wide error bar."],
+    "col-cpa": ["Capacitance Over Area", "Capacitance divided by the actuated area.",
+      "Capacitance (pF) ÷ Actuated Area (mm^2), per sample; empty when nothing was on.",
+      "Lets you compare steps with different numbers of electrodes on. Electrodes only partly covered by liquid lower it."],
+    "col-thick": ["Dielectric Thickness (um)", "An estimate of the dielectric coating's thickness.",
+      "Dielectric constant × ε0 ÷ (capacitance over area − filler calibration), per sample.",
+      "Only valid while the electrodes that are on are fully covered by liquid: empty or partly covered electrodes make it read too thick."],
+    heatmap: ["Device actuation heatmap", "The chip drawing, each electrode coloured by how long it was on in total.",
+      "Number of capacitance samples taken while the channel was on × the average time between samples. Needs a device file.",
+      "Hover an electrode for its time; the colour bar gives the scale. The busiest electrodes are the ones to watch for wear."],
+    chart: ["Bar chart per column", "One bar per step that ran: the step's mean, with an error bar of ± one standard deviation.",
+      "The samples, grouped by step. Step 1, the first step that ran, is at the top.",
+      "Step N is the Nth step that ran, not its row in the tree: repeats keep counting. A long error bar means the value moved a lot within the step (Step 3 here). A step with one sample has no error bar."],
+    folded: ["The other charts", "One chart for every column of the Data Summary, each in its own fold.",
+      "Same as the chart above, one per column.",
+      "In the real report every chart starts open; here they are folded to save space. Click a name in the real report to fold or open it."],
+    footnote: ["Footnote", "A small grey note under a chart.",
+      "Today only Dielectric Thickness has one.",
+      "Says whether the filler calibration was subtracted, with which value, and warns when it changed during the run."],
+    video: ["Video Captures", "Videos recorded during the run.",
+      "Recordings the Device Viewer saved while the run went.",
+      "Click the black box to play it inside the page (it depends on the browser playing .mkv), or the name to open the file. The whole Media Captures section is left out when nothing was captured."],
+    image: ["Image Captures", "Pictures taken during the run, as small thumbnails.",
+      "Captures the Device Viewer saved while the run went.",
+      "Click the picture or its name to open the full-size file. Other Captures lists any other kind of file."]
+  };
+  var ORDER = ["page", "fold", "exp", "svg", "diel", "filler", "steps", "proto", "times", "outlier", "files", "summary",
+    "col-cap", "col-v", "col-force", "col-area", "col-cpa", "col-thick", "heatmap", "chart", "folded", "footnote", "video", "image"];
+  var page = figure.querySelector(".rp-page");
+  var toggle = figure.querySelector(".rp-outlier");
+  var current = 0;
+
+  function q(selector) { return figure.querySelector(selector); }
+
+  function renderStats() {
+    var body = q(".rp-stats"), side = toggle.checked ? 3 : 2;
+
+    body.innerHTML = "";
+    STATS.forEach(function (row) {
+      var tr = document.createElement("tr");
+
+      tr.setAttribute("data-rp", row[0]);
+      tr.tabIndex = 0;
+      tr.innerHTML = "<th>" + row[1] + "</th><td>" + row[side].join("</td><td>") + "</td>";
+      body.appendChild(tr);
+    });
+  }
+
+  function renderBars(svg) {
+    var spec = STEPS[svg.getAttribute("data-col")], rows = toggle.checked ? spec.kept : spec.raw;
+    var sx = T.scale(0, spec.max, 46, 290);
+
+    T.clear(svg);
+    rows.forEach(function (stat, i) {
+      var y = 6 + i * 21, tip = "Mean " + stat[0] + " ± " + stat[1];
+      var bar = T.el("rect", { x: 46, y: y, width: sx(stat[0]) - 46, height: 15, fill: "#17a2b8" }, svg);
+      var lo = sx(stat[0] - stat[1]), hi = sx(stat[0] + stat[1]);
+
+      if (toggle.checked) { tip += "\n" + EXCLUDED[i] + " sample(s) excluded"; }
+
+      T.el("title", {}, bar).textContent = tip;
+      T.text(svg, 42, y + 11, "Step " + (i + 1), { "text-anchor": "end" });
+      T.el("path", { d: "M" + lo + " " + (y + 7.5) + "H" + hi + "M" + lo + " " + (y + 4) + "v7M" + hi + " " + (y + 4) + "v7",
+        stroke: "#2a3f5f", fill: "none" }, svg);
+    });
+    T.el("path", { d: "M46 92H290", stroke: "#ccc" }, svg);
+    [0, spec.max / 2, spec.max].forEach(function (v) { T.text(svg, sx(v), 102, String(v), { "text-anchor": "middle" }); });
+    T.text(svg, 168, 114, "Mean " + spec.label, { "text-anchor": "middle" });
+  }
+
+  function renderHeat() {
+    var svg = q(".rp-heat"), max = Math.max.apply(null, HEAT);
+    var stops = [[68, 1, 84], [33, 145, 140], [253, 231, 37]];
+
+    function colour(t) {
+      var f = t / max * 2, i = Math.min(1, Math.floor(f)), u = f - i;
+
+      return "rgb(" + [0, 1, 2].map(function (k) { return Math.round(stops[i][k] + (stops[i + 1][k] - stops[i][k]) * u); }).join(",") + ")";
+    }
+
+    HEAT.forEach(function (t, n) {
+      var cell = T.el("rect", { x: 4 + (n % 6) * 34, y: 4 + Math.floor(n / 6) * 32, width: 31, height: 29, fill: colour(t), stroke: "#fff" }, svg);
+
+      T.el("title", {}, cell).textContent = "Channel " + (n + 10) + ": " + t.toFixed(1) + " seconds";
+    });
+
+    for (var k = 0; k < 20; k++) {
+      T.el("rect", { x: 220, y: 4 + k * 3, width: 10, height: 3.2, fill: colour(max * (19 - k) / 19) }, svg);
+    }
+
+    T.text(svg, 234, 12, max.toFixed(0) + " s");
+    T.text(svg, 234, 64, "0 s");
+  }
+
+  function show(index) {
+    var key = ORDER[index], info = INFO[key];
+
+    current = index;
+    page.querySelectorAll(".rp-on").forEach(function (node) { node.classList.remove("rp-on"); });
+    page.querySelectorAll('[data-rp="' + key + '"]').forEach(function (node) { node.classList.add("rp-on"); });
+    q(".rp-count").textContent = (index + 1) + " of " + ORDER.length;
+    q(".rp-name").textContent = info[0];
+    q(".rp-what").textContent = info[1];
+    q(".rp-from").textContent = info[2];
+    q(".rp-read").textContent = info[3];
+  }
+
+  function select(node) {
+    var spot = node && node.closest("[data-rp]");
+
+    if (!spot || !page.contains(spot)) { return; }
+
+    show(ORDER.indexOf(spot.getAttribute("data-rp")));
+    spot.scrollIntoView({ block: "nearest" });
+  }
+
+  function step(by) {
+    select(page.querySelector('[data-rp="' + ORDER[(current + by + ORDER.length) % ORDER.length] + '"]'));
+  }
+
+  page.addEventListener("click", function (event) {
+    if (event.target.closest("a, .rp-folded summary")) { event.preventDefault(); }
+
+    select(event.target);
+  });
+  page.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") { select(event.target); }
+  });
+  toggle.addEventListener("change", function () {
+    renderStats();
+    figure.querySelectorAll(".rp-bars").forEach(renderBars);
+    show(current);
+  });
+  q(".rp-prev").addEventListener("click", function () { step(-1); });
+  q(".rp-next").addEventListener("click", function () { step(1); });
+
+  renderStats();
+  figure.querySelectorAll(".rp-bars").forEach(renderBars);
+  renderHeat();
+  show(0);
 });
 </script>
