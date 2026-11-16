@@ -15,9 +15,9 @@ Runs the shape-moments prototype's five synthetic droplets
 droplet, every frame's root-normalised Hu vector (``hu_root``) as
 thousandths, trailing zeros dropped. The guide recomputes Shape change
 from these vectors in JavaScript, so it can re-baseline when images are
-excluded. Paste
-the printed ``SHAPE_SERIES`` literal over the one in
-``image_viewer/resources/analysis_help.html``. From ``src``::
+excluded. Paste the printed ``SHAPE_SERIES`` literal over the one in
+``image_viewer/resources/analysis_help.src.html``, then rebuild the page
+(``examples/tutorials/build_tutorial.py``). From ``src``::
 
     pixi run python -m examples.analysis_help.generate_shape_series
 """

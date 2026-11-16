@@ -25,12 +25,20 @@ from traits.api import Float, HasTraits, List, Str, Union
 
 # Local imports.
 from ..consts import (
+    ALIGNMENT_PRESET_KIND_LAST_USED,
     ALIGNMENT_PRESET_KIND_NAMED,
+    ALIGNMENT_PRESET_SCOPE_CAMERA,
+    ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE,
     ALIGNMENT_PRESET_SCOPE_DEVICE,
+    ALIGNMENT_PRESET_SCOPE_LABELS,
     PRESET_NAME_CONTROL_CHARACTERS_MESSAGE,
     PRESET_NAME_EMPTY_MESSAGE,
+    PRESET_SCOPE_NEEDS_CAMERA_MESSAGE,
+    PRESET_SCOPE_NEEDS_CAMERA_QUAD_MESSAGE,
+    PRESET_SCOPE_UNKNOWN_TEMPLATE,
 )
 from ..utils.quad_order import canonical_quad
+from .camera_identity import CameraIdentity
 
 
 def alignment_preset_name_error(name):
@@ -46,6 +54,25 @@ def alignment_preset_name_error(name):
 
     if any(ord(character) < 32 or ord(character) == 127 for character in name):
         return PRESET_NAME_CONTROL_CHARACTERS_MESSAGE
+
+    return ""
+
+
+def alignment_scope_error(scope, camera_label, camera_id, has_camera_quad):
+    """Return why a preset saved with this camera (and camera corners or
+    not) cannot have ``scope``, or "" when it can."""
+
+    if scope not in ALIGNMENT_PRESET_SCOPE_LABELS:
+        return PRESET_SCOPE_UNKNOWN_TEMPLATE.format(scope=scope)
+
+    if scope == ALIGNMENT_PRESET_SCOPE_DEVICE:
+        return ""
+
+    if not (camera_label or camera_id):
+        return PRESET_SCOPE_NEEDS_CAMERA_MESSAGE
+
+    if scope == ALIGNMENT_PRESET_SCOPE_CAMERA and not has_camera_quad:
+        return PRESET_SCOPE_NEEDS_CAMERA_QUAD_MESSAGE
 
     return ""
 
@@ -91,11 +118,13 @@ class AlignmentPreset(HasTraits):
     #: The user's name for it, unique per device (case-insensitively).
     name = Str()
 
-    #: "named" for a user-saved preset; later stages add history snapshots.
+    #: "named" for a user-saved preset, "last_used" for the alignment last
+    #: used with one camera on one device.
     kind = Str(ALIGNMENT_PRESET_KIND_NAMED)
 
-    #: Which setups it applies to: "device" (only its own device) in this
-    #: stage; later stages add camera-specific and device-agnostic scopes.
+    #: Which setups it applies to: its camera on its device
+    #: ("camera_device"), its device through any camera ("device"), or its
+    #: camera on any device ("camera").
     scope = Str(ALIGNMENT_PRESET_SCOPE_DEVICE)
 
     #: The device it was saved for — its SVG file's stem.
@@ -107,6 +136,10 @@ class AlignmentPreset(HasTraits):
 
     #: The selected camera's label at save time; "" when unknown.
     camera_label = Str()
+
+    #: The selected camera's stable id at save time (see CameraIdentity);
+    #: "" when its backend gives none or it was saved before ids were kept.
+    camera_id = Str()
 
     #: The camera's native frame size at save time as [w, h]; None when
     #: there was no frame.
@@ -123,8 +156,9 @@ class AlignmentPreset(HasTraits):
     scene_quad = List(List(Float))
 
     #: The device's alignment endpoint (scene coordinates, numbered from
-    #: the top-left clockwise).
-    endpoint_quad = List(List(Float))
+    #: the top-left clockwise). Only a last-used record may lack one (None):
+    #: the camera was aligned before an endpoint was confirmed.
+    endpoint_quad = Union(None, List(List(Float)))
 
     #: When it was saved, as a UTC ISO 8601 string.
     saved_at = Str()
@@ -139,6 +173,25 @@ class AlignmentPreset(HasTraits):
     def is_endpoint_only(self):
         """Whether the preset carries no camera-side corners."""
         return self.camera_quad is None
+
+    @property
+    def camera(self):
+        """The camera it was saved with."""
+        return CameraIdentity(camera_id=self.camera_id, label=self.camera_label)
+
+    def applies_to(self, camera, device_key):
+        """Whether its scope covers ``camera`` (a CameraIdentity) on
+        ``device_key``."""
+        same_device = self.device_key == device_key
+        same_camera = self.camera.matches(camera)
+
+        if self.scope == ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE:
+            return same_device and same_camera
+
+        if self.scope == ALIGNMENT_PRESET_SCOPE_CAMERA:
+            return same_camera
+
+        return same_device
 
     def to_dict(self):
         """Return the record as plain JSON-ready data."""
@@ -157,6 +210,7 @@ class AlignmentPreset(HasTraits):
             "device_key": self.device_key,
             "device_scene_rect": plain(self.device_scene_rect),
             "camera_label": self.camera_label,
+            "camera_id": self.camera_id,
             "frame_size": plain(self.frame_size),
             "camera_quad": plain(self.camera_quad),
             "scene_quad": plain(self.scene_quad),
@@ -176,17 +230,24 @@ class AlignmentPreset(HasTraits):
         if not isinstance(data, dict):
             raise TypeError(f"a preset record is a JSON object, not {data!r}")
 
+        kind = str(data.get("kind", ALIGNMENT_PRESET_KIND_NAMED))
+        endpoint = data["endpoint_quad"]
+
+        if endpoint is None and kind != ALIGNMENT_PRESET_KIND_LAST_USED:
+            raise ValueError("only a last-used record may lack an endpoint")
+
         return cls(
             id=str(data["id"]),
             name=str(data["name"]),
-            kind=str(data.get("kind", ALIGNMENT_PRESET_KIND_NAMED)),
+            kind=kind,
             scope=str(data.get("scope", ALIGNMENT_PRESET_SCOPE_DEVICE)),
             device_key=str(data.get("device_key", "")),
             device_scene_rect=_optional_floats(data.get("device_scene_rect"), 4),
             camera_label=str(data.get("camera_label", "")),
+            camera_id=str(data.get("camera_id", "")),
             frame_size=_optional_floats(data.get("frame_size"), 2),
             camera_quad=_optional_quad(data.get("camera_quad")),
             scene_quad=_quad(data["scene_quad"]),
-            endpoint_quad=canonical_quad(_quad(data["endpoint_quad"])),
+            endpoint_quad=None if endpoint is None else canonical_quad(_quad(endpoint)),
             saved_at=str(data.get("saved_at", "")),
         )
