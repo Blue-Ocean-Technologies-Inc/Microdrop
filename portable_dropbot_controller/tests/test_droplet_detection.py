@@ -10,7 +10,8 @@
 
 """Droplet detection: DETECT_DROPLETS is answered in the DropBot's reply
 shape with the driver's liquid channels, judged against the threshold
-preference, and a refused or empty scan is an error carrying the reason."""
+preference, never scanning a user-disabled channel, and a refused or empty
+scan is an error carrying the reason."""
 
 # Standard library imports.
 import json
@@ -23,6 +24,7 @@ import pytest
 from traits.api import Any, HasTraits
 
 # Microdrop package imports.
+from device_viewer.consts import user_disabled_channels_mirror
 from portable_dropbot_controller.consts import (
     DROPLET_DETECTION_THRESHOLD_PF,
     DROPLET_DETECTION_THRESHOLD_PF_KEY,
@@ -68,14 +70,15 @@ class _Refused(RuntimeError):
 
 
 class _Session:
-    """Records every find_drops call and judges READINGS against the
-    thresholds it holds at that moment."""
+    """Records every find_drops call and judges the scanned channels'
+    readings against the thresholds it holds at that moment."""
 
     def __init__(self, readings=READINGS, refusal=None):
         self.calls = []
         self.readings = dict(readings)
         self.refusal = refusal
         self.drop_thresholds = _Thresholds(per_channel={7: 40.0})
+        self.used_channels = frozenset(READINGS)
 
     def find_drops(self, channels=None):
         self.calls.append((channels, self.drop_thresholds))
@@ -83,13 +86,18 @@ class _Session:
         if self.refusal:
             raise _Refused(self.refusal)
 
+        readings = {
+            channel: capacitance
+            for channel, capacitance in self.readings.items()
+            if channels is None or channel in channels
+        }
         liquid = sorted(
             channel
-            for channel, capacitance in self.readings.items()
+            for channel, capacitance in readings.items()
             if capacitance >= self.drop_thresholds.default_pf
         )
 
-        return _Result(liquid=liquid, readings=dict(self.readings))
+        return _Result(liquid=liquid, readings=readings)
 
 
 class _Base(HasTraits):
@@ -122,6 +130,16 @@ def detected(monkeypatch):
     return replies
 
 
+@pytest.fixture(autouse=True)
+def user_disabled_channels(monkeypatch):
+    """The user-disabled channels the backend reads; none unless a test adds
+    some."""
+    channels = set()
+    monkeypatch.setattr(user_disabled_channels_mirror, "read", lambda: channels)
+
+    return channels
+
+
 @pytest.fixture
 def harness():
     return _Harness(proxy=_Session())
@@ -137,7 +155,29 @@ def test_detection_replies_with_the_drivers_liquid_channels(harness, detected):
 def test_empty_request_scans_the_sessions_used_channels(harness, detected):
     harness.on_detect_droplets_request("[]")
 
-    assert harness.proxy.calls[0][0] is None
+    assert harness.proxy.calls[0][0] == [0, 1, 2]
+
+
+def test_user_disabled_channels_are_not_scanned(
+    harness, detected, user_disabled_channels
+):
+    user_disabled_channels.add(1)
+
+    harness.on_detect_droplets_request("[]")
+
+    assert harness.proxy.calls[0][0] == [0, 2]
+    assert detected == [{"success": True, "detected_channels": [], "error": ""}]
+
+
+def test_all_requested_channels_disabled_scans_nothing(
+    harness, detected, user_disabled_channels
+):
+    user_disabled_channels.update({0, 1})
+
+    harness.on_detect_droplets_request("[0, 1]")
+
+    assert harness.proxy.calls == []
+    assert detected == [{"success": True, "detected_channels": [], "error": ""}]
 
 
 def test_dry_chip_reports_no_channels(detected):

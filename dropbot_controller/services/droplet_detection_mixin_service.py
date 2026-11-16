@@ -22,6 +22,7 @@ import pandas as pd
 from traits.api import Float, HasTraits, Int, List, Str, provides
 
 # Microdrop package imports.
+from device_viewer.consts import user_disabled_channels_mirror
 from dropbot_controller.consts import (
     DROPLET_DETECTION_FREQUENCY,
     DROPLETS_DETECTED,
@@ -79,6 +80,14 @@ class DropletDetectionMixinService(HasTraits):
                 return
 
             channels = json.loads(channels_json_str) if channels_json_str else []
+            channels = self._enabled_channels(channels)
+
+            # Not "scan everything": every requested channel is disabled.
+            if not channels:
+                self._publish_detection_response(detected_channels=[])
+
+                return
+
             result = self._perform_safe_droplet_detection(channels)
             self._publish_detection_response(
                 detected_channels=result.detected_channels, error_message=result.error
@@ -152,6 +161,19 @@ class DropletDetectionMixinService(HasTraits):
     # Helper Methods
     # --------------------------------------------------------------------------
 
+    def _enabled_channels(self, channels):
+        """Return ``channels`` (every channel when empty) without the
+        user-disabled ones and those the hardware mask disables."""
+        with self.proxy.transaction_lock:
+            number_of_channels = self.proxy.number_of_channels
+            mask = np.array(self.proxy.disabled_channels_mask)
+
+        return user_disabled_channels_mirror.drop_from(
+            channels or range(number_of_channels),
+            "DropBot droplet detection",
+            also_disabled=np.flatnonzero(mask).tolist(),
+        )
+
     @staticmethod
     @contextmanager
     def _detection_context(
@@ -195,10 +217,8 @@ class DropletDetectionMixinService(HasTraits):
     ) -> np.ndarray:
         """Measure and scale capacitances from the hardware."""
         with proxy.transaction_lock:
-            raw_capacitances = proxy.channel_capacitances(channels or None)
-            capacitances = pd.Series(
-                raw_capacitances, index=channels or proxy.active_channels
-            )
+            raw_capacitances = proxy.channel_capacitances(channels)
+            capacitances = pd.Series(raw_capacitances, index=channels)
 
         logger.debug(f"Capacitances (pF): {capacitances * PF_SCALE_FACTOR}")
         return map_series_to_array(capacitances)
