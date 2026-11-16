@@ -449,6 +449,29 @@ def test_device_load_remembers_the_outgoing_and_restores_the_new(
     assert controller.preset_store.last_used_for(CAM_A, "90_pin_array") is not None
 
 
+def test_a_renamed_device_takes_its_alignment_along(
+    controller, model, cameras, tmp_path
+):
+    controller.endpoint_store.save("2x3device", ENDPOINT)
+    _take_charge(controller, model, cameras)
+    _set_live(model, REFERENCE_B, SCENE_B)
+
+    # Save As of a bundled device repoints the loaded file, same drawing.
+    model.electrodes.svg_model.filename = str(tmp_path / "2x3device - Copy.svg")
+
+    copied = controller.preset_store.last_used_for(CAM_A, "2x3device - Copy")
+    setup = json.loads(
+        model.preferences.preferences.get(LIVE_ALIGNMENT_SETUP_PREFERENCE)
+    )
+
+    assert _live(model) == (_tuples(REFERENCE_B), _tuples(SCENE_B))
+    assert copied.scene_quad == [list(point.toTuple()) for point in SCENE_B]
+    assert controller.endpoint_store.load("2x3device - Copy") == ENDPOINT
+    assert controller.endpoint_store.load("2x3device") == ENDPOINT
+    assert controller.preset_store.last_used_for(CAM_A, "2x3device") is not None
+    assert setup["device_key"] == "2x3device - Copy"
+
+
 # ---------------------------------------------------------------------- #
 # Last used changes only on deliberate actions
 # ---------------------------------------------------------------------- #
