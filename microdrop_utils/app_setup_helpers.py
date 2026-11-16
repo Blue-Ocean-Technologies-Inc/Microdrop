@@ -18,6 +18,7 @@ from pathlib import Path
 
 # Microdrop utils imports.
 from microdrop_utils.broker_server_helpers import configure_dramatiq_broker
+from microdrop_utils.web_engine_guard import block_web_engine_views_on_linux
 
 # Logger import.
 from logger.logger_service import get_logger, init_logger
@@ -140,7 +141,9 @@ def microdrop_runner_setup():
     Common setup for all MicroDrop runner scripts.
 
     Configures the Dramatiq broker from redis_settings.json, adds the project
-    root to sys.path so submodules are importable, and runs the best-effort
+    root to sys.path so submodules are importable, keeps QtWebEngine views
+    out of the process on Linux (see :mod:`microdrop_utils.web_engine_guard`),
+    and runs the best-effort
     git self-update (see :func:`self_update_source_repo` — updates apply on
     the NEXT launch, this one is already imported).
 
@@ -155,5 +158,8 @@ def microdrop_runner_setup():
     # lines below never reach the console. The plugin's later init_logger()
     # clears these handlers first, so nothing is duplicated.
     init_logger()
+
+    # Before any plugin or TraitsUI editor can import QtWebEngine.
+    block_web_engine_views_on_linux()
 
     self_update_source_repo()
