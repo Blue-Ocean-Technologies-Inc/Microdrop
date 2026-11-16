@@ -12,6 +12,7 @@
 from traits.api import Dict, HasTraits, Str, provides
 
 # Microdrop package imports.
+from device_viewer.consts import user_disabled_channels_mirror
 from electrode_controller.models import ElectrodeChannelsRequest
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
@@ -63,7 +64,9 @@ class PortableDropbotElectrodesMixinService(HasTraits):
             message,
             context={"max_channels": self._board_channels()},
         )
-        channels = [int(channel) for channel in model.channels]
+        channels = user_disabled_channels_mirror.drop_from(
+            model.channels, "Portable Dropbot actuation"
+        )
         logger.debug(
             f"Electrode state change requested: "
             f"{len(channels)} active channel(s) {channels}"

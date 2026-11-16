@@ -15,6 +15,7 @@ import numpy as np
 from traits.api import Dict, HasTraits, Str, provides
 
 # Microdrop package imports.
+from device_viewer.consts import user_disabled_channels_mirror
 from electrode_controller.models import ElectrodeChannelsRequest
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
@@ -52,7 +53,9 @@ class OpenDropElectrodesMixinService(HasTraits):
             context=self.message_context,
         )
 
-        channels_to_actuate = list(model.channels)
+        channels_to_actuate = user_disabled_channels_mirror.drop_from(
+            model.channels, "OpenDrop actuation"
+        )
         channel_mask = np.zeros(NUM_ELECTRODES, dtype=bool)
         if channels_to_actuate is not None:
             channel_mask[channels_to_actuate] = True

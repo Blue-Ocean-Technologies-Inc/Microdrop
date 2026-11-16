@@ -21,6 +21,7 @@ import dramatiq
 from traits.api import Bool, Dict, Float, HasTraits, Instance, Int, Set, Str
 
 # Microdrop package imports.
+from device_viewer.consts import user_disabled_channels_mirror
 from dropbot_controller.consts import FREQUENCY_APPLIED, VOLTAGE_APPLIED
 
 # Microdrop utils imports.
@@ -250,6 +251,10 @@ class MockDropbotController(HasTraits):
             if invalid:
                 logger.error(f"Mock: Invalid channel indices: {invalid}")
                 return
+
+            channels = set(
+                user_disabled_channels_mirror.drop_from(channels, "Mock actuation")
+            )
             self.actuated_channels = channels
             publish_message(
                 topic=MOCK_ACTUATED_CHANNELS_UPDATED,
