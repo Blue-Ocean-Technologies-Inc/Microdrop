@@ -13,10 +13,12 @@
 Creates ``<plugin>/resources/<slug>.src.html`` from ``template.src.html``,
 builds it, adds ``<SLUG>_TUTORIAL_HTML_PATH`` to ``<plugin>/consts.py`` and
 makes ``<plugin>/plugin.py`` contribute a ``TutorialEntry`` for it to the
-``TUTORIALS`` extension point. Every step is idempotent: re-running leaves
-existing work alone. From ``src``::
+``TUTORIALS`` extension point, placed in a learning-path ``--section`` of the
+menu. Every step is idempotent: re-running leaves existing work alone. From
+``src``::
 
-    pixi run python -m examples.tutorials.new_tutorial <plugin> <slug> "<Title>"
+    pixi run python -m examples.tutorials.new_tutorial <plugin> <slug> "<Title>" \\
+        --section <section>
 
 Then run ``ruff check --fix`` and ``ruff format`` on the touched ``consts.py``
 and ``plugin.py`` to settle import order. Set ``QT_QPA_PLATFORM=offscreen``
@@ -32,6 +34,9 @@ import json
 import re
 import sys
 from pathlib import Path
+
+# Microdrop package imports.
+from user_help_plugin import consts as user_help_consts
 
 # Local imports.
 from .build_tutorial import build_tutorial
@@ -53,6 +58,22 @@ TUTORIALS_DECLARATION = re.compile(
 #: The indentation of a line outside the ``_tutorials_default`` list.
 OUTSIDE_TUTORIALS_LIST = re.compile(r"^ {0,11}\S", re.MULTILINE)
 CONTRIBUTION_IMPORT = "from user_help_plugin.consts import TUTORIALS, TutorialEntry"
+ORDER_PREFIX = "TUTORIAL_ORDER_"
+
+#: The order of each Help > Tutorials section, by lowercase section name.
+SECTION_ORDERS = {
+    name.removeprefix(ORDER_PREFIX).lower(): order
+    for name, order in vars(user_help_consts).items()
+    if name.startswith(ORDER_PREFIX) and name != "TUTORIAL_ORDER_DEFAULT"
+}
+
+#: ``--section`` choices, in menu order.
+SECTIONS = sorted(SECTION_ORDERS, key=SECTION_ORDERS.get)
+
+
+def section_constant_name(section):
+    """Return the ``user_help_plugin.consts`` name of a section's order."""
+    return f"{ORDER_PREFIX}{section.upper()}"
 
 
 def tutorial_constant_name(slug):
@@ -162,20 +183,30 @@ def _add_entry(text, entry, by_hand):
     return f"{head}\n{entry}{text[end:]}"
 
 
-def contribute_to_plugin(plugin_path, slug, title):
-    """Make ``plugin.py`` contribute the tutorial to ``TUTORIALS``; return
-    True when the file changed."""
+def contribute_to_plugin(plugin_path, slug, title, section=None):
+    """Make ``plugin.py`` contribute the tutorial to ``TUTORIALS``, in
+    ``section`` of the menu when given; return True when the file changed."""
     name = tutorial_constant_name(slug)
     text = plugin_path.read_text(encoding="utf-8").replace("\r\n", "\n")
     quoted = json.dumps(title, ensure_ascii=False)
+    arguments = [f"title={quoted}", f"path={name}"]
+    imports = [f"from .consts import {name}"]
+
+    if section is not None:
+        order = section_constant_name(section)
+        arguments.append(f"order={order}")
+
+        if not re.search(rf"\b{order}\b", text):
+            imports.append(f"from user_help_plugin.consts import {order}")
+
+    wrapped = "".join(f"                {argument},\n" for argument in arguments)
     entry = _fit(
-        f"            TutorialEntry(title={quoted}, path={name}),\n",
-        f"            TutorialEntry(\n                title={quoted},\n"
-        f"                path={name},\n            ),\n",
+        f"            TutorialEntry({', '.join(arguments)}),\n",
+        f"            TutorialEntry(\n{wrapped}            ),\n",
     )
 
     by_hand = (
-        f"{plugin_path}; add TutorialEntry(title={quoted}, path={name}) to its "
+        f"{plugin_path}; add TutorialEntry({', '.join(arguments)}) to its "
         f"_tutorials_default by hand, importing {name} from .consts"
     )
 
@@ -189,7 +220,7 @@ def contribute_to_plugin(plugin_path, slug, title):
     else:
         text = _add_contribution(text, entry, plugin_path)
 
-    text = _add_imports(text, [f"from .consts import {name}"], plugin_path)
+    text = _add_imports(text, imports, plugin_path)
     plugin_path.write_text(text, encoding="utf-8", newline="\n")
     logger.info(f"{plugin_path} now contributes '{title}'")
 
@@ -223,10 +254,17 @@ def _add_contribution(text, entry, plugin_path):
     return _add_imports(text, imports, plugin_path)
 
 
-def scaffold_tutorial(plugin, slug, title, root=SRC_ROOT, build=True):
-    """Create, build and contribute one tutorial; return the source path."""
+def scaffold_tutorial(plugin, slug, title, root=SRC_ROOT, build=True, section=None):
+    """Create, build and contribute one tutorial; return the source path.
+
+    Without a ``section`` the entry sets no order, and Help > Tutorials lists
+    it after every built-in section.
+    """
     if not SLUG_PATTERN.match(slug):
         raise ValueError(f"Slugs are lower_snake_case identifiers: {slug!r}")
+
+    if section is not None and section not in SECTIONS:
+        raise ValueError(f"Unknown section {section!r}; choose one of {SECTIONS}")
 
     plugin_dir = Path(root) / plugin
 
@@ -240,7 +278,7 @@ def scaffold_tutorial(plugin, slug, title, root=SRC_ROOT, build=True):
         build_tutorial(source)
 
     add_constant(plugin_dir / "consts.py", slug)
-    contribute_to_plugin(plugin_dir / "plugin.py", slug, title)
+    contribute_to_plugin(plugin_dir / "plugin.py", slug, title, section)
 
     return source
 
@@ -252,9 +290,17 @@ def main(argv=None):
     )
     parser.add_argument("slug", help="lower_snake_case page name")
     parser.add_argument("title", help='menu and page title, e.g. "Heater Tutorial"')
+    parser.add_argument(
+        "--section",
+        required=True,
+        choices=SECTIONS,
+        help="where on the learning path Help > Tutorials lists it",
+    )
     parser.add_argument("--root", type=Path, default=SRC_ROOT, help="source root")
     args = parser.parse_args(argv)
-    scaffold_tutorial(args.plugin, args.slug, args.title, root=args.root)
+    scaffold_tutorial(
+        args.plugin, args.slug, args.title, root=args.root, section=args.section
+    )
 
     return 0
 

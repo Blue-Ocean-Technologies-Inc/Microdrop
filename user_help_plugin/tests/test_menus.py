@@ -25,6 +25,9 @@ from traits.api import List
 from ..consts import (
     GETTING_STARTED_TUTORIAL_TITLE,
     HELP_LOGS_STORAGE_TUTORIAL_TITLE,
+    TUTORIAL_ORDER_DEVICE,
+    TUTORIAL_ORDER_REFERENCE,
+    TUTORIAL_ORDER_START,
     TUTORIALS,
     TutorialEntry,
 )
@@ -34,11 +37,11 @@ from ..menus import (
     TutorialsMenuManager,
     menu_factory,
 )
-from ..plugin import UserHelpPlugin
+from ..plugin import UserHelpPlugin, tutorial_sort_key
 
 PAGE = Path(__file__).resolve()
 
-#: The Help plugin's own pages, as the Tutorials submenu sorts them.
+#: The Help plugin's own pages, as the Tutorials submenu orders them.
 OWN_TUTORIAL_TITLES = [GETTING_STARTED_TUTORIAL_TITLE, HELP_LOGS_STORAGE_TUTORIAL_TITLE]
 
 
@@ -55,12 +58,25 @@ class TutorialContributingPlugin(Plugin):
 
 
 def _tutorial_titles(menu):
-    return [
-        item.action.window_title
+    return [title for section in _section_titles(menu) for title in section]
+
+
+def _section_titles(menu):
+    """Titles per non-empty group: what the menu shows between separators."""
+    sections = [
+        [
+            item.action.window_title
+            for item in group.items
+            if isinstance(item.action, OpenWebViewDialogAction)
+        ]
         for group in menu.groups
-        for item in group.items
-        if isinstance(item.action, OpenWebViewDialogAction)
     ]
+
+    return [section for section in sections if section]
+
+
+def _entry(title, **traits):
+    return TutorialEntry(title=title, path=PAGE, **traits)
 
 
 @pytest.fixture
@@ -116,13 +132,54 @@ def test_a_plugin_loaded_at_runtime_adds_its_tutorials(help_plugin):
 
     help_plugin.application.add_plugin(contributor)
 
+    # Contributions that set no order follow every built-in section.
     assert _tutorial_titles(menu) == [
         GETTING_STARTED_TUTORIAL_TITLE,
-        "Heater & Magnet Tutorial",
         HELP_LOGS_STORAGE_TUTORIAL_TITLE,
+        "Heater & Magnet Tutorial",
         "Zebra Tutorial",
     ]
 
     help_plugin.application.remove_plugin(contributor)
 
     assert _tutorial_titles(menu) == OWN_TUTORIAL_TITLES
+
+
+def test_tutorials_sort_by_order_then_title_with_unordered_ones_last():
+    entries = [
+        _entry("zebra"),
+        _entry("Apple"),
+        _entry("Reference", order=TUTORIAL_ORDER_REFERENCE),
+        _entry("beta", order=TUTORIAL_ORDER_DEVICE),
+        _entry("Alpha", order=TUTORIAL_ORDER_DEVICE),
+        _entry("Zones", order=TUTORIAL_ORDER_DEVICE - 1),
+        _entry("Start", order=TUTORIAL_ORDER_START),
+    ]
+
+    assert [entry.title for entry in sorted(entries, key=tutorial_sort_key)] == [
+        "Start",
+        "Zones",
+        "Alpha",
+        "beta",
+        "Reference",
+        "Apple",
+        "zebra",
+    ]
+
+
+def test_each_section_gets_its_own_group():
+    catalog = TutorialCatalog()
+    menu = TutorialsMenuManager(catalog=catalog)
+    catalog.entries = [
+        _entry("Start", order=TUTORIAL_ORDER_START),
+        _entry("Device", order=TUTORIAL_ORDER_DEVICE),
+        _entry("Zones", order=TUTORIAL_ORDER_DEVICE + 20),
+        _entry("Heater"),
+    ]
+
+    assert _section_titles(menu) == [["Start"], ["Device", "Zones"], ["Heater"]]
+
+    # Fewer sections leave the spare groups empty, which the menu skips.
+    catalog.entries = [_entry("Device", order=TUTORIAL_ORDER_DEVICE)]
+
+    assert _section_titles(menu) == [["Device"]]

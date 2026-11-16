@@ -14,7 +14,7 @@ from traits.api import List
 
 # Microdrop package imports.
 from template_status_and_controls.base_plugin import BaseStatusPlugin
-from user_help_plugin.consts import TUTORIALS, TutorialEntry
+from user_help_plugin.consts import TUTORIAL_ORDER_HARDWARE, TUTORIALS, TutorialEntry
 
 # Local imports.
 from .consts import (
@@ -60,6 +60,7 @@ class DropbotStatusAndControlsPlugin(BaseStatusPlugin):
             TutorialEntry(
                 title="Dropbot Status & Controls Tutorial",
                 path=DROPBOT_STATUS_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_HARDWARE,
             )
         ]
 
