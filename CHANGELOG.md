@@ -1,3 +1,29 @@
+## [v1.45.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.45.0) (2026-11-16)
+
+### Feat
+
+- **dropbot_controller**: skip disabled channels in scans ([`4577c0a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4577c0a66f9b7b31fea7617b7f5446ae78c92c76))
+- **controllers**: refuse user-disabled channels ([`f3328da`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f3328da8aef154ffa697c39356895fa014fc74e1))
+- **device_viewer**: split user and hardware disables ([`2ea0dac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2ea0dacf76634e34317d98934f3490d8e672e7ad))
+- **user_help_plugin**: add the Tutorial Simulations dock pane ([`04f2c15`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/04f2c15683dfe7e006c9086304362a1e1fefba27))
+
+### Fix
+
+- keep QtWebEngine views out of the app on Linux ([`47d4b64`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/47d4b6466a067c94f449a098dc3ae4bd2ead0003))
+
+### Docs
+
+- **messages**: describe user vs hardware disables ([`641329f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/641329f64445c52a015a23057ffbc629886c8e43))
+- **user_help_plugin**: add an interactive run report to the tutorial ([`3c72077`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3c7207777428281cee7f50be5cfe326d72f5dfd2))
+- **device_viewer**: run two routes at once in the several-routes demo ([`f6dab1b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f6dab1bc55c44fea35eb1cfc6dc2fb1eebaf823a))
+- **tutorials**: name simulations whose heading is ambiguous ([`14798f8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/14798f831a69d36c5f7c13b22756b140c1de776d))
+
+### Chore
+
+- **dropbot_controller**: ruff-clean droplet detection ([`88eb635`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/88eb635b5c8877f0e844bd6b9e0729f95aa4a3a7))
+- **mock_dropbot_controller**: ruff-clean mock_controller ([`3bf9135`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3bf91350cac8c24bbad90850cf2d4f99d54b9ed2))
+- **device_viewer**: ruff-clean electrodes.py ([`5cf4e6c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5cf4e6c1187c17869cc71c314e0eb7ac0fd03f2f))
+
 ## [v1.44.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.44.0) (2026-11-16)
 
 ### Feat
