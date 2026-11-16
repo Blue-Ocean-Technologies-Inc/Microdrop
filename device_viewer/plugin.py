@@ -36,6 +36,7 @@ from .consts import (
     DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_LAYERS,
     PKG,
+    RECORDING_VIEWER_TUTORIAL_HTML_PATH,
     ZONES_TUTORIAL_HTML_PATH,
     PKG_name,
 )
@@ -209,6 +210,11 @@ class DeviceViewerPlugin(Plugin):
                 title="Camera & Alignment Tutorial",
                 path=CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
                 order=TUTORIAL_ORDER_DEVICE + 10,
+            ),
+            TutorialEntry(
+                title="Recording Viewer Tutorial",
+                path=RECORDING_VIEWER_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_DEVICE + 15,
             ),
             TutorialEntry(
                 title="Zones Tutorial",

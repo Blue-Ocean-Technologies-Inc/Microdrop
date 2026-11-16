@@ -31,6 +31,7 @@ from envisage.api import Application
 from device_viewer.consts import (
     CAMERA_ALIGNMENT_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
+    RECORDING_VIEWER_TUTORIAL_HTML_PATH,
     ZONES_TUTORIAL_HTML_PATH,
 )
 from device_viewer.plugin import DeviceViewerPlugin
@@ -52,10 +53,17 @@ from examples.tutorials.new_tutorial import (
     _add_imports,
     scaffold_tutorial,
 )
+from image_viewer.consts import ANALYSIS_HELP_HTML_PATH
 from image_viewer.plugin import ImageViewerPlugin
-from microdrop_application.consts import SHORTCUTS_TUTORIAL_HTML_PATH
+from microdrop_application.consts import (
+    PREFERENCES_TUTORIAL_HTML_PATH,
+    SHORTCUTS_TUTORIAL_HTML_PATH,
+)
 from microdrop_application.plugin import MicrodropPlugin
-from pluggable_protocol_tree.consts import PROTOCOL_TREE_TUTORIAL_HTML_PATH
+from pluggable_protocol_tree.consts import (
+    PROTOCOL_FILES_TUTORIAL_HTML_PATH,
+    PROTOCOL_TREE_TUTORIAL_HTML_PATH,
+)
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
 from plugin_management.consts import PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH
 from plugin_management.plugin import PluginManagementPlugin
@@ -79,17 +87,25 @@ DEVICE_VIEWER_SOURCE = DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH.with_name(
 GETTING_STARTED_SOURCE = GETTING_STARTED_TUTORIAL_HTML_PATH.with_name(
     "getting_started.src.html"
 )
+IMAGE_ANALYSIS_SOURCE = ANALYSIS_HELP_HTML_PATH.with_name("analysis_help.src.html")
 HELP_LOGS_STORAGE_SOURCE = HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH.with_name(
     "help_logs_storage.src.html"
+)
+PROTOCOL_FILES_SOURCE = PROTOCOL_FILES_TUTORIAL_HTML_PATH.with_name(
+    "protocol_files.src.html"
 )
 PROTOCOL_TREE_SOURCE = PROTOCOL_TREE_TUTORIAL_HTML_PATH.with_name(
     "protocol_tree.src.html"
 )
 SHORTCUTS_SOURCE = SHORTCUTS_TUTORIAL_HTML_PATH.with_name("shortcuts.src.html")
+PREFERENCES_SOURCE = PREFERENCES_TUTORIAL_HTML_PATH.with_name("preferences.src.html")
 PLUGIN_MANAGEMENT_SOURCE = PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH.with_name(
     "plugin_management.src.html"
 )
 ZONES_SOURCE = ZONES_TUTORIAL_HTML_PATH.with_name("zones.src.html")
+RECORDING_VIEWER_SOURCE = RECORDING_VIEWER_TUTORIAL_HTML_PATH.with_name(
+    "recording_viewer.src.html"
+)
 FIXTURE_PLUGIN = "tutorial_kit_fixture_plugin"
 
 #: A plugin.py with no tutorials yet, as new_tutorial.py first meets it.
@@ -322,11 +338,14 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
         "Device Viewer Tutorial",
         "Device Files, Channels & Connections Tutorial",
         "Camera & Alignment Tutorial",
+        "Recording Viewer Tutorial",
         "Zones Tutorial",
         "Protocol Tree Tutorial",
+        "Protocol Files & Experiments Tutorial",
         "Dropbot Status & Controls Tutorial",
         "Image Analysis Tutorial",
         "Plugin Management Tutorial",
+        "Preferences Tutorial",
         "Shortcuts, Gamepad & Touch Assist Tutorial",
         "Help, Logs & Saved Files Tutorial",
     ]
@@ -350,8 +369,16 @@ def test_getting_started_tutorial_rebuilds_identically():
     assert is_up_to_date(GETTING_STARTED_SOURCE)
 
 
+def test_image_analysis_tutorial_rebuilds_identically():
+    assert is_up_to_date(IMAGE_ANALYSIS_SOURCE)
+
+
 def test_help_logs_storage_tutorial_rebuilds_identically():
     assert is_up_to_date(HELP_LOGS_STORAGE_SOURCE)
+
+
+def test_protocol_files_tutorial_rebuilds_identically():
+    assert is_up_to_date(PROTOCOL_FILES_SOURCE)
 
 
 def test_protocol_tree_tutorial_rebuilds_identically():
@@ -366,12 +393,20 @@ def test_plugin_management_tutorial_rebuilds_identically():
     assert is_up_to_date(PLUGIN_MANAGEMENT_SOURCE)
 
 
+def test_preferences_tutorial_rebuilds_identically():
+    assert is_up_to_date(PREFERENCES_SOURCE)
+
+
 def test_device_viewer_tutorial_rebuilds_identically():
     assert is_up_to_date(DEVICE_VIEWER_SOURCE)
 
 
 def test_zones_tutorial_rebuilds_identically():
     assert is_up_to_date(ZONES_SOURCE)
+
+
+def test_recording_viewer_tutorial_rebuilds_identically():
+    assert is_up_to_date(RECORDING_VIEWER_SOURCE)
 
 
 def _clip_page(clip="t_media/a.webm", poster=""):
@@ -682,6 +717,14 @@ def test_term_facts_become_a_definition_list(tmp_path):
     assert '<h3>A <span class="where">here</span></h3>' in page
     assert '<dl class="facts"><dt>What it is</dt><dd>x</dd>' in page
     assert "<dt>Typical value</dt><dd>y</dd></dl></article>" in page
+
+
+def test_an_svg_title_stays_in_its_svg(tmp_path):
+    source = "<title>T</title><svg><title>Drawing</title></svg>"
+    page, _cache = render_tutorial(source, tmp_path, {}, "t.src.html")
+
+    assert "<title>T</title>" in page
+    assert "<svg><title>Drawing</title></svg>" in page
 
 
 def test_glyph_tracer_outlines_an_icon_constant():
