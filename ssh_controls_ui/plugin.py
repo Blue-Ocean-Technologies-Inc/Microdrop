@@ -8,16 +8,29 @@
 #
 # Thanks for using Microdrop open source!
 
-# enthought imports
+# Enthought library imports.
+from envisage.api import (
+    PREFERENCES_CATEGORIES,
+    PREFERENCES_PANES,
+    TASK_EXTENSIONS,
+    Plugin,
+)
+from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
 from traits.api import List, Str
-from envisage.api import Plugin, TASK_EXTENSIONS, PREFERENCES_PANES, PREFERENCES_CATEGORIES
-from envisage.ui.tasks.api import TaskExtension
 
-from microdrop_application.consts import PKG as microdrop_application_PKG
+# Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_application.consts import PKG as microdrop_application_PKG
+from user_help_plugin.consts import TUTORIAL_ORDER_MANAGEMENT, TUTORIALS, TutorialEntry
 
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+# Local imports.
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    PKG,
+    SSH_REMOTE_BACKEND_TUTORIAL_HTML_PATH,
+    PKG_name,
+)
 
 
 class SSHUIPlugin(Plugin):
@@ -41,6 +54,9 @@ class SSHUIPlugin(Plugin):
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
+    #: Help > Tutorials entry for the Remote Controls dialogs.
+    tutorials = List(contributes_to=TUTORIALS)
+
     #### Trait initializers ###################################################
 
     def _contributed_task_extensions_default(self):
@@ -52,17 +68,28 @@ class SSHUIPlugin(Plugin):
                 actions=[
                     SchemaAddition(
                         factory=menu_factory,
-                        path='MenuBar/Tools',
+                        path="MenuBar/Tools",
                     )
-
-                ]
+                ],
             )
         ]
 
     def _preferences_panes_default(self):
         from .preferences import SSHControlPreferencesPane
+
         return [SSHControlPreferencesPane]
 
     def _preferences_categories_default(self):
         from .preferences import ssh_controls_tab
+
         return [ssh_controls_tab]
+
+    def _tutorials_default(self):
+        # After Plugin Management (+0) and Preferences (+10) in its section.
+        return [
+            TutorialEntry(
+                title="SSH & Remote Backend Tutorial",
+                path=SSH_REMOTE_BACKEND_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_MANAGEMENT + 20,
+            ),
+        ]

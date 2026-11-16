@@ -13,197 +13,830 @@
 <nav data-contents></nav>
 
 <style>
-.sb { display: flex; align-items: center; gap: 10px; padding: 6px 10px; margin: 8px 0;
+ol.steps li.step.wide { grid-template-columns: minmax(0, 1fr); }
+figure.clip video { width: 100%; }
+.table-wrap { overflow-x: auto; }
+table.small td { overflow-wrap: anywhere; }
+kbd { white-space: nowrap; }
+.hv-list li { margin: 3px 0; }
+.sb { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 6px 10px; margin: 8px 0;
   background: var(--surface); border: 1px solid var(--line); border-radius: 6px; font-size: .85rem; color: var(--muted); }
 .sb svg.ic { width: 24px; height: 24px; }
 .sb .sb-text { margin-left: auto; }
-.vf-demo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-@media (max-width: 700px) { .vf-demo { grid-template-columns: minmax(0, 1fr); } }
+.pm { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 12px; align-items: start;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin: 8px 0; font-size: .88rem; }
+@media (max-width: 640px) { .pm { grid-template-columns: minmax(0, 1fr); } }
+.pm-left { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: center; }
+.pm-pic { width: 64px; height: 64px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+.pm-pic svg { width: 48px; height: 48px; }
+.pm-rt { grid-column: 1 / -1; justify-self: start; padding: 4px 14px; border-radius: 4px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+.pm-rt.on { background: var(--ok); border-color: var(--ok); color: #ffffff; }
+.pm-rt:disabled { opacity: .5; cursor: default; }
+table.pm-grid { border-collapse: collapse; width: 100%; }
+table.pm-grid td { padding: 2px 6px; vertical-align: middle; }
+table.pm-grid td.lab { color: var(--muted); white-space: nowrap; }
+table.pm-grid td.val { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.pm-box { display: inline-block; min-width: 76px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px;
+  background: var(--surface-2); font-variant-numeric: tabular-nums; }
+.pm-box.locked { opacity: .5; }
+.hv { display: inline-block; padding: 2px 10px; border-radius: 12px; font-weight: 700; font-size: .85rem; }
+.hv.on { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
+.hv.off { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+ul.pr-notes { margin: 6px 0 0; padding-left: 20px; font-size: .9rem; }
+ul.pr-notes li { margin: 2px 0; }
+.dlg { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 10px 12px; margin: 8px 0; }
+.dlg h4 { margin: 0 0 6px; }
+.dlg p.quote { font-family: Consolas, "Courier New", monospace; font-size: .84rem; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; overflow-wrap: anywhere; margin: 4px 0 8px; }
+.dlg dl { display: grid; grid-template-columns: minmax(0, 9em) minmax(0, 1fr); gap: 4px 10px; margin: 0; }
+.dlg dt { font-weight: 700; color: var(--muted); font-size: .88rem; }
+.dlg dd { margin: 0; }
+@media (max-width: 640px) { .dlg dl { grid-template-columns: minmax(0, 1fr); } }
+.calc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 700px) { .calc-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>
 
 <header data-hero>
   <h1>Dropbot Status &amp; Controls</h1>
-  <p>The Dropbot Status &amp; Controls pane shows whether MicroDrop can talk to your DropBot, sets the voltage and
-  frequency it drives the electrodes with, and reports what the board measures back.</p>
-  <p>Each card says <strong>what it is</strong>, <strong>when you would use it</strong>, <strong>how to read it</strong>,
-  and the <strong>value MicroDrop starts with</strong>. The demo is live: drag the sliders.</p>
+  <p>The <strong>Dropbot Status And Controls</strong> pane shows whether MicroDrop can talk to your DropBot and whether a
+  chip is in it. It switches the high voltage on and off (<em>Realtime</em>), sets the voltage and frequency, and shows
+  what the DropBot measures back: capacitance, force and an estimate of droplet volume.</p>
+  <p>This tutorial also covers the dialogs the DropBot can raise (halt, shorts, no power), the
+  <span class="ui">Tools ▸ Dropbot</span> menu with its self-tests, and the DropBot preferences. Each card says
+  <strong>what it is</strong>, <strong>when you would use it</strong>, <strong>how to read it</strong> and the
+  <strong>value MicroDrop starts with</strong>. The two clips are real recordings; the interactive figures let you try the
+  pane without a DropBot.</p>
 </header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview: where things are, and when high voltage is on</h2>
+<p class="intro">Four places in MicroDrop belong to the DropBot.</p>
+<ul class="uses">
+  <li><strong>The pane</strong>, docked on the right above the protocol tree. Left: a picture of the DropBot,
+  <span class="ui">Connection</span>, <span class="ui">Chip Status</span> and the <span class="ui">Realtime</span> button.
+  Right: the readings, in three columns: name, what the DropBot reports, and the box you set.</li>
+  <li><strong>The status bar</strong> at the bottom of the window: a droplet icon <i data-glyph="ICON_DROP_EC" data-inline
+  data-label="Device status"></i> whose colour is the connection state, and a realtime switch
+  <i data-glyph="live_tv" data-inline data-label="Realtime mode"></i>.</li>
+  <li><strong>Tools ▸ Dropbot</strong>: self-tests, <span class="ui">Search for Dropbot Connection</span> and
+  <span class="ui">Reboot Dropbot</span>.</li>
+  <li><strong>Edit ▸ Preferences</strong>: the <span class="ui">Dropbot Settings</span> and
+  <span class="ui">DropBot Status &amp; Controls</span> pages, plus a few DropBot settings on other pages (see
+  <a href="#part-prefs">Preferences</a>).</li>
+</ul>
+<div class="callout warn">
+  <p><strong>When is high voltage on?</strong> Clicking an electrode only lights it in the Device Viewer. The DropBot puts
+  high voltage on the lit electrodes only in these cases:</p>
+  <ul class="hv-list">
+    <li><strong>Realtime On.</strong> The high-voltage output is switched on. Every electrode lit in the Device Viewer gets
+    the voltage at once, including the ones that were already lit before you switched Realtime on.</li>
+    <li><strong>A protocol run</strong> (not a preview run). The run switches Realtime on by itself before the first step.</li>
+    <li><strong>Find Liquid.</strong> It switches the high-voltage output on at 1 kHz for the measurement, even with
+    Realtime off, then puts the DropBot back as it was.</li>
+    <li><strong>Three self-tests</strong>: Test high voltage, On-board feedback calibration and Scan test board (see
+    <a href="#part-tools">Self-tests</a>).</li>
+  </ul>
+  <p>High voltage is off with Realtime off, after a halt, and while the DropBot is disconnected.</p>
+</div>
+</section>
 
 <!-- ============================================================ -->
 <section data-part id="walkthrough">
 <h2>Quick walkthrough</h2>
-<p class="intro">From plugging in the DropBot to moving a droplet with a known force. The
-<a href="#part-controls">Controls and icons</a> section shows every icon as it looks in the app.</p>
+<p class="intro">From plugging in the DropBot to moving droplets with a known force. The
+<a href="#part-controls">Buttons and icons</a> section shows every icon as it looks in the app.</p>
 <ol class="steps">
   <li class="step">
-    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="The pane with the DropBot picture and its connection fields highlighted"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="10" y="12" width="64" height="64" rx="6" fill="var(--surface-2)"/><use href="#ic-drop_ec" x="24" y="26" width="36" height="36" style="fill:var(--ok)"/><text x="84" y="30" style="font-size:10px">Connection: Active</text><text x="84" y="48" style="font-size:10px">Chip Status: Present</text><rect x="6" y="8" width="180" height="48" rx="4" fill="none" stroke="var(--accent)" stroke-width="1.5"/><text x="10" y="150" style="font-size:9px">Status bar:</text><use href="#ic-drop_ec" x="60" y="139" width="16" height="16" style="fill:var(--ok)"/><use href="#ic-live_tv" x="80" y="139" width="16" height="16" style="fill:var(--muted)"/></svg></figure>
-    <div class="step-text"><h4><span class="step-n">1</span>Connect</h4><p>Plug in the DropBot's USB and power. MicroDrop
-    finds it on its own: <span class="ui">Connection</span> turns to <strong>Active</strong>, and the picture and the
-    status-bar droplet turn green once a chip is inserted (orange while there is none). Not found? Use
+    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="The pane with the DropBot picture and its connection fields highlighted"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="10" y="12" width="64" height="64" rx="6" fill="var(--ok)"/><use href="#ic-drop_ec" x="24" y="26" width="36" height="36" style="fill:#ffffff"/><text x="84" y="30" style="font-size:10px">Connection: Active</text><text x="84" y="48" style="font-size:10px">Chip Status: Present</text><rect x="6" y="8" width="180" height="48" rx="4" fill="none" stroke="var(--accent)" stroke-width="1.5"/><text x="10" y="150" style="font-size:9px">Status bar:</text><use href="#ic-drop_ec" x="60" y="139" width="16" height="16" style="fill:var(--ok)"/><use href="#ic-live_tv" x="80" y="139" width="16" height="16" style="fill:var(--muted)"/></svg></figure>
+    <div class="step-text"><h4><span class="step-n">1</span>Connect</h4>
+    <p>Plug in the DropBot's power supply and USB cable. MicroDrop looks for it every 2 seconds on its own.
+    <span class="ui">Connection</span> turns to <strong>Active</strong>. The picture's background and the status-bar droplet
+    turn orange, then green once the DropBot reports a chip (<span class="ui">Chip Status: Present</span>).</p>
+    <p>On every connection MicroDrop switches the high voltage off, turns all electrodes off and checks the chip for
+    shorted channels. You then see <span class="ui">Shorts Detected</span> or <span class="ui">No Shorts Detected</span>
+    (see <a href="#part-dialogs">Dialogs</a>). Not found after a while? Use
     <span class="ui">Tools ▸ Dropbot ▸ Search for Dropbot Connection</span>.</p></div>
   </li>
   <li class="step">
-    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="The Realtime button switched on"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="84" y="70" width="90" height="24" rx="4" fill="var(--accent)"/><text x="129" y="86" text-anchor="middle" style="font-size:10px;fill:var(--bg);font-weight:600">Realtime On</text><rect x="80" y="66" width="98" height="32" rx="5" fill="none" stroke="var(--accent)" stroke-width="1.5"/><text x="10" y="150" style="font-size:9px">Status bar:</text><use href="#ic-drop_ec" x="60" y="139" width="16" height="16" style="fill:var(--ok)"/><use href="#ic-live_tv" x="80" y="139" width="16" height="16" style="fill:var(--ok)"/></svg></figure>
-    <div class="step-text"><h4><span class="step-n">2</span>Turn on Realtime</h4><p>Click <span class="ui">Realtime Off</span>
-    so it reads <span class="ui">Realtime On</span> (or click the <i data-glyph="live_tv" data-inline></i> icon in the status bar).
-    Now the DropBot applies settings and electrode changes as you make them, and the readings start to update.</p></div>
+    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="The voltage and frequency boxes highlighted"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><text x="12" y="30" style="font-size:10px">Voltage</text><text x="80" y="30" style="font-size:10px">-</text><rect x="140" y="18" width="80" height="18" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="148" y="31" style="font-size:10px;fill:var(--ink)">100 V</text><text x="12" y="56" style="font-size:10px">Frequency</text><text x="80" y="56" style="font-size:10px">-</text><rect x="140" y="44" width="80" height="18" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="148" y="57" style="font-size:10px;fill:var(--ink)">10000 Hz</text><rect x="136" y="14" width="88" height="52" rx="4" fill="none" stroke="var(--accent)" stroke-width="1.5"/><rect x="84" y="110" width="90" height="24" rx="4" fill="var(--surface-2)" stroke="var(--line)"/><text x="129" y="126" text-anchor="middle" style="font-size:10px;fill:var(--ink);font-weight:600">Realtime Off</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">2</span>Set voltage and frequency first</h4>
+    <p>Type or scroll in the boxes on the right. With Realtime off nothing is sent yet: MicroDrop keeps the latest value
+    and sends it when you switch Realtime on. The middle column shows "-" until then.</p>
+    <p>The boxes accept only the range set in the preferences (30 to 140 V and 100 to 10 000 Hz at first). See
+    <a href="#voltage">Voltage</a>.</p></div>
+  </li>
+  <li class="step wide">
+    <div class="step-text"><h4><span class="step-n">3</span>Switch Realtime on: high voltage is now on</h4>
+    <p>Click <span class="ui">Realtime Off</span> so it turns green and reads <span class="ui">Realtime On</span> (or click
+    <i data-glyph="live_tv" data-inline data-label="Realtime mode"></i> in the status bar, or press <kbd>T</kbd> over the
+    Device Viewer). The DropBot switches its high-voltage output on and applies your voltage and frequency.
+    <strong>Every electrode that is lit in the Device Viewer gets the voltage straight away.</strong> Clear the electrodes
+    first if you do not want that.</p>
+    <p>The middle column fills in: the voltage the DropBot measures, the frequency, and the capacitance of the lit
+    electrodes.</p></div>
+    <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="832" height="225" poster="dropbot_status_media/realtime-on.webp" aria-label="The status pane: Realtime Off is clicked and turns into the green Realtime On button; Voltage 110 V, Frequency 10 kHz, Capacitance around 110 pF, Volume around 4.4 µL and Force 35.8 mN/m appear, and capacitance and volume keep changing as the droplet moves"><source src="dropbot_status_media/realtime-on.webm" type="video/webm"></video>
+    <figcaption><strong>Real clip, 1×.</strong> Before the click, Voltage, Frequency, Capacitance and Force read "-"; Volume
+    still shows its last value (see <a href="#volume">Droplet readout</a>). A second after <em>Realtime On</em> the readings
+    appear: 110 V, 10 kHz, about 110 pF. Capacitance and Volume move as the droplet moves; Force stays put because it
+    depends only on voltage and calibration.</figcaption></figure>
   </li>
   <li class="step">
-    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="The voltage and frequency boxes highlighted"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><text x="12" y="30" style="font-size:10px">Voltage</text><text x="80" y="30" style="font-size:10px">100 V</text><rect x="140" y="18" width="80" height="18" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="148" y="31" style="font-size:10px;fill:var(--ink)">100 V</text><text x="12" y="56" style="font-size:10px">Frequency</text><text x="80" y="56" style="font-size:10px">10 kHz</text><rect x="140" y="44" width="80" height="18" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="148" y="57" style="font-size:10px;fill:var(--ink)">10000 Hz</text><rect x="136" y="14" width="88" height="52" rx="4" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg></figure>
-    <div class="step-text"><h4><span class="step-n">3</span>Set voltage and frequency</h4><p>Type or scroll in the
-    boxes on the right. The left column is what the DropBot reports back. Values outside the allowed range snap to its
-    ends; see <a href="#voltage">Voltage</a>.</p></div>
+    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="The calibration buttons of the Device Viewer and the c_device and Force readings"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><text x="12" y="24" style="font-size:9px">Device Viewer, calibration</text><use href="#ic-airwave" x="12" y="32" width="20" height="20" style="fill:var(--ink)"/><use href="#ic-humidity_high" x="12" y="58" width="20" height="20" style="fill:var(--ink)"/><text x="40" y="46" style="font-size:10px">Cf: filler (air or oil)</text><text x="40" y="72" style="font-size:10px">Cl: liquid</text><path d="M134 60H160" stroke="var(--muted)" stroke-dasharray="3 3"/><text x="166" y="40" style="font-size:10px">Volume 3.8 µL</text><text x="166" y="58" style="font-size:10px">Force 35.7 mN/m</text><text x="166" y="76" style="font-size:10px">Dielectric 4.65 µm</text><rect x="160" y="26" width="132" height="58" rx="4" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg></figure>
+    <div class="step-text"><h4><span class="step-n">4</span>Calibrate, then read force and volume</h4>
+    <p>In the Device Viewer's calibration buttons: light a few electrodes with only filler (air or oil) over them and click
+    <i data-glyph="airwave" data-inline></i>. Then light electrodes fully under liquid and click
+    <i data-glyph="humidity_high" data-inline></i>. The pane now shows <a href="#force">Force</a> and the
+    <a href="#volume">Volume</a> estimate.</p>
+    <p>Set the plate gap of your chip in the preferences so the volume is right, and pick your dielectric material to see
+    its <a href="#dielectric">thickness</a>.</p></div>
+  </li>
+  <li class="step wide">
+    <div class="step-text"><h4><span class="step-n">5</span>Change the voltage while you work</h4>
+    <p>With Realtime on, a new value goes to the DropBot a third of a second after you stop typing or scrolling. The
+    measured voltage and the force follow. The measured value can sit a volt or so off the box.</p></div>
+    <figure class="clip"><video data-clip muted loop playsinline controls preload="metadata" width="832" height="225" poster="dropbot_status_media/voltage-change.webp" aria-label="The status pane with Realtime On: the voltage box is changed from 110 V to 140 V; the measured voltage reads 141 V and Force goes from 35.8 to 58.9 mN/m"><source src="dropbot_status_media/voltage-change.webm" type="video/webm"></video>
+    <figcaption><strong>Real clip, 1×.</strong> The box goes from 110 V to 140 V. About a second later the measured voltage
+    reads 141 V and Force rises from 35.8 to 58.9 mN/m: force grows with the square of the voltage.</figcaption></figure>
   </li>
   <li class="step">
-    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="The calibration buttons of the Device Viewer and the c_device and Force readings"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><text x="12" y="24" style="font-size:9px">Device Viewer, calibration</text><use href="#ic-airwave" x="12" y="32" width="20" height="20" style="fill:var(--ink)"/><use href="#ic-humidity_high" x="12" y="58" width="20" height="20" style="fill:var(--ink)"/><text x="40" y="46" style="font-size:10px">filler (air or oil)</text><text x="40" y="72" style="font-size:10px">liquid</text><path d="M120 60H160" stroke="var(--muted)" stroke-dasharray="3 3"/><text x="170" y="48" style="font-size:10px">c_device 1.0 pF/mm²</text><text x="170" y="70" style="font-size:10px">Force 5.0 mN/m</text><rect x="164" y="34" width="124" height="44" rx="4" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg></figure>
-    <div class="step-text"><h4><span class="step-n">4</span>Calibrate, then read the force</h4><p>In the Device Viewer's
-    calibration buttons, turn on a few electrodes under filler and click <i data-glyph="airwave" data-inline></i>, then under
-    liquid and click <i data-glyph="humidity_high" data-inline></i>. The pane then shows <a href="#cdevice">c_device</a> and the
-    <a href="#force">Force</a> your voltage produces.</p></div>
+    <figure class="step-panel"><svg viewBox="0 0 300 170" role="img" aria-label="The Tools menu with its Dropbot submenu open"><rect x="0.5" y="0.5" width="299" height="169" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="12" y="12" width="60" height="22" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="42" y="27" text-anchor="middle" style="fill:var(--ink);font-size:10px">Tools</text><rect x="12" y="38" width="100" height="22" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="20" y="53" style="fill:var(--ink);font-size:10px">Dropbot ▸</text><rect x="118" y="38" width="172" height="104" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="126" y="54" style="fill:var(--ink);font-size:9px">Run all on-board self-tests</text><text x="126" y="78" style="fill:var(--ink);font-size:9px">On-board self-tests ▸</text><text x="126" y="102" style="fill:var(--ink);font-size:9px">Search for Dropbot Connection</text><text x="126" y="126" style="fill:var(--ink);font-size:9px">Reboot Dropbot</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">6</span>Switch off, or deal with trouble</h4>
+    <p>Click <span class="ui">Realtime On</span> again to switch the high voltage off when you are done.</p>
+    <p>If a <span class="ui">DropBot Halted</span>, <span class="ui">Shorts Detected</span> or
+    <span class="ui">ERROR: No Power</span> window appears, look it up in <a href="#dialog-helper">Which window, and what
+    to do</a>. If readings look wrong, run the self-tests in <span class="ui">Tools ▸ Dropbot</span> and read the
+    <a href="#test-results">Test Results</a>.</p></div>
   </li>
 </ol>
 </section>
 
 <!-- ============================================================ -->
+<section data-part id="part-reader">
+<h2>Try the pane</h2>
+<p class="intro">Set the situation on the first rows and see what the pane and status bar show, whether high voltage is on,
+and what you can and cannot do. Click the <em>Realtime</em> button in the copy of the pane.</p>
+
+<section data-term id="panel-reader" data-where="interactive copy of the pane">
+  <h3>Status-panel reader</h3>
+  <p>A copy of the pane that follows the same rules as MicroDrop's code. The numbers are a worked example (see
+  <a href="#force">Force</a> for the formulas).</p>
+  <figure data-demo="panel" aria-label="Interactive copy of the DropBot status pane">
+    <div class="controls">
+      <label>DropBot <select id="pr-conn-in"><option value="off">Disconnected</option><option value="on" selected>Connected</option></select></label>
+      <label><input type="checkbox" id="pr-chip-in" checked> Chip inserted</label>
+      <label>Halt <select id="pr-halt-in"><option value="none" selected>None</option><option value="current">Output current exceeded</option><option value="load">Chip load saturated</option></select></label>
+    </div>
+    <div class="controls">
+      <label><input type="checkbox" id="pr-run-in"> Protocol running</label>
+      <label><input type="checkbox" id="pr-step-in"> A protocol step is selected</label>
+      <label>Lit electrodes <select id="pr-lit-in"><option value="none">None</option><option value="filler">Lit, filler only</option><option value="drop" selected>Lit, droplet on them</option></select></label>
+      <label><input type="checkbox" id="pr-cal-in" checked> Calibrated</label>
+    </div>
+    <div class="controls">
+      <label>Voltage box <input type="range" id="pr-v-in" min="30" max="140" step="1" value="110"></label><output for="pr-v-in"></output>
+      <label>Frequency box <input type="range" id="pr-f-in" min="100" max="10000" step="100" value="10000"></label><output for="pr-f-in"></output>
+      <label>Dielectric <select id="pr-diel-in"></select></label>
+    </div>
+    <div class="pm" aria-live="polite">
+      <div class="pm-left">
+        <div class="pm-pic" id="pr-pic"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="14" width="36" height="24" rx="3" fill="#2b2b2b"/><rect x="12" y="18" width="24" height="10" rx="1" id="pr-slot" fill="#9e9e9e"/><rect x="10" y="32" width="28" height="3" rx="1" fill="#555555"/></svg></div>
+        <div><div>Connection: <strong id="pr-conn">Active</strong></div><div>Chip Status: <strong id="pr-chip">Present</strong></div></div>
+        <button type="button" class="pm-rt" id="pr-rt">Realtime Off</button>
+      </div>
+      <table class="pm-grid">
+        <tr><td class="lab">Voltage</td><td class="val" id="pr-vr">-</td><td><span class="pm-box" id="pr-vb">110 V</span></td></tr>
+        <tr><td class="lab">Frequency</td><td class="val" id="pr-fr">-</td><td><span class="pm-box" id="pr-fb">10000 Hz</span></td></tr>
+        <tr><td class="lab">Capacitance</td><td class="val" id="pr-cap">-</td><td></td></tr>
+        <tr><td class="lab">Volume</td><td class="val" id="pr-vol">-</td><td></td></tr>
+        <tr><td class="lab">Force</td><td class="val" id="pr-force">-</td><td></td></tr>
+        <tr><td class="lab">Dielectric</td><td class="val" id="pr-thick">-</td><td></td></tr>
+      </table>
+    </div>
+    <div class="sb"><span>Status bar</span>
+      <svg class="ic" id="pr-dev" role="img" aria-label="device status"><use href="#ic-drop_ec"/></svg>
+      <svg class="ic" id="pr-live" role="img" aria-label="realtime"><use href="#ic-live_tv"/></svg>
+      <span class="sb-text" id="pr-sb"></span></div>
+    <p class="status"><span class="hv" id="pr-hv">High voltage off</span></p>
+    <ul class="pr-notes" id="pr-notes"></ul>
+    <figcaption>Rules from <code>template_status_and_controls</code> and <code>dropbot_status_and_controls</code>.
+    Example numbers: 18 mm² of electrodes lit, 15 mm² of it under the droplet, calibration Cl 7.2 and Cf 1.3 pF/mm²
+    (c_device 5.9), plate gap 254 µm. The measured voltage is shown equal to the box; on the real DropBot it can be a volt
+    off. Colours approximate the app's.</figcaption>
+  </figure>
+</section>
+</section>
+
+<!-- ============================================================ -->
 <section data-part id="part-controls">
-<h2>Controls and icons</h2>
-<p class="intro">Hover over a control in MicroDrop to see its tooltip. Highlighted copies of an icon show it switched on.</p>
+<h2>Buttons and icons</h2>
+<p class="intro">Hover over a control in MicroDrop to see its tooltip, quoted here. Highlighted copies of an icon show it
+switched on.</p>
 
 <section data-term id="tb-status" data-where="status bar, bottom of the window">
   <h3>Status-bar icons</h3>
+  <div class="table-wrap">
   <table class="small icons-table">
     <thead><tr><th>Icon</th><th>Name</th><th>What it does</th></tr></thead>
     <tbody>
-      <tr><td class="icons"><i data-glyph="ICON_DROP_EC"></i></td><td class="lbl">Device status</td><td>Its colour is the
-      connection state: grey disconnected, orange connected with no chip, green chip detected, red halted. Hover for the legend.</td></tr>
-      <tr><td class="icons"><i data-glyph="live_tv"></i><i data-glyph="live_tv" data-on></i></td><td class="lbl">Realtime mode</td><td>Click
-      to switch <a href="#realtime">Realtime</a> on (green) or off. Greyed out without a connection; locked while a protocol runs.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_DROP_EC"></i></td><td class="lbl">Device Status</td><td>Its colour is the
+      connection state: grey <em>Disconnected</em>, orange <em>Connected (No Chip)</em>, green <em>Connected (Chip
+      Detected)</em>, red <em>Halted (Device Fault)</em>. Hover for this legend. It does nothing when clicked.</td></tr>
+      <tr><td class="icons"><i data-glyph="live_tv"></i><i data-glyph="live_tv" data-on></i></td><td class="lbl">Realtime
+      mode</td><td>Click to switch <a href="#realtime">Realtime</a> on (green) or off (grey). Tooltips: <em>Click to enable
+      realtime mode</em> / <em>Click to disable realtime mode</em>. Greyed out without a connection (<em>Cannot enable
+      realtime mode. No device connection</em>). Locked while a protocol runs (<em>Realtime mode is locked while a protocol
+      is running</em>).</td></tr>
     </tbody>
   </table>
+  </div>
+</section>
+
+<section data-term id="tb-pane" data-where="the Dropbot Status And Controls pane">
+  <h3>Buttons in the pane</h3>
+  <div class="table-wrap">
+  <table class="small icons-table">
+    <thead><tr><th>Control</th><th>Name</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><span class="ui">Realtime Off</span></td><td class="lbl">Realtime button</td><td>Switches
+      <a href="#realtime">Realtime</a> on and off; green with the label <em>Realtime On</em> while on. Usable only while
+      connected, not halted and no protocol runs. Rapid clicks are merged: the last state within one second is sent.</td></tr>
+      <tr><td class="icons"><span class="ui">Volume ▾</span></td><td class="lbl">Droplet readout</td><td>Picks which of
+      <a href="#volume">Volume, Fill or Covered area</a> the row shows. Tooltip: <em>Droplet readout to show; hover the value
+      for all of them</em>.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_OPEN_IN_NEW"></i></td><td class="lbl">Show all droplet readouts</td><td>Opens
+      the <a href="#readouts-window">Droplet Readouts</a> window. It stays open beside the main window; clicking again brings
+      the open one to the front.</td></tr>
+      <tr><td class="icons"><span class="ui">Pick a dielectric... ▾</span></td><td class="lbl">Dielectric material</td><td>The
+      material of your chip's dielectric layer, used to work out its <a href="#dielectric">thickness</a>.</td></tr>
+      <tr><td class="icons">right-click</td><td class="lbl">Show Dielectric Info</td><td>Right-click anywhere in the pane and
+      tick or untick it to show or hide the Dielectric row.</td></tr>
+    </tbody>
+  </table>
+  </div>
 </section>
 
 <section data-term id="tb-calibration" data-where="Device Viewer, calibration buttons">
-  <h3>Calibration buttons</h3>
+  <h3>Calibration buttons (Device Viewer)</h3>
+  <p>The force, volume and dielectric readings need a calibration from the Device Viewer.</p>
+  <div class="table-wrap">
   <table class="small icons-table">
     <thead><tr><th>Icon</th><th>Tooltip</th><th>What it does</th></tr></thead>
     <tbody>
-      <tr><td class="icons"><i data-glyph="airwave"></i></td><td class="lbl">Measure filler Capacitance</td><td>Reads the capacitance of the
-      electrodes that are on, divided by their area, with only filler medium over them.</td></tr>
-      <tr><td class="icons"><i data-glyph="humidity_high"></i></td><td class="lbl">Measure Liquid Capacitance</td><td>The same, with liquid over
-      them. The pane's <a href="#cdevice">c_device</a> is the liquid value minus the filler value.</td></tr>
-      <tr><td class="icons"><i data-glyph="ICON_RESET_WRENCH"></i></td><td class="lbl">Reset Measurements</td><td>Forgets both measurements, so
-      c_device and Force go back to "-".</td></tr>
+      <tr><td class="icons"><i data-glyph="airwave"></i></td><td class="lbl">Measure filler Capacitance</td><td>Takes the
+      latest capacitance reading and divides it by the area of the lit electrodes. Light electrodes with only filler (air or
+      oil) over them first. Shown as <strong>C<sub>f</sub></strong>.</td></tr>
+      <tr><td class="icons"><i data-glyph="humidity_high"></i></td><td class="lbl">Measure Liquid Capacitance</td><td>The
+      same with liquid fully covering the lit electrodes. Shown as <strong>C<sub>l</sub></strong>.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_RESET_WRENCH"></i></td><td class="lbl">Reset Measurements</td><td>Forgets
+      both, so c_device, Force, Dielectric and Volume go back to "-".</td></tr>
     </tbody>
   </table>
+  </div>
+  <p>Both measurements need at least one lit electrode and a capacitance reading, so switch Realtime on first. The Device
+  Viewer's right-click menu has the same two measurements. MicroDrop keeps the calibration in its preferences, so it is
+  still there after a restart: reset and measure again when you change the chip or the liquid.</p>
 </section>
 
-<section data-term id="tb-menu" data-where="Tools ▸ Dropbot menu">
-  <h3>Self-tests and connection menu</h3>
-  <table class="small">
-    <thead><tr><th>Menu item</th><th>What it does</th></tr></thead>
-    <tbody>
-      <tr><td class="lbl">Run all on-board self-tests</td><td>Runs every hardware check below in turn and shows a report.</td></tr>
-      <tr><td class="lbl">On-board self-tests ▸ Test high voltage</td><td>Checks the board reaches the voltages it is asked for.</td></tr>
-      <tr><td class="lbl">On-board self-tests ▸ On-board feedback calibration</td><td>Checks the capacitance-measuring circuit against its built-in reference.</td></tr>
-      <tr><td class="lbl">On-board self-tests ▸ Detect shorted channels</td><td>Looks for electrodes wired to each other or to ground.</td></tr>
-      <tr><td class="lbl">On-board self-tests ▸ Scan test board</td><td>Steps through every channel on the DropBot test board.</td></tr>
-      <tr><td class="lbl">Search for Dropbot Connection</td><td>Starts looking for the board again, e.g. after replugging it.</td></tr>
-      <tr><td class="lbl">Reboot Dropbot</td><td>Restarts the board's microcontroller. It asks first: the DropBot disconnects and may stop responding.</td></tr>
-    </tbody>
-  </table>
+<section data-term id="find-liquid" data-where="Device Viewer right-click ▸ Find Liquid; key F">
+  <h3>Find Liquid (droplet detection)</h3>
+  <p>Asks the DropBot which electrodes have liquid on them and lights those electrodes in the Device Viewer.</p>
+  <div data-what><p>The DropBot switches its high-voltage output on at 1 kHz, measures the capacitance of each channel of
+  the loaded device, and counts a channel as wet when it reads above the <a href="#pref-drop-detect">Drop Detect
+  Capacitance</a>. Then it puts the voltage, frequency and output back as they were. Pressing <kbd>F</kbd> also clears
+  the lit electrodes first; the menu item does not.</p></div>
+  <div data-when><p>To find where droplets are after loading a chip, or before running a step that needs to know.</p></div>
+  <div data-read><p>The wet electrodes light up a moment later. <strong>High voltage is on during the measurement, even with
+  Realtime off</strong>, and with Realtime on the newly lit electrodes stay powered.</p></div>
+  <div data-typical><p>Threshold 10 pF (<a href="#pref-drop-detect">Drop Detect Capacitance</a>).</p></div>
 </section>
 </section>
 
 <!-- ============================================================ -->
 <section data-part id="part-terms">
-<h2>Settings and readings</h2>
-<p class="intro">Left column: what the DropBot reports. Right column: what you ask for.</p>
+<h2>Status, settings and readings</h2>
+<p class="intro">Middle column: what the DropBot reports. Right column: what you ask for. A "-" means no reading.</p>
 
-<section data-term id="realtime" data-where="Realtime On / Off button">
+<section data-term id="connection" data-where="Connection field; status-bar droplet">
+  <h3>Connection</h3>
+  <p>Whether MicroDrop is talking to a DropBot.</p>
+  <div data-what><p><strong>Active</strong> once MicroDrop has opened the DropBot on its USB port; <strong>Inactive</strong>
+  otherwise. MicroDrop looks for a DropBot every 2 seconds until it finds one, and starts looking again after a
+  disconnection.</p></div>
+  <div data-when><p>Check it first whenever nothing seems to reach the chip.</p></div>
+  <div data-read><p>The status-bar droplet and the picture's background are grey while Inactive. Connecting also clears a
+  halt.</p></div>
+  <div data-typical><p>Inactive at start-up, Active a few seconds after the DropBot is plugged in and powered.</p></div>
+</section>
+
+<section data-term id="chip-status" data-where="Chip Status field">
+  <h3>Chip Status (chip insert detection)</h3>
+  <p>Whether a chip is in the DropBot.</p>
+  <div data-what><p><strong>Present</strong> or <strong>Absent</strong>. The DropBot senses the chip through its
+  output-enable contact and reports each change; MicroDrop also asks once when it connects, in case the chip went in
+  before.</p></div>
+  <div data-when><p>After inserting or swapping a chip, before switching Realtime on.</p></div>
+  <div data-read><p>Present turns the picture to the "chip inserted" photo and the colour from orange to green.
+  Disconnecting sets it back to Absent.</p></div>
+  <div data-typical><p>Absent until a connected DropBot reports a chip.</p></div>
+</section>
+
+<section data-term id="realtime" data-where="Realtime On / Off button; status-bar icon; key T">
   <h3>Realtime mode</h3>
-  <p>The switch between "change things on the hardware now" and "prepare settings without touching the hardware".</p>
-  <div data-what><p>When on, every voltage, frequency and electrode change goes to the DropBot straight away and the readings
-  update live. When off, changes are kept and only the <em>latest</em> voltage and frequency are sent when you switch it on again.</p></div>
-  <div data-when><p>On while you work with droplets. Off to set things up first, or to make sure nothing is driven.</p></div>
-  <div data-read><p>The button label and the green <i data-glyph="live_tv" data-inline data-on></i> status-bar icon say it is on.
-  While off, Voltage, Frequency, Capacitance and Force read "-".</p></div>
-  <div data-typical><p>Off. It can only be switched on while the DropBot is connected and not halted, and not while a
-  protocol runs (the protocol controls the hardware then). A halt switches it off.</p></div>
+  <p>The switch for the DropBot's high-voltage output.</p>
+  <div data-what><p><strong>On:</strong> the output is on; the lit electrodes get the voltage, and new voltage, frequency
+  and electrode changes reach the DropBot as you make them. Switching on also sends the latest voltage, frequency and the
+  set of lit electrodes. <strong>Off:</strong> the output is off. Voltage and frequency changes are kept and sent when you
+  switch on; electrode clicks only change the picture.</p></div>
+  <div data-when><p>On while you move droplets by hand. Off to set things up, to swap a chip, or whenever nothing should
+  be driven.</p></div>
+  <div data-read><p>Green <span class="ui">Realtime On</span> button and green <i data-glyph="live_tv" data-inline data-on></i>.
+  While off, Voltage, Frequency, Capacitance, Force and Dielectric read "-".</p></div>
+  <div data-typical><p>Off. The pane's button works only while connected, not halted, and while no protocol runs. A
+  protocol run switches it on before the first step. Afterwards, if it was off, the run switches it off again; if it was
+  on, MicroDrop asks <em>Keep Realtime Mode Enabled Post-Protocol?</em> (or follows your saved answer). Any halt switches
+  it off.</p></div>
+</section>
+
+<section data-term id="free-mode" data-where="status bar: Free Mode / Editing: Step N">
+  <h3>Free mode</h3>
+  <p>Working on the chip by hand, with no protocol step selected.</p>
+  <div data-what><p>MicroDrop is in free mode while no step (or only a group) is selected in the protocol tree. Selecting a
+  step shows that step on the Device Viewer instead.</p></div>
+  <div data-when><p>Set voltage and frequency in free mode: the pane's boxes are locked while a step is selected, because
+  the step's own voltage and frequency apply.</p></div>
+  <div data-read><p>The status bar says <em>Free Mode</em>, <em>Editing: Step N</em> or <em>Running Protocol: Step N</em>.</p></div>
+  <div data-typical><p>Free mode when nothing is selected.</p></div>
+</section>
+
+<section data-term id="halted" data-where="DropBot Halted window; red status colour">
+  <h3>Halted</h3>
+  <p>The DropBot stopped driving the chip by itself after a fault.</p>
+  <div data-what><p>Two faults halt the DropBot: <strong>output current exceeded</strong> and <strong>chip load
+  saturated</strong>. Either one switches Realtime and the high voltage off and shows <span class="ui">DropBot Halted</span>.
+  A short does not halt the DropBot; it is reported separately (<a href="#dlg-shorts">Shorts Detected</a>).</p></div>
+  <div data-when><p>Not something you switch: read the window, then fix the cause.</p></div>
+  <div data-read><p>After <em>output current exceeded</em> the colour turns red and the pane's Realtime button and voltage
+  and frequency boxes stay locked until the DropBot reconnects. After <em>chip load saturated</em> the colour does not
+  change and you can switch Realtime on again.</p></div>
+  <div data-typical><p>Not halted.</p></div>
 </section>
 
 <section data-term id="voltage" data-where="Voltage row">
   <h3>Voltage</h3>
-  <p>How hard the DropBot drives the electrodes that are on: more voltage, more force on the droplet.</p>
-  <div data-what><p>The right-hand box is the voltage you ask for (whole volts). The left-hand value is the voltage the board
-  measures back, which can sit slightly off the request.</p></div>
-  <div data-when><p>Raise it when droplets move sluggishly or not at all; lower it if droplets split, stick or the dielectric breaks down.</p></div>
-  <div data-read><p>The box only accepts the range set under <span class="ui">Preferences ▸ Protocol Settings ▸ Protocol Setters Config</span>
-  (Min/Max Voltage); anything outside snaps to its end. Edits are sent after you pause for a moment, so scrolling through values
-  does not flood the hardware.</p></div>
-  <div data-typical><p>100 V, within 30 to 140 V. MicroDrop remembers the last value you applied.</p></div>
-  <figure data-demo="vf-range" aria-label="Voltage and frequency demo">
-    <div class="controls">
-      <label>Connection <select id="vf-conn">
-        <option value="off">Disconnected</option><option value="nochip">Connected, no chip</option>
-        <option value="chip" selected>Chip detected</option><option value="halted">Halted</option></select></label>
-      <label><input type="checkbox" id="vf-rt" checked> Realtime</label>
-    </div>
-    <div class="controls">
-      <label>Ask for <input type="range" id="vf-v" min="0" max="200" step="5" value="100"></label><output for="vf-v"></output>
-      <label>Max Voltage pref. <input type="range" id="vf-max" min="60" max="200" step="10" value="140"></label><output for="vf-max"></output>
-    </div>
-    <div class="controls">
-      <label>Ask for <input type="range" id="vf-f" min="0" max="12000" step="100" value="10000"></label><output for="vf-f"></output>
-    </div>
-    <div class="sb" aria-live="polite"><span>Status bar</span>
-      <svg class="ic" id="vf-dev" role="img" aria-label="device status"><use href="#ic-drop_ec"/></svg>
-      <svg class="ic" id="vf-live" role="img" aria-label="realtime"><use href="#ic-live_tv"/></svg>
-      <span class="sb-text" id="vf-sb"></span></div>
-    <div class="vf-demo">
-      <table id="vf-read"></table>
-      <p class="status" id="vf-status"></p>
-    </div>
-    <figcaption>The table is the pane's left column; Start is where the demo began. Force assumes c_device = 1.0 pF/mm².
-    Colours approximate the app's.</figcaption>
-  </figure>
+  <p>How hard the DropBot drives the lit electrodes: more voltage, more force on the droplet.</p>
+  <div data-what><p>The box is the voltage you ask for, in whole volts. The middle value is the voltage the DropBot measures
+  on its output; it updates when it moves by more than 1 V.</p></div>
+  <div data-when><p>Raise it when droplets move sluggishly or not at all; lower it if droplets split, stick, or the
+  dielectric breaks down.</p></div>
+  <div data-read><p>The box accepts only <span class="ui">Min Voltage</span> to <span class="ui">Max Voltage</span> from
+  <span class="ui">Edit ▸ Preferences ▸ Protocol Settings ▸ Protocol Setters Config</span>. The DropBot has its own limits:
+  at least 30 V, and at most the <span class="ui">Max Voltage</span> it reports (see <a href="#pref-hardware">Hardware
+  Config</a>). A value outside those is refused by the DropBot; the pane does not warn you, but the measured value does
+  not follow. Edits go out 0.3 s after you stop changing the box. Locked while a protocol runs, while a step is selected
+  and after an over-current halt.</p></div>
+  <div data-typical><p>100 V, within 30 to 140 V. MicroDrop remembers the last value you set and starts with it.</p></div>
 </section>
 
 <section data-term id="frequency" data-where="Frequency row">
   <h3>Frequency</h3>
   <p>How fast the drive voltage alternates, in hertz (cycles per second).</p>
-  <div data-what><p>The right-hand box sets it in steps of 100 Hz; the left-hand value shows it back while Realtime is on.</p></div>
-  <div data-when><p>Most work stays at the default; change it when your chip or method calls for a different one.</p></div>
-  <div data-read><p>The left-hand value repeats the setting (it is not measured), with an SI prefix: 10 kHz is 10000 Hz. Range and snapping work as for Voltage (Min/Max Frequency preferences).</p></div>
-  <div data-typical><p>10 kHz, within 100 Hz to 10 kHz.</p></div>
+  <div data-what><p>The box sets it in steps of 100 Hz. The middle value repeats the setting while Realtime is on; it is not
+  measured.</p></div>
+  <div data-when><p>Most work stays at the default; change it when your chip or method calls for another.</p></div>
+  <div data-read><p>Shown with an SI prefix: 10 kHz is 10 000 Hz. The range, the DropBot's own limits (at least 100 Hz, at
+  most its reported <span class="ui">Max Frequency</span>) and the locking work as for Voltage.</p></div>
+  <div data-typical><p>10 000 Hz (10 kHz), within 100 Hz to 10 kHz.</p></div>
 </section>
 
 <section data-term id="capacitance" data-where="Capacitance row">
   <h3>Capacitance</h3>
-  <p>What the DropBot measures across the electrodes that are on. Liquid over an electrode raises it.</p>
-  <div data-what><p>The average of the last 5 readings, in picofarads; small wobbles are not shown, to keep it steady.</p></div>
-  <div data-read><p>A jump when you turn on an electrode under a droplet means the droplet is there. "-" while Realtime is off.</p></div>
-  <div data-typical><p>Depends on the chip and how many electrodes are on: a few to hundreds of pF.</p></div>
+  <p>What the DropBot measures across the lit electrodes. Liquid over an electrode raises it a lot; filler raises it a
+  little.</p>
+  <div data-what><p>In picofarads (pF). The DropBot sends a reading every <a href="#pref-cap-interval">Capacitance Update
+  Interval</a>. The pane shows the average of 5 readings, and only when it moves by more than 3 pF, to keep it steady.</p></div>
+  <div data-when><p>To see whether a droplet sits on the lit electrodes, and as the input to volume.</p></div>
+  <div data-read><p>A jump when you light an electrode under a droplet means the droplet is there. "-" while Realtime is
+  off.</p></div>
+  <div data-typical><p>Depends on the chip and on how much is lit. In the clips: about 3 pF with nothing lit and 100 to
+  170 pF with a droplet on a few lit electrodes.</p></div>
 </section>
 
-<section data-term id="cdevice" data-where="c_device row">
+<section data-term id="volume" data-where="the row with the Volume / Fill / Covered area picker">
+  <h3>Droplet readout: Volume, Fill and Covered area</h3>
+  <p>An estimate of how much liquid sits on the lit electrodes, worked out from the capacitance and your calibration.</p>
+  <div data-what><p>The Device Viewer splits the capacitance into a liquid part and a filler part. <strong>Covered
+  area</strong> = (capacitance − C<sub>f</sub> × lit area) ÷ (C<sub>l</sub> − C<sub>f</sub>), never below 0.
+  <strong>Volume</strong> = covered area × plate gap. <strong>Fill</strong> = covered area ÷ lit area. Without a filler
+  calibration, C<sub>f</sub> counts as 0 and the volume reads high.</p></div>
+  <div data-when><p>To check that a dispensed or split droplet has about the volume you expect.</p></div>
+  <div data-read><p>Pick the readout with the drop-down; hover the value to see all three plus c_device. "-" with a
+  reason: <em>No volume estimate from the device viewer yet.</em>, <em>Measure the liquid capacitance to calibrate.</em>,
+  <em>Liquid calibration must exceed the filler calibration.</em>, <em>No actuated electrodes.</em> or <em>No capacitance
+  reading.</em> It updates when the volume moves by more than 0.1 µL. A fill above 100 % means liquid outside the lit
+  electrodes or an old calibration. Unlike the other readings it is not cleared when Realtime goes off, so it can show an
+  old value then.</p></div>
+  <div data-typical><p>Volume in µL with one decimal (4.4 µL in the first clip), Fill in %, Covered area in mm². The plate
+  gap starts at 254 µm (<a href="#pref-gap">Plate gap</a>).</p></div>
+</section>
+
+<section data-term id="readouts-window" data-where="Show all droplet readouts button">
+  <h3>Droplet Readouts window</h3>
+  <p>A small window listing Volume, Fill, Covered area and c_device together.</p>
+  <div data-what><p>Opened by <i data-glyph="ICON_OPEN_IN_NEW" data-inline></i>. It stays open next to the main window and
+  updates live; the reason for a missing estimate is shown at its bottom.</p></div>
+  <div data-when><p>When you want all droplet numbers in view while the pane shows only one, for example while
+  dispensing.</p></div>
+  <div data-read><p>Same values and "-" rules as the readout row.</p></div>
+  <div data-typical><p>Closed.</p></div>
+</section>
+
+<section data-term id="cdevice" data-where="Droplet readout tooltip; Droplet Readouts window">
   <h3>c_device</h3>
-  <p>The chip's capacitance per square millimetre of electrode due to the liquid, from your calibration.</p>
-  <div data-what><p>Liquid calibration minus filler calibration, in pF/mm² (see <a href="#tb-calibration">Calibration buttons</a>).</p></div>
-  <div data-when><p>Calibrate once per chip and liquid; it feeds Force and, if shown, Dielectric.</p></div>
-  <div data-read><p>"-" until both calibrations are measured. Right-click the pane and tick <span class="ui">Show Dielectric Info</span>,
-  then pick your dielectric material, to also see its thickness worked out from c_device.</p></div>
-  <div data-typical><p>No single value: it depends on the dielectric's material and thickness, and thinner layers read higher.
-  The demo above uses 1 pF/mm² as an example.</p></div>
+  <p>The chip's capacitance per square millimetre due to the liquid, from your calibration.</p>
+  <div data-what><p>C<sub>l</sub> − C<sub>f</sub>, in pF/mm² (see <a href="#tb-calibration">Calibration buttons</a>). It
+  feeds Force and Dielectric.</p></div>
+  <div data-when><p>Calibrate once per chip and liquid.</p></div>
+  <div data-read><p>Not a row of its own: hover the droplet readout value, or open the Droplet Readouts window. "-" until
+  both C<sub>l</sub> and C<sub>f</sub> are measured. It does not clear when Realtime goes off.</p></div>
+  <div data-typical><p>No single value: it depends on the dielectric's material and thickness, and thinner layers read
+  higher. One recording: C<sub>l</sub> 7.2 and C<sub>f</sub> 1.3 pF/mm², so c_device 5.9 pF/mm².</p></div>
 </section>
 
 <section data-term id="force" data-where="Force row">
   <h3>Force</h3>
-  <p>The pull on a droplet's edge per millimetre, from c_device and the measured voltage.</p>
-  <div data-what><p>c_device × voltage² ÷ 2, in mN/m. Doubling the voltage gives four times the force.</p></div>
-  <div data-when><p>To compare runs on different chips or voltages, or to set a voltage that gives the force a protocol needs.</p></div>
-  <div data-read><p>Uses the voltage the board measures, so it follows the left column, not the box. "-" without a calibration or with Realtime off.</p></div>
-  <div data-typical><p>A worked example, not a target: 5 mN/m at 100 V with c_device = 1 pF/mm².</p></div>
+  <p>The pull on a droplet's edge per metre, from c_device and the measured voltage.</p>
+  <div data-what><p>c_device × voltage² ÷ 2, in millinewtons per metre (mN/m). Doubling the voltage gives four times the
+  force.</p></div>
+  <div data-when><p>To compare runs on different chips or voltages, or to find a voltage that gives the force a protocol
+  needs.</p></div>
+  <div data-read><p>Uses the measured voltage (middle column), not the box. "-" without both calibrations or with Realtime
+  off.</p></div>
+  <div data-typical><p>In the clips: 35.8 mN/m at 110 V and 58.9 mN/m at 141 V with c_device 5.9 pF/mm².</p></div>
+  <figure data-demo="calc" aria-label="Calculator for force, dielectric thickness and droplet volume">
+    <div class="controls">
+      <label>Measured voltage <input type="range" id="cc-v" min="30" max="140" step="1" value="110"></label><output for="cc-v"></output>
+      <label>Dielectric <select id="cc-diel"></select></label>
+    </div>
+    <div class="controls">
+      <label><input type="checkbox" id="cc-l-on" checked> C<sub>l</sub> measured</label>
+      <label><input type="range" id="cc-l" min="0" max="15" step="0.1" value="7.2"></label><output for="cc-l"></output>
+      <label><input type="checkbox" id="cc-f-on" checked> C<sub>f</sub> measured</label>
+      <label><input type="range" id="cc-f" min="0" max="5" step="0.1" value="1.3"></label><output for="cc-f"></output>
+    </div>
+    <div class="controls">
+      <label>Lit area <input type="range" id="cc-a" min="0" max="50" step="1" value="18"></label><output for="cc-a"></output>
+      <label>Under the droplet <input type="range" id="cc-c" min="0" max="50" step="1" value="15"></label><output for="cc-c"></output>
+      <label>Plate gap <input type="range" id="cc-g" min="50" max="600" step="1" value="254"></label><output for="cc-g"></output>
+    </div>
+    <div class="calc-grid">
+      <table id="cc-read"></table>
+      <p class="status" id="cc-status" aria-live="polite"></p>
+    </div>
+    <figcaption>The DropBot's reading here is what a fresh calibration predicts: C<sub>l</sub> × area under the droplet +
+    C<sub>f</sub> × the rest of the lit area. Untick C<sub>f</sub> to see Volume read high; untick C<sub>l</sub> to see why
+    Volume reads "-". Same formulas as MicroDrop; Start is where the figure began.</figcaption>
+  </figure>
 </section>
+
+<section data-term id="dielectric" data-where="Dielectric row (right-click ▸ Show Dielectric Info)">
+  <h3>Dielectric (thickness)</h3>
+  <p>The thickness of the insulating layer between the electrodes and the droplets, worked out from c_device.</p>
+  <div data-what><p>Relative permittivity of the picked material × the permittivity of free space ÷ c_device, in µm.</p></div>
+  <div data-when><p>To check a new batch of chips: a thinner or thicker coating than expected shows here.</p></div>
+  <div data-read><p>"-" until a material is picked and both calibrations exist. It also clears when Realtime goes off; if it
+  stays "-" after you switch Realtime back on, pick the material again.</p></div>
+  <div data-typical><p>Example: Parylene C with c_device 5.9 pF/mm² gives 4.65 µm. The row is shown by default.</p></div>
+</section>
+
+<section data-term id="dielectric-material" data-where="drop-down next to the Dielectric row">
+  <h3>Dielectric material</h3>
+  <p>The coating your chip is made with, and its relative permittivity (how strongly it stores charge compared with
+  vacuum).</p>
+  <div data-what>
+  <div class="table-wrap"><table class="small">
+    <thead><tr><th>Material</th><th class="num">Relative permittivity</th></tr></thead>
+    <tbody>
+      <tr><td>Parylene C</td><td class="num">3.1</td></tr><tr><td>CYTOP</td><td class="num">2.1</td></tr>
+      <tr><td>Teflon AF</td><td class="num">1.93</td></tr><tr><td>SiO2</td><td class="num">3.9</td></tr>
+      <tr><td>SU-8</td><td class="num">3.2</td></tr><tr><td>Parylene N</td><td class="num">2.65</td></tr>
+      <tr><td>Parylene D</td><td class="num">2.84</td></tr><tr><td>PDMS</td><td class="num">2.7</td></tr>
+      <tr><td>Si3N4</td><td class="num">7.5</td></tr><tr><td>Kapton</td><td class="num">3.4</td></tr>
+    </tbody>
+  </table></div></div>
+  <div data-when><p>Pick it once per chip type; MicroDrop remembers it as the <a href="#pref-status">Default Dielectric
+  Material</a> and writes it into the protocol run report.</p></div>
+  <div data-read><p><em>Pick a dielectric...</em> means none: thickness stays "-".</p></div>
+  <div data-typical><p>Pick a dielectric... until you choose one.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-dialogs">
+<h2>Dialogs</h2>
+<p class="intro">Windows the DropBot can raise, with their exact titles. Pick the one you see.</p>
+
+<section data-term id="dialog-helper" data-where="interactive">
+  <h3>Which window, and what to do</h3>
+  <figure data-demo="dialogs" aria-label="Pick a dialog title to see what caused it and what to do">
+    <div class="controls">
+      <label>I see <select id="dh-pick"></select></label>
+    </div>
+    <div class="dlg" aria-live="polite">
+      <h4 id="dh-title"></h4>
+      <p class="quote" id="dh-text"></p>
+      <dl>
+        <dt>Why</dt><dd id="dh-why"></dd>
+        <dt>High voltage now</dt><dd id="dh-hv"></dd>
+        <dt>What to do</dt><dd id="dh-do"></dd>
+        <dt>Afterwards</dt><dd id="dh-after"></dd>
+      </dl>
+    </div>
+    <figcaption>The quoted text is the window's own, from MicroDrop's code. Channel numbers are examples.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="dlg-halted" data-where="DropBot Halted window">
+  <h3>DropBot Halted</h3>
+  <p>The DropBot cut the high voltage by itself.</p>
+  <div data-what><p>Text: <em>DropBot has halted because output current was exceeded.</em> or <em>DropBot has halted because
+  chip load feedback exceeded allowable range.</em>, with advice below it. One OK button; no Retry.</p></div>
+  <div data-when="When it appears"><p>Too much current (a short through liquid, a damaged chip) or too much load (too many droplets or
+  electrodes at once).</p></div>
+  <div data-read><p>Realtime is off when you see it. See <a href="#halted">Halted</a> for what stays locked.</p></div>
+  <div data-typical="What to do"><p>Over-current: check the chip, then unplug all DropBot cables and plug them back in, as the window
+  advises. Chip load: light fewer electrodes, check for damage, then switch Realtime on again.</p></div>
+</section>
+
+<section data-term id="dlg-shorts" data-where="Shorts Detected / No Shorts Detected windows">
+  <h3>Shorts Detected and No Shorts Detected</h3>
+  <p>The result of the DropBot's check for shorted channels.</p>
+  <div data-what><p><span class="ui">Shorts Detected</span>: <em>Shorts detected on channels: [3, 17]. [RISKY] Would you like
+  keep these channels enabled?</em> with <span class="ui">Yes</span> and <span class="ui">No</span>.
+  <span class="ui">No Shorts Detected</span>: <em>No shorts were detected.</em></p></div>
+  <div data-when="When it appears"><p>On every connection, after <span class="ui">Detect shorted channels</span>, and whenever the DropBot
+  reports a short on its own (not during self-tests).</p></div>
+  <div data-read><p><span class="ui">No</span> disables the listed channels: the Device Viewer shows them as disabled and
+  they are not driven. <span class="ui">Yes</span> keeps them enabled, which is risky. Re-enable a channel later from the
+  Device Viewer's right-click menu (<span class="ui">Enable Electrode</span> / <span class="ui">Enable All Electrodes</span>).
+  At a connection, <em>No shorts</em> has a <em>Do not show again (can be undone from preferences)</em> box; after a test you
+  asked for it is always shown.</p></div>
+  <div data-typical="What to do"><p>Answer No unless you know why the channel reads shorted.</p></div>
+</section>
+
+<section data-term id="dlg-nopower" data-where="ERROR: No Power window">
+  <h3>ERROR: No Power</h3>
+  <p>The DropBot answered on USB but has no power supply.</p>
+  <div data-what><p><em>DropBot currently has no power supply connected. Plug in power supply cable. Click the "Retry"
+  button after plugging in the power cable to attempt reconnection</em>, with a picture of the power socket and a
+  <span class="ui">Retry</span> button.</p></div>
+  <div data-when="When it appears"><p>The power supply is unplugged or switched off while USB is connected.</p></div>
+  <div data-read><p>While this window is up MicroDrop stops looking for the DropBot on its own.</p></div>
+  <div data-typical="What to do"><p>Plug the power in, then click <span class="ui">Retry</span>: MicroDrop starts looking again and closes
+  the window.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-tools">
+<h2>Tools ▸ Dropbot: self-tests, search and reboot</h2>
+<p class="intro">Run the self-tests when readings look wrong or after a halt. A self-test needs a connected DropBot; without
+one you get <span class="ui">Dropbot Disconnected</span> (<em>DropBot is not connected. Plug in the DropBot USB cable and
+power supply.</em>). While a test runs, the DropBot's normal shorts warnings are muted. Each test puts the voltage,
+frequency, output and electrodes back as they were when it ends.</p>
+
+<section data-term id="tb-menu" data-where="Tools ▸ Dropbot">
+  <h3>The menu at a glance</h3>
+  <div class="table-wrap">
+  <table class="small">
+    <thead><tr><th>Menu item</th><th>Needs</th><th>High voltage</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Run all on-board self-tests</td><td>Test board</td><td>Yes</td><td>A report in your web browser</td></tr>
+      <tr><td class="lbl">On-board self-tests ▸ Test high voltage</td><td>Nothing extra</td><td>Yes, up to the DropBot's maximum</td><td>Test Results plot</td></tr>
+      <tr><td class="lbl">On-board self-tests ▸ On-board feedback calibration</td><td>Nothing extra</td><td>Yes, 100 V, all electrodes off</td><td>Test Results plot</td></tr>
+      <tr><td class="lbl">On-board self-tests ▸ Detect shorted channels</td><td>Test board (asked for)</td><td>No</td><td>Shorts window</td></tr>
+      <tr><td class="lbl">On-board self-tests ▸ Scan test board</td><td>Test board</td><td>Yes, 100 V, one channel at a time</td><td>Test Results plot and failed channels</td></tr>
+      <tr><td class="lbl">Search for Dropbot Connection</td><td>—</td><td>No</td><td>Connection updates</td></tr>
+      <tr><td class="lbl">Reboot Dropbot</td><td>—</td><td>Off after reboot</td><td>Disconnects; asks first</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Before a test that needs the test board, MicroDrop shows <span class="ui">DropBot Self-Test: Prepare Device</span>:
+  <em>Please insert the DropBot test board</em>, with pictures and a link to the DropBot Test Board documentation.
+  <span class="ui">OK</span> starts the test, <span class="ui">Cancel</span> does not. While a test runs, a window titled
+  <em>Running Dropbot Self Test: …</em> (one test, spinner) or <em>Running All Dropbot Self Tests...</em> (progress bar,
+  <em>Testing: …</em>) is shown. Its <span class="ui">Cancel</span> stops a Run all before the next test; a single test
+  finishes but shows no result.</p>
+</section>
+
+<section data-term id="st-voltage" data-where="On-board self-tests ▸ Test high voltage">
+  <h3>Test high voltage</h3>
+  <p>Checks that the DropBot reaches the voltages it is asked for.</p>
+  <div data-what><p>Switches the high-voltage output on and steps through 5 voltages from the DropBot's lowest to its
+  highest, measuring each. Then repeats with the output disconnected from the electrodes, for comparison. It waits about
+  3 seconds in total between steps.</p></div>
+  <div data-when><p>When the measured voltage does not follow the box, or after an over-current halt.</p></div>
+  <div data-read><p><span class="ui">Test voltage Results</span>: a plot <em>Measured vs Target Voltage</em>. The dashed
+  line is a perfect match; the dots are the measurements. Dots far below the line at high voltage mean the DropBot cannot
+  reach them.</p></div>
+  <div data-typical="Needs and risk"><p><strong>Risk:</strong> electrodes that are lit stay lit and get up to the maximum voltage. Clear the
+  electrodes, or take the chip out, before you run it.</p></div>
+</section>
+
+<section data-term id="st-feedback" data-where="On-board self-tests ▸ On-board feedback calibration">
+  <h3>On-board feedback calibration</h3>
+  <p>Checks the capacitance-measuring circuit against reference capacitors built into the DropBot.</p>
+  <div data-what><p>Sets 100 V, switches the output on with every electrode off, and measures each built-in reference
+  capacitor 10 times.</p></div>
+  <div data-when><p>When capacitance readings look wrong on a chip you trust.</p></div>
+  <div data-read><p><span class="ui">Test on board feedback calibration Results</span>: a plot <em>Measured vs Nominal
+  Capacitance</em> with error bars. Points on the dashed line are good.</p></div>
+  <div data-typical="Needs and risk"><p>No chip or test board needed. High voltage is on during the test.</p></div>
+</section>
+
+<section data-term id="st-shorts" data-where="On-board self-tests ▸ Detect shorted channels">
+  <h3>Detect shorted channels</h3>
+  <p>Asks the DropBot which channels are shorted.</p>
+  <div data-what><p>The same check MicroDrop runs on every connection, run on demand. MicroDrop asks you to insert the test
+  board first.</p></div>
+  <div data-when><p>After a <span class="ui">Shorts Detected</span> window you doubt, or to check the DropBot without a chip.</p></div>
+  <div data-read><p>A <span class="ui">Shorts Detected</span> window listing the channels, or <span class="ui">No Shorts
+  Detected</span>. See <a href="#dlg-shorts">Shorts</a> for the Yes / No choice.</p></div>
+  <div data-typical="Needs and risk"><p>No high voltage. With the test board in, no shorts is the expected result.</p></div>
+</section>
+
+<section data-term id="st-scan" data-where="On-board self-tests ▸ Scan test board">
+  <h3>Scan test board</h3>
+  <p>Steps through every channel of the DropBot with the test board in.</p>
+  <div data-what><p>Checks for shorts first, then sets 100 V and switches on one channel at a time, measuring its
+  capacitance. Shorted channels are skipped.</p></div>
+  <div data-when><p>To find a dead channel after a halt, or when one electrode never moves liquid.</p></div>
+  <div data-read><p><span class="ui">Test channels Results</span>: a bar per channel (red when under 5 pF) and a histogram,
+  then <em>Failed channels (N): …</em> in red or <em>All channels passed.</em> in green. A channel fails when it reads under
+  5 pF. Skipped shorted channels read 0, so they are listed as failed too.</p></div>
+  <div data-typical="Needs and risk"><p>Needs the DropBot test board. High voltage is on, one channel at a time.</p></div>
+</section>
+
+<section data-term id="st-all" data-where="Run all on-board self-tests">
+  <h3>Run all on-board self-tests</h3>
+  <p>Runs every check in one go and writes a report.</p>
+  <div data-what><p>In order: system information, system metrics (temperature and reference voltage), a scan of the boards
+  inside the DropBot, Test high voltage, shorts, On-board feedback calibration and Scan test board.</p></div>
+  <div data-when><p>To send to support, or as a full check of a new or repaired DropBot.</p></div>
+  <div data-read><p>No Test Results window: the report is saved as an HTML file in <code>Documents/Sci-Bots/Microdrop</code>
+  and opened in your web browser, with links to the raw data behind each plot.</p></div>
+  <div data-typical="Needs and risk"><p>Needs the test board. High voltage is on during the voltage, calibration and scan parts; the same
+  risk as <a href="#st-voltage">Test high voltage</a> applies.</p></div>
+</section>
+
+<section data-term id="test-results" data-where="Test Results window">
+  <h3>Test Results</h3>
+  <p>The window a single plotted self-test opens when it finishes.</p>
+  <div data-what><p>A live plot with a toolbar (zoom, pan, save), a <span class="ui">Raw data JSON</span> link to the data
+  file, and for Scan test board the failed-channel line. The data file is saved in <code>Documents/Sci-Bots/Microdrop</code>
+  with the test's name and the time.</p></div>
+  <div data-when><p>Read it before you close it; it does not come back.</p></div>
+  <div data-read><p>Pick an outcome below to see what it means.</p></div>
+  <div data-typical="When it opens"><p>Opens a moment after the progress window says the test is complete.</p></div>
+  <figure data-demo="results" aria-label="Pick a self-test outcome to see what it means">
+    <div class="controls"><label>Outcome <select id="tr-pick"></select></label></div>
+    <div class="dlg" aria-live="polite">
+      <h4 id="tr-title"></h4>
+      <p class="quote" id="tr-line"></p>
+      <dl><dt>Means</dt><dd id="tr-means"></dd><dt>Try</dt><dd id="tr-try"></dd></dl>
+    </div>
+    <figcaption>The pass rule (5 pF) is MicroDrop's. The other plots carry no pass or fail line in MicroDrop; compare the dots
+    with the dashed line. Channel numbers are examples.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="search" data-where="Tools ▸ Dropbot ▸ Search for Dropbot Connection">
+  <h3>Search for Dropbot Connection</h3>
+  <p>Makes MicroDrop look for the DropBot again.</p>
+  <div data-what><p>If a DropBot is already connected, MicroDrop re-announces the connection and checks the chip again.
+  Otherwise it starts, or resumes, looking for the DropBot's USB device every 2 seconds.</p></div>
+  <div data-when><p>When Connection stays Inactive after plugging in, for example after the search stopped for
+  <a href="#dlg-nopower">No Power</a>.</p></div>
+  <div data-read><p>Connection turns Active once found. It never switches the high voltage on.</p></div>
+  <div data-typical><p>Not needed in normal use: the search runs on its own.</p></div>
+</section>
+
+<section data-term id="reboot" data-where="Tools ▸ Dropbot ▸ Reboot Dropbot">
+  <h3>Reboot Dropbot</h3>
+  <p>Restarts the DropBot's microcontroller.</p>
+  <div data-what><p>Asks first, in <span class="ui">Dropbot Reboot Warning</span>: <em>Rebooting the DropBot will Disconnect
+  the microcontroller and the DropBot may become Unresponsive. Do you still want to proceed?</em>
+  <span class="ui">OK</span> reboots; <span class="ui">Exit</span> does nothing.</p></div>
+  <div data-when><p>Rarely: when the DropBot stops answering. Never in the middle of an experiment, since the connection
+  drops.</p></div>
+  <div data-read><p>Connection goes Inactive. MicroDrop then looks for the DropBot again. If it does not come back, unplug
+  USB and power, and plug them back in.</p></div>
+  <div data-typical><p>Not needed in normal use.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-prefs">
+<h2>Preferences</h2>
+<p class="intro">Open <span class="ui">Edit ▸ Preferences</span>. The DropBot settings are spread over a few pages.</p>
+
+<section data-term id="pref-hardware" data-where="Dropbot Settings ▸ Hardware Config">
+  <h3>Hardware Config</h3>
+  <p>Read-only numbers the DropBot reports, and the last values it accepted.</p>
+  <div data-what><p><span class="ui">Max Voltage (V)</span> and <span class="ui">Max Frequency (Hz)</span>: the DropBot's own
+  limits, read when it connects. <span class="ui">Last Applied Voltage (V)</span> and <span class="ui">Last Applied
+  Frequency (Hz)</span>: the last values it accepted from the pane.</p></div>
+  <div data-when><p>Before raising the pane's range, check the maximum here.</p></div>
+  <div data-read><p>The maximums show <em>inf</em> until a DropBot has connected. The DropBot starts at the last applied
+  values when it connects. Protocol steps do not change them.</p></div>
+  <div data-typical><p>Depends on the DropBot; last applied 100 V and 10 000 Hz on a fresh install.</p></div>
+</section>
+
+<section data-term id="pref-cap-interval" data-where="Dropbot Settings ▸ Capacitance Update Interval (ms)">
+  <h3>Capacitance Update Interval</h3>
+  <p>How often the DropBot sends a capacitance reading, in milliseconds.</p>
+  <div data-what><p>Sent to the DropBot as soon as you change it.</p></div>
+  <div data-when><p>Lower it for faster readings; raise it to reduce traffic.</p></div>
+  <div data-read><p>The pane averages 5 readings, so at 100 ms its Capacitance can change at most every half second.</p></div>
+  <div data-typical><p>100 ms.</p></div>
+</section>
+
+<section data-term id="pref-drop-detect" data-where="Dropbot Settings ▸ Drop Detect Capacitance (pF)">
+  <h3>Drop Detect Capacitance</h3>
+  <p>The capacitance above which a channel counts as wet in droplet detection.</p>
+  <div data-what><p>Used by <a href="#find-liquid">Find Liquid</a> and by protocol features that check for droplets.</p></div>
+  <div data-when><p>Raise it if dry electrodes are found as wet; lower it if small droplets are missed.</p></div>
+  <div data-read><p>Compared with each channel's capacitance, measured at 1 kHz.</p></div>
+  <div data-typical><p>10 pF.</p></div>
+</section>
+
+<section data-term id="pref-setters" data-where="Protocol Settings ▸ Protocol Setters Config">
+  <h3>Protocol Setters Config</h3>
+  <p>The range of the voltage and frequency boxes, in the pane and in the protocol tree.</p>
+  <div data-what><p><span class="ui">Min Voltage (V)</span>, <span class="ui">Max Voltage (V)</span>,
+  <span class="ui">Min Frequency (Hz)</span>, <span class="ui">Max Frequency (Hz)</span>, and <span class="ui">Default
+  Voltage (V)</span> / <span class="ui">Default Frequency (Hz)</span>, which follow the last value set in the pane.</p></div>
+  <div data-when><p>To stop anyone setting more than your chip can take, or to allow more if your DropBot can.</p></div>
+  <div data-read><p>Open boxes take the new range at once. These are MicroDrop's limits only: keep the maximums at or below
+  the <a href="#pref-hardware">Hardware Config</a> maximums.</p></div>
+  <div data-typical><p>30 to 140 V, default 100 V; 100 to 10 000 Hz, default 10 000 Hz.</p></div>
+</section>
+
+<section data-term id="pref-realtime-persist" data-where="Protocol Settings ▸ Realtime Mode Persistence">
+  <h3>Realtime Mode Persistence</h3>
+  <p>What happens to Realtime after a protocol run.</p>
+  <div data-what><p><span class="ui">Prompt to keep Realtime Mode?</span> and <span class="ui">Keep Realtime Mode
+  active?</span>, plus <span class="ui">Realtime Mode Pre-Protocol (s)</span>, the wait after switching Realtime on before
+  the first step.</p></div>
+  <div data-when><p>Untick the prompt once you always want the same answer.</p></div>
+  <div data-read><p>Used only when Realtime was on before the run. A run started with Realtime off always switches it off
+  again.</p></div>
+  <div data-typical><p>Prompt on, keep on.</p></div>
+</section>
+
+<section data-term id="pref-status" data-where="DropBot Status &amp; Controls page">
+  <h3>Default Dielectric Material and Show Dielectric Info</h3>
+  <p>The pane's two remembered choices.</p>
+  <div data-what><p><span class="ui">Default Dielectric Material</span>: the material picked when MicroDrop starts.
+  <span class="ui">Show Dielectric Info</span>: whether the Dielectric row is shown.</p></div>
+  <div data-when><p>Set once for the chips you use most.</p></div>
+  <div data-read><p>Both follow the pane: picking a material or using the right-click menu changes them too.</p></div>
+  <div data-typical><p>Pick a dielectric...; shown.</p></div>
+</section>
+
+<section data-term id="pref-no-shorts" data-where="Microdrop General ▸ Dialog Settings">
+  <h3>Suppress no shorts information</h3>
+  <p>Hides the <span class="ui">No Shorts Detected</span> window that appears on each connection.</p>
+  <div data-what><p>Ticking <em>Do not show again</em> in that window sets it; untick it here to bring the window back.</p></div>
+  <div data-when><p>When the window on every connection gets in the way.</p></div>
+  <div data-read><p><span class="ui">Shorts Detected</span> is always shown, and so is <em>No shorts</em> after a test you
+  asked for.</p></div>
+  <div data-typical><p>Off.</p></div>
+</section>
+
+<section data-term id="pref-gap" data-where="Device Viewer ▸ Volume Readout ▸ Plate gap (µm)">
+  <h3>Plate gap</h3>
+  <p>The distance between the chip's top and bottom plates, which the droplet fills.</p>
+  <div data-what><p>Volume = covered area × plate gap.</p></div>
+  <div data-when><p>Set it for every chip design; a wrong gap scales every volume by the same factor.</p></div>
+  <div data-read><p>From 1 to 2000 µm.</p></div>
+  <div data-typical><p>254 µm.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="opendrop">
+<h2>If you have an OpenDrop</h2>
+<div class="callout">
+  <p>With an OpenDrop, MicroDrop shows the <strong>Opendrop Status And Controls</strong> pane instead. It has the same
+  <span class="ui">Connection</span> field, <span class="ui">Realtime On</span> / <span class="ui">Realtime Off</span>
+  button and status-bar icons, with the same rules, except that there is no halt. It also shows the
+  <span class="ui">Board Id</span>, three temperatures and the number of active feedback channels.</p>
+  <p>The OpenDrop sets its voltage and frequency on the board itself, so the pane only says <em>Voltage: On-Board</em>,
+  <em>Frequency: On-Board</em>, <em>Capacitance: N/A</em> and <em>Chip Status: See Instrument</em>. Force, volume,
+  dielectric, the self-tests and the dialogs on this page are DropBot-only.</p>
+</div>
 </section>
 
 <!-- ============================================================ -->
@@ -211,10 +844,23 @@
 <h2>Caveats</h2>
 <div class="callout warn">
   <ul class="uses">
-    <li><strong>Realtime off means nothing is sent.</strong> Changing voltage with Realtime off does not touch the hardware until you switch it on.</li>
-    <li><strong>A halt switches Realtime off.</strong> After the halt message, check the chip and connections before switching it back on.</li>
-    <li><strong>The boxes are locked while a protocol runs</strong> and after a halt; the protocol's own voltage and frequency apply then.</li>
-    <li><strong>Force needs a fresh calibration</strong> for each chip and liquid; an old one gives a confident but wrong number.</li>
+    <li><strong>Switching Realtime on powers what is already lit.</strong> Clear the electrodes first if you do not want
+    them driven.</li>
+    <li><strong>A protocol run switches high voltage on</strong> even if Realtime was off, and the button is locked during
+    the run. Treat high voltage as on during any run that is not a preview. In one recording the button read
+    <em>Realtime Off</em> during a run; do not rely on its label then.</li>
+    <li><strong>Find Liquid and three self-tests use high voltage</strong> with Realtime off.</li>
+    <li><strong>After an over-current halt, check the chip before switching back on.</strong> The pane locks its Realtime
+    button, but the status-bar icon and the <kbd>T</kbd> key check only the connection, not the halt.</li>
+    <li><strong>The boxes are locked</strong> while a protocol runs, while a protocol step is selected, and after an
+    over-current halt.</li>
+    <li><strong>A value the DropBot refuses gives no warning.</strong> If the pane's maximum is above the DropBot's, the box
+    shows the value but the measured voltage does not follow.</li>
+    <li><strong>Calibrate for each chip and liquid.</strong> The calibration survives a restart; an old one gives confident
+    but wrong force and volume.</li>
+    <li><strong>Volume is an estimate</strong> and keeps its last value when Realtime goes off. If it reads 0.0 µL while
+    Capacitance reads tens of pF with a droplet on the lit electrodes, reset and redo the calibration; if it stays at
+    0.0 µL, report it. This has been seen in a recording and is not explained yet.</li>
   </ul>
 </div>
 </section>
@@ -224,78 +870,446 @@
 <dl class="glossary">
   <dt>DropBot</dt><dd>The instrument that drives the chip's electrodes and measures capacitance.</dd>
   <dt>Chip</dt><dd>The digital microfluidics device with the electrodes the droplets sit on.</dd>
+  <dt>Channel</dt><dd>One DropBot output; each electrode is wired to a channel.</dd>
+  <dt>Lit electrode</dt><dd>An electrode switched on in the Device Viewer (actuated).</dd>
+  <dt>High voltage</dt><dd>The DropBot's drive output, tens to over a hundred volts. Only on as listed in the Overview.</dd>
   <dt>Filler</dt><dd>The medium around the droplets, usually air or oil.</dd>
   <dt>Dielectric</dt><dd>The thin insulating layer between the electrodes and the droplets.</dd>
-  <dt>pF</dt><dd>Picofarad, a trillionth of a farad: the unit of the capacitance readings.</dd>
+  <dt>pF</dt><dd>Picofarad, a millionth of a millionth of a farad: the unit of the capacitance readings.</dd>
   <dt>mN/m</dt><dd>Millinewtons per metre: force along each metre of droplet edge.</dd>
-  <dt>Halted</dt><dd>The DropBot stopped driving after a fault, such as a short or an over-current.</dd>
+  <dt>Halted</dt><dd>The DropBot cut the high voltage itself after too much current or too much load.</dd>
+  <dt>Short</dt><dd>A channel the DropBot finds connected where it should not be; MicroDrop offers to disable it.</dd>
+  <dt>Test board</dt><dd>A board from Sci-Bots that goes in place of a chip for the self-tests.</dd>
 </dl>
 </section>
 
 <script>
-Tutorial.demo("vf-range", function (figure, T) {
-  var MIN_V = 30, MIN_F = 100, MAX_F = 10000, C_DEVICE = 1.0;
-  var STATES = {
-    off: ["var(--muted)", "Disconnected"],
-    nochip: ["var(--orange)", "Connected (No Chip)"],
-    chip: ["var(--ok)", "Connected (Chip Detected)"],
-    halted: ["var(--down)", "Halted (Device Fault)"]
+/* Formats a reading like the pane: 3 significant figures, SI prefix for
+   kilo, "-" for none (dropbot_status_and_controls/model.py _format_reading). */
+function dbSig(value, unit) {
+  if (value === null || value !== value) { return "-"; }
+
+  if (unit === "Hz" && value >= 1000) { return Number((value / 1000).toPrecision(3)) + " kHz"; }
+
+  return Number(value.toPrecision(3)) + " " + unit;
+}
+
+var DB_DIELECTRICS = [
+  ["Pick a dielectric...", NaN], ["Parylene C", 3.1], ["CYTOP", 2.1], ["Teflon AF", 1.93], ["SiO2", 3.9],
+  ["SU-8", 3.2], ["Parylene N", 2.65], ["Parylene D", 2.84], ["PDMS", 2.7], ["Si3N4", 7.5], ["Kapton", 3.4]
+];
+var DB_EPSILON_0 = 8.8541878128; /* pF/m, so epsilon_r * this / (pF/mm2) is in micrometres */
+
+function dbFillDielectrics(select, chosen) {
+  DB_DIELECTRICS.forEach(function (entry) {
+    var option = document.createElement("option");
+    option.value = entry[0];
+    option.textContent = entry[0];
+    option.selected = entry[0] === chosen;
+    select.appendChild(option);
+  });
+}
+
+function dbEpsilon(name) {
+  for (var i = 0; i < DB_DIELECTRICS.length; i++) {
+    if (DB_DIELECTRICS[i][0] === name) { return DB_DIELECTRICS[i][1]; }
+  }
+
+  return NaN;
+}
+
+/* The Device Viewer's volume model (device_viewer/models/volume_estimate.py). */
+function dbVolume(capacitance, area, liquid, filler, gap) {
+  var fillerPerArea = filler === null ? 0 : filler;
+  var status = "";
+
+  if (liquid === null) {
+    status = "Measure the liquid capacitance to calibrate.";
+  } else if (liquid <= fillerPerArea) {
+    status = "Liquid calibration must exceed the filler calibration.";
+  } else if (area <= 0) {
+    status = "No actuated electrodes.";
+  } else if (capacitance <= 0) {
+    status = "No capacitance reading.";
+  }
+
+  if (status) { return { status: status, covered: NaN, volume: NaN, fill: NaN }; }
+
+  var covered = Math.max((capacitance - fillerPerArea * area) / (liquid - fillerPerArea), 0);
+
+  return { status: "", covered: covered, volume: covered * gap / 1000, fill: covered / area };
+}
+
+Tutorial.demo("panel", function (figure, T) {
+  var LIQUID = 7.2, FILLER = 1.3, AREA = 18, UNDER = 15, GAP = 254, NOTHING_LIT_PF = 3.41;
+  var COLORS = { off: "var(--muted)", nochip: "var(--orange)", chip: "var(--ok)", halted: "var(--down)" };
+  var LABELS = { off: "Disconnected", nochip: "Connected (No Chip)", chip: "Connected (Chip Detected)", halted: "Halted (Device Fault)" };
+  var q = function (id) { return figure.querySelector("#" + id); };
+  var inputs = {
+    conn: q("pr-conn-in"), chip: q("pr-chip-in"), halt: q("pr-halt-in"), run: q("pr-run-in"), step: q("pr-step-in"),
+    lit: q("pr-lit-in"), cal: q("pr-cal-in"), v: q("pr-v-in"), f: q("pr-f-in"), diel: q("pr-diel-in")
   };
-  var conn = figure.querySelector("#vf-conn"), rt = figure.querySelector("#vf-rt");
-  var v = figure.querySelector("#vf-v"), max = figure.querySelector("#vf-max"), f = figure.querySelector("#vf-f");
-  var table = figure.querySelector("#vf-read"), status = figure.querySelector("#vf-status");
+  var state = { realtime: false, halted: false, beforeRun: false, lastVolume: "-" };
+
+  dbFillDielectrics(inputs.diel, "Parylene C");
+
+  function capacitance() {
+    if (inputs.lit.value === "none") { return NOTHING_LIT_PF; }
+
+    if (inputs.lit.value === "filler") { return FILLER * AREA; }
+
+    return LIQUID * UNDER + FILLER * (AREA - UNDER);
+  }
+
+  function volumeText() {
+    var area = inputs.lit.value === "none" ? 0 : AREA;
+    var estimate = dbVolume(capacitance(), area, inputs.cal.checked ? LIQUID : null, inputs.cal.checked ? FILLER : null, GAP);
+
+    return estimate.status ? "- (" + estimate.status + ")" : estimate.volume.toFixed(1) + " µL";
+  }
+
+  function draw() {
+    var connected = inputs.conn.value === "on";
+
+    if (!connected) {
+      inputs.chip.checked = false;
+      inputs.halt.value = "none";
+      inputs.run.checked = false;
+      state.realtime = false;
+      state.halted = false;
+    }
+
+    inputs.chip.disabled = inputs.halt.disabled = inputs.run.disabled = !connected;
+
+    var running = inputs.run.checked, freeMode = !inputs.step.checked && !running;
+    var canToggle = connected && !state.halted && !running;
+    var boxesOpen = freeMode && !running && !state.halted;
+    var colour = !connected ? "off" : state.halted ? "halted" : inputs.chip.checked ? "chip" : "nochip";
+    var live = state.realtime;
+    var cdevice = inputs.cal.checked ? LIQUID - FILLER : NaN;
+    var epsilon = dbEpsilon(inputs.diel.value);
+    var notes = [];
+
+    inputs.v.disabled = inputs.f.disabled = !boxesOpen;
+
+    if (live && connected) { state.lastVolume = volumeText(); }
+
+    q("pr-pic").style.background = COLORS[colour];
+    q("pr-slot").style.fill = inputs.chip.checked ? "#4caf50" : "#9e9e9e";
+    q("pr-conn").textContent = connected ? "Active" : "Inactive";
+    q("pr-chip").textContent = inputs.chip.checked ? "Present" : "Absent";
+
+    var button = q("pr-rt");
+    button.textContent = live ? "Realtime On" : "Realtime Off";
+    button.classList.toggle("on", live);
+    button.disabled = !canToggle;
+
+    q("pr-vb").textContent = inputs.v.value + " V";
+    q("pr-fb").textContent = inputs.f.value + " Hz";
+    q("pr-vb").classList.toggle("locked", !boxesOpen);
+    q("pr-fb").classList.toggle("locked", !boxesOpen);
+    q("pr-vr").textContent = live ? dbSig(+inputs.v.value, "V") : "-";
+    q("pr-fr").textContent = live ? dbSig(+inputs.f.value, "Hz") : "-";
+    q("pr-cap").textContent = live ? dbSig(capacitance(), "pF") : "-";
+    q("pr-vol").textContent = state.lastVolume;
+    q("pr-force").textContent = live ? dbSig(cdevice * inputs.v.value * inputs.v.value / 2000, "mN/m") : "-";
+    q("pr-thick").textContent = live ? dbSig(epsilon * DB_EPSILON_0 / cdevice, "µm") : "-";
+
+    q("pr-dev").style.fill = COLORS[colour];
+    q("pr-live").style.fill = live ? "var(--ok)" : "var(--muted)";
+    q("pr-live").style.opacity = connected ? "1" : ".45";
+
+    var iconTip = !connected ? "Cannot enable realtime mode. No device connection" :
+      running ? "Realtime mode is locked while a protocol is running" :
+      live ? "Click to disable realtime mode" : "Click to enable realtime mode";
+    q("pr-sb").textContent = LABELS[colour] + ". Realtime icon: " + iconTip + ".";
+
+    var hv = q("pr-hv");
+    hv.textContent = live ? "High voltage ON" : "High voltage off";
+    hv.className = "hv " + (live ? "on" : "off");
+
+    if (!connected) {
+      notes.push("Nothing reaches a DropBot. MicroDrop looks for one every 2 seconds.");
+    } else if (state.halted) {
+      notes.push("Over-current halt: Realtime and the boxes stay locked until the DropBot reconnects. Unplug and replug it after checking the chip.");
+      notes.push("Careful: the status-bar icon and the T key can still switch Realtime on.");
+    } else if (running) {
+      notes.push("The run switched Realtime on and locked the button and the boxes. Each step sets its own voltage and frequency.");
+    } else if (live) {
+      notes.push("Lit electrodes get " + inputs.v.value + " V now. Clicking an electrode drives it at once.");
+    } else {
+      notes.push("Electrode clicks only light the Device Viewer. Voltage and frequency are kept and sent when you switch Realtime on.");
+    }
+
+    if (connected && !inputs.chip.checked) { notes.push("No chip reported: the colour stays orange."); }
+
+    if (inputs.step.checked && !running) { notes.push("A protocol step is selected, so the voltage and frequency boxes are locked."); }
+
+    if (live && !inputs.cal.checked) { notes.push("No calibration: Force and Dielectric read \"-\", and Volume says why."); }
+
+    if (!live && state.lastVolume !== "-") { notes.push("Volume keeps its last value while Realtime is off."); }
+
+    q("pr-notes").innerHTML = notes.map(function (text) { return "<li>" + text + "</li>"; }).join("");
+  }
+
+  q("pr-rt").addEventListener("click", function () { state.realtime = !state.realtime; draw(); });
+
+  inputs.halt.addEventListener("change", function () {
+    if (inputs.halt.value !== "none") { state.realtime = false; }
+
+    state.halted = inputs.halt.value === "current";
+    draw();
+  });
+
+  inputs.conn.addEventListener("change", function () { state.halted = false; inputs.halt.value = "none"; draw(); });
+
+  inputs.run.addEventListener("change", function () {
+    if (inputs.run.checked) {
+      state.beforeRun = state.realtime;
+      state.realtime = true;
+    } else {
+      state.realtime = state.beforeRun;
+    }
+
+    draw();
+  });
+
+  [inputs.chip, inputs.step, inputs.lit, inputs.cal, inputs.diel].forEach(function (input) {
+    input.addEventListener("change", draw);
+  });
+
+  T.bind(inputs.v, draw, function (x) { return x + " V"; });
+  T.bind(inputs.f, draw, function (x) { return x + " Hz"; });
+  draw();
+});
+
+Tutorial.demo("calc", function (figure, T) {
+  var q = function (id) { return figure.querySelector("#" + id); };
+  var table = q("cc-read"), status = q("cc-status");
   var start = null;
 
-  function clamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
+  dbFillDielectrics(q("cc-diel"), "Parylene C");
 
-  function state() {
-    var connected = conn.value !== "off" && conn.value !== "halted";
-    if (!connected) { rt.checked = false; }
-    rt.disabled = !connected;
-    v.disabled = f.disabled = conn.value === "halted";
-    var volts = clamp(+v.value, MIN_V, +max.value), hertz = clamp(+f.value, MIN_F, MAX_F);
-    var live = rt.checked;
+  function values() {
+    var area = +q("cc-a").value, under = Math.min(+q("cc-c").value, area);
+    var liquid = +q("cc-l").value, filler = +q("cc-f").value;
+    var reading = liquid * under + filler * (area - under);
+    var liquidMeasured = q("cc-l-on").checked ? liquid : null, fillerMeasured = q("cc-f-on").checked ? filler : null;
+    var cdevice = liquidMeasured !== null && fillerMeasured !== null ? liquid - filler : NaN;
+    var volts = +q("cc-v").value;
+    var estimate = dbVolume(reading, area, liquidMeasured, fillerMeasured, +q("cc-g").value);
+
     return {
-      volts: volts, hertz: hertz, live: live,
-      shownV: live ? volts : null, shownF: live ? hertz / 1000 : null,
-      force: live ? C_DEVICE * volts * volts / 2000 : null
+      reading: reading, cdevice: cdevice, estimate: estimate,
+      force: cdevice > 0 ? cdevice * volts * volts / 2000 : NaN,
+      thickness: cdevice > 0 ? dbEpsilon(q("cc-diel").value) * DB_EPSILON_0 / cdevice : NaN
     };
   }
 
   function draw() {
-    var s = state();
-    if (!start) { start = s; }
-    figure.querySelector("#vf-dev").style.fill = STATES[conn.value][0];
-    figure.querySelector("#vf-live").style.fill = s.live ? "var(--ok)" : "var(--muted)";
-    figure.querySelector("#vf-sb").textContent = STATES[conn.value][1] + (s.live ? ", realtime on" : ", realtime off");
+    var now = values();
+
+    if (!start) { start = now; }
+
     T.readout(table, [
-      { label: "Voltage box", now: s.volts, start: start.volts, unit: "V" },
-      { label: "Frequency box", now: s.hertz, start: start.hertz, unit: "Hz" },
-      { label: "Voltage shown", now: s.shownV, start: start.shownV, unit: "V", na: "-" },
-      { label: "Frequency shown", now: s.shownF, start: start.shownF, digits: 1, unit: "kHz", na: "-" },
-      { label: "Force shown", now: s.force, start: start.force, digits: 1, unit: "mN/m", na: "-" }
+      { label: "Capacitance", now: now.reading, start: start.reading, digits: 1, unit: "pF" },
+      { label: "c_device", now: now.cdevice, start: start.cdevice, digits: 2, unit: "pF/mm²", na: "-" },
+      { label: "Force", now: now.force, start: start.force, digits: 1, unit: "mN/m", na: "-" },
+      { label: "Dielectric", now: now.thickness, start: start.thickness, digits: 2, unit: "µm", na: "-" },
+      { label: "Covered area", now: now.estimate.covered, start: start.estimate.covered, digits: 1, unit: "mm²", na: "-" },
+      { label: "Volume", now: now.estimate.volume, start: start.estimate.volume, digits: 1, unit: "µL", na: "-" },
+      { label: "Fill", now: now.estimate.fill * 100, start: start.estimate.fill * 100, digits: 0, unit: "%", na: "-" }
     ]);
+
     var notes = [];
-    if (+v.value !== s.volts) {
-      notes.push('<span class="bad">' + v.value + " V is outside " + MIN_V + " to " + max.value + " V:</span> the box snaps to " + s.volts + " V.");
-    }
-    if (+f.value !== s.hertz) {
-      notes.push('<span class="bad">' + f.value + " Hz is outside 100 to 10000 Hz:</span> the box snaps to " + s.hertz + " Hz.");
-    }
-    if (conn.value === "halted") {
-      notes.push('<span class="bad">Halted:</span> Realtime is off and the boxes are locked until the DropBot reconnects.');
-    } else if (!s.live) {
-      notes.push("Realtime is off: the latest voltage and frequency are kept and sent when you switch it on.");
+
+    if (now.estimate.status) {
+      notes.push('<span class="bad">Volume: ' + now.estimate.status + "</span>");
+    } else if (!q("cc-f-on").checked) {
+      notes.push('<span class="bad">No filler calibration:</span> MicroDrop counts the filler as 0, so all the capacitance is taken for liquid and Volume reads high.');
     } else {
-      notes.push('<span class="good">Realtime on:</span> changes reach the DropBot after a short pause.');
+      notes.push('<span class="good">Calibrated:</span> Volume matches the liquid under the lit electrodes.');
     }
+
+    if (now.cdevice !== now.cdevice) { notes.push("c_device, Force and Dielectric need both calibrations."); }
+
+    if (+q("cc-c").value > +q("cc-a").value) { notes.push("Only liquid on lit electrodes is measured, so the droplet area is capped at the lit area."); }
+
     status.innerHTML = notes.join(" ");
   }
 
-  [conn, rt].forEach(function (input) { input.addEventListener("change", draw); });
-  T.bind(v, draw, function (x) { return x + " V"; });
-  T.bind(max, draw, function (x) { return x + " V"; });
-  T.bind(f, draw, function (x) { return x + " Hz"; });
+  T.bind(q("cc-v"), draw, function (x) { return x + " V"; });
+  T.bind(q("cc-l"), draw, function (x) { return (+x).toFixed(1) + " pF/mm²"; });
+  T.bind(q("cc-f"), draw, function (x) { return (+x).toFixed(1) + " pF/mm²"; });
+  T.bind(q("cc-a"), draw, function (x) { return x + " mm²"; });
+  T.bind(q("cc-c"), draw, function (x) { return x + " mm²"; });
+  T.bind(q("cc-g"), draw, function (x) { return x + " µm"; });
+  [q("cc-l-on"), q("cc-f-on"), q("cc-diel")].forEach(function (input) { input.addEventListener("change", draw); });
   draw();
+});
+
+Tutorial.demo("dialogs", function (figure, T) {
+  var HV_OFF = "Off.";
+  var DIALOGS = [
+    {
+      key: "DropBot Halted (output current)", title: "DropBot Halted",
+      text: "DropBot has halted because output current was exceeded. All channels have been disabled and high voltage has been turned off. It is recommended to restart the DropBot (e.g., unplug all cables and plug back in.).",
+      why: "Too much current flowed: for example liquid bridging to a damaged spot, or a faulty chip.",
+      hv: "Off. Realtime was switched off.",
+      todo: "Check the chip for damage and stray liquid. Unplug the DropBot's USB and power, and plug them back in.",
+      after: "The colour is red and the pane's Realtime button and boxes stay locked until the DropBot reconnects. Channels the DropBot disabled show as disabled in the Device Viewer; re-enable them with right-click ▸ Enable Electrode once you trust them."
+    },
+    {
+      key: "DropBot Halted (chip load)", title: "DropBot Halted",
+      text: "DropBot has halted because chip load feedback exceeded allowable range. Requested channels cannot be actuated. Check if you have too many droplets, or damage on actuated electrodes before attempting more actuation.",
+      why: "The lit electrodes together are too big a load: too many droplets or electrodes at once, or damage.",
+      hv: "Off. Realtime was switched off.",
+      todo: "Light fewer electrodes, check the chip, then switch Realtime on again.",
+      after: "The colour does not change and nothing stays locked. MicroDrop re-enables all channels."
+    },
+    {
+      key: "Shorts Detected", title: "Shorts Detected",
+      text: "Shorts detected on channels: [3, 17]. [RISKY] Would you like keep these channels enabled?",
+      why: "The DropBot found shorted channels: on connection, after Detect shorted channels, or on its own.",
+      hv: "Unchanged. On connection it is off.",
+      todo: "Click No unless you know why these channels read shorted.",
+      after: "No: the channels are disabled and shown as disabled in the Device Viewer. Yes: they stay enabled (risky)."
+    },
+    {
+      key: "No Shorts Detected", title: "No Shorts Detected",
+      text: "No shorts were detected.",
+      why: "The shorts check found nothing: on connection, or after Detect shorted channels.",
+      hv: "Unchanged. On connection it is off.",
+      todo: "Click OK. On connection you can tick Do not show again.",
+      after: "Nothing changes. Bring the window back with Edit ▸ Preferences ▸ Microdrop General ▸ Suppress no shorts information."
+    },
+    {
+      key: "ERROR: No Power", title: "ERROR: No Power",
+      text: "DropBot currently has no power supply connected. Plug in power supply cable. Click the \"Retry\" button after plugging in the power cable to attempt reconnection",
+      why: "The DropBot answered on USB, but its power supply is not connected.",
+      hv: HV_OFF,
+      todo: "Plug in the power supply, then click Retry.",
+      after: "MicroDrop looks for the DropBot again and closes the window. Until you click Retry it does not look on its own."
+    },
+    {
+      key: "Dropbot Disconnected", title: "Dropbot Disconnected",
+      text: "DropBot is not connected. Plug in the DropBot USB cable and power supply. Click \"OK\" after connecting the DropBot and try again.",
+      why: "You chose a self-test while no DropBot is connected.",
+      hv: HV_OFF,
+      todo: "Connect the DropBot, wait for Connection: Active, then pick the test again.",
+      after: "The test was not started."
+    },
+    {
+      key: "DropBot Self-Test: Prepare Device", title: "DropBot Self-Test: Prepare Device",
+      text: "Please insert the DropBot test board, for more info see DropBot Test Board documentation",
+      why: "You chose Run all, Detect shorted channels or Scan test board.",
+      hv: "Not yet. Run all and Scan test board switch it on once you click OK.",
+      todo: "Take the chip out, insert the test board, then click OK. Cancel does not start the test.",
+      after: "A progress window, then the result. Put the chip back afterwards."
+    },
+    {
+      key: "Dropbot Reboot Warning", title: "Dropbot Reboot Warning",
+      text: "Rebooting the DropBot will Disconnect the microcontroller and the DropBot may become Unresponsive. Do you still want to proceed?",
+      why: "You chose Tools ▸ Dropbot ▸ Reboot Dropbot.",
+      hv: "Off once the DropBot restarts.",
+      todo: "OK reboots, Exit does nothing. Do not reboot during an experiment.",
+      after: "Connection goes Inactive and MicroDrop looks for the DropBot again. If it does not come back, unplug and replug USB and power."
+    },
+    {
+      key: "Keep Realtime Mode Enabled Post-Protocol?", title: "Keep Realtime Mode Enabled Post-Protocol?",
+      text: "Realtime mode is currently ON. Would you like to keep it enabled after the protocol finishes?",
+      why: "You started a protocol with Realtime on, and the prompt is enabled in Protocol Settings.",
+      hv: "On, and it stays on for the run.",
+      todo: "Yes keeps Realtime on after the run; No switches it off. Tick Don't ask again to save the answer.",
+      after: "The run starts after the Realtime settling wait."
+    }
+  ];
+  var pick = figure.querySelector("#dh-pick");
+
+  DIALOGS.forEach(function (dialog, index) {
+    var option = document.createElement("option");
+    option.value = index;
+    option.textContent = dialog.key;
+    pick.appendChild(option);
+  });
+
+  function show() {
+    var dialog = DIALOGS[+pick.value];
+    figure.querySelector("#dh-title").textContent = dialog.title;
+    figure.querySelector("#dh-text").textContent = dialog.text;
+    figure.querySelector("#dh-why").textContent = dialog.why;
+    figure.querySelector("#dh-hv").textContent = dialog.hv;
+    figure.querySelector("#dh-do").textContent = dialog.todo;
+    figure.querySelector("#dh-after").textContent = dialog.after;
+  }
+
+  pick.addEventListener("change", show);
+  show();
+});
+
+Tutorial.demo("results", function (figure, T) {
+  var OUTCOMES = [
+    {
+      key: "Scan test board: all passed", title: "Test channels Results",
+      line: "All channels passed.",
+      means: "Every channel measured 5 pF or more on the test board.",
+      tryText: "Nothing to fix on the DropBot. If one electrode still never moves liquid, look at the chip or its wiring to that channel."
+    },
+    {
+      key: "Scan test board: a few channels failed", title: "Test channels Results",
+      line: "Failed channels (2): 37, 81",
+      means: "These channels measured under 5 pF, or were skipped because they read shorted (skipped channels read 0).",
+      tryText: "Run Detect shorted channels to see which of them are shorts. Re-seat the test board and run the scan again. Disable channels that keep failing."
+    },
+    {
+      key: "Scan test board: every channel failed", title: "Test channels Results",
+      line: "Failed channels (120): 0, 1, 2, …",
+      means: "No channel reached 5 pF.",
+      tryText: "Check that the test board, not a chip, is in and seated, then run the scan again."
+    },
+    {
+      key: "Test high voltage: dots on the line", title: "Test voltage Results",
+      line: "Measured vs Target Voltage: dots on the dashed line",
+      means: "The DropBot reaches each voltage it was asked for.",
+      tryText: "Nothing to fix."
+    },
+    {
+      key: "Test high voltage: dots fall below at the top", title: "Test voltage Results",
+      line: "Measured vs Target Voltage: dots below the dashed line at high voltage",
+      means: "The DropBot cannot reach its highest voltages.",
+      tryText: "Check the power supply. Keep the pane's Max Voltage below the voltage it does reach, and send the raw data JSON to support."
+    },
+    {
+      key: "Feedback calibration: points off the line", title: "Test on board feedback calibration Results",
+      line: "Measured vs Nominal Capacitance: points away from the dashed line",
+      means: "The capacitance circuit reads the built-in references wrongly, so chip readings are off too.",
+      tryText: "Run it again; if it repeats, send the raw data JSON to support. Do not trust volume or force until then."
+    },
+    {
+      key: "Run all: report in the browser", title: "(web browser)",
+      line: "run_all_tests_results-<time>.html",
+      means: "Every test ran; the report holds each result, saved in Documents/Sci-Bots/Microdrop.",
+      tryText: "Read each section as above. Send the HTML file and its JSON files to support if something failed."
+    }
+  ];
+  var pick = figure.querySelector("#tr-pick");
+
+  OUTCOMES.forEach(function (outcome, index) {
+    var option = document.createElement("option");
+    option.value = index;
+    option.textContent = outcome.key;
+    pick.appendChild(option);
+  });
+
+  function show() {
+    var outcome = OUTCOMES[+pick.value];
+    figure.querySelector("#tr-title").textContent = outcome.title;
+    figure.querySelector("#tr-line").textContent = outcome.line;
+    figure.querySelector("#tr-means").textContent = outcome.means;
+    figure.querySelector("#tr-try").textContent = outcome.tryText;
+  }
+
+  pick.addEventListener("change", show);
+  show();
 });
 </script>

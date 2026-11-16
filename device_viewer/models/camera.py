@@ -33,6 +33,9 @@ from traits.api import (
 # Microdrop utils imports.
 from microdrop_utils.libcamera_tuning import lens_dioptres
 
+# Local imports.
+from .camera_identity import CameraIdentity
+
 
 class RecordingModel(HasTraits):
     """State of the current (or last) video recording."""
@@ -158,6 +161,11 @@ class CameraModel(HasTraits):
     #: Combo label of the selected source (camera description, provider
     #: label, or empty for "<No Camera>").
     selected_camera = Str()
+
+    #: The selected source as alignments remember it: its stable id where
+    #: the backend gives one, and its label. Replaced (never mutated) on
+    #: each selection that changes either.
+    camera_identity = Instance(CameraIdentity, ())
 
     #: The selected source is a CAMERA_SOURCES provider feed, not a QCamera.
     provider_selected = Bool(False)
