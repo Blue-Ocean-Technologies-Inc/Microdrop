@@ -34,6 +34,7 @@ from .consts import (
     TutorialEntry,
 )
 from .menus import TutorialCatalog
+from .simulations import TutorialSimulationCatalog
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -72,6 +73,9 @@ class UserHelpPlugin(Plugin):
 
     #: What the Tutorials submenu shows: the contributions, in learning order.
     tutorial_catalog = Instance(TutorialCatalog, ())
+
+    #: The simulations inside those tutorials, for the Tutorial Simulations pane.
+    simulation_catalog = Instance(TutorialSimulationCatalog)
 
     #### Contributions to extension points made by this plugin ################
 
@@ -124,6 +128,7 @@ class UserHelpPlugin(Plugin):
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,
+                dock_pane_factories=[self._simulations_dock_pane_factory],
                 actions=[
                     SchemaAddition(
                         factory=partial(
@@ -139,3 +144,11 @@ class UserHelpPlugin(Plugin):
                 ],
             )
         ]
+
+    def _simulation_catalog_default(self):
+        return TutorialSimulationCatalog(tutorial_catalog=self.tutorial_catalog)
+
+    def _simulations_dock_pane_factory(self, *args, **kwargs):
+        from .simulations_dock_pane import TutorialSimulationsDockPane
+
+        return TutorialSimulationsDockPane(model=self.simulation_catalog, **kwargs)

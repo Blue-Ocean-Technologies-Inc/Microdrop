@@ -15,7 +15,7 @@ from pathlib import Path
 
 # Enthought library imports.
 from pyface.action.api import Action, Group, MenuManager
-from pyface.tasks.action.api import SGroup, SMenu
+from pyface.tasks.action.api import SGroup, SMenu, TaskAction
 from traits.api import Any, Bool, HasTraits, Instance, Int, List, Str, observe
 
 # Microdrop package imports.
@@ -35,6 +35,8 @@ from .consts import (
     SCIBOTS_URL,
     SUPPORT_EMAIL,
     TUTORIAL_SECTION_SPAN,
+    TUTORIAL_SIMULATIONS_DOCK_PANE_ID,
+    TUTORIAL_SIMULATIONS_DOCK_PANE_NAME,
     TutorialEntry,
 )
 
@@ -176,6 +178,23 @@ class ContactSupportAction(Action):
         webbrowser.open(f"mailto:{self.email}")
 
 
+class ShowTutorialSimulationsAction(TaskAction):
+    """Show and raise the Tutorial Simulations dock pane."""
+
+    name = f"{TUTORIAL_SIMULATIONS_DOCK_PANE_NAME}..."
+    tooltip = "Try every tutorial's interactive simulations, one tab each"
+
+    def perform(self, event=None):
+        pane = self.task.window.get_dock_pane(TUTORIAL_SIMULATIONS_DOCK_PANE_ID)
+
+        if pane is None:
+            logger.error(f"No dock pane {TUTORIAL_SIMULATIONS_DOCK_PANE_ID}")
+            return
+
+        pane.visible = True
+        pane.control.raise_()
+
+
 class TutorialCatalog(HasTraits):
     """The tutorials contributed to the TUTORIALS extension point."""
 
@@ -266,6 +285,7 @@ def menu_factory(tutorial_catalog=None):
             window_title="MicroDrop Changelog",
         ),
         TutorialsMenuManager(catalog=tutorial_catalog or TutorialCatalog()),
+        ShowTutorialSimulationsAction(),
         OpenWebViewDialogAction(
             name="&About MicroDrop...",
             tooltip="Learn about MicroDrop's architecture and capabilities",

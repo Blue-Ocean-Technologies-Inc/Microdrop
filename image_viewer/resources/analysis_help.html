@@ -1338,7 +1338,7 @@ says which one to pick for what.</p>
   <span><i class="k-box"></i>upright bounding box</span>
   <span><i class="k-roi"></i>ROI</span></p>
 
-  <figure class="demo" data-demo="shp-stretch" aria-label="Stretch demo">
+  <figure class="demo" data-demo="shp-stretch" data-title="Shape: stretch" aria-label="Stretch demo">
     <div class="controls"><label>Stretch <input type="range" id="shp-stretch" min="1" max="3" step="0.05" value="1"><output id="shp-stretch-o">1.00 : 1</output></label></div>
     <div class="shape-demo"><svg id="shp-stretch-svg" viewBox="0 0 260 260" role="img"><title>A droplet stretched into an ellipse at constant area</title></svg><table class="small readout" id="shp-stretch-read"></table></div>
     <div class="status" id="shp-stretch-status" aria-live="polite"></div>
@@ -1346,7 +1346,7 @@ says which one to pick for what.</p>
     while solidity stays near 1: an ellipse has no dents.</figcaption>
   </figure>
 
-  <figure class="demo" data-demo="shp-lobe" aria-label="Lobe and merge demo">
+  <figure class="demo" data-demo="shp-lobe" data-title="Shape: lobe and merge" aria-label="Lobe and merge demo">
     <div class="controls"><label>Bring together <input type="range" id="shp-lobe" min="0" max="24" value="0"><output id="shp-lobe-o">apart</output></label></div>
     <div class="shape-demo"><svg id="shp-lobe-svg" viewBox="0 0 260 260" role="img"><title>A small satellite droplet sliding into a bigger one</title></svg><table class="small readout" id="shp-lobe-read"></table></div>
     <div class="status" id="shp-lobe-status" aria-live="polite"></div>
@@ -1354,7 +1354,7 @@ says which one to pick for what.</p>
     touch, solidity drops sharply, circularity falls, axis ratio jumps and shape change leaps; as the satellite sinks in, all of them recover part of the way.</figcaption>
   </figure>
 
-  <figure class="demo" data-demo="shp-rotate" aria-label="Rotate demo">
+  <figure class="demo" data-demo="shp-rotate" data-title="Shape: rotate" aria-label="Rotate demo">
     <div class="controls"><label>Turn <input type="range" id="shp-rotate" min="-90" max="90" value="0"><output id="shp-rotate-o">0°</output></label></div>
     <div class="shape-demo"><svg id="shp-rotate-svg" viewBox="0 0 260 260" role="img"><title>A 2 : 1 droplet turning on the spot</title></svg><table class="small readout" id="shp-rotate-read"></table></div>
     <div class="status" id="shp-rotate-status" aria-live="polite"></div>
@@ -1362,7 +1362,7 @@ says which one to pick for what.</p>
     swings because its box stays upright, and everything else stays put. That is what "rotation-invariant" means.</figcaption>
   </figure>
 
-  <figure class="demo" data-demo="shp-shrink" aria-label="Shrink demo">
+  <figure class="demo" data-demo="shp-shrink" data-title="Shape: shrink" aria-label="Shrink demo">
     <div class="controls"><label>Size <input type="range" id="shp-shrink" min="3" max="40" value="22"><output id="shp-shrink-o">22 px</output></label></div>
     <div class="shape-demo"><svg id="shp-shrink-svg" viewBox="0 0 260 260" role="img"><title>An oval droplet growing and shrinking</title></svg><table class="small readout" id="shp-shrink-read"></table></div>
     <div class="status" id="shp-shrink-status" aria-live="polite"></div>
@@ -1370,7 +1370,7 @@ says which one to pick for what.</p>
     pixels across and the pixel steps start to show.</figcaption>
   </figure>
 
-  <figure class="demo" data-demo="shp-rough" aria-label="Rough edge demo">
+  <figure class="demo" data-demo="shp-rough" data-title="Shape: rough edge" aria-label="Rough edge demo">
     <div class="controls">
       <label>Ripple <input type="range" id="shp-rough" min="0" max="3" step="0.1" value="0"><output id="shp-rough-o">0.0 px</output></label>
       <label><input type="checkbox" id="shp-rough-smooth" checked> 1-px smoothing (as MicroDrop)</label>
@@ -1595,7 +1595,7 @@ says which one to pick for what.</p>
     Butterworth starts at <strong>order 2, cutoff 0.2</strong> (order 1 to 8, cutoff 0.01 to 0.99).</p></dd>
 </dl></article>
 
-<figure class="demo" data-demo="tf" id="transform-demo" aria-label="Interactive Normalize, Subtract first and Bkg Ref demonstration">
+<figure class="demo" data-demo="tf" data-title="Normalize, Subtract first, Bkg Ref" id="transform-demo" aria-label="Interactive Normalize, Subtract first and Bkg Ref demonstration">
   <div class="controls">
     <label><input type="checkbox" id="tf-ref"> Bkg Ref</label>
     <label><input type="checkbox" id="tf-first"> Subtract first</label>
