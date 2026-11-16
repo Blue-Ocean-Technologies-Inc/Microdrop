@@ -40,12 +40,20 @@ from microdrop_application.dialogs.pyface_wrapper import NO, YES, confirm
 
 # Microdrop style imports.
 from microdrop_style.colors import WARNING_COLOR
+from microdrop_style.icons.icons import (
+    ICON_CHECK,
+    ICON_DELETE,
+    ICON_DESELECT,
+    ICON_SAVE_AS,
+    ICON_SELECT_All,
+)
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
     ActiveRowCheckboxColumn,
     ActiveRowObjectColumn,
     HtmlLabelEditor,
+    IconButtonEditor,
 )
 
 # Local imports.
@@ -155,30 +163,47 @@ alignment_presets_view = View(
             ),
             UItem(
                 "save_as_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_SAVE_AS,
+                    tooltip="Save as… — save the confirmed alignment as a named preset",
+                ),
                 enabled_when="can_save",
-                tooltip="Save the confirmed alignment as a named preset",
             ),
             UItem(
                 "apply_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_CHECK,
+                    tooltip="Apply — put the selected preset on the live "
+                    "alignment (also double-click its row)",
+                ),
                 enabled_when="can_apply",
-                tooltip="Put the selected preset on the live alignment "
-                "(also double-click its row)",
             ),
             UItem(
                 "set_default_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_SELECT_All,
+                    tooltip="Set Default — make the selected preset the "
+                    "default of its scope",
+                ),
                 enabled_when="writable and selected is not None "
                 "and not selected_is_default",
-                tooltip="Make the selected preset the default of its scope",
             ),
             UItem(
                 "clear_default_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_DESELECT,
+                    tooltip="Clear Default — leave the selected preset's "
+                    "scope without a default",
+                ),
                 enabled_when="writable and selected_is_default",
-                tooltip="Leave the selected preset's scope without a default",
             ),
             UItem(
                 "delete_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_DELETE,
+                    tooltip="Delete — delete the selected preset (asks first)",
+                ),
                 enabled_when="writable and selected is not None",
-                tooltip="Delete the selected preset",
             ),
         ),
         UItem("setup_text", style="readonly"),

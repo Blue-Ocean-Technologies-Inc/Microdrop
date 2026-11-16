@@ -105,6 +105,7 @@ ICON_CHEVRON_RIGHT = "chevron_right"  # reveal a collapsed sidebar
 ICON_FUNCTION = "function"  # fit equations table
 ICON_COPY = "content_copy"  # copy the selected ROI
 ICON_BOOKMARKS = "bookmarks"  # show or hide the saved camera-alignment presets
+ICON_SAVE_AS = "save_as"  # save the current state under a new name
 ICON_PASTE = "content_paste"  # paste a copied ROI
 ICON_TONALITY = "tonality"  # rolling-ball flattening
 ICON_PHOTO_CAMERA = "photo_camera"  # capture a camera frame
