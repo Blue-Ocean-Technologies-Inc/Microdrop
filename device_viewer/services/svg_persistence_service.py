@@ -17,12 +17,14 @@ scene, and reacts to ``loaded_path`` and ``modified`` for its title.
 """
 
 # Standard library imports.
+import os
 from pathlib import Path
 
 # Enthought library imports.
-from traits.api import Bool, File, HasTraits, Instance, List, observe
+from traits.api import Bool, File, HasTraits, Instance, List, Property, observe
 
 # Local imports.
+from ..consts import MASTER_SVG_FILE
 from ..interfaces.i_main_model import IDeviceViewMainModel
 from ..interfaces.i_svg_layer_codec import ISvgLayerCodec
 from ..preferences import DeviceViewerPreferences
@@ -31,6 +33,21 @@ from ..preferences import DeviceViewerPreferences
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+def is_bundled_device(path):
+    """True when ``path`` lies in the bundled devices folder.
+
+    Bundled devices are read-only: the launcher update resets the checkout
+    they ship in, so edits saved there would be lost. Paths are compared
+    resolved and case-normalised, as Windows paths may be spelled either way.
+    """
+    if not path:
+        return False
+
+    bundled_dir = os.path.normcase(MASTER_SVG_FILE.parent.resolve())
+
+    return os.path.normcase(Path(path).resolve().parent) == bundled_dir
 
 
 class SvgPersistenceService(HasTraits):
@@ -51,6 +68,10 @@ class SvgPersistenceService(HasTraits):
 
     #: True while the loaded device has edits not yet written to a file.
     modified = Bool(False)
+
+    #: True when the loaded device is a read-only bundled one, which
+    #: ``save`` refuses to write over.
+    bundled_device_loaded = Property(Bool, observe="loaded_path")
 
     def traits_init(self):
         if self.preferences is None:
@@ -95,18 +116,55 @@ class SvgPersistenceService(HasTraits):
 
     # ------------------------------------------------------------- save
     def save(self):
-        """Write the model back to the loaded device file."""
+        """Write the model back to the loaded device file.
+
+        Raises ``PermissionError`` when the loaded device is bundled.
+        """
+
+        if self.bundled_device_loaded:
+            raise PermissionError(
+                f"Bundled device {self.loaded_path} cannot be overwritten."
+            )
+
         self.model.electrodes.svg_save()
         self.modified = False
 
     def save_as(self, new_filename):
-        """Write the model to ``new_filename``, adding ``.svg`` if missing."""
+        """Write the model to ``new_filename``, adding ``.svg`` if missing.
+
+        Raises ``PermissionError`` when the target is in the bundled devices
+        folder. Saving a bundled device carries on with the copy, as the
+        bundled file cannot take later saves; any other device stays loaded.
+
+        Returns
+        -------
+        str
+            The path written.
+        """
 
         if not new_filename.endswith(".svg"):
             new_filename = f"{new_filename}.svg"
 
+        if is_bundled_device(new_filename):
+            raise PermissionError(
+                f"Cannot save into the bundled devices folder: {new_filename}"
+            )
+
+        from_bundled = self.bundled_device_loaded
         self.model.electrodes.svg_save_as(new_filename)
+
+        # Repointed rather than reloaded, so routes and switched-on
+        # electrodes survive; the file holds what is on screen.
+        if from_bundled:
+            self.model.electrodes.svg_model.filename = new_filename
+            self.loaded_path = new_filename
+
         self.modified = False
+
+        return new_filename
+
+    def _get_bundled_device_loaded(self):
+        return is_bundled_device(self.loaded_path)
 
     # ------------------------------------------------------- observers
     @observe("model:electrodes:svg_model:area_scale", post_init=True)

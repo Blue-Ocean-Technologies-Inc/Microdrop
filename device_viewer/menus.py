@@ -26,6 +26,17 @@ def load_svg_dialog_menu_factory():
     )
 
 
+def load_default_svg_menu_factory():
+    """Create the menu item that loads the bundled default device."""
+
+    return DockPaneAction(
+        id=PKG + ".load_default_svg",
+        dock_pane_id=PKG + ".dock_pane",
+        name="Load &Default Device",
+        method="load_default_svg",
+    )
+
+
 def save_svg_dialogue_menu_factory():
     """Create the menu item that saves the device back to its SVG file."""
 
@@ -76,6 +87,7 @@ def tools_menu_factory():
     return SMenu(
         SGroup(
             load_svg_dialog_menu_factory(),
+            load_default_svg_menu_factory(),
             save_svg_dialogue_menu_factory(),
             save_as_svg_dialogue_menu_factory(),
         ),

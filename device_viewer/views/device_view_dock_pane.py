@@ -39,6 +39,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     FileDialog,
     confirm,
     error,
+    information,
     warning,
 )
 from microdrop_status_bar.consts import ICON_PRIORITY_LEFT
@@ -71,6 +72,7 @@ from ..consts import (
     KEYBOARD_SHORTCUT_GROUPS,
     KEYBOARD_SHORTCUTS,
     KEYBOARD_SHORTCUTS_TITLE,
+    MASTER_SVG_FILE,
     PKG,
     STEP_PARAMS_COMMIT,
     ZONE_STATUS_MESSAGE_MS,
@@ -108,7 +110,10 @@ from ..services.electrode_interaction_service import (
 )
 from ..services.electrode_stepping_service import ElectrodeSteppingService
 from ..services.keyboard_shortcut_service import KeyboardShortcutService
-from ..services.svg_persistence_service import SvgPersistenceService
+from ..services.svg_persistence_service import (
+    SvgPersistenceService,
+    is_bundled_device,
+)
 from ..utils.alignment_geometry import device_render_rect
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
@@ -1025,30 +1030,51 @@ class DeviceViewerDockPane(TraitsDockPane):
     ###### SVG file loading / saving / other handling ########
     ###################################################################################################################
 
+    def _proceed_despite_unsaved_changes(self):
+        """Ask before discarding unsaved device edits; True to go ahead."""
+
+        if not self.svg_persistence.modified:
+            return True
+
+        user_choice = confirm(
+            None,
+            "Current device svg has unsaved changes.\nProceed without saving?",
+            title="Unsaved Device SVG Changes",
+            cancel=False,
+        )
+
+        if user_choice == NO:
+            logger.warning("Action cancelled due to unsaved changes.")
+
+            return False
+
+        return True
+
+    @app_statusbar_message_from_dock_pane("...Loading Svg")
+    def load_default_svg(self):
+        """Load the bundled default device."""
+        if self._proceed_despite_unsaved_changes():
+            self._set_device_view_from_svg(str(MASTER_SVG_FILE))
+
     @app_statusbar_message_from_dock_pane("...Loading Svg")
     def load_svg_dialog(self):
 
         # -- 0. Make sure user saves existing changes if file modified:
 
-        if self.svg_persistence.modified:
-            ### Open a confirmation dialog ####
-            user_choice = confirm(
-                None,
-                "Current device svg has unsaved changes.\nProceed without saving?",
-                title="Unsaved Device SVG Changes",
-                cancel=False,
-            )
-
-            # 3. If user says NO, stop here. Do not run the function.
-            if user_choice == NO:
-                logger.warning("Action cancelled due to unsaved changes.")
-                return
+        if not self._proceed_despite_unsaved_changes():
+            return
 
         # --- 1. Open a dialog for the user to select a source file ---
         # This is decoupled from self.file to allow loading any file at any time.
+        default_path = self.device_viewer_preferences.DEFAULT_SVG_FILE
+
+        # Browse the user's devices rather than the install's resources folder.
+        if is_bundled_device(default_path):
+            default_path = self.device_viewer_preferences.DEVICE_REPO_DIR
+
         dialog = FileDialog(
             action="open",
-            default_path=str(self.device_viewer_preferences.DEFAULT_SVG_FILE),
+            default_path=str(default_path),
             wildcard="SVG Files (*.svg)|*.svg|All Files (*.*)|*.*",
         )
 
@@ -1060,11 +1086,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         repo_dir = Path(self.device_viewer_preferences.DEVICE_REPO_DIR)
 
         # --- 3. Handle case where the selected file is already in the repo ---
-        # We just select it in the UI and do not need to copy anything.
+        # We just select it in the UI and do not need to copy anything. A
+        # bundled device is loaded in place too: it is read-only.
         logger.debug("Checking for chosen file in repo...")
-        if src_file.parent == repo_dir:
+
+        if src_file.parent == repo_dir or is_bundled_device(src_file):
             logger.debug(
-                f"File '{src_file.name}' is already in the repo. Selecting it."
+                f"File '{src_file.name}' is in the repo or bundled. Selecting it."
             )
             self._set_device_view_from_svg(src_file)
             return OK
@@ -1138,18 +1166,58 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     @app_statusbar_message_from_dock_pane("...Saving Svg")
     def save_as_svg_dialog(self):
-        """Open a file dialog to save the current model to an SVG file."""
-        dialog = FileDialog(
-            action="save as",
-            default_directory=str(self.device_viewer_preferences.DEVICE_REPO_DIR),
-            wildcard="SVG Files (*.svg)|*.svg",
-        )
+        """Open a file dialog to save the current model to an SVG file.
 
-        if dialog.open() == OK:
-            self.svg_persistence.save_as(str(dialog.path))
+        A target the service refuses reopens the dialog. Saving a bundled
+        device carries on with the copy, which becomes the default device.
+        """
+        from_bundled = self.svg_persistence.bundled_device_loaded
+        default_filename = ""
+
+        if from_bundled:
+            default_filename = f"{Path(self.svg_persistence.loaded_path).stem} - Copy"
+
+        while True:
+            dialog = FileDialog(
+                action="save as",
+                default_directory=str(self.device_viewer_preferences.DEVICE_REPO_DIR),
+                default_filename=default_filename,
+                wildcard="SVG Files (*.svg)|*.svg",
+            )
+
+            if dialog.open() != OK:
+                return
+
+            try:
+                written_path = self.svg_persistence.save_as(str(dialog.path))
+
+                break
+
+            except PermissionError as e:
+                logger.warning(f"Save As refused: {e}")
+                warning(
+                    None,
+                    f"{e}<br><br>Choose another location.",
+                    title="Cannot Save Device Here",
+                )
+
+        if from_bundled:
+            self.device_viewer_preferences.DEFAULT_SVG_FILE = written_path
 
     @app_statusbar_message_from_dock_pane("...Saving Svg")
     def save_svg(self):
+        if self.svg_persistence.bundled_device_loaded:
+            information(
+                None,
+                "Bundled devices are restored on every update and cannot be "
+                "overwritten. Save your edits as a copy instead.",
+                title="Bundled Device",
+                cancel=False,
+            )
+            self.save_as_svg_dialog()
+
+            return
+
         self.svg_persistence.save()
 
     @app_statusbar_message_from_dock_pane("...Generating Connections")
