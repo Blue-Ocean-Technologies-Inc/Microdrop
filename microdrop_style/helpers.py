@@ -25,6 +25,7 @@ from .general_style import get_general_style
 from .label_style import get_label_style
 from .message_box_style import get_message_box_style
 from .palettes import dark_palette
+from .touch_style import get_touch_style
 
 QT_THEME_NAMES = {Qt.ColorScheme.Dark: "dark", Qt.ColorScheme.Light: "light"}
 
@@ -44,17 +45,15 @@ _palette_refresh_installed = False
 DOCK_SEPARATOR_STYLE_START_MARKER = "/* dock-separator */"
 DOCK_SEPARATOR_STYLE_END_MARKER = "/* /dock-separator */"
 
+# Brackets for the touch-mode rules inside the application stylesheet.
+TOUCH_STYLE_START_MARKER = "/* touch-mode */"
+TOUCH_STYLE_END_MARKER = "/* /touch-mode */"
+
 # TraitsUI's field-error colours and the Base HSV value below which it picks
 # the dark one; they mirror the literals in traitsui.qt.constants.
 TRAITSUI_DARK_BASE_VALUE_THRESHOLD = 0x80
 TRAITSUI_DARK_ERROR_COLOR = "#cf6679"
 TRAITSUI_LIGHT_ERROR_COLOR = "#ffc0c0"
-
-_DOCK_SEPARATOR_STYLE_BLOCK = re.compile(
-    f"{re.escape(DOCK_SEPARATOR_STYLE_START_MARKER)}.*?"
-    f"{re.escape(DOCK_SEPARATOR_STYLE_END_MARKER)}\n?",
-    re.DOTALL,
-)
 
 
 def is_dark_mode():
@@ -193,25 +192,24 @@ def apply_color_scheme(color_scheme):
     style_hints.colorSchemeChanged.emit(color_scheme_in_force)
 
 
-def apply_dock_separator_style(color, thickness=None):
-    """Write the dock-separator rules into the application stylesheet.
+def apply_style_sheet_block(start_marker, end_marker, rules):
+    """Write ``rules`` into the application stylesheet between the markers.
 
     The previously applied block is replaced, so repeated calls never
-    accumulate rules. A ``color`` of None removes the block, restoring the
-    native separators.
+    accumulate rules, and rules outside the markers survive. ``rules`` of
+    None removes the block.
     """
     app = QApplication.instance()
     current_style_sheet = app.styleSheet()
     block = ""
 
-    if color is not None:
-        block = (
-            f"{DOCK_SEPARATOR_STYLE_START_MARKER}"
-            f"{get_dock_separator_style(color, thickness)}"
-            f"{DOCK_SEPARATOR_STYLE_END_MARKER}\n"
-        )
+    if rules is not None:
+        block = f"{start_marker}{rules}{end_marker}\n"
 
-    style_sheet, replaced = _DOCK_SEPARATOR_STYLE_BLOCK.subn(
+    block_pattern = re.compile(
+        f"{re.escape(start_marker)}.*?{re.escape(end_marker)}\n?", re.DOTALL
+    )
+    style_sheet, replaced = block_pattern.subn(
         lambda _match: block, current_style_sheet, count=1
     )
 
@@ -221,6 +219,35 @@ def apply_dock_separator_style(color, thickness=None):
     # Re-setting an unchanged sheet would still re-polish every widget.
     if style_sheet != current_style_sheet:
         app.setStyleSheet(style_sheet)
+
+
+def apply_dock_separator_style(color, thickness=None):
+    """Write the dock-separator rules into the application stylesheet.
+
+    A ``color`` of None removes them, restoring the native separators.
+    """
+    rules = None
+
+    if color is not None:
+        rules = get_dock_separator_style(color, thickness)
+
+    apply_style_sheet_block(
+        DOCK_SEPARATOR_STYLE_START_MARKER, DOCK_SEPARATOR_STYLE_END_MARKER, rules
+    )
+
+
+def apply_touch_style(enabled):
+    """Write the touch-mode rules, coloured from the current application
+    palette, into the application stylesheet, or remove them.
+    """
+    rules = None
+
+    if enabled:
+        palette = QApplication.palette()
+        dark = palette.window().color().lightness() < DARK_PALETTE_LIGHTNESS_THRESHOLD
+        rules = get_touch_style(palette, dark)
+
+    apply_style_sheet_block(TOUCH_STYLE_START_MARKER, TOUCH_STYLE_END_MARKER, rules)
 
 
 def style_app(app_instance: "QApplication"):
