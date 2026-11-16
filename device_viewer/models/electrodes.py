@@ -34,7 +34,7 @@ from traits.api import (
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Local imports.
-from ..consts import CHANNEL_AREAS_KEY
+from ..consts import CHANNEL_AREAS_KEY, user_disabled_channels_mirror
 from ..utils.dmf_utils import SvgUtil
 
 # Logger import.
@@ -107,9 +107,20 @@ class Electrodes(HasTraits):
     #: means not actuated
     actuated_channels = Set(Int, desc="actuated channel ids.")
 
-    #: Set of disabled channel ids. Disabled channels are marked as bad and should not
-    #: be actuated.
-    disabled_channels = Set(Int, desc="disabled channel ids.")
+    #: Channels the user disabled from the context menu: drawn grey, mirrored
+    #: to app_globals so every backend refuses to actuate or scan them.
+    user_disabled_channels = Set(Int, desc="user-disabled channel ids.")
+
+    #: Channels the hardware reports disabled (DISABLED_CHANNELS_CHANGED):
+    #: drawn red; the firmware itself refuses to actuate them.
+    hardware_disabled_channels = Set(Int, desc="hardware-disabled channel ids.")
+
+    #: Every disabled channel, of either kind: marked as bad, never actuated.
+    #: Observe the two sets above for changes — this union emits no .items.
+    disabled_channels = Property(
+        Set(Int),
+        observe=["user_disabled_channels.items", "hardware_disabled_channels.items"],
+    )
 
     #: Map of channel areas: depends on electrode areas, and which electrodes associated
     #: with each channel
@@ -135,7 +146,17 @@ class Electrodes(HasTraits):
     def __len__(self):
         return len(self.electrodes)
 
+    # ------------------- Initialization -------------------------------------------
+    def traits_init(self):
+        """Overwrite any user-disabled channels a previous session left in
+        app_globals, so the backends block only what this model shows."""
+        user_disabled_channels_mirror.write(self.user_disabled_channels)
+
     # -------------------Trait Property getters and setters ----------------------------
+
+    @cached_property
+    def _get_disabled_channels(self):
+        return self.user_disabled_channels | self.hardware_disabled_channels
 
     @cached_property
     def _get_electrode_ids_channels_map(self):
@@ -300,3 +321,12 @@ class Electrodes(HasTraits):
     @observe(CHANNEL_AREAS_KEY)
     def _channel_electrode_areas_scaled_map_changed(self, event):
         _update_app_globals_on_trait_change_event(event)
+
+    @observe("user_disabled_channels.items, svg_model")
+    def _mirror_user_disabled_channels_to_app_globals(self, event):
+        """Keep the backends' copy current on every change and device load.
+
+        Registered at construction, so it runs before any outside observer
+        of the set — the publish controller's actuation republish included.
+        """
+        user_disabled_channels_mirror.write(self.user_disabled_channels)

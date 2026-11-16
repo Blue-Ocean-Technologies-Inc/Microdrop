@@ -310,7 +310,8 @@ class ElectrodeView(QGraphicsPathItem):
         # Two colours at most: the base fill and the actuation / disabled fill.
         self.color_stack = None
         self.footprint_color = None  # the live slug preview tint, if any
-        self._disabled = False  # Whether this electrode's channel is disabled
+        # Who disabled this electrode's channel: "hardware", "user" or "".
+        self._disabled_by = ""
 
         self.electrode = electrode
         self.id = id_
@@ -380,8 +381,8 @@ class ElectrodeView(QGraphicsPathItem):
             f"Channel: {self.electrode.channel}\n"
             f"Area (mm²): {self.electrode.area_scaled:.2f}"
         )
-        if self._disabled:
-            _tooltip_text += "\n[DISABLED]"
+        if self._disabled_by:
+            _tooltip_text += f"\n[DISABLED by {self._disabled_by}]"
 
         return _tooltip_text
 
