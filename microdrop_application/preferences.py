@@ -27,6 +27,7 @@ from microdrop_style.text_styles import preferences_group_style_sheet
 
 # Microdrop utils imports.
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
+from microdrop_utils.system_config import is_rpi
 
 # Local imports.
 from .consts import (
@@ -68,6 +69,10 @@ class MicrodropPreferences(PreferencesHelper):
     #: Separator colour used when dock_separator_color_mode is custom.
     dock_separator_color = Color(GREY["light"])
 
+    #: Finger-sized controls, and a number pad when a numeric field is
+    #: tapped. Applied live by MicrodropApplication.
+    touch_mode = Bool()
+
     # dialogs:
     suppress_no_shorts_information = Bool(False)
 
@@ -82,6 +87,10 @@ class MicrodropPreferences(PreferencesHelper):
     canvas_background_use_custom = Bool(False)
     canvas_background_color = Color()
     canvas_background_opacity = Range(low=0, high=100, value=100)
+
+    def _touch_mode_default(self):
+        """On until chosen otherwise on the portable rig's touchscreen."""
+        return is_rpi()
 
     def _EXPERIMENTS_DIR_default(self) -> Path:
         default_dir = Path(ETSConfig.user_data) / "Experiments"
@@ -144,6 +153,11 @@ class MicrodropPreferencesPane(PreferencesPane):
                 enabled_when=(
                     f"dock_separator_color_mode == {DOCK_SEPARATOR_COLOR_CUSTOM!r}"
                 ),
+            ),
+            Item(
+                "touch_mode",
+                label="Touch mode",
+                tooltip="Larger controls, and a keypad when a number is tapped",
             ),
             label="Appearance",
             show_border=True,

@@ -39,6 +39,7 @@ from .dialogs.pyface_wrapper import YES, confirm, information
 from .menus import AdvancedModeAction, MinimizeWindowAction, ResetLayoutAction
 from .preferences import MicrodropPreferences
 from .touch_assist.actions import touch_assist_menu
+from .touch_mode.help_controls import help_mode_action
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -107,7 +108,7 @@ class MicrodropTask(Task):
             id="View",
             name="&View",
         ),
-        SMenu(id="Help", name="&Help"),
+        SMenu(help_mode_action(), id="Help", name="&Help"),
     )
 
     def create_central_pane(self):
