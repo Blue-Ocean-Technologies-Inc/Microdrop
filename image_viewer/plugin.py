@@ -30,6 +30,7 @@ from .consts import (
     ACTOR_TOPIC_DICT,
     ANALYSIS_HELP_HTML_PATH,
     IMAGE_FILTERS,
+    IMAGE_VIEWER_TUTORIAL_HTML_PATH,
     PKG,
     PKG_name,
 )
@@ -59,10 +60,15 @@ class ImageViewerPlugin(Plugin):
     def _tutorials_default(self):
         return [
             TutorialEntry(
+                title="Image Viewer Tutorial",
+                path=IMAGE_VIEWER_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_ANALYSIS,
+            ),
+            TutorialEntry(
                 title="Image Analysis Tutorial",
                 path=ANALYSIS_HELP_HTML_PATH,
-                order=TUTORIAL_ORDER_ANALYSIS,
-            )
+                order=TUTORIAL_ORDER_ANALYSIS + 10,
+            ),
         ]
 
     def _contributed_task_extensions_default(self):
