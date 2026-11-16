@@ -255,6 +255,17 @@ open branch). The pre-commit hooks run only on staged files, so each file
 is brought clean as it is touched. Run ruff on the files you changed, never
 repo-wide.
 
+**God files get the same ratchet, not a size limit.** ruff has no
+file-length rule, and a flat cap would fail the legacy tree on day one
+(#615). The `file-length-ratchet` pre-commit hook checks staged `*.py`
+files against `tools/file_length_baseline.json`: a file already over the
+500-line threshold fails if it grew past its baseline, a new file starting
+out over the threshold warns, and a file that shrank passes with a hint to
+lower its baseline via `python tools/check_file_length_ratchet.py --update`
+(never raised automatically — a deliberate growth is a manual edit to the
+baseline JSON, visible in review). Tests and demos are excluded. See
+`tools/check_file_length_ratchet.py` for the rollout state (#643).
+
 ## Code Style Guidelines
 
 ### Copyright Header
