@@ -8,40 +8,62 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 import random
 import threading
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
+# Third-party imports.
 import dramatiq
-from traits.api import HasTraits, Instance, Bool, Str, Float, Int, Set, Dict
 
-from dropbot_controller.consts import VOLTAGE_APPLIED, FREQUENCY_APPLIED
+# Enthought library imports.
+from traits.api import Bool, Dict, Float, HasTraits, Instance, Int, Set, Str
+
+# Microdrop package imports.
+from dropbot_controller.consts import FREQUENCY_APPLIED, VOLTAGE_APPLIED
+
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
+    TimestampedMessage,
     generate_class_method_dramatiq_listener_actor,
     invoke_class_method,
-    TimestampedMessage,
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
-from logger.logger_service import get_logger
-
+# Local imports.
 from .consts import (
-    PKG, CHIP_INSERTED, CAPACITANCE_UPDATED, HALTED, shorts_detected_publisher,
-    DROPBOT_CONNECTED, DROPBOT_DISCONNECTED, DROPLETS_DETECTED,
-    REALTIME_MODE_UPDATED, SELF_TESTS_PROGRESS,
-    START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS,
-    SET_REALTIME_MODE, HALT,
-    TestEvent, create_test_progress_message,
-    DEFAULT_BASE_CAPACITANCE_PF, DEFAULT_CAPACITANCE_DELTA_PF,
-    DEFAULT_CAPACITANCE_NOISE_PF, DEFAULT_STREAM_INTERVAL_MS,
-    HARDWARE_DEFAULT_VOLTAGE, HARDWARE_DEFAULT_FREQUENCY, DEFAULT_NUM_CHANNELS,
-    MOCK_SIMULATE_CONNECT, MOCK_SIMULATE_DISCONNECT,
-    MOCK_CHANGE_SIM_SETTINGS, MOCK_SIMULATE_CHIP_INSERT,
-    MOCK_SIMULATE_SHORTS, MOCK_SIMULATE_HALT,
-    MOCK_ACTUATED_CHANNELS_UPDATED, MOCK_STREAM_STATUS_UPDATED,
-    ELECTRODES_STATE_APPLIED
+    CAPACITANCE_UPDATED,
+    CHANGE_SETTINGS,
+    CHIP_INSERTED,
+    DEFAULT_BASE_CAPACITANCE_PF,
+    DEFAULT_CAPACITANCE_DELTA_PF,
+    DEFAULT_CAPACITANCE_NOISE_PF,
+    DEFAULT_NUM_CHANNELS,
+    DEFAULT_STREAM_INTERVAL_MS,
+    DROPBOT_CONNECTED,
+    DROPBOT_DISCONNECTED,
+    DROPLETS_DETECTED,
+    ELECTRODES_STATE_APPLIED,
+    HALT,
+    HALTED,
+    HARDWARE_DEFAULT_FREQUENCY,
+    HARDWARE_DEFAULT_VOLTAGE,
+    MOCK_ACTUATED_CHANNELS_UPDATED,
+    MOCK_STREAM_STATUS_UPDATED,
+    PKG,
+    REALTIME_MODE_UPDATED,
+    RETRY_CONNECTION,
+    SELF_TESTS_PROGRESS,
+    SET_REALTIME_MODE,
+    START_DEVICE_MONITORING,
+    TestEvent,
+    create_test_progress_message,
+    shorts_detected_publisher,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__, level="INFO")
 
@@ -94,8 +116,12 @@ class MockDropbotController(HasTraits):
 
     # ---- Dramatiq listener dispatch ----
 
-    def listener_actor_routine(self, timestamped_message: TimestampedMessage, topic: str):
-        logger.debug(f"MOCK DROPBOT LISTENER: '{timestamped_message}' from topic: {topic}")
+    def listener_actor_routine(
+        self, timestamped_message: TimestampedMessage, topic: str
+    ):
+        logger.debug(
+            f"MOCK DROPBOT LISTENER: '{timestamped_message}' from topic: {topic}"
+        )
 
         topics_tree = topic.split("/")
         head_topic = topics_tree[0]
@@ -104,21 +130,26 @@ class MockDropbotController(HasTraits):
 
         requested_method = None
 
-        if head_topic == 'mock_dropbot' and primary_sub_topic == 'requests':
+        if head_topic == "mock_dropbot" and primary_sub_topic == "requests":
             # Mock-specific requests are always accepted (no connection required)
             requested_method = f"on_{specific_sub_topic}_request"
         elif topic in [DROPBOT_CONNECTED, DROPBOT_DISCONNECTED]:
             requested_method = f"on_{specific_sub_topic}_signal"
         elif topic in [START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS]:
             requested_method = f"on_{specific_sub_topic}_request"
-        elif primary_sub_topic == 'requests':
+        elif primary_sub_topic == "requests":
             if self.connected:
                 requested_method = f"on_{specific_sub_topic}_request"
             else:
-                logger.warning(f"Mock: Request for {specific_sub_topic} denied: not connected.")
+                logger.warning(
+                    f"Mock: Request for {specific_sub_topic} denied: not connected."
+                )
 
         if requested_method:
-            if self.timestamps.get(topic, datetime.min) > timestamped_message.timestamp_dt:
+            if (
+                self.timestamps.get(topic, datetime.min)
+                > timestamped_message.timestamp_dt
+            ):
                 return
             self.timestamps[topic] = timestamped_message.timestamp_dt
 
@@ -208,7 +239,9 @@ class MockDropbotController(HasTraits):
 
     def on_electrodes_state_change_request(self, message: str):
         if not self.realtime_mode:
-            logger.warning("Mock: Cannot process actuations since realtime mode is disabled.")
+            logger.warning(
+                "Mock: Cannot process actuations since realtime mode is disabled."
+            )
             return
         try:
             data = json.loads(message)
@@ -226,7 +259,9 @@ class MockDropbotController(HasTraits):
         except (json.JSONDecodeError, TypeError) as e:
             logger.error(f"Mock: Invalid electrode state message: {e}")
 
-        publish_message(str(len(self.actuated_channels)), topic=ELECTRODES_STATE_APPLIED)
+        publish_message(
+            str(len(self.actuated_channels)), topic=ELECTRODES_STATE_APPLIED
+        )
 
     def on_detect_shorts_request(self, message):
         shorts_detected_publisher.publish(shorted_channels=[], show_window=True)
@@ -235,11 +270,13 @@ class MockDropbotController(HasTraits):
     def on_detect_droplets_request(self, message):
         publish_message(
             topic=DROPLETS_DETECTED,
-            message=json.dumps({
-                "success": True,
-                "detected_channels": sorted(self.actuated_channels),
-                "error": "",
-            }),
+            message=json.dumps(
+                {
+                    "success": True,
+                    "detected_channels": sorted(self.actuated_channels),
+                    "error": "",
+                }
+            ),
         )
 
     def on_halt_request(self, message):
@@ -249,40 +286,84 @@ class MockDropbotController(HasTraits):
         publish_message(topic=SET_REALTIME_MODE, message="False")
 
     def on_run_all_tests_request(self, message):
-        tests = ["test_voltage", "test_on_board_feedback_calibration", "test_shorts", "test_channels"]
-        publish_message(topic=SELF_TESTS_PROGRESS,
-                        message=create_test_progress_message(TestEvent.SESSION_START))
+        tests = [
+            "test_voltage",
+            "test_on_board_feedback_calibration",
+            "test_shorts",
+            "test_channels",
+        ]
+        publish_message(
+            topic=SELF_TESTS_PROGRESS,
+            message=create_test_progress_message(TestEvent.SESSION_START),
+        )
         for i, test_name in enumerate(tests):
-            publish_message(topic=SELF_TESTS_PROGRESS,
-                            message=create_test_progress_message(
-                                TestEvent.PROGRESS, test_name=test_name, test_index=i, status="completed"))
-        publish_message(topic=SELF_TESTS_PROGRESS,
-                        message=create_test_progress_message(TestEvent.SESSION_END, status="completed"))
+            publish_message(
+                topic=SELF_TESTS_PROGRESS,
+                message=create_test_progress_message(
+                    TestEvent.PROGRESS,
+                    test_name=test_name,
+                    test_index=i,
+                    status="completed",
+                ),
+            )
+        publish_message(
+            topic=SELF_TESTS_PROGRESS,
+            message=create_test_progress_message(
+                TestEvent.SESSION_END, status="completed"
+            ),
+        )
 
     def on_test_voltage_request(self, message):
-        publish_message(topic=SELF_TESTS_PROGRESS,
-                        message=create_test_progress_message(
-                            TestEvent.PROGRESS, test_name="test_voltage", test_index=0, status="completed"))
+        publish_message(
+            topic=SELF_TESTS_PROGRESS,
+            message=create_test_progress_message(
+                TestEvent.PROGRESS,
+                test_name="test_voltage",
+                test_index=0,
+                status="completed",
+            ),
+        )
 
     def on_test_on_board_feedback_calibration_request(self, message):
-        publish_message(topic=SELF_TESTS_PROGRESS,
-                        message=create_test_progress_message(
-                            TestEvent.PROGRESS, test_name="test_on_board_feedback_calibration",
-                            test_index=1, status="completed"))
+        publish_message(
+            topic=SELF_TESTS_PROGRESS,
+            message=create_test_progress_message(
+                TestEvent.PROGRESS,
+                test_name="test_on_board_feedback_calibration",
+                test_index=1,
+                status="completed",
+            ),
+        )
 
     def on_test_shorts_request(self, message):
-        publish_message(topic=SELF_TESTS_PROGRESS,
-                        message=create_test_progress_message(
-                            TestEvent.PROGRESS, test_name="test_shorts", test_index=2, status="completed"))
+        publish_message(
+            topic=SELF_TESTS_PROGRESS,
+            message=create_test_progress_message(
+                TestEvent.PROGRESS,
+                test_name="test_shorts",
+                test_index=2,
+                status="completed",
+            ),
+        )
 
     def on_test_channels_request(self, message):
-        publish_message(topic=SELF_TESTS_PROGRESS,
-                        message=create_test_progress_message(
-                            TestEvent.PROGRESS, test_name="test_channels", test_index=3, status="completed"))
+        publish_message(
+            topic=SELF_TESTS_PROGRESS,
+            message=create_test_progress_message(
+                TestEvent.PROGRESS,
+                test_name="test_channels",
+                test_index=3,
+                status="completed",
+            ),
+        )
 
     def on_self_test_cancel_request(self, message):
-        publish_message(topic=SELF_TESTS_PROGRESS,
-                        message=create_test_progress_message(TestEvent.SESSION_END, status="cancelled"))
+        publish_message(
+            topic=SELF_TESTS_PROGRESS,
+            message=create_test_progress_message(
+                TestEvent.SESSION_END, status="cancelled"
+            ),
+        )
 
     def on_change_settings_request(self, message):
         logger.info(f"Mock: Settings change request received: {message}")
@@ -341,16 +422,19 @@ class MockDropbotController(HasTraits):
         utc_timestamp = datetime.now(UTC).timestamp()
         publish_message(
             topic=CAPACITANCE_UPDATED,
-            message=json.dumps({
-                "capacitance": f"{cap_pf:.4g} pF",
-                "voltage": f"{self.voltage:.3g} V",
-                "instrument_time_us": int(utc_timestamp * 1e6),
-                "reception_time": utc_timestamp,
-            }),
+            message=json.dumps(
+                {
+                    "capacitance": f"{cap_pf:.4g} pF",
+                    "voltage": f"{self.voltage:.3g} V",
+                    "instrument_time_us": int(utc_timestamp * 1e6),
+                    "reception_time": utc_timestamp,
+                }
+            ),
         )
 
     def _stream_loop(self):
-        """Background thread loop that publishes capacitance at the configured interval."""
+        """Background thread loop that publishes capacitance at the configured
+        interval."""
         while not self._stream_stop_event.is_set():
             self._publish_capacitance()
             self._stream_stop_event.wait(self.stream_interval_ms / 1000.0)
@@ -364,7 +448,9 @@ class MockDropbotController(HasTraits):
         self._stream_thread.start()
         self.stream_active = True
         publish_message(topic=MOCK_STREAM_STATUS_UPDATED, message="True")
-        logger.info(f"Mock: Capacitance stream started ({self.stream_interval_ms}ms interval)")
+        logger.info(
+            f"Mock: Capacitance stream started ({self.stream_interval_ms}ms interval)"
+        )
 
     def stop_stream(self):
         if self._stream_stop_event is not None:
@@ -406,7 +492,9 @@ class MockDropbotController(HasTraits):
             ),
         }
         reason, msg = reasons.get(error_name, ("unknown", "Unknown halt reason"))
-        halted_message = json.dumps({"name": error_name, "reason": reason, "message": msg})
+        halted_message = json.dumps(
+            {"name": error_name, "reason": reason, "message": msg}
+        )
         publish_message(topic=HALTED, message=halted_message)
         publish_message(topic=HALT, message=halted_message)
         logger.warning(f"Mock: Simulated halt ({error_name})")
