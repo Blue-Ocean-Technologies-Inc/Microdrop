@@ -24,7 +24,7 @@ import json
 import webbrowser
 
 # Enthought library imports.
-from pyface.qt import QtCore, QtWidgets
+from pyface.qt import QtCore, QtGui, QtWidgets
 from pyface.tasks.api import DockPane
 from traits.api import Instance, observe
 
@@ -42,7 +42,19 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 #: Starting widths of the contents tree and the simulation view.
-SPLITTER_SIZES = [200, 600]
+SPLITTER_SIZES = [230, 600]
+
+#: How much larger a tutorial heading is than its simulations' entries.
+HEADING_POINT_SIZE_INCREASE = 1.5
+
+#: Indentation of the simulations under their tutorial heading, in pixels.
+SIMULATION_INDENTATION_PX = 14
+
+#: Roomier rows. Padding only, so the touch style's min-height still applies.
+CONTENTS_TREE_STYLE_SHEET = """
+    QTreeWidget { border: none; }
+    QTreeWidget::item { padding: 4px 6px; }
+"""
 
 
 def _escape_mnemonic(text):
@@ -172,6 +184,9 @@ class TutorialSimulationsDockPane(DockPane):
 
         self._contents_tree = QtWidgets.QTreeWidget(splitter)
         self._contents_tree.setHeaderHidden(True)
+        self._contents_tree.setAnimated(True)
+        self._contents_tree.setIndentation(SIMULATION_INDENTATION_PX)
+        self._contents_tree.setStyleSheet(CONTENTS_TREE_STYLE_SHEET)
         self._contents_tree.currentItemChanged.connect(self._show_current)
 
         self._pages = QtWidgets.QStackedWidget(splitter)
@@ -212,12 +227,22 @@ class TutorialSimulationsDockPane(DockPane):
             pages.removeWidget(page)
             page.deleteLater()
 
+        heading_font = QtGui.QFont(tree.font())
+        heading_font.setBold(True)
+
+        # A font sized in pixels reports -1 points; leave its size alone.
+        if heading_font.pointSizeF() > 0:
+            heading_font.setPointSizeF(
+                heading_font.pointSizeF() + HEADING_POINT_SIZE_INCREASE
+            )
+
         selected = None
 
         for record in self.model.tutorials:
             pages.addWidget(TutorialSimulationsPage(record, pages))
 
             tutorial_item = QtWidgets.QTreeWidgetItem(tree, [record.label])
+            tutorial_item.setFont(0, heading_font)
             tutorial_item.setToolTip(0, record.tutorial.title)
 
             for simulation in record.simulations:
