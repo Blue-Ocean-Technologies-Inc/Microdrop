@@ -8,25 +8,46 @@
 #
 # Thanks for using Microdrop open source!
 
-# Imports:
+# Standard library imports.
 from collections import defaultdict
 
-from ..consts import CHANNEL_AREAS_KEY
-# local
-from ..utils.dmf_utils import SvgUtil
-from logger.logger_service import get_logger
-logger = get_logger(__name__)
+# Enthought library imports.
+from traits.api import (
+    Array,
+    Bool,
+    Dict,
+    File,
+    Float,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Property,
+    Set,
+    Str,
+    String,
+    cached_property,
+    observe,
+)
 
+# Microdrop package imports.
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
-app_globals = get_microdrop_redis_globals_manager()
 
-# enthought
-from traits.api import HasTraits, Int, Bool, Array, Float, String, Dict, Str, Instance, Property, File, cached_property, List, observe, Set
+# Local imports.
+from ..consts import CHANNEL_AREAS_KEY
+from ..utils.dmf_utils import SvgUtil
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
+app_globals = get_microdrop_redis_globals_manager()
 
 
 def _update_app_globals_on_trait_change_event(event, value_units=""):
     app_globals[event.name] = event.new
     logger.info(f"App Globals Update: {event.name}: {event.new} {value_units}")
+
 
 class Electrode(HasTraits):
     """
@@ -34,7 +55,9 @@ class Electrode(HasTraits):
     """
 
     #: Channel number
-    channel = Instance(int, allow_none=True) # Int() doesn't seem to follow allow_none for some reason
+    channel = Instance(
+        int, allow_none=True
+    )  # Int() doesn't seem to follow allow_none for some reason
 
     #: Electrode id
     id = String()
@@ -48,40 +71,58 @@ class Electrode(HasTraits):
     #: Scaled Electrode area in mm^2
     area_scaled = Float(allow_none=True)
 
-class Electrodes(HasTraits):
 
+class Electrodes(HasTraits):
     """
     Electrodes class for managing multiple electrodes
     """
 
-    #: Dictionary of electrodes with keys being an electrode id and values being the electrode object
-    electrodes = Dict(Str, Instance(Electrode), desc="Dictionary of electrodes with keys being an electrode id and values "
-                                            "being the electrode object")
+    #: Dictionary of electrodes with keys being an electrode id and values being the
+    #: electrode object
+    electrodes = Dict(
+        Str,
+        Instance(Electrode),
+        desc="Dictionary of electrodes with keys being an electrode id and values "
+        "being the electrode object",
+    )
     electrode_editing = Instance(Electrode)
     electrode_right_clicked = Instance(Electrode)
 
-    svg_model = Instance(SvgUtil, allow_none=True, desc="Model for the SVG file if given")
+    svg_model = Instance(
+        SvgUtil, allow_none=True, desc="Model for the SVG file if given"
+    )
 
-    #: Map of the unique channels found amongst the electrodes, and various electrode ids associated with them
-    # Note that channel-electrode_id is one-to-many! So there is meaningful difference in acting on one or the other
-    electrode_ids_channels_map = Property(Dict(Str, Int), observe='electrodes.items.channel')
-    channels_electrode_ids_map = Property(Dict(Int, List(Str)), observe='electrode_ids_channels_map')
+    #: Map of the unique channels found amongst the electrodes, and various electrode
+    #: ids associated with them
+    # Note that channel-electrode_id is one-to-many! So there is meaningful difference
+    # in acting on one or the other
+    electrode_ids_channels_map = Property(
+        Dict(Str, Int), observe="electrodes.items.channel"
+    )
+    channels_electrode_ids_map = Property(
+        Dict(Int, List(Str)), observe="electrode_ids_channels_map"
+    )
 
-    #: Map of the unique channels and their states, True means actuated, anything else means not actuated
+    #: Map of the unique channels and their states, True means actuated, anything else
+    #: means not actuated
     actuated_channels = Set(Int, desc="actuated channel ids.")
 
-    #: Set of disabled channel ids. Disabled channels are marked as bad and should not be actuated.
+    #: Set of disabled channel ids. Disabled channels are marked as bad and should not
+    #: be actuated.
     disabled_channels = Set(Int, desc="disabled channel ids.")
 
-    #: Map of channel areas: depends on electrode areas, and which electrodes associated with each channel
-    channel_electrode_areas_scaled_map = Property(Dict(Int, Float), observe=['svg_model.electrode_areas_scaled', 'channels_electrode_ids_map'])
+    #: Map of channel areas: depends on electrode areas, and which electrodes associated
+    #: with each channel
+    channel_electrode_areas_scaled_map = Property(
+        Dict(Int, Float),
+        observe=["svg_model.electrode_areas_scaled", "channels_electrode_ids_map"],
+    )
 
     #: Flag indicating electrode areas are being updated in bulk (true on init).
     # If False: change made on single electrode only.
     _is_bulk_updating_electrode_areas = Bool(True)
 
-
-    # ------------------- Magic methods ----------------------------------------------------------------------
+    # ------------------- Magic methods ------------------------------------------------
     def __getitem__(self, item: Str) -> Electrode:
         return self.electrodes[item]
 
@@ -94,7 +135,7 @@ class Electrodes(HasTraits):
     def __len__(self):
         return len(self.electrodes)
 
-    # -------------------Trait Property getters and setters --------------------------------------------------
+    # -------------------Trait Property getters and setters ----------------------------
 
     @cached_property
     def _get_electrode_ids_channels_map(self):
@@ -138,14 +179,19 @@ class Electrodes(HasTraits):
             # We can iterate over the electrode ids for each channel
             for channel, electrode_ids in self.channels_electrode_ids_map.items():
                 # Aggregate the electrode_ids using their area values
-                total_area_scaled = sum([self.svg_model.electrode_areas_scaled[electrode_id] for electrode_id in electrode_ids])
+                total_area_scaled = sum(
+                    [
+                        self.svg_model.electrode_areas_scaled[electrode_id]
+                        for electrode_id in electrode_ids
+                    ]
+                )
 
                 # Set channel id scaled area
                 channel_electrode_areas_map[channel] = total_area_scaled
 
         return channel_electrode_areas_map
 
-    # -------------------Trait change handlers --------------------------------------------------
+    # -------------------Trait change handlers -----------------------------------------
     def _svg_model_changed(self, new_model: SvgUtil):
         logger.debug(f"Setting new electrode models based on new svg model {new_model}")
         self.electrodes.clear()
@@ -154,11 +200,11 @@ class Electrodes(HasTraits):
             new_electrodes[k] = Electrode(channel=v.channel, path=v.path, id=k)
 
         # self.electrode_scale = new_model.pixel_scale
-        self.electrodes.update(new_electrodes) # Single update to model = single draw
+        self.electrodes.update(new_electrodes)  # Single update to model = single draw
 
         logger.debug(f"Created electrodes from SVG file: {new_model.filename}")
 
-    # -------------------Public methods --------------------------------------------------
+    # -------------------Public methods ------------------------------------------------
     def set_electrodes_from_svg_file(self, svg_file: File):
         """
         Get electrodes from SVG file
@@ -191,7 +237,9 @@ class Electrodes(HasTraits):
                 electrodes = self.channels_electrode_ids_map[channel]
 
                 for electrode_id in electrodes:
-                    total_area += self.svg_model.electrode_areas_scaled.get(electrode_id, 0)
+                    total_area += self.svg_model.electrode_areas_scaled.get(
+                        electrode_id, 0
+                    )
 
             return total_area
 
@@ -204,20 +252,26 @@ class Electrodes(HasTraits):
         self.svg_save_as(self.svg_model.filename)
 
     #### Observer methods ######
-    @observe('svg_model.electrode_areas_scaled')
+    @observe("svg_model.electrode_areas_scaled")
     def update_scaled_electrode_areas(self, event):
-        logger.info("Scaled electrode areas map changed. Updating electrode model with new area")
+        logger.info(
+            "Scaled electrode areas map changed. Updating electrode model with new area"
+        )
         self._is_bulk_updating_electrode_areas = True
         try:
             for electrode_id, electrode in self.electrodes.items():
-                electrode.area_scaled = self.svg_model.electrode_areas_scaled[electrode_id]
+                electrode.area_scaled = self.svg_model.electrode_areas_scaled[
+                    electrode_id
+                ]
 
         finally:
             self._is_bulk_updating_electrode_areas = False
 
-    @observe('svg_model.electrode_areas')
+    @observe("svg_model.electrode_areas")
     def update_electrode_areas(self, event):
-        logger.info("Scaled electrode areas map changed. Updating electrode model with new area")
+        logger.info(
+            "Scaled electrode areas map changed. Updating electrode model with new area"
+        )
         self._is_bulk_updating_electrode_areas = True
         try:
             for electrode_id, electrode in self.electrodes.items():
@@ -226,10 +280,11 @@ class Electrodes(HasTraits):
         finally:
             self._is_bulk_updating_electrode_areas = False
 
-    @observe('electrodes:items:area_scaled', post_init=True)
+    @observe("electrodes:items:area_scaled", post_init=True)
     def electrode_area_scaled_changed(self, event):
         """
-        Handle cases when the area information is changed at the electrode level post init.
+        Handle cases when the area information is changed at the electrode level
+        post init.
         """
 
         if not self._is_bulk_updating_electrode_areas:
