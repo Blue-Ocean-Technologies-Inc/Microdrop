@@ -1,0 +1,1170 @@
+<!--
+  (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>Preferences Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+ol.steps.stack li.step { grid-template-columns: minmax(0, 1fr); }
+.table-wrap { overflow-x: auto; }
+.mock { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 10px 12px; font-size: .88rem; }
+.mock .mock-title { font-weight: 700; margin-bottom: 6px; }
+.mock button, .mock select, .mock input[type="number"] { font: inherit; color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 4px; padding: 2px 10px; }
+.mock button { cursor: pointer; }
+.mock input[type="number"] { width: 6em; padding: 2px 6px; }
+.mock .btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.tabbar { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.tabbar button { border-radius: 4px 4px 0 0; border-bottom: none; background: var(--surface); }
+.tabbar button[aria-selected="true"] { background: var(--accent-soft); font-weight: 700; }
+.groupbox { border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; margin: 6px 0; }
+.groupbox .gb-title { font-weight: 700; font-size: .84rem; color: var(--muted); }
+.mock .closed { color: var(--muted); font-style: italic; padding: 12px 0; }
+.log { font-size: .86rem; color: var(--muted); min-height: 1.4em; margin: 6px 0 0; }
+.finder-controls input[type="search"] { min-width: 14em; padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); color: var(--ink); font: inherit; }
+table.finder { width: 100%; }
+table.finder td.where, table.finder td.eff { color: var(--muted); font-size: .86rem; }
+table.finder td.def { min-width: 6em; }
+table.finder tr.off { display: none; }
+.finder-status { font-size: .88rem; color: var(--muted); margin: 6px 0; }
+.swatch-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.canvas-frame { width: 260px; max-width: 100%; height: 130px; border: 1px solid var(--line); border-radius: 6px; position: relative;
+  overflow: hidden; background-color: #b9b9b9;
+  background-image: linear-gradient(45deg, #8c8c8c 25%, transparent 25%), linear-gradient(-45deg, #8c8c8c 25%, transparent 25%),
+  linear-gradient(45deg, transparent 75%, #8c8c8c 75%), linear-gradient(-45deg, transparent 75%, #8c8c8c 75%);
+  background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0; }
+.canvas-frame .canvas-fill { position: absolute; inset: 0; }
+.canvas-frame .canvas-label { position: absolute; left: 8px; bottom: 6px; font-size: .78rem; padding: 1px 6px; border-radius: 3px;
+  background: var(--surface); color: var(--ink); }
+code.css-out { display: block; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
+dl.tabinfo { display: grid; grid-template-columns: 9em minmax(0, 1fr); margin: 6px 0 0; }
+dl.tabinfo dt, dl.tabinfo dd { margin: 0; padding: 4px 0; border-bottom: 1px solid var(--line); }
+dl.tabinfo dt { font-weight: 700; color: var(--muted); padding-right: 10px; }
+@media (max-width: 560px) { dl.tabinfo { grid-template-columns: minmax(0, 1fr); } dl.tabinfo dt { border-bottom: none; } }
+</style>
+<style media="print">
+.finder-controls, .finder-status { display: none; }
+table.finder tr.off { display: table-row; }
+</style>
+
+<header data-hero>
+  <h1>Preferences</h1>
+  <p><strong>Edit ▸ Preferences...</strong> opens one window with a tab for each part of MicroDrop: the look of the
+  window, the device viewer, the camera, protocols, the image viewer, remote access and your instrument.</p>
+  <p>Start with the short walkthrough. After that, use the <a href="#part-finder">settings finder</a> to look up any
+  setting, its default and when a change takes effect. The cards below it explain the settings people change most.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">What you see in the Preferences window depends on your instrument and on Advanced Mode.</p>
+<ul class="uses">
+  <li><strong>Always there:</strong> Microdrop General, Device Viewer, Video Settings, Protocol Settings, Image Viewer
+  and SSH / Remote Backend.</li>
+  <li><strong>DropBot</strong> (also the mock DropBot): two more tabs, Dropbot Settings and DropBot Status &amp;
+  Controls, and a <span class="ui">Protocol Setters Config</span> box at the bottom of Protocol Settings.</li>
+  <li><strong>Portable DropBot:</strong> one more tab, Portable DropBot Settings.</li>
+  <li><strong>OpenDrop:</strong> no extra tab.</li>
+  <li><strong>Advanced Mode</strong> (<span class="ui">Edit ▸ Advanced Mode</span>): adds the Advanced Mode tab at the
+  end.</li>
+  <li><strong>Plugins</strong> installed with Tools ▸ Manage Plugins… (the heater, the magnet, fluorescence and others)
+  can add tabs of their own. Their own tutorials describe them.</li>
+</ul>
+<p>Each tab is made of boxes, one per group of settings. Most settings are saved in <code>preferences.ini</code> in
+MicroDrop's settings folder. The <em>Help, Logs &amp; Saved Files</em> tutorial (Help ▸ Tutorials) explains where that
+file is and when MicroDrop writes it.</p>
+
+<section data-term id="tab-map" data-where="Interactive">
+  <h3>Tab map</h3>
+  <p>Pick your instrument, switch Advanced Mode on or off, then click a tab to see its boxes and which tutorial covers it.</p>
+  <figure data-demo="tabmap">
+    <div class="controls">
+      <label>Instrument <select data-profile>
+        <option value="dropbot">DropBot (or mock DropBot)</option>
+        <option value="portable">Portable DropBot</option>
+        <option value="opendrop">OpenDrop</option>
+      </select></label>
+      <label><input type="checkbox" data-adv> Advanced Mode</label>
+    </div>
+    <div class="mock" aria-label="Mock Preferences window">
+      <div class="mock-title">Preferences</div>
+      <div class="tabbar" role="tablist" data-tabs></div>
+      <div data-body aria-live="polite"></div>
+    </div>
+    <figcaption><strong>Schematic.</strong> Tab and box names are the real ones from the code. The tab order is the one
+    the code produces; tabs added by plugins are not shown.</figcaption>
+  </figure>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<p class="intro">Five short tasks: open the window, change a setting, keep or undo it, and find the extra tab.</p>
+<ol class="steps stack">
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">1</span>Open Preferences</h4>
+    <p>Choose <span class="ui">Edit ▸ Preferences...</span>. The <strong>Preferences</strong> window opens with its tabs
+    along the top and four buttons along the bottom: <span class="ui">Apply</span>, <span class="ui">Revert</span>,
+    <span class="ui">OK</span> and <span class="ui">Cancel</span>. While it is open, the main window waits.</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">2</span>Tour the tabs</h4>
+    <p>Click each tab. Every box has a title, such as <span class="ui">Canvas Background</span> on Microdrop General or
+    <span class="ui">Main View</span> on Device Viewer. Some boxes appear only after a choice: the
+    <span class="ui">FFmpeg Recording</span> box on Video Settings shows only when the recording engine is FFmpeg.</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">3</span>Change one setting and press Apply</h4>
+    <p>On <span class="ui">Microdrop General</span>, set <span class="ui">Color Scheme</span> under
+    <span class="ui">Appearance</span> to <span class="ui">Dark</span>, then click <span class="ui">Apply</span>. The whole
+    of MicroDrop turns dark at once. <span class="ui">Apply</span> saves the tab you are on; <span class="ui">OK</span> saves
+    every tab and closes. Many settings work at once like this one; others wait for the next run or the next start (the
+    <a href="#part-finder">finder</a> says which).</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">4</span>Undo it</h4>
+    <p>Before you apply, <span class="ui">Cancel</span> throws your changes away. After you apply, set the value back by
+    hand. <span class="ui">Revert</span> is not an undo: it puts <em>every</em> setting the tab stores back to its
+    default, at once (see <a href="#btn-revert">Revert</a>).</p></div>
+  </li>
+  <li class="step">
+    <div class="step-text"><h4><span class="step-n">5</span>See the Advanced Mode tab</h4>
+    <p>Close the window, tick <span class="ui">Edit ▸ Advanced Mode</span> and open Preferences again. A tab named
+    <span class="ui">Advanced Mode</span> is now last. Untick Advanced Mode when you are done: it also changes what you
+    can edit during a run (see <a href="#adv-mode">Advanced Mode</a>).</p></div>
+  </li>
+</ol>
+<div class="callout"><p><strong>Shortcut to the sidebar sizes.</strong> Right-click the Device Viewer's sidebar and
+choose <span class="ui">Modify Layout...</span>. A small window opens with the four
+<a href="#dv-sidebar">Sidebar View</a> sizes. Changes made there apply straight away; you do not need the Preferences
+window.</p></div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-buttons">
+<h2>The four buttons</h2>
+<p class="intro">The window has no toolbar. Everything happens through the four buttons, and they do not all act on the
+same tabs.</p>
+
+<section data-term id="btn-apply" data-where="Bottom of the window">
+  <h3>Apply</h3>
+  <p>Saves the changes on the tab you are looking at. The window stays open.</p>
+  <div data-what><p>Only the current tab. Changes you made on other tabs stay on screen, not yet saved, until you
+  apply them there or press OK.</p></div>
+  <div data-when><p>To try a setting while you watch its effect, for example the colour scheme or the canvas
+  background.</p></div>
+</section>
+
+<section data-term id="btn-ok" data-where="Bottom of the window">
+  <h3>OK</h3>
+  <p>Saves the changes on every tab and closes the window.</p>
+  <div data-what><p>Every tab you can see, including the ones you changed but did not apply. With Advanced Mode off,
+  the hidden Advanced Mode tab is left alone.</p></div>
+  <div data-when><p>The normal way to finish.</p></div>
+</section>
+
+<section data-term id="btn-cancel" data-where="Bottom of the window">
+  <h3>Cancel</h3>
+  <p>Closes the window and throws away the changes you did not apply.</p>
+  <div data-read><p>Anything already saved with Apply or Revert stays saved. Cancel does not undo it.</p></div>
+</section>
+
+<section data-term id="btn-revert" data-where="Bottom of the window">
+  <h3>Revert</h3>
+  <p>Puts every setting of the current tab back to its default, and saves that at once.</p>
+  <div data-what><p>There is no "Restore Defaults" button; Revert is it. It acts on the current tab only, but on
+  <em>everything that tab stores</em>, including values the tab does not show. It does not ask first, and Cancel does
+  not bring the old values back.</p></div>
+  <div data-read>
+  <table class="small">
+    <thead><tr><th>Tab</th><th>Also reset by Revert, though not shown on the tab</th></tr></thead>
+    <tbody>
+      <tr><td>Microdrop General</td><td>The experiments folder (back to <code>Documents\Sci-Bots\Microdrop\Experiments</code>)</td></tr>
+      <tr><td>Device Viewer</td><td>The default device (back to the bundled <code>90_pin_array.svg</code>), your zone types, the layer opacity and visibility table, the camera-alignment marker style, the Recording Viewer's zoom and overlays, and <a href="#elsewhere">Auto-commit</a></td></tr>
+      <tr><td>Video Settings</td><td>The remembered camera and resolution</td></tr>
+      <tr><td>Protocol Settings</td><td>AutoSave (back on), the protocol tree's column choices and order, the Import Legacy Protocol paths, and every column wait time (back to the plugin's value). With a DropBot, also Protocol Setters Config</td></tr>
+      <tr><td>Image Viewer</td><td>The last scale calibration, your saved fit equations, the display window, and the perspective window's device outline</td></tr>
+      <tr><td>Dropbot Settings</td><td>The last applied voltage and frequency</td></tr>
+      <tr><td>SSH / Remote Backend</td><td>Every field, back to the values in MicroDrop's <code>.env</code> file (or empty)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div data-when><p>Rarely. To undo one setting, change it back by hand instead.</p></div>
+</section>
+
+<section data-term id="btn-demo" data-where="Interactive">
+  <h3>Try the buttons</h3>
+  <p>A two-tab Preferences window. Change a value, switch tabs, and watch the <em>In use</em> line: it is what MicroDrop
+  actually works with.</p>
+  <figure data-demo="buttons">
+    <div class="mock" aria-label="Mock Preferences window with two tabs">
+      <div class="mock-title">Preferences</div>
+      <div data-open>
+        <div class="tabbar" role="tablist">
+          <button type="button" role="tab" data-tab="general" aria-selected="true">Microdrop General</button>
+          <button type="button" role="tab" data-tab="device" aria-selected="false">Device Viewer</button>
+        </div>
+        <div class="groupbox" data-panel="general"><div class="gb-title">Canvas Background</div>
+          <label>Opacity (%) <input type="number" min="0" max="100" step="1" data-field="general"></label></div>
+        <div class="groupbox" data-panel="device" hidden><div class="gb-title">Main View</div>
+          <label>Zoom Sensitivity <input type="number" min="1" max="100" step="1" data-field="device"></label></div>
+        <div class="btns">
+          <button type="button" data-act="apply">Apply</button><button type="button" data-act="revert">Revert</button>
+          <button type="button" data-act="ok">OK</button><button type="button" data-act="cancel">Cancel</button>
+        </div>
+      </div>
+      <div class="closed" data-closed hidden>The window is closed. <button type="button" data-act="open">Edit ▸ Preferences...</button></div>
+    </div>
+    <p class="status" data-inuse aria-live="polite"></p>
+    <p class="log" data-log aria-live="polite"></p>
+    <figcaption><strong>Try it.</strong> Change both values, then press Apply on one tab only, then Cancel: one change
+    stays, the other is gone. Revert brings the current tab back to its defaults (100 % and 5) at once.</figcaption>
+  </figure>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-finder">
+<h2>Settings finder</h2>
+<p class="intro">Every setting in the Preferences window, with its box, its default and when a change takes effect.
+Type to search, or pick a tab.</p>
+<ul class="uses">
+  <li><strong>Apply</strong>: works as soon as you press Apply or OK.</li>
+  <li><strong>Next run / Next recording / Next start</strong>: saved at once, used the next time that happens.</li>
+  <li>Defaults are those of a fresh install. Rows marked <em>DropBot</em>, <em>Portable</em> or <em>Advanced Mode</em>
+  appear only there.</li>
+</ul>
+<section data-term id="finder" data-where="All tabs">
+  <h3>All settings</h3>
+  <p>The labels are the ones in the window, word for word.</p>
+  <figure data-demo="finder">
+    <div class="controls finder-controls">
+      <label>Search <input type="search" data-q placeholder="setting, box or value" autocomplete="off"></label>
+      <label>Tab <select data-tabsel>
+        <option value="">All tabs</option>
+        <option value="general">Microdrop General</option>
+        <option value="device">Device Viewer</option>
+        <option value="video">Video Settings</option>
+        <option value="protocol">Protocol Settings</option>
+        <option value="image">Image Viewer</option>
+        <option value="ssh">SSH / Remote Backend</option>
+        <option value="dropbot">Dropbot Settings</option>
+        <option value="status">DropBot Status &amp; Controls</option>
+        <option value="portable">Portable DropBot Settings</option>
+        <option value="advanced">Advanced Mode</option>
+      </select></label>
+      <button type="button" data-reset>Show all</button>
+    </div>
+    <p class="finder-status" aria-live="polite"></p>
+    <div class="table-wrap">
+    <table class="small finder">
+      <thead><tr><th>Setting</th><th>Tab ▸ box</th><th>Default</th><th>Takes effect</th></tr></thead>
+      <tbody>
+<tr data-tab="general" data-node="microdrop.app" data-key="color_scheme" data-default='"follow_system"'><td><a href="#gen-scheme">Color Scheme</a></td><td class="where">Microdrop General ▸ Appearance</td><td class="def">Follow system</td><td class="eff">Apply</td></tr>
+<tr data-tab="general" data-node="microdrop.app" data-key="dock_separator_color_mode" data-default='"follow_system"'><td><a href="#gen-separator">Dock Separator Color</a></td><td class="where">Microdrop General ▸ Appearance</td><td class="def">Follow system</td><td class="eff">Apply</td></tr>
+<tr data-tab="general" data-node="microdrop.app" data-key="dock_separator_color" data-default='"#d1d1d1"'><td><a href="#gen-separator">Custom Separator Color (hex)</a></td><td class="where">Microdrop General ▸ Appearance</td><td class="def">#d1d1d1</td><td class="eff">Apply; only with Custom</td></tr>
+<tr data-tab="general" data-node="microdrop.app" data-key="always_use_default_layout" data-default="false"><td><a href="#gen-layout">Always Use Default Layout</a></td><td class="where">Microdrop General ▸ Application Startup</td><td class="def">Off</td><td class="eff">Next start</td></tr>
+<tr data-tab="general" data-node="microdrop.app" data-key="canvas_background_use_custom" data-default="false"><td><a href="#gen-canvas-custom">Use Custom Color</a></td><td class="where">Microdrop General ▸ Canvas Background</td><td class="def">Off</td><td class="eff">Apply</td></tr>
+<tr data-tab="general" data-node="microdrop.app" data-key="canvas_background_color" data-default='"#ffffff"'><td><a href="#gen-canvas-color">Background Color (hex)</a></td><td class="where">Microdrop General ▸ Canvas Background</td><td class="def">#ffffff</td><td class="eff">Apply; only with Use Custom Color</td></tr>
+<tr data-tab="general" data-node="microdrop.app" data-key="canvas_background_opacity" data-default="100"><td><a href="#gen-canvas-opacity">Opacity (%)</a></td><td class="where">Microdrop General ▸ Canvas Background</td><td class="def">100</td><td class="eff">Apply</td></tr>
+<tr data-tab="general" data-node="microdrop.app" data-key="suppress_no_shorts_information" data-default="false"><td><a href="#gen-shorts">Suppress no shorts information</a></td><td class="where">Microdrop General ▸ Dialog Settings</td><td class="def">Off</td><td class="eff">Next short check</td></tr>
+<tr data-tab="general" data-node="microdrop.logger" data-key="level" data-default='"INFO"'><td><a href="#gen-log">Level</a></td><td class="where">Microdrop General ▸ Logger Settings</td><td class="def">Info</td><td class="eff">Apply</td></tr>
+<tr data-tab="device" data-node="microdrop.device_viewer" data-key="DEFAULT_SVG_FILE"><td><a href="#dv-default-device">Default Device Layout</a></td><td class="where">Device Viewer ▸ Main View</td><td class="def">Devices\90_pin_array.svg</td><td class="eff">Next start</td></tr>
+<tr data-tab="device" data-node="microdrop.device_viewer" data-key="AUTO_FIT_MARGIN_SCALE" data-default="95"><td><a href="#dv-fit">Auto Fit Margin Scale</a></td><td class="where">Device Viewer ▸ Main View</td><td class="def">95 (1–100)</td><td class="eff">Apply</td></tr>
+<tr data-tab="device" data-node="microdrop.device_viewer" data-key="ZOOM_SENSITIVITY" data-default="5"><td><a href="#dv-zoom">Zoom Sensitivity</a></td><td class="where">Device Viewer ▸ Main View</td><td class="def">5 (1–100)</td><td class="eff">Apply</td></tr>
+<tr data-tab="device" data-node="microdrop.device_viewer" data-key="NUMBER_OF_CHANNELS" data-default="120"><td><a href="#dv-channels">Number of channels</a></td><td class="where">Device Viewer ▸ Main View</td><td class="def">120 (1–1024)</td><td class="eff">Apply</td></tr>
+<tr data-tab="device" data-node="microdrop.device_viewer" data-key="DEVICE_VIEWER_SIDEBAR_WIDTH" data-default="320"><td><a href="#dv-sidebar">Device Viewer Sidebar Width</a></td><td class="where">Device Viewer ▸ Sidebar View</td><td class="def">320</td><td class="eff">Apply</td></tr>
+<tr data-tab="device" data-node="microdrop.device_viewer" data-key="ALPHA_VIEW_MIN_HEIGHT" data-default="180"><td><a href="#dv-sidebar">Alpha View Min Height</a></td><td class="where">Device Viewer ▸ Sidebar View</td><td class="def">180</td><td class="eff">Apply</td></tr>
+<tr data-tab="device" data-node="microdrop.device_viewer" data-key="LAYERS_VIEW_MIN_HEIGHT" data-default="250"><td><a href="#dv-sidebar">Layers View Min Height</a></td><td class="where">Device Viewer ▸ Sidebar View</td><td class="def">250</td><td class="eff">Apply</td></tr>
+<tr data-tab="device" data-node="microdrop.device_viewer" data-key="ZONES_VIEW_MIN_HEIGHT" data-default="250"><td><a href="#dv-sidebar">Zones View Min Height</a></td><td class="where">Device Viewer ▸ Sidebar View</td><td class="def">250</td><td class="eff">Apply</td></tr>
+<tr data-tab="device" data-node="microdrop.device_viewer" data-key="max_slug_width" data-default="5"><td><a href="#dv-slug">Max slug width (electrodes)</a></td><td class="where">Device Viewer ▸ Paths</td><td class="def">5 (1–21)</td><td class="eff">Apply</td></tr>
+<tr data-tab="device" data-node="microdrop.device_viewer" data-key="gap_height_um" data-default="254"><td><a href="#dv-gap">Plate gap (µm)</a></td><td class="where">Device Viewer ▸ Volume Readout</td><td class="def">254 (1–2000)</td><td class="eff">Apply</td></tr>
+<tr data-tab="video" data-node="camera" data-key="preferred_video_format"><td><a href="#vid-format">Preferred Video Format</a></td><td class="where">Video Settings ▸ Video Format</td><td class="def">NV12 (Windows, macOS); JPEG (Linux, Pi)</td><td class="eff">Apply</td></tr>
+<tr data-tab="video" data-node="camera" data-key="strict_video_format"><td><a href="#vid-format">Strictly Use Only Preferred Video Format?</a></td><td class="where">Video Settings ▸ Video Format</td><td class="def">On</td><td class="eff">Apply</td></tr>
+<tr data-tab="video" data-node="camera" data-key="suppress_high_resolution_warning" data-default="false"><td><a href="#vid-highres">Hide High Resolution Warning</a></td><td class="where">Video Settings ▸ Video Format</td><td class="def">Off</td><td class="eff">Next resolution pick</td></tr>
+<tr data-tab="video" data-node="camera" data-key="recorder_backend" data-default='"Qt MediaRecorder (hardware)"'><td><a href="#vid-engine">Recording Engine</a></td><td class="where">Video Settings ▸ Video Recording</td><td class="def">Qt MediaRecorder (hardware)</td><td class="eff">Next recording</td></tr>
+<tr data-tab="video" data-node="camera" data-key="qt_video_format" data-default='"MP4"'><td><a href="#vid-qt">Video Format</a></td><td class="where">Video Settings ▸ Qt Recording</td><td class="def">MP4</td><td class="eff">Next recording</td></tr>
+<tr data-tab="video" data-node="camera" data-key="qt_video_codec"><td><a href="#vid-qt">Video Codec</a></td><td class="where">Video Settings ▸ Qt Recording</td><td class="def">H264, when this computer offers it</td><td class="eff">Next recording</td></tr>
+<tr data-tab="video" data-node="camera" data-key="qt_bitrate_resolution_class" data-default='"1080p @ 30 fps"'><td><a href="#vid-qt">Resolution</a></td><td class="where">Video Settings ▸ Qt Recording ▸ MKV Quality</td><td class="def">1080p @ 30 fps</td><td class="eff">Picks which tier to edit</td></tr>
+<tr data-tab="video" data-node="camera" data-key="qt_bitrate_1080p30_tier" data-default='"Auto"'><td><a href="#vid-qt">Quality tier (one per resolution)</a></td><td class="where">Video Settings ▸ Qt Recording ▸ MKV Quality</td><td class="def">Auto</td><td class="eff">Next recording</td></tr>
+<tr data-tab="video" data-node="camera" data-key="ffmpeg_container" data-default='"mkv"'><td><a href="#vid-ffmpeg">Container</a></td><td class="where">Video Settings ▸ FFmpeg Recording</td><td class="def">mkv</td><td class="eff">Next recording</td></tr>
+<tr data-tab="video" data-node="camera" data-key="ffmpeg_video_codec" data-default='"libx264"'><td><a href="#vid-ffmpeg">Video Codec</a></td><td class="where">Video Settings ▸ FFmpeg Recording</td><td class="def">libx264</td><td class="eff">Next recording</td></tr>
+<tr data-tab="video" data-node="camera" data-key="ffmpeg_preset" data-default='"ultrafast"'><td><a href="#vid-ffmpeg">Preset</a></td><td class="where">Video Settings ▸ FFmpeg Recording</td><td class="def">ultrafast</td><td class="eff">Next recording</td></tr>
+<tr data-tab="video" data-node="camera" data-key="ffmpeg_crf" data-default="17"><td><a href="#vid-ffmpeg">Quality (CRF)</a></td><td class="where">Video Settings ▸ FFmpeg Recording</td><td class="def">17 (0–51)</td><td class="eff">Next recording</td></tr>
+<tr data-tab="video" data-node="camera" data-key="ffmpeg_extra_output_args" data-default='""'><td><a href="#vid-ffmpeg">Extra Output Args</a></td><td class="where">Video Settings ▸ FFmpeg Recording</td><td class="def">empty</td><td class="eff">Next recording</td></tr>
+<tr data-tab="protocol" data-node="microdrop.protocol" data-key="realtime_mode_settling_time_s" data-default="1.0"><td><a href="#pro-realtime-wait">Realtime Mode Pre-Protocol (s)</a></td><td class="where">Protocol Settings ▸ Protocol Settling Times</td><td class="def">1.0 (0.5–15)</td><td class="eff">Next run</td></tr>
+<tr data-tab="protocol" data-node="microdrop.protocol" data-key="logs_settling_time_s" data-default="3.0"><td><a href="#pro-logs-wait">Logs Accepted Post-Protocol (s)</a></td><td class="where">Protocol Settings ▸ Protocol Settling Times</td><td class="def">3.0 (0.5–15)</td><td class="eff">Next run</td></tr>
+<tr data-tab="protocol" data-node="microdrop.protocol" data-key="prompt_to_restore_realtime_mode" data-default="true"><td><a href="#pro-keep-realtime">Prompt to keep Realtime Mode?</a></td><td class="where">Protocol Settings ▸ Realtime Mode Persistence</td><td class="def">On</td><td class="eff">Next run</td></tr>
+<tr data-tab="protocol" data-node="microdrop.protocol" data-key="keep_realtime_mode_after_protocol" data-default="true"><td><a href="#pro-keep-realtime">Keep Realtime Mode active?</a></td><td class="where">Protocol Settings ▸ Realtime Mode Persistence</td><td class="def">On</td><td class="eff">Next run</td></tr>
+<tr data-tab="protocol" data-node="microdrop.protocol" data-key="suppress_unused_column_hooks_information" data-default="false"><td><a href="#pro-unused">Suppress unused column hooks information</a></td><td class="where">Protocol Settings ▸ Dialog Settings</td><td class="def">Off</td><td class="eff">Next run</td></tr>
+<tr data-tab="protocol" data-node="microdrop.protocol" data-key="protocol_tree_ack_times"><td><a href="#pro-ack">Wait Time (s), one per column</a></td><td class="where">Protocol Settings ▸ Column Ack Wait Times</td><td class="def">Set by each column (5 s for Voltage)</td><td class="eff">Next run</td></tr>
+<tr data-tab="protocol" data-node="microdrop.ui.voltage_frequency_range" data-key="ui_min_voltage" data-default="30"><td><a href="#pro-setters">Min Voltage (V)</a></td><td class="where">Protocol Settings ▸ Protocol Setters Config · <em>DropBot</em></td><td class="def">30 (0–300)</td><td class="eff">Apply</td></tr>
+<tr data-tab="protocol" data-node="microdrop.ui.voltage_frequency_range" data-key="ui_max_voltage" data-default="140"><td><a href="#pro-setters">Max Voltage (V)</a></td><td class="where">Protocol Settings ▸ Protocol Setters Config · <em>DropBot</em></td><td class="def">140 (0–300)</td><td class="eff">Apply</td></tr>
+<tr data-tab="protocol" data-node="microdrop.ui.voltage_frequency_range" data-key="ui_min_frequency" data-default="100"><td><a href="#pro-setters">Min Frequency (Hz)</a></td><td class="where">Protocol Settings ▸ Protocol Setters Config · <em>DropBot</em></td><td class="def">100 (0–100000)</td><td class="eff">Apply</td></tr>
+<tr data-tab="protocol" data-node="microdrop.ui.voltage_frequency_range" data-key="ui_max_frequency" data-default="10000"><td><a href="#pro-setters">Max Frequency (Hz)</a></td><td class="where">Protocol Settings ▸ Protocol Setters Config · <em>DropBot</em></td><td class="def">10000 (0–100000)</td><td class="eff">Apply</td></tr>
+<tr data-tab="protocol" data-node="microdrop.ui.voltage_frequency_range" data-key="ui_default_voltage"><td><a href="#pro-setters">Default Voltage (V)</a></td><td class="where">Protocol Settings ▸ Protocol Setters Config · <em>DropBot</em></td><td class="def">100</td><td class="eff">Next start</td></tr>
+<tr data-tab="protocol" data-node="microdrop.ui.voltage_frequency_range" data-key="ui_default_frequency"><td><a href="#pro-setters">Default Frequency (Hz)</a></td><td class="where">Protocol Settings ▸ Protocol Setters Config · <em>DropBot</em></td><td class="def">10000</td><td class="eff">Next start</td></tr>
+<tr data-tab="image" data-node="microdrop.image_viewer" data-key="confirm_experiment_delete" data-default="true"><td><a href="#img-delete">Ask for confirmation before deleting an experiment folder</a></td><td class="where">Image Viewer ▸ Experiments</td><td class="def">On</td><td class="eff">Next delete</td></tr>
+<tr data-tab="image" data-node="microdrop.image_viewer" data-key="ai_model" data-default='"efficientsam:latest"'><td><a href="#img-ai-model">AI ROI detection model</a></td><td class="where">Image Viewer ▸ AI ROI Detection</td><td class="def">EfficientSam (accuracy)</td><td class="eff">Apply (may download)</td></tr>
+<tr data-tab="image" data-node="microdrop.image_viewer" data-key="ai_use_gpu" data-default="true"><td><a href="#img-gpu">Run the SAM encoder on the GPU (DirectML)</a></td><td class="where">Image Viewer ▸ AI ROI Detection</td><td class="def">On</td><td class="eff">Next detection</td></tr>
+<tr data-tab="ssh" data-node="microdrop.ssh_controls" data-key="host"><td><a href="#ssh-fields">Host</a></td><td class="where">SSH / Remote Backend ▸ Remote Backend</td><td class="def">From <code>.env</code>, else empty</td><td class="eff">Next dialog</td></tr>
+<tr data-tab="ssh" data-node="microdrop.ssh_controls" data-key="port"><td><a href="#ssh-fields">SSH Port</a></td><td class="where">SSH / Remote Backend ▸ Remote Backend</td><td class="def">From <code>.env</code>, else 22</td><td class="eff">Next dialog</td></tr>
+<tr data-tab="ssh" data-node="microdrop.ssh_controls" data-key="username"><td><a href="#ssh-fields">Username</a></td><td class="where">SSH / Remote Backend ▸ Remote Backend</td><td class="def">From <code>.env</code>, else empty</td><td class="eff">Next dialog</td></tr>
+<tr data-tab="ssh" data-node="microdrop.ssh_controls" data-key="key_name" data-default='"id_rsa_microdrop"'><td><a href="#ssh-fields">SSH Key Name</a></td><td class="where">SSH / Remote Backend ▸ Remote Backend</td><td class="def">id_rsa_microdrop</td><td class="eff">Next dialog</td></tr>
+<tr data-tab="ssh" data-node="microdrop.ssh_controls" data-key="remote_experiments_path" data-default='"~/Documents/Sci-Bots/Microdrop/Experiments/"'><td><a href="#ssh-fields">Remote Experiments Path</a></td><td class="where">SSH / Remote Backend ▸ Remote Backend</td><td class="def">~/Documents/Sci-Bots/Microdrop/Experiments/</td><td class="eff">Next dialog</td></tr>
+<tr data-tab="ssh" data-node="microdrop.ssh_controls" data-key="device_id"><td><a href="#ssh-fields">Device ID</a></td><td class="where">SSH / Remote Backend ▸ Remote Backend</td><td class="def">The host, with dots as _</td><td class="eff">Next dialog</td></tr>
+<tr data-tab="dropbot" data-node="microdrop.dropbot_settings" data-key="capacitance_update_interval" data-default="100"><td><a href="#db-interval">Capacitance Update Interval (ms)</a></td><td class="where">Dropbot Settings · <em>DropBot</em></td><td class="def">100</td><td class="eff">Apply, DropBot connected</td></tr>
+<tr data-tab="dropbot" data-node="microdrop.dropbot_settings" data-key="droplet_detection_capacitance" data-default="10"><td><a href="#db-drop">Drop Detect Capacitance (pF)</a></td><td class="where">Dropbot Settings · <em>DropBot</em></td><td class="def">10</td><td class="eff">Apply, DropBot connected</td></tr>
+<tr data-tab="dropbot" data-node="microdrop.dropbot_settings" data-key="_hardware_max_voltage"><td><a href="#db-hardware">Max Voltage (V), Max Frequency (Hz)</a></td><td class="where">Dropbot Settings ▸ Hardware Config · <em>DropBot</em></td><td class="def">Read only: from the DropBot</td><td class="eff">—</td></tr>
+<tr data-tab="dropbot" data-node="microdrop.dropbot_settings" data-key="last_voltage"><td><a href="#db-hardware">Last Applied Voltage (V), Last Applied Frequency (Hz)</a></td><td class="where">Dropbot Settings ▸ Hardware Config · <em>DropBot</em></td><td class="def">Read only: 100 V, 10000 Hz until changed</td><td class="eff">—</td></tr>
+<tr data-tab="status" data-node="microdrop.dropbot_status_and_controls" data-key="default_dielectric_material" data-default='"Pick a dielectric..."'><td><a href="#st-dielectric">Default Dielectric Material</a></td><td class="where">DropBot Status &amp; Controls · <em>DropBot</em></td><td class="def">Pick a dielectric...</td><td class="eff">Next start</td></tr>
+<tr data-tab="status" data-node="microdrop.dropbot_status_and_controls" data-key="show_dielectric_info" data-default="true"><td><a href="#st-dielectric">Show Dielectric Info</a></td><td class="where">DropBot Status &amp; Controls · <em>DropBot</em></td><td class="def">On</td><td class="eff">Apply</td></tr>
+<tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="fan_board" data-default='"signal"'><td><a href="#pd-fan">Fan toggle controls</a></td><td class="where">Portable DropBot Settings · <em>Portable</em></td><td class="def">MCU board fan</td><td class="eff">Apply</td></tr>
+<tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="chip_detect_rule" data-default='"both_pogos"'><td><a href="#pd-chip">Chip detected when</a></td><td class="where">Portable DropBot Settings · <em>Portable</em></td><td class="def">Both pogo pads touching the chip</td><td class="eff">Apply</td></tr>
+<tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="droplet_detection_threshold_pf" data-default="5.0"><td><a href="#pd-threshold">Droplet detection threshold (pF)</a></td><td class="where">Portable DropBot Settings · <em>Portable</em></td><td class="def">5.0 (0.1–1000)</td><td class="eff">Apply</td></tr>
+<tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="magnet_engage_mm" data-default="14.0"><td><a href="#pd-magnet">Engage position (mm)</a></td><td class="where">Portable DropBot Settings ▸ Magnet · <em>Portable</em></td><td class="def">14.000</td><td class="eff">Board only on Write / Preset to flash</td></tr>
+<tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="gain_presets" data-default='"64, 128, 192, 255"'><td><a href="#pd-presets">Gain presets</a></td><td class="where">Portable DropBot Settings ▸ Presets · <em>Portable</em></td><td class="def">64, 128, 192, 255</td><td class="eff">Apply</td></tr>
+<tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="temperature_presets" data-default='"25, 37, 55, 95"'><td><a href="#pd-presets">Temperature presets (°C)</a></td><td class="where">Portable DropBot Settings ▸ Presets · <em>Portable</em></td><td class="def">25, 37, 55, 95</td><td class="eff">Apply</td></tr>
+<tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="move_presets" data-default='"-10, -1, -0.1, 0.1, 1, 10"'><td><a href="#pd-presets">Move presets (mm)</a></td><td class="where">Portable DropBot Settings ▸ Presets · <em>Portable</em></td><td class="def">-10, -1, -0.1, 0.1, 1, 10</td><td class="eff">Apply</td></tr>
+<tr data-tab="advanced" data-node="microdrop.device_viewer.advanced" data-key="allow_hardware_disables" data-default="true"><td><a href="#adv-disables">Allow hardware disables</a></td><td class="where">Advanced Mode ▸ Device Viewer · <em>Advanced Mode</em></td><td class="def">On</td><td class="eff">Apply</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </figure>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-general">
+<h2>Microdrop General</h2>
+<p class="intro">How the main window looks and starts, one notice you can silence, and how much MicroDrop logs.</p>
+
+<section data-term id="gen-scheme" data-where="Microdrop General ▸ Appearance ▸ Color Scheme">
+  <h3>Color Scheme</h3>
+  <p>Light or dark windows for all of MicroDrop.</p>
+  <div data-what><p>Three choices: <span class="ui">Follow system</span> uses your computer's light or dark setting;
+  <span class="ui">Light</span> and <span class="ui">Dark</span> force one.</p></div>
+  <div data-when><p>Force one when the computer's choice makes MicroDrop hard to read, for example a dark room at the
+  bench.</p></div>
+  <div data-read><p>Changes as soon as you press Apply.</p></div>
+  <div data-typical><p>Follow system.</p></div>
+</section>
+
+<section data-term id="gen-separator" data-where="Microdrop General ▸ Appearance">
+  <h3>Dock Separator Color</h3>
+  <p>The colour of the thin bars between the docked panes.</p>
+  <div data-what><p><span class="ui">Follow system</span>, <span class="ui">Light</span> and <span class="ui">Dark</span>
+  pick that scheme's grey; <span class="ui">Custom</span> uses <span class="ui">Custom Separator Color (hex)</span>,
+  which can only be edited when Custom is chosen.</p></div>
+  <div data-when><p>When the bars are hard to see and grab.</p></div>
+  <div data-typical><p>Follow system; custom colour #d1d1d1.</p></div>
+</section>
+
+<section data-term id="gen-layout" data-where="Microdrop General ▸ Application Startup">
+  <h3>Always Use Default Layout</h3>
+  <p>Open with the standard pane arrangement every time, instead of the one you left.</p>
+  <div data-what><p>Normally MicroDrop restores where each pane was when you last closed it. Ticked, it ignores that
+  and starts with the default layout.</p></div>
+  <div data-when><p>On a shared instrument, so every user starts from the same window.</p></div>
+  <div data-read><p>Takes effect at the next start. If MicroDrop cannot restore your saved layout, it ticks this box for
+  you; untick it to get your own layout back.</p></div>
+  <div data-typical><p>Off.</p></div>
+</section>
+
+<section data-term id="gen-canvas-custom" data-where="Microdrop General ▸ Canvas Background">
+  <h3>Use Custom Color</h3>
+  <p>Paint the empty area in the middle of the main window with your own colour.</p>
+  <div data-what><p>Off, the area is white in light mode and black in dark mode. On, it uses
+  <a href="#gen-canvas-color">Background Color (hex)</a>.</p></div>
+  <div data-when><p>To make the bench screen easier on the eyes, or to tell two instruments apart at a glance.</p></div>
+  <div data-typical><p>Off.</p></div>
+</section>
+
+<section data-term id="gen-canvas-color" data-where="Microdrop General ▸ Canvas Background">
+  <h3>Background Color (hex)</h3>
+  <p>The custom canvas colour, as a hex code such as #ffffff.</p>
+  <div data-what><p>Click the field to pick a colour. It can be edited only while
+  <a href="#gen-canvas-custom">Use Custom Color</a> is ticked.</p></div>
+  <div data-typical><p>#ffffff (white).</p></div>
+</section>
+
+<section data-term id="gen-canvas-opacity" data-where="Microdrop General ▸ Canvas Background">
+  <h3>Opacity (%)</h3>
+  <p>How solid the canvas colour is, 0 to 100 %.</p>
+  <div data-what><p>Applies to whichever colour is in use, custom or automatic. 100 % is fully solid; lower values let
+  what is behind the canvas show through.</p></div>
+  <div data-read><p>A slider. Changes as soon as you press Apply.</p></div>
+  <div data-typical><p>100.</p></div>
+  <figure data-demo="canvas">
+    <div class="swatch-row">
+      <div class="canvas-frame" aria-hidden="true"><div class="canvas-fill" data-fill></div><span class="canvas-label">Canvas</span></div>
+      <div class="controls" style="flex-direction: column; align-items: flex-start">
+        <label>Computer is in <select data-scheme><option value="light">light mode</option><option value="dark">dark mode</option></select></label>
+        <label><input type="checkbox" data-custom> Use Custom Color</label>
+        <label>Background Color (hex) <input type="color" value="#ffffff" data-color disabled></label>
+        <label>Opacity (%) <input type="range" min="0" max="100" value="100" id="canvas-opacity" data-opacity> <output for="canvas-opacity">100</output></label>
+      </div>
+    </div>
+    <code class="css-out" data-css></code>
+    <figcaption><strong>Try it.</strong> The line under the preview is the style MicroDrop gives the canvas for these
+    choices. The checkerboard stands for whatever is behind the canvas.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="gen-shorts" data-where="Microdrop General ▸ Dialog Settings">
+  <h3>Suppress no shorts information</h3>
+  <p>Stop the <em>No Shorts Detected</em> message after an automatic short check.</p>
+  <div data-what><p>When a short check finds nothing, MicroDrop says <em>No shorts were detected.</em> with a
+  <span class="ui">Do not show again (can be undone from preferences)</span> box. Ticking that box ticks this setting.
+  Untick it here to see the message again. A check you start yourself always shows its result.</p></div>
+  <div data-typical><p>Off.</p></div>
+</section>
+
+<section data-term id="gen-experiments" data-where="Not in the window">
+  <h3>Experiments folder</h3>
+  <p>Where MicroDrop makes a folder for each experiment.</p>
+  <div data-what><p>There is no field for it on this tab. MicroDrop uses
+  <code>&lt;home&gt;\Documents\Sci-Bots\Microdrop\Experiments</code> and creates it if needed. Revert on Microdrop
+  General sets it back to that folder.</p></div>
+  <div data-read><p>The <em>Help, Logs &amp; Saved Files</em> tutorial describes what each experiment folder holds.</p></div>
+  <div data-typical><p><code>Documents\Sci-Bots\Microdrop\Experiments</code>.</p></div>
+</section>
+
+<section data-term id="gen-log" data-where="Microdrop General ▸ Logger Settings ▸ Level">
+  <h3>Log level</h3>
+  <p>How much MicroDrop writes to its log, from Debug (everything) to Critical (least).</p>
+  <div data-what><p>The only setting in the Logger Settings box. The <em>Help, Logs &amp; Saved Files</em> tutorial
+  explains the levels and the log file.</p></div>
+  <div data-read><p>Takes effect when you press Apply or OK.</p></div>
+  <div data-typical><p>Info.</p></div>
+</section>
+
+<section data-term id="gen-log-pane" data-where="The Microdrop Console Logs pane">
+  <h3>Log pane buffer and filters</h3>
+  <p>Not in this window: set them in the log pane itself.</p>
+  <div data-what><p>The pane's <span class="ui">Buffer</span> (how many lines it keeps, 10 to 100 000) and its
+  <span class="ui">Debug</span>, <span class="ui">Info</span>, <span class="ui">Warning</span> and
+  <span class="ui">Error</span> filters are remembered between sessions, but you change them in the pane.</p></div>
+  <div data-typical><p>Buffer 10; Debug off; Info, Warning and Error on.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-device">
+<h2>Device Viewer</h2>
+<p class="intro">The device drawing, its zoom, the sidebar, slugs and the volume readout. The <em>Device Viewer</em>
+and <em>Zones</em> tutorials cover the pane itself.</p>
+
+<section data-term id="dv-default-device" data-where="Device Viewer ▸ Main View">
+  <h3>Default Device Layout</h3>
+  <p>The device (.svg) file MicroDrop opens at start.</p>
+  <div data-what><p>A file box with a browse button. MicroDrop also updates it each time you open a device, so it
+  normally holds the last device you used.</p></div>
+  <div data-when><p>Point it at the chip you use most if you switch devices often.</p></div>
+  <div data-read><p>Used at the next start. If the file is missing, MicroDrop goes back to its bundled
+  <code>90_pin_array.svg</code>.</p></div>
+  <div data-typical><p><code>Documents\Sci-Bots\Microdrop\Devices\90_pin_array.svg</code>.</p></div>
+</section>
+
+<section data-term id="dv-fit" data-where="Device Viewer ▸ Main View">
+  <h3>Auto Fit Margin Scale</h3>
+  <p>How much of the view the device fills when MicroDrop fits it to the pane, in per cent.</p>
+  <div data-what><p>95 leaves a thin margin round the device; 100 fills the view edge to edge.</p></div>
+  <div data-typical><p>95 (1 to 100).</p></div>
+</section>
+
+<section data-term id="dv-zoom" data-where="Device Viewer ▸ Main View">
+  <h3>Zoom Sensitivity</h3>
+  <p>How big each zoom step is.</p>
+  <div data-what><p>Each zoom in or out scales the view by 1 + value/100: the default 5 zooms by 5 % per step.</p></div>
+  <div data-when><p>Raise it if zooming feels slow; lower it for finer control.</p></div>
+  <div data-typical><p>5 (1 to 100).</p></div>
+</section>
+
+<section data-term id="dv-channels" data-where="Device Viewer ▸ Main View">
+  <h3>Number of channels</h3>
+  <p>How many electrode channels your instrument has.</p>
+  <div data-what><p>When you type a channel number while editing a device, MicroDrop accepts 0 up to this number minus
+  one, and refuses the rest.</p></div>
+  <div data-when><p>Change it only if your instrument has more or fewer channels than 120.</p></div>
+  <div data-typical><p>120 (1 to 1024).</p></div>
+</section>
+
+<section data-term id="dv-sidebar" data-where="Device Viewer ▸ Sidebar View; also right-click the sidebar ▸ Modify Layout...">
+  <h3>Sidebar View sizes</h3>
+  <p>The width of the Device Viewer's sidebar and the smallest height of three of its sections, in pixels.</p>
+  <div data-what><p><span class="ui">Device Viewer Sidebar Width</span>, and the minimum heights of the opacity
+  table (<span class="ui">Alpha View Min Height</span>), the layers list (<span class="ui">Layers View Min
+  Height</span>) and the zones list (<span class="ui">Zones View Min Height</span>).</p></div>
+  <div data-when><p>When a section is too cramped to use, or the sidebar takes too much room on a small screen.</p></div>
+  <div data-read><p>Changes as soon as you apply. The <span class="ui">Modify Layout...</span> window edits the same four
+  values.</p></div>
+  <div data-typical><p>Width 320; heights 180, 250 and 250 (each 0 to 10000).</p></div>
+</section>
+
+<section data-term id="dv-slug" data-where="Device Viewer ▸ Paths">
+  <h3>Max slug width (electrodes)</h3>
+  <p>The widest slug the route sidebar lets you draw, counting the route electrode itself.</p>
+  <div data-what><p>The route sidebar's two lane sliders together can add at most one less than this.</p></div>
+  <div data-typical><p>5 (1 to 21).</p></div>
+</section>
+
+<section data-term id="dv-gap" data-where="Device Viewer ▸ Volume Readout">
+  <h3>Plate gap (µm)</h3>
+  <p>The distance between the top and bottom plates the droplet fills.</p>
+  <div data-what><p>The live volume readout is the liquid-covered area times this gap, so a wrong gap makes every
+  volume wrong by the same factor.</p></div>
+  <div data-when><p>Set it to your chip's spacer height.</p></div>
+  <div data-typical><p>254 µm (1 to 2000).</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-video">
+<h2>Video Settings</h2>
+<p class="intro">Which camera formats are offered, and how recordings are encoded. The <em>Camera &amp; Alignment</em>
+tutorial covers the camera pane.</p>
+
+<section data-term id="vid-format" data-where="Video Settings ▸ Video Format">
+  <h3>Preferred Video Format</h3>
+  <p>The camera picture format MicroDrop offers first: NV12 or JPEG.</p>
+  <div data-what><p>With <span class="ui">Strictly Use Only Preferred Video Format?</span> ticked, the camera's
+  resolution list shows only resolutions in this format. Unticked, other formats are offered too, the preferred one
+  first.</p></div>
+  <div data-when><p>Untick <em>Strictly</em> if your camera's resolution list is empty or missing the size you
+  need.</p></div>
+  <div data-read><p>The camera pane's resolution list refreshes as soon as you apply.</p></div>
+  <div data-typical><p>NV12 on Windows and macOS, JPEG on Linux and the Pi; Strictly on.</p></div>
+</section>
+
+<section data-term id="vid-highres" data-where="Video Settings ▸ Video Format">
+  <h3>Hide High Resolution Warning</h3>
+  <p>Skip the notice shown when you pick a camera resolution above Full HD (1920x1080).</p>
+  <div data-typical><p>Off.</p></div>
+</section>
+
+<section data-term id="vid-engine" data-where="Video Settings ▸ Video Recording">
+  <h3>Recording Engine</h3>
+  <p>What turns camera frames into a video file.</p>
+  <div data-what><p><span class="ui">Qt MediaRecorder (hardware)</span> uses your computer's own video encoder, with
+  the least work for the processor. <span class="ui">FFmpeg process</span> sends the frames to a separate ffmpeg program:
+  more choice, more processor load. The box below changes to match.</p></div>
+  <div data-read><p>Every recording is set up from these settings when it starts, so a change applies from the next
+  recording.</p></div>
+  <div data-typical><p>Qt MediaRecorder (hardware).</p></div>
+</section>
+
+<section data-term id="vid-qt" data-where="Video Settings ▸ Qt Recording">
+  <h3>Qt recording: format, codec and quality</h3>
+  <p>The file type and how much detail each second of video keeps.</p>
+  <div data-what><p><span class="ui">Video Format</span>: MP4 plays everywhere, but a crash while recording can leave the
+  file unreadable; MKV stays readable after a crash. <span class="ui">Video Codec</span> lists only what this computer
+  can encode. With MKV, the <span class="ui">MKV Quality</span> box sets a quality tier for each of four resolution
+  classes (1080p or 4K, at 30 or 60 fps): pick the class under <span class="ui">Resolution</span>, then its tier. Each
+  tier shows its bitrate and about how many MB one minute takes.</p></div>
+  <div data-read><p>When a recording starts, MicroDrop uses the tier of the class nearest the camera's real resolution
+  and frame rate.</p></div>
+  <div data-typical><p>MP4 with H264; every tier Auto (for 1080p at 30 fps, 4.5 Mbps).</p></div>
+</section>
+
+<section data-term id="vid-ffmpeg" data-where="Video Settings ▸ FFmpeg Recording">
+  <h3>FFmpeg recording settings</h3>
+  <p>Shown only when the engine is <span class="ui">FFmpeg process</span>.</p>
+  <div data-what><p><span class="ui">Container</span> mkv or mp4 (mkv survives a crash). <span class="ui">Video
+  Codec</span> libx264 (fast, plays everywhere) or libx265 (about half the size, more processor).
+  <span class="ui">Preset</span> trades speed for file size. <span class="ui">Quality (CRF)</span>: 0 is lossless, 51 the
+  worst; about 17 looks lossless. <span class="ui">Extra Output Args</span> adds ffmpeg options; leave it empty unless
+  you know ffmpeg.</p></div>
+  <div data-read><p>Frame rate, resolution and pixel format always come from the camera.</p></div>
+  <div data-typical><p>mkv, libx264, ultrafast, CRF 17, no extra arguments.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-protocol">
+<h2>Protocol Settings</h2>
+<p class="intro">Waits around a run, two questions MicroDrop can stop asking, how long a run waits for each column,
+and, with a DropBot, the voltage and frequency ranges. The <em>Protocol Tree</em> tutorial covers running
+protocols.</p>
+
+<section data-term id="pro-realtime-wait" data-where="Protocol Settings ▸ Protocol Settling Times">
+  <h3>Realtime Mode Pre-Protocol (s)</h3>
+  <p>How long a run waits for the hardware to settle after turning realtime mode on, before the first step.</p>
+  <div data-what><p>Part of the single wait, shown as a loading screen, before the first step. Preview runs skip
+  it.</p></div>
+  <div data-typical><p>1.0 s (0.5 to 15).</p></div>
+</section>
+
+<section data-term id="pro-logs-wait" data-where="Protocol Settings ▸ Protocol Settling Times">
+  <h3>Logs Accepted Post-Protocol (s)</h3>
+  <p>How long after a run ends MicroDrop still accepts readings into that run's log.</p>
+  <div data-when><p>Raise it if the last readings of a run are missing from its data.</p></div>
+  <div data-typical><p>3.0 s (0.5 to 15).</p></div>
+</section>
+
+<section data-term id="pro-keep-realtime" data-where="Protocol Settings ▸ Realtime Mode Persistence">
+  <h3>Prompt to keep Realtime Mode? and Keep Realtime Mode active?</h3>
+  <p>What happens to realtime mode when a run ends, if it was already on when the run started.</p>
+  <div data-what><p>If realtime mode is off at the start, the run turns it on and off again at the end. If it is
+  already on: with <span class="ui">Prompt to keep Realtime Mode?</span> ticked, MicroDrop asks whether to keep it; with
+  it unticked, it follows <span class="ui">Keep Realtime Mode active?</span>. Ticking <span class="ui">Don't ask
+  again</span> in that question unticks the prompt and saves your answer here.</p></div>
+  <div data-typical><p>Both on.</p></div>
+</section>
+
+<section data-term id="pro-unused" data-where="Protocol Settings ▸ Dialog Settings">
+  <h3>Suppress unused column hooks information</h3>
+  <p>Hide the <em>Protocol Columns Not Used</em> notice, which lists columns whose start and end actions a run
+  skipped because no step uses them.</p>
+  <div data-what><p>The notice's <span class="ui">Do not show again</span> box ticks this setting; untick it here to see
+  the notice again.</p></div>
+  <div data-typical><p>Off.</p></div>
+</section>
+
+<section data-term id="pro-ack" data-where="Protocol Settings ▸ Column Ack Wait Times (0 = don't wait)">
+  <h3>Column Ack Wait Times</h3>
+  <p>How long a step waits for each column's hardware to confirm it has done its job.</p>
+  <div data-what><p>One row per column that waits, with its <span class="ui">Wait Time (s)</span>. 0 means do not wait;
+  ∞ (wait forever) waits as long as it takes. The list follows the columns loaded now, so plugin columns appear when
+  their plugin is on.</p></div>
+  <div data-when><p>Raise a time when a slow device makes runs stop with a time-out; lower it to find a stuck device
+  sooner.</p></div>
+  <div data-read>
+  <table class="small">
+    <thead><tr><th>Column (as listed)</th><th class="num">Default (s)</th></tr></thead>
+    <tbody>
+      <tr><td>Electrodes / Routes, Voltage (V), Frequency (Hz)</td><td class="num">5</td></tr>
+      <tr><td>Check Droplets, Zone Target</td><td class="num">12</td></tr>
+      <tr><td>Capture (camera)</td><td class="num">15</td></tr>
+      <tr><td>Set Magnet (Portable DropBot)</td><td class="num">40</td></tr>
+      <tr><td>Fluorescence Capture, PMT Capture (Portable DropBot)</td><td class="num">60</td></tr>
+      <tr><td>Set Temp (Portable DropBot)</td><td class="num">120</td></tr>
+    </tbody>
+  </table>
+  <p>Plugin columns bring their own defaults. Revert puts every row back to its column's default.</p></div>
+</section>
+
+<section data-term id="pro-setters" data-where="Protocol Settings ▸ Protocol Setters Config (DropBot)">
+  <h3>Protocol Setters Config: voltage and frequency ranges</h3>
+  <p>The lowest and highest voltage and frequency the spin boxes let you type, and the values they start with.</p>
+  <div data-what><p>These are <em>screen</em> limits: they bound the voltage and frequency boxes in the DropBot status
+  pane and in the protocol. They do not change what the DropBot accepts; its own limits, shown under
+  <a href="#db-hardware">Hardware Config</a>, still apply. <span class="ui">Default Voltage (V)</span> and
+  <span class="ui">Default Frequency (Hz)</span> are what the DropBot status pane starts with; they must lie between the
+  min and max.</p></div>
+  <div data-read><p>New min and max apply to open boxes at once. The defaults are read at the next start.</p></div>
+  <div data-typical><p>30 to 140 V, 100 to 10000 Hz; defaults 100 V and 10000 Hz.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-dropbot">
+<h2>Dropbot Settings and DropBot Status &amp; Controls</h2>
+<p class="intro">Two tabs that appear with a DropBot (or the mock DropBot). The <em>Dropbot Status &amp; Controls</em>
+tutorial covers the status pane.</p>
+
+<section data-term id="db-interval" data-where="Dropbot Settings">
+  <h3>Capacitance Update Interval (ms)</h3>
+  <p>How often the DropBot reports capacitance.</p>
+  <div data-what><p>Lower numbers mean more readings per second and more traffic.</p></div>
+  <div data-read><p>Sent to the DropBot when you press Apply or OK. Change it while the DropBot is connected.</p></div>
+  <div data-typical><p>100 ms.</p></div>
+</section>
+
+<section data-term id="db-drop" data-where="Dropbot Settings">
+  <h3>Drop Detect Capacitance (pF)</h3>
+  <p>The capacitance above which an electrode counts as holding a droplet.</p>
+  <div data-when><p>Raise it if dry electrodes are reported as wet; lower it if small droplets are missed.</p></div>
+  <div data-read><p>Sent to the DropBot when you press Apply or OK, and used by the next droplet check. Change it while
+  the DropBot is connected.</p></div>
+  <div data-typical><p>10 pF.</p></div>
+</section>
+
+<section data-term id="db-hardware" data-where="Dropbot Settings ▸ Hardware Config">
+  <h3>Hardware Config</h3>
+  <p>Four read-only values from the instrument.</p>
+  <div data-what><p><span class="ui">Max Voltage (V)</span> and <span class="ui">Max Frequency (Hz)</span> are the limits
+  the connected DropBot reports; they read <em>inf</em> until a DropBot has connected. <span class="ui">Last Applied
+  Voltage (V)</span> and <span class="ui">Last Applied Frequency (Hz)</span> are the values last sent to it, kept
+  between sessions.</p></div>
+  <div data-typical><p>Last applied 100 V and 10000 Hz until you change them.</p></div>
+</section>
+
+<section data-term id="st-dielectric" data-where="DropBot Status &amp; Controls tab">
+  <h3>Default Dielectric Material and Show Dielectric Info</h3>
+  <p>The dielectric the status pane assumes at start, and whether its dielectric readout is shown.</p>
+  <div data-what><p>The material is used to work out the dielectric thickness from the measured capacitance. Picking a
+  material in the status pane also changes this setting, so it normally holds your last choice. Right-clicking the
+  status pane offers the same <span class="ui">Show Dielectric Info</span> switch.</p></div>
+  <div data-read><p>The material is read at the next start; Show Dielectric Info applies at once.</p></div>
+  <div data-typical><p>Pick a dielectric... (none); Show Dielectric Info on.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-image">
+<h2>Image Viewer</h2>
+<p class="intro">Deleting experiments, and AI-assisted region detection. The <em>Image Analysis</em> tutorial covers the
+viewer.</p>
+
+<section data-term id="img-delete" data-where="Image Viewer ▸ Experiments">
+  <h3>Ask for confirmation before deleting an experiment folder</h3>
+  <p>Ask before the image viewer's delete button removes an experiment folder.</p>
+  <div data-what><p>The warning's "don't ask again" box unticks this. Tick it here to be asked again.</p></div>
+  <div data-typical><p>On.</p></div>
+</section>
+
+<section data-term id="img-ai-model" data-where="Image Viewer ▸ AI ROI Detection">
+  <h3>AI ROI detection model</h3>
+  <p>Which AI model finds regions of interest for you, from fast to accurate.</p>
+  <div data-what><p>EfficientSam, Sam and Sam2, each in speed, balanced or accuracy versions. A model not yet on this
+  computer is downloaded when you apply; cancel the download and the previous model stays.</p></div>
+  <div data-typical><p>EfficientSam (accuracy).</p></div>
+</section>
+
+<section data-term id="img-gpu" data-where="Image Viewer ▸ AI ROI Detection">
+  <h3>Run the SAM encoder on the GPU (DirectML)</h3>
+  <p>Use the graphics card for AI detection when it can.</p>
+  <div data-what><p>About three times faster on Windows with the GPU build installed (Help ▸ Install AI ROI Support).
+  Without it MicroDrop says so and keeps using the processor.</p></div>
+  <div data-typical><p>On.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-ssh">
+<h2>SSH / Remote Backend</h2>
+<p class="intro">Connection details for an instrument on the network.</p>
+
+<section data-term id="ssh-fields" data-where="SSH / Remote Backend ▸ Remote Backend">
+  <h3>Remote Backend fields</h3>
+  <p>Host, SSH Port, Username, SSH Key Name, Remote Experiments Path and Device ID.</p>
+  <div data-what><p>The same values the <span class="ui">Tools ▸ Remote Controls</span> dialogs (SSH Key Portal, Sync
+  Remote Experiments) use; typing in those dialogs changes them here too. The password is never saved.
+  <span class="ui">Device ID</span> follows the host (dots become _) until you give it a name of your own.</p></div>
+  <div data-read><p>The dialogs read them each time they open.</p></div>
+  <div data-typical><p>Host, port and user from MicroDrop's <code>.env</code> file if it has them (port 22 otherwise); key
+  <code>id_rsa_microdrop</code>; path <code>~/Documents/Sci-Bots/Microdrop/Experiments/</code>.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-portable">
+<h2>Portable DropBot Settings</h2>
+<p class="intro">Only with the Portable DropBot. Changes reach the instrument when you apply, except the magnet
+position, which needs its own buttons.</p>
+
+<section data-term id="pd-fan" data-where="Portable DropBot Settings">
+  <h3>Fan toggle controls</h3>
+  <p>Which fan the status pane's fan switch turns on and off.</p>
+  <div data-what><p><span class="ui">MCU board fan</span> or <span class="ui">Motor board fans</span>.</p></div>
+  <div data-typical><p>MCU board fan.</p></div>
+</section>
+
+<section data-term id="pd-chip" data-where="Portable DropBot Settings">
+  <h3>Chip detected when</h3>
+  <p>How many pogo contacts must touch the chip before MicroDrop says a chip is in.</p>
+  <div data-what><p><span class="ui">Both pogo pads touching the chip</span> or <span class="ui">At least one pogo pad
+  touching the chip</span>.</p></div>
+  <div data-when><p>Use "at least one" if a seated chip keeps showing as absent.</p></div>
+  <div data-typical><p>Both pogo pads.</p></div>
+</section>
+
+<section data-term id="pd-threshold" data-where="Portable DropBot Settings">
+  <h3>Droplet detection threshold (pF)</h3>
+  <p>The capacitance an electrode must read to count as holding liquid.</p>
+  <div data-what><p>A starting value. For each channel, thresholds saved in the vendor app and a fresh chip baseline
+  take its place, and the active chip's electrode sizes scale it.</p></div>
+  <div data-typical><p>5.0 pF (0.1 to 1000).</p></div>
+</section>
+
+<section data-term id="pd-magnet" data-where="Portable DropBot Settings ▸ Magnet">
+  <h3>Engage position (mm)</h3>
+  <p>The height the magnet moves to when engaged.</p>
+  <div data-what><p><span class="ui">Read</span> fills the field from the board (apply to keep it).
+  <span class="ui">Write</span> sends the value on screen to the board's memory until it reboots.
+  <span class="ui">Preset to flash</span> asks first, then makes the last written value survive reboots. The line below
+  the buttons reports each step.</p></div>
+  <div data-read><p>Apply only remembers the number in MicroDrop; it does not send it to the board. Keep it below the
+  magnet's upper travel limit.</p></div>
+  <div data-typical><p>14.000 mm.</p></div>
+</section>
+
+<section data-term id="pd-presets" data-where="Portable DropBot Settings ▸ Presets">
+  <h3>Gain, temperature and move presets</h3>
+  <p>The quick-pick buttons beside the PMT gain, heater target and motor move fields.</p>
+  <div data-what><p>Comma-separated numbers, one button each, up to 8. Gains 0 to 255; temperatures −50 to 150 °C;
+  moves −1000 to 1000 mm (negative moves back). Values that do not read as numbers are skipped.</p></div>
+  <div data-typical><p>Gains 64, 128, 192, 255; temperatures 25, 37, 55, 95; moves −10, −1, −0.1, 0.1, 1, 10.</p></div>
+</section>
+
+<section data-term id="pd-scale" data-where="Tools ▸ Display Scale... (Portable DropBot)">
+  <h3>Display Scale</h3>
+  <p>Not in Preferences: the size of everything on the instrument's screen.</p>
+  <div data-what><p>A slider from 50 to 200 % of the screen's normal scale. Below 100 % everything shrinks and more panes
+  fit. <span class="ui">Apply</span> uses it now, <span class="ui">Reset to 100%</span> goes back. MicroDrop applies it
+  again at every start.</p></div>
+  <div data-typical><p>100 %.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-advanced">
+<h2>Advanced Mode</h2>
+<p class="intro">A switch in the Edit menu, and the tab it reveals.</p>
+
+<section data-term id="adv-mode" data-where="Edit ▸ Advanced Mode">
+  <h3>Advanced Mode</h3>
+  <p>A tick in the Edit menu that unlocks settings and controls meant for experienced users.</p>
+  <div data-what><p>While it is on: Preferences shows the <span class="ui">Advanced Mode</span> tab; during a run you can
+  still edit values in the protocol tree (adding, deleting and pasting steps stay locked); on the Portable DropBot, the
+  advanced controls and the port picker appear. Turning it on writes <em>Microdrop Running in Advanced Mode!</em> to the
+  log; turning it off writes <em>Microdrop Advanced Mode is Off.</em></p></div>
+  <div data-when><p>Only when you need one of those. Keep it off for routine work.</p></div>
+  <div data-read><p>It is not saved in <code>preferences.ini</code>: it lives in the message server's memory, like the
+  other live values described in the <em>Help, Logs &amp; Saved Files</em> tutorial. Check the tick after a
+  restart.</p></div>
+  <div data-typical><p>Off.</p></div>
+</section>
+
+<section data-term id="adv-disables" data-where="Advanced Mode ▸ Device Viewer">
+  <h3>Allow hardware disables</h3>
+  <p>Show channels the hardware has switched off as greyed out and not clickable.</p>
+  <div data-what><p>The hardware disables channels for safety, for example after a short. Ticked, the device viewer
+  shows this. Unticked, every channel looks active whatever the hardware reports.</p></div>
+  <div data-when><p>Leave it on. Turning it off hides safety feedback.</p></div>
+  <div data-typical><p>On.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="elsewhere">
+<h2>Remembered for you, changed elsewhere</h2>
+<p class="intro">MicroDrop also saves choices you make outside this window. They are in <code>preferences.ini</code>
+too, but you change them where they live.</p>
+<div class="table-wrap">
+<table class="small">
+  <thead><tr><th>What</th><th>Where you change it</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td>AutoSave on or off</td><td>The AutoSave glyph in the status bar, or the AutoSave box above the protocol tree</td><td>On</td></tr>
+    <tr><td>Auto-commit (route edits go to the selected step)</td><td>The toggle in the Device Viewer's route sidebar</td><td>On</td></tr>
+    <tr><td>Zone types: names and colours</td><td>The Device Viewer's zones section (<em>Zones</em> tutorial)</td><td>The built-in zone types</td></tr>
+    <tr><td>Layer opacity and visibility</td><td>The Device Viewer's opacity table</td><td>Shown; most at 100 %</td></tr>
+    <tr><td>The default device</td><td>Opening a device file</td><td>The bundled 90-pin array</td></tr>
+    <tr><td>Camera and resolution</td><td>The camera pane</td><td>None remembered</td></tr>
+    <tr><td>Camera-alignment marker style</td><td>The alignment sidebar (<em>Camera &amp; Alignment</em> tutorial)</td><td>Snap radius 100 px</td></tr>
+    <tr><td>Recording Viewer zoom and overlays</td><td>The Recording Viewer pane</td><td>Fit to view; overlays off</td></tr>
+    <tr><td>Protocol tree columns: shown or hidden, and their order</td><td>Right-click a column header; drag a header</td><td>Each column's own default</td></tr>
+    <tr><td>Import Legacy Protocol paths</td><td>The Import Legacy Protocol dialog</td><td>Empty</td></tr>
+    <tr><td>Log pane buffer and filters</td><td>The Microdrop Console Logs pane</td><td>Buffer 10; Debug off</td></tr>
+    <tr><td>Dielectric material, dielectric readout</td><td>The DropBot status pane and its right-click menu</td><td>None; shown</td></tr>
+    <tr><td>Image viewer display window, scale calibration, fit equations, perspective outline</td><td>The image viewer and its windows</td><td>Auto contrast on</td></tr>
+    <tr><td>"Do not show again" answers</td><td>The notices themselves; undo them with the settings in this window</td><td>Every notice shown</td></tr>
+    <tr><td>Display Scale (Portable DropBot)</td><td>Tools ▸ Display Scale...</td><td>100 %</td></tr>
+    <tr><td>Which plugin groups are on</td><td>Tools ▸ Manage Plugins… (<em>Plugin Management</em> tutorial)</td><td>Each plugin's default</td></tr>
+    <tr><td>Gamepad buttons</td><td>The gamepad plugin, which keeps them in its own section since it moved out of the Device Viewer</td><td>The plugin's</td></tr>
+  </tbody>
+</table>
+</div>
+<p>The window layout and layout presets are not in <code>preferences.ini</code>; the <em>Help, Logs &amp; Saved
+Files</em> tutorial says where they are.</p>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>Apply saves one tab.</strong> Changes on the other tabs wait for their own Apply or for OK. Cancel
+    throws them away.</li>
+    <li><strong>Revert is a reset, not an undo.</strong> It resets everything the tab stores, including hidden values
+    such as zone types or AutoSave, saves at once and does not ask. Cancel does not bring the old values back.</li>
+    <li><strong>Some changes wait.</strong> Always Use Default Layout, Default Device Layout, the default voltage and
+    frequency and the default dielectric are read at the next start; run settings at the next run.</li>
+    <li><strong>DropBot settings need the DropBot.</strong> Capacitance Update Interval and Drop Detect Capacitance are
+    sent to the instrument; change them while it is connected.</li>
+    <li><strong>Screen limits are not hardware limits.</strong> Protocol Setters Config bounds what you can type; the
+    DropBot's own limits still apply.</li>
+    <li><strong>Advanced Mode can change what is safe.</strong> Its tab can hide hardware safety feedback, and it lets
+    you edit a running protocol. Keep it off for routine work.</li>
+    <li><strong>Settings are saved when MicroDrop closes normally.</strong> Do not edit <code>preferences.ini</code>
+    while MicroDrop runs (see the <em>Help, Logs &amp; Saved Files</em> tutorial).</li>
+    <li><strong>Tabs follow your set-up.</strong> A tab you remember from another instrument or plugin may simply not
+    be loaded here.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Preference</dt><dd>A setting MicroDrop remembers between sessions.</dd>
+  <dt>Tab</dt><dd>One page of the Preferences window, usually one part of MicroDrop.</dd>
+  <dt>Box</dt><dd>A titled group of settings on a tab.</dd>
+  <dt>Default</dt><dd>The value a setting has on a fresh install, and after Revert.</dd>
+  <dt>preferences.ini</dt><dd>The text file in MicroDrop's settings folder that holds your settings.</dd>
+  <dt>Advanced Mode</dt><dd>A switch in the Edit menu for settings and controls meant for experienced users.</dd>
+  <dt>Realtime mode</dt><dd>The state in which electrode changes go to the hardware straight away.</dd>
+  <dt>Ack</dt><dd>Short for acknowledgement: the hardware's reply that it has done what a step asked.</dd>
+  <dt>Codec</dt><dd>The method used to compress video into a file.</dd>
+  <dt>Slug</dt><dd>A droplet wider than one electrode, moved as one along a route.</dd>
+  <dt>Plugin</dt><dd>An add-on that gives MicroDrop new panes, columns, tabs or hardware support.</dd>
+</dl>
+</section>
+
+<script>
+Tutorial.demo("tabmap", function (figure, T) {
+  var TABS = [
+    { name: "Microdrop General", boxes: ["Appearance", "Application Startup", "Canvas Background", "Dialog Settings", "Logger Settings"],
+      tut: "Help, Logs & Saved Files (log level, layout)", here: "#part-general" },
+    { name: "Device Viewer", boxes: ["Main View", "Sidebar View", "Paths", "Volume Readout"],
+      tut: "Device Viewer; Zones", here: "#part-device" },
+    { name: "Video Settings", boxes: ["Video Format", "Video Recording (Qt Recording or FFmpeg Recording)"],
+      tut: "Camera & Alignment", here: "#part-video" },
+    { name: "Protocol Settings", boxes: ["Protocol Settling Times", "Realtime Mode Persistence", "Dialog Settings", "Column Ack Wait Times"],
+      dropbotBoxes: ["Protocol Setters Config"], tut: "Protocol Tree", here: "#part-protocol" },
+    { name: "Image Viewer", boxes: ["Experiments", "AI ROI Detection"], tut: "Image Analysis", here: "#part-image" },
+    { name: "SSH / Remote Backend", boxes: ["Remote Backend"], tut: "None yet", here: "#part-ssh" },
+    { name: "Dropbot Settings", only: "dropbot", boxes: ["Capacitance and drop detection (no title)", "Hardware Config"],
+      tut: "Dropbot Status & Controls", here: "#part-dropbot" },
+    { name: "DropBot Status & Controls", only: "dropbot", boxes: ["Dielectric (no title)"],
+      tut: "Dropbot Status & Controls", here: "#st-dielectric" },
+    { name: "Portable DropBot Settings", only: "portable", boxes: ["Fan, chip and threshold (no title)", "Magnet", "Presets"],
+      tut: "None yet", here: "#part-portable" },
+    { name: "Advanced Mode", only: "advanced", boxes: ["Device Viewer"], tut: "This page", here: "#part-advanced" }
+  ];
+  var profile = figure.querySelector("[data-profile]");
+  var adv = figure.querySelector("[data-adv]");
+  var bar = figure.querySelector("[data-tabs]");
+  var body = figure.querySelector("[data-body]");
+  var selected = TABS[0].name;
+
+  function visible() {
+    return TABS.filter(function (tab) {
+      if (tab.only === "advanced") { return adv.checked; }
+      return !tab.only || tab.only === profile.value;
+    });
+  }
+
+  function show(tab) {
+    var boxes = tab.boxes.slice();
+    var dl = document.createElement("dl");
+    var rows = [["Boxes", null], ["Tutorial", tab.tut + (tab.tut === "None yet" || tab.tut === "This page" ? "" : " (Help ▸ Tutorials)")], ["On this page", null]];
+
+    if (tab.dropbotBoxes && profile.value === "dropbot") { boxes = boxes.concat(tab.dropbotBoxes); }
+    T.clear(body);
+    dl.className = "tabinfo";
+    rows.forEach(function (row) {
+      var dt = document.createElement("dt");
+      var dd = document.createElement("dd");
+
+      dt.textContent = row[0];
+      if (row[0] === "Boxes") {
+        boxes.forEach(function (b) {
+          var div = document.createElement("div");
+          div.className = "groupbox";
+          div.textContent = b;
+          dd.appendChild(div);
+        });
+      } else if (row[0] === "On this page") {
+        var a = document.createElement("a");
+        a.href = tab.here;
+        a.textContent = "Settings of " + tab.name;
+        dd.appendChild(a);
+      } else {
+        dd.textContent = row[1];
+      }
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    });
+    body.appendChild(dl);
+  }
+
+  function draw() {
+    var tabs = visible();
+
+    if (!tabs.some(function (t) { return t.name === selected; })) { selected = tabs[0].name; }
+    T.clear(bar);
+    tabs.forEach(function (tab) {
+      var b = document.createElement("button");
+
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", tab.name === selected ? "true" : "false");
+      b.textContent = tab.name;
+      b.addEventListener("click", function () { selected = tab.name; draw(); });
+      bar.appendChild(b);
+    });
+    show(tabs.filter(function (t) { return t.name === selected; })[0]);
+  }
+
+  profile.addEventListener("change", draw);
+  adv.addEventListener("change", draw);
+  draw();
+});
+
+Tutorial.demo("buttons", function (figure, T) {
+  var DEFAULTS = { general: 100, device: 5 };
+  var NAMES = { general: "Opacity", device: "Zoom Sensitivity" };
+  var saved = { general: 100, device: 5 };
+  var screen = { general: 100, device: 5 };
+  var current = "general";
+  var open = figure.querySelector("[data-open]");
+  var closed = figure.querySelector("[data-closed]");
+  var inuse = figure.querySelector("[data-inuse]");
+  var log = figure.querySelector("[data-log]");
+  var fields = {};
+
+  figure.querySelectorAll("[data-field]").forEach(function (input) {
+    var key = input.getAttribute("data-field");
+
+    fields[key] = input;
+    input.addEventListener("input", function () {
+      var v = Number(input.value);
+      if (!isNaN(v)) { screen[key] = v; }
+      draw();
+    });
+  });
+
+  function pending() {
+    return Object.keys(screen).filter(function (k) { return screen[k] !== saved[k]; });
+  }
+
+  function draw() {
+    figure.querySelectorAll("[data-tab]").forEach(function (b) {
+      var on = b.getAttribute("data-tab") === current;
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    figure.querySelectorAll("[data-panel]").forEach(function (p) {
+      p.hidden = p.getAttribute("data-panel") !== current;
+    });
+    Object.keys(fields).forEach(function (k) {
+      if (document.activeElement !== fields[k]) { fields[k].value = screen[k]; }
+    });
+    inuse.textContent = "In use: Opacity " + saved.general + " %, Zoom Sensitivity " + saved.device + "." +
+      (pending().length && !open.hidden ? " Not applied yet: " + pending().map(function (k) { return NAMES[k]; }).join(", ") + "." : "");
+  }
+
+  function close(text) {
+    open.hidden = true;
+    closed.hidden = false;
+    log.textContent = text;
+    draw();
+  }
+
+  figure.querySelectorAll("[data-tab]").forEach(function (b) {
+    b.addEventListener("click", function () { current = b.getAttribute("data-tab"); draw(); });
+  });
+
+  figure.querySelector('[data-act="apply"]').addEventListener("click", function () {
+    saved[current] = screen[current];
+    var others = pending();
+    log.textContent = "Apply saved the " + (current === "general" ? "Microdrop General" : "Device Viewer") + " tab only." +
+      (others.length ? " " + NAMES[others[0]] + " on the other tab is still not applied." : "");
+    draw();
+  });
+
+  figure.querySelector('[data-act="revert"]').addEventListener("click", function () {
+    saved[current] = DEFAULTS[current];
+    screen[current] = DEFAULTS[current];
+    log.textContent = "Revert put this tab back to its default and saved it at once. Cancel will not undo that.";
+    draw();
+  });
+
+  figure.querySelector('[data-act="ok"]').addEventListener("click", function () {
+    Object.keys(screen).forEach(function (k) { saved[k] = screen[k]; });
+    close("OK saved every tab and closed the window.");
+  });
+
+  figure.querySelector('[data-act="cancel"]').addEventListener("click", function () {
+    var lost = pending();
+    close(lost.length ? "Cancel threw away: " + lost.map(function (k) { return NAMES[k]; }).join(", ") + ". Applied changes stay." :
+      "Cancel closed the window. Nothing was waiting to be applied.");
+  });
+
+  figure.querySelector('[data-act="open"]').addEventListener("click", function () {
+    Object.keys(saved).forEach(function (k) { screen[k] = saved[k]; });
+    open.hidden = false;
+    closed.hidden = true;
+    log.textContent = "The window opens showing the values in use.";
+    draw();
+  });
+
+  draw();
+});
+
+Tutorial.demo("canvas", function (figure, T) {
+  var scheme = figure.querySelector("[data-scheme]");
+  var custom = figure.querySelector("[data-custom]");
+  var color = figure.querySelector("[data-color]");
+  var opacity = figure.querySelector("[data-opacity]");
+  var fill = figure.querySelector("[data-fill]");
+  var css = figure.querySelector("[data-css]");
+
+  function rgb(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function update() {
+    var pct = Math.max(0, Math.min(100, Number(opacity.value)));
+    var alpha = Math.round(pct * 255 / 100);
+    var c = custom.checked ? rgb(color.value) : (scheme.value === "dark" ? [0, 0, 0] : [255, 255, 255]);
+    var rule = "background-color: rgba(" + c[0] + ", " + c[1] + ", " + c[2] + ", " + alpha + ");";
+
+    color.disabled = !custom.checked;
+    fill.style.backgroundColor = "rgba(" + c[0] + ", " + c[1] + ", " + c[2] + ", " + (alpha / 255) + ")";
+    css.textContent = rule;
+  }
+
+  T.bind(opacity, update, function (v) { return v; });
+  [scheme, custom, color].forEach(function (el) {
+    el.addEventListener("input", update);
+    el.addEventListener("change", update);
+  });
+  update();
+});
+
+Tutorial.demo("finder", function (figure) {
+  var query = figure.querySelector("[data-q]");
+  var tab = figure.querySelector("[data-tabsel]");
+  var status = figure.querySelector(".finder-status");
+  var rows = Array.prototype.slice.call(figure.querySelectorAll("table.finder tbody tr"));
+
+  rows.forEach(function (row) { row._text = row.textContent.toLowerCase(); });
+
+  function apply() {
+    var words = query.value.toLowerCase().split(/\s+/).filter(Boolean);
+    var shown = 0;
+
+    rows.forEach(function (row) {
+      var ok = !tab.value || row.getAttribute("data-tab") === tab.value;
+      ok = ok && words.every(function (w) { return row._text.indexOf(w) >= 0; });
+      row.classList.toggle("off", !ok);
+      if (ok) { shown++; }
+    });
+    status.textContent = shown + " of " + rows.length + " settings.";
+  }
+
+  figure.querySelector("[data-reset]").addEventListener("click", function () {
+    query.value = "";
+    tab.value = "";
+    apply();
+  });
+  query.addEventListener("input", apply);
+  tab.addEventListener("change", apply);
+  apply();
+});
+</script>

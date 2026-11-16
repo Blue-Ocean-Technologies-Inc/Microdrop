@@ -23,13 +23,14 @@ from traits.api import Instance, List
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
-from user_help_plugin.consts import TUTORIALS, TutorialEntry
+from user_help_plugin.consts import TUTORIAL_ORDER_ANALYSIS, TUTORIALS, TutorialEntry
 
 # Local imports.
 from .consts import (
     ACTOR_TOPIC_DICT,
     ANALYSIS_HELP_HTML_PATH,
     IMAGE_FILTERS,
+    IMAGE_VIEWER_TUTORIAL_HTML_PATH,
     PKG,
     PKG_name,
 )
@@ -58,7 +59,16 @@ class ImageViewerPlugin(Plugin):
 
     def _tutorials_default(self):
         return [
-            TutorialEntry(title="Image Analysis Tutorial", path=ANALYSIS_HELP_HTML_PATH)
+            TutorialEntry(
+                title="Image Viewer Tutorial",
+                path=IMAGE_VIEWER_TUTORIAL_HTML_PATH,
+                order=TUTORIAL_ORDER_ANALYSIS,
+            ),
+            TutorialEntry(
+                title="Image Analysis Tutorial",
+                path=ANALYSIS_HELP_HTML_PATH,
+                order=TUTORIAL_ORDER_ANALYSIS + 10,
+            ),
         ]
 
     def _contributed_task_extensions_default(self):

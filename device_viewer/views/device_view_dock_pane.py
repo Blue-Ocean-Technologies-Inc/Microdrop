@@ -109,6 +109,7 @@ from ..services.electrode_interaction_service import (
 from ..services.electrode_stepping_service import ElectrodeSteppingService
 from ..services.keyboard_shortcut_service import KeyboardShortcutService
 from ..services.svg_persistence_service import SvgPersistenceService
+from ..utils.alignment_geometry import device_render_rect
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
 from .electrode_view.electrode_layer import ElectrodeLayer
@@ -335,8 +336,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         # A small margin so edge outlines don't clip at the image
         # border; the padded rect is also the returned scene bridge,
         # so the pixel <-> scene mapping stays exact.
-        margin = 0.02 * max(rect.width(), rect.height())
-        rect = rect.adjusted(-margin, -margin, margin, margin)
+        rect = QRectF(
+            *device_render_rect([rect.x(), rect.y(), rect.width(), rect.height()])
+        )
         height_px = max(int(width_px * rect.height() / rect.width()), 1)
 
         image = QImage(width_px, height_px, QImage.Format_ARGB32_Premultiplied)
@@ -347,6 +349,13 @@ class DeviceViewerDockPane(TraitsDockPane):
         painter.end()
 
         return image, rect
+
+    def _on_camera_frame_size_changed(self, size):
+        """The feed's native frame size changed (a camera or resolution
+        switch): the alignment presets' picture-shape checks follow it."""
+        self.camera_alignment_controller.live_frame_size = (
+            None if size.isEmpty() else [float(size.width()), float(size.height())]
+        )
 
     def _close_connections_editor(self):
         if self._connections_editor_ui is not None:
@@ -757,6 +766,10 @@ class DeviceViewerDockPane(TraitsDockPane):
         # Publish geometry after SVG is fully loaded and channel mapping is established.
         self.publish_controller._publish_geometry_if_changed()
 
+        # The video item now spans the new device's scene: restore the
+        # camera alignment saved for this camera on this device.
+        self.camera_alignment_controller.device_loaded()
+
     def _set_device_view_from_svg(self, svg_file=None):
         if svg_file is None:
             svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE
@@ -845,6 +858,15 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.device_view.display_state_signal.connect(self.apply_message_model)
 
         self.sidebar_sections = self._build_sidebar_sections()
+
+        # The camera panel now exists: the alignment controller takes charge
+        # of the live alignment per camera, and follows the feed's size.
+        self.video_item.nativeSizeChanged.connect(self._on_camera_frame_size_changed)
+        self._on_camera_frame_size_changed(self.video_item.nativeSize())
+        self.camera_alignment_controller.camera_model = (
+            self.camera_control_widget.camera_model
+        )
+
         self.scroll_area = build_sidebar(self.sidebar_sections)
         self.scroll_content = self.scroll_area.widget()
         self._set_device_view_layout_width()

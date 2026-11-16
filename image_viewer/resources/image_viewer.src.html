@@ -1,0 +1,998 @@
+<!--
+  (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
+  All rights reserved.
+
+  This software is provided without warranty under the terms of the AGPL-3.0
+  license included in LICENSE and may be redistributed only under the
+  conditions described in the aforementioned license. The license is also
+  available online at https://www.gnu.org/licenses/agpl-3.0.txt
+
+  Thanks for using Microdrop open source!
+-->
+<title>Image Viewer Tutorial</title>
+<nav data-contents></nav>
+
+<style>
+kbd { white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+table.small td { overflow-wrap: anywhere; }
+.iv-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; align-items: start; }
+@media (max-width: 680px) { .iv-grid { grid-template-columns: minmax(0, 1fr); } }
+.iv-form { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 8px; align-items: center; font-size: .9rem; }
+.iv-form select { min-width: 0; width: 100%; font: inherit; padding: 3px 4px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); }
+.iv-form .lbl { color: var(--muted); }
+.iv-form .row-hidden { display: none; }
+.iv-nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 0; }
+.iv-nav button { font: inherit; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2);
+  color: var(--ink); cursor: pointer; }
+.iv-nav .pos { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+ul.iv-tree { list-style: none; margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+  font-family: Consolas, "Courier New", monospace; font-size: .8rem; line-height: 1.5; overflow-x: auto; }
+ul.iv-tree li { white-space: nowrap; }
+ul.iv-tree li.dir { color: var(--muted); }
+ul.iv-tree li.listed { color: var(--ink); }
+ul.iv-tree li.off { color: var(--muted); opacity: .55; }
+ul.iv-tree li.shown { background: var(--accent-soft); color: var(--ink); font-weight: 700; border-radius: 4px; }
+ul.iv-tree .tag { display: inline-block; font-size: .72rem; padding: 0 5px; margin-left: 6px; border-radius: 4px; border: 1px solid var(--line);
+  font-family: inherit; font-weight: 400; color: var(--muted); }
+ul.iv-tree .tag.b16 { border-color: var(--accent); color: var(--accent); }
+.iv-canvas-wrap { position: relative; max-width: 520px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #000000; }
+.iv-canvas-wrap canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; cursor: crosshair; }
+.iv-hud { position: absolute; right: 8px; bottom: 8px; padding: 2px 6px; background: rgba(0, 0, 0, .45); color: #ffffff;
+  font: 12px Consolas, "Courier New", monospace; border-radius: 2px; pointer-events: none; }
+.iv-hud:empty { display: none; }
+.controls input[type="range"]:disabled { opacity: .45; }
+</style>
+
+<header data-hero>
+  <h1>Image Viewer</h1>
+  <p>The Image Viewer shows the pictures an experiment has captured, including the 16-bit raw frames of fluorescence
+  captures that most picture programs show as almost black. It finds the images on its own, keeps up with new ones as they
+  are saved, and lets you step through a series, set the contrast, zoom in and read the value of any pixel.</p>
+  <p>This tutorial covers <strong>finding and looking at images</strong>. Measuring them (regions of interest, the
+  intensity plot, drift, AI detection, perspective correction) is the subject of the <strong>Image Analysis
+  Tutorial</strong>, the next entry under <span class="ui">Help ▸ Tutorials</span>. The pictures on this page are
+  sketches and made-up data, not screenshots.</p>
+</header>
+
+<!-- ============================================================ -->
+<section data-part id="overview">
+<h2>Overview</h2>
+<p class="intro">The Image Viewer is a pane of the main window, like the Device Viewer and the protocol tree. It is not part of
+the first-launch layout, so you open it once from the <span class="ui">View</span> menu.</p>
+<ul class="uses">
+  <li><strong>What it reads:</strong> image files on disk. By default it follows the <em>current experiment's</em>
+  <code>captures</code> folder, where MicroDrop saves its captures, and opens on the newest image.</li>
+  <li><strong>What it never does:</strong> change an image file. Contrast and zoom are display settings only.</li>
+  <li><strong>The pane title</strong> names what you are looking at: <code>Image Viewer - &lt;experiment&gt; - &lt;file
+  name&gt; - 2048x1536 16-bit gray</code> (size, bit depth and gray or RGB of the shown image). While a new image loads it
+  reads <code>Loading &lt;file name&gt;…</code>.</li>
+</ul>
+
+<figure class="demo" aria-label="Schematic of the Image Viewer pane layout">
+<svg viewBox="0 0 640 300" role="img" aria-label="Schematic: a slim bar on the left edge, the selector sidebar with six folding sections, the icon row above the image, the image with the pixel readout in its bottom-right corner, the Advanced block below the image, and the ROI toolbar down the right edge">
+  <rect x="0.5" y="0.5" width="639" height="299" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+  <rect x="6" y="8" width="10" height="284" rx="3" fill="var(--surface-2)" stroke="var(--line)"/>
+  <text x="11" y="154" text-anchor="middle" style="font-size:11px">‹</text>
+  <rect x="22" y="8" width="168" height="284" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+  <text x="32" y="28" style="fill:var(--ink);font-weight:700">Sidebar</text>
+  <text x="32" y="52">› Experiments</text>
+  <text x="32" y="76" style="fill:var(--ink)">⌄ Image Groups</text>
+  <text x="44" y="94" style="font-size:11px">Image Group · Session</text>
+  <text x="32" y="120" style="fill:var(--ink)">⌄ Images</text>
+  <text x="44" y="138" style="font-size:11px">(Filter) · Image · Seek</text>
+  <text x="32" y="164">› Analysis Exclusion</text>
+  <text x="32" y="188">› Contrast</text>
+  <text x="32" y="212">› Metadata</text>
+  <text x="32" y="250" style="font-size:11px">› folded, ⌄ open</text>
+  <rect x="198" y="8" width="388" height="26" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+  <text x="208" y="25" style="font-size:11px">folder · home · open · fit · zoom · ◀ ▶ play · ROI edits · calculate</text>
+  <text x="578" y="25" text-anchor="end" style="fill:var(--ink);font-size:11px;font-weight:700">7/30</text>
+  <rect x="198" y="40" width="388" height="170" rx="4" fill="#101010" stroke="var(--line)"/>
+  <circle cx="300" cy="120" r="26" fill="#6a6a6a"/><circle cx="410" cy="100" r="18" fill="#9a9a9a"/><circle cx="480" cy="150" r="14" fill="#505050"/>
+  <rect x="478" y="186" width="100" height="18" fill="rgba(0,0,0,.6)"/>
+  <text x="528" y="199" text-anchor="middle" style="fill:#ffffff;font-size:11px">(412, 98) = 3517</text>
+  <text x="208" y="200" style="fill:#bbbbbb;font-size:11px">the image</text>
+  <rect x="198" y="216" width="388" height="58" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+  <text x="208" y="234" style="fill:var(--ink)">⌄ Advanced</text>
+  <text x="220" y="252" style="font-size:11px">Scale: not set · Measurement (… Zoom Step) · AI Detection</text>
+  <rect x="198" y="279" width="388" height="13" rx="3" fill="var(--surface-2)" stroke="var(--line)"/>
+  <text x="392" y="289" text-anchor="middle" style="font-size:10px">progress of a calculation</text>
+  <rect x="594" y="8" width="40" height="284" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+  <text x="614" y="150" text-anchor="middle" transform="rotate(-90 614 150)" style="font-size:11px">ROI and AI tools</text>
+</svg>
+<figcaption><strong>Schematic, not a screenshot.</strong> The slim bar on the far left hides and shows the sidebar. The
+sections marked › start folded: click a section title to open it. The tools down the right edge and the
+<span class="ui">Advanced</span> block are for measuring; the Image Analysis Tutorial covers them.</figcaption>
+</figure>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="walkthrough">
+<h2>Quick walkthrough</h2>
+<p class="intro">From an open experiment to a well-displayed series you can step through, in six steps.</p>
+<ol class="steps">
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: the View menu with a ticked entry Image Viewer"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="14" y="14" width="60" height="24" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="44" y="30" text-anchor="middle" style="fill:var(--ink)">View</text><rect x="14" y="40" width="250" height="96" rx="4" fill="var(--surface-2)" stroke="var(--line)"/><text x="28" y="60">Device Viewer</text><text x="28" y="80">Protocol …</text><rect x="20" y="88" width="238" height="20" rx="3" fill="var(--accent-soft)"/><text x="28" y="102" style="fill:var(--ink);font-weight:700">✓ Image Viewer - my_experiment - …</text><text x="28" y="126">Reset Layout</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">1</span>Open the Image Viewer</h4>
+    <p>Open the <span class="ui">View</span> menu and click the entry that starts with <span class="ui">Image Viewer</span>.
+    The entry carries the pane's title, so it may read <em>Image Viewer - &lt;experiment&gt; - …</em>. Click it again to
+    hide the pane. You can drag the pane by its title bar to dock it elsewhere or float it.</p>
+    <p>The pane opens on the current experiment's newest image. If the experiment has no captures yet the image area
+    stays empty until the first one is saved.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: the Image Groups section with Image Group set to 16bit_raw and Capture Session set to a session folder, and the Images section with an Image dropdown and a Seek slider"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><text x="14" y="22" style="fill:var(--ink)">⌄ Image Groups</text><text x="22" y="44">Image Group</text><rect x="120" y="32" width="164" height="18" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="128" y="45" style="fill:var(--ink)">16bit_raw</text><text x="22" y="66">Capture Session</text><rect x="120" y="54" width="164" height="18" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="128" y="67" style="fill:var(--ink)">flu_run2_…</text><text x="14" y="96" style="fill:var(--ink)">⌄ Images</text><text x="22" y="116">Image</text><rect x="120" y="104" width="164" height="18" rx="3" fill="var(--surface-2)" stroke="var(--line)"/><text x="128" y="117" style="fill:var(--ink)">Green_540_nm_1_…_raw.png</text><text x="22" y="140">Seek</text><line x1="120" y1="136" x2="284" y2="136" stroke="var(--line)" stroke-width="3"/><circle cx="150" cy="136" r="6" fill="var(--accent)"/></svg></figure>
+    <div class="step-text"><h4><span class="step-n">2</span>Pick the images you want</h4>
+    <p>In the sidebar, <span class="ui">Image Groups</span> holds two choices. <a href="#image-group">Image Group</a> is the
+    kind of image (the subfolder it was saved in, such as <code>16bit_raw</code>); <a href="#capture-session">Capture
+    Session</a> is one capture run. Then pick an image under <span class="ui">Images</span>, or drag its
+    <span class="ui">Seek</span> slider.</p>
+    <p>For another experiment, open <span class="ui">Experiments</span> and choose it there. <i data-glyph="ICON_HOME"
+    data-inline data-label="Home"></i> brings you back to the current experiment.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: the Contrast section with Auto contrast unticked and the Min and Max sliders set"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><text x="14" y="24" style="fill:var(--ink)">⌄ Contrast</text><rect x="22" y="38" width="14" height="14" rx="2" fill="var(--surface-2)" stroke="var(--line)"/><text x="46" y="50" style="fill:var(--ink)">Auto contrast</text><text x="22" y="86">Min</text><line x1="70" y1="82" x2="240" y2="82" stroke="var(--line)" stroke-width="3"/><circle cx="84" cy="82" r="6" fill="var(--accent)"/><text x="250" y="86" style="fill:var(--ink)">500</text><text x="22" y="120">Max</text><line x1="70" y1="116" x2="240" y2="116" stroke="var(--line)" stroke-width="3"/><circle cx="130" cy="116" r="6" fill="var(--accent)"/><text x="250" y="120" style="fill:var(--ink)">6000</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">3</span>Make the image visible</h4>
+    <p><a href="#auto-contrast">Auto contrast</a> is on to start with, so a dark 16-bit frame already shows its droplets.
+    Open <span class="ui">Contrast</span> and untick it when you want to set the black and white points yourself with
+    <a href="#min-max">Min and Max</a>. Then every image is shown the same way and you can compare them by eye.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: a zoomed image with the pixel readout in the bottom-right corner"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="14" y="14" width="272" height="122" rx="4" fill="#101010"/><circle cx="130" cy="78" r="48" fill="#7a7a7a"/><path d="M196 54 l10 10 l-4 0 l4 9 l-3 1 l-4 -9 l-3 3 z" fill="#ffffff"/><rect x="174" y="112" width="106" height="18" fill="rgba(0,0,0,.6)"/><text x="227" y="125" text-anchor="middle" style="fill:#ffffff;font-size:11px">(201, 63) = 4210</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">4</span>Look closer</h4>
+    <p>Turn the mouse wheel over the image to <a href="#zoom">zoom</a> around the cursor, and drag to pan.
+    <i data-glyph="ICON_REFRESH" data-inline data-label="Fit image to the pane"></i> fits the whole image again.</p>
+    <p>Rest the cursor on a pixel: its position and stored value appear in the image's bottom-right corner (the
+    <a href="#pixel-readout">pixel readout</a>). Open <span class="ui">Metadata</span> for the file's details and any
+    settings saved inside it.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: previous, play and next buttons with the position counter 4/9"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="30" y="54" width="44" height="40" rx="6" fill="var(--surface-2)" stroke="var(--line)"/><text x="52" y="80" text-anchor="middle" style="fill:var(--ink);font-size:16px">⏮</text><rect x="82" y="54" width="44" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="104" y="80" text-anchor="middle" style="fill:var(--ink);font-size:16px">▶</text><rect x="134" y="54" width="44" height="40" rx="6" fill="var(--surface-2)" stroke="var(--line)"/><text x="156" y="80" text-anchor="middle" style="fill:var(--ink);font-size:16px">⏭</text><text x="262" y="80" text-anchor="end" style="fill:var(--ink);font-weight:700;font-size:15px">4/9</text><text x="30" y="124">Left / Right keys after clicking the image</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">5</span>Step through the series</h4>
+    <p><i data-glyph="ICON_PREVIOUS" data-inline data-label="Previous image"></i> and <i data-glyph="ICON_NEXT" data-inline
+    data-label="Next image"></i> show the previous and next image; after a click on the image, the <kbd>Left</kbd> and
+    <kbd>Right</kbd> keys do the same. <i data-glyph="ICON_PLAY" data-inline data-label="Cycle through the folder's
+    images"></i> plays them, one every 1.5 seconds, until you click <i data-glyph="ICON_PAUSE" data-inline
+    data-label="Pause"></i>.</p>
+    <p>Stepping carries on into the next capture session when one ends. The counter at the right end of the button row
+    (<a href="#image-seek">4/9</a>) counts every image you can reach this way.</p></div>
+  </li>
+  <li class="step">
+    <figure class="step-panel"><svg viewBox="0 0 300 150" role="img" aria-label="Schematic: an ellipse region of interest drawn around a droplet and the Calculate button"><rect x="0.5" y="0.5" width="299" height="149" rx="6" fill="var(--surface)" stroke="var(--line)"/><rect x="14" y="14" width="212" height="122" rx="4" fill="#101010"/><circle cx="110" cy="76" r="36" fill="#7a7a7a"/><ellipse cx="110" cy="76" rx="30" ry="30" fill="none" stroke="#ffd54f" stroke-width="2"/><text x="110" y="128" text-anchor="middle" style="fill:#ffd54f;font-size:11px">ROI 1</text><rect x="240" y="14" width="46" height="122" rx="4" fill="var(--surface-2)" stroke="var(--line)"/><circle cx="263" cy="36" r="9" fill="none" stroke="var(--accent)" stroke-width="2"/><text x="263" y="70" text-anchor="middle" style="font-size:11px">O B</text><text x="263" y="86" text-anchor="middle" style="font-size:11px">C P</text><text x="263" y="118" text-anchor="middle" style="fill:var(--ink);font-size:11px">Ctrl+↵</text></svg></figure>
+    <div class="step-text"><h4><span class="step-n">6</span>Hand over to the analysis</h4>
+    <p>When the right images are listed, draw a region of interest (ROI) around a droplet with a tool on the right edge and
+    click <i data-glyph="ICON_SHOW_CHART" data-inline data-label="Calculate"></i> <em>Calculate</em>. MicroDrop measures
+    <a href="#measured-images">the images the sidebar lists</a>, nothing else.</p>
+    <p>Carry on in <span class="ui">Help ▸ Tutorials ▸ Image Analysis Tutorial</span>.</p></div>
+  </li>
+</ol>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-toolbar">
+<h2>Toolbar icons</h2>
+<p class="intro">The viewer's own buttons. Hover over a button in MicroDrop to see its tooltip; a key in brackets works
+once you have clicked the image. The ROI, calculation and AI buttons are explained in the Image Analysis Tutorial.</p>
+<section data-term id="tb-row" data-where="the button row above the image">
+  <h3>Button row</h3>
+  <div class="table-wrap"><table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Button</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_FOLDER_OPEN"></i></td><td class="lbl">Choose the image folder</td><td>Opens a
+      folder picker that starts in the folder holding all experiments. Pick any folder to <a href="#choose-folder">browse
+      it</a> instead of the experiment.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_HOME"></i></td><td class="lbl">Back to the current experiment's captures</td>
+      <td>Returns to the experiment MicroDrop is recording into and shows its newest image.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_OPEN_IN_NEW"></i></td><td class="lbl">Open the shown images' folder in the
+      file browser</td><td>Opens the folder of the shown image in Explorer (Windows) or your file manager.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_REFRESH"></i></td><td class="lbl">Fit image to the pane
+      (<kbd>Ctrl</kbd>+<kbd>0</kbd>)</td><td>Shows the whole image again after zooming. The icon is a circular arrow, but it
+      does not reload anything.</td></tr>
+      <tr><td class="icons"><i data-glyph="zoom_in"></i> <i data-glyph="zoom_out"></i></td><td class="lbl">Zoom in / out one
+      step (<kbd>Ctrl</kbd>+<kbd>+</kbd>, <kbd>Ctrl</kbd>+<kbd>-</kbd>)</td><td>Zooms around the middle of the pane by one
+      <a href="#zoom">Zoom Step</a>.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_PREVIOUS"></i> <i data-glyph="ICON_NEXT"></i></td><td class="lbl">Previous
+      image / Next image (<kbd>Left</kbd>, <kbd>Right</kbd>)</td><td>Steps through the listed images, into the
+      neighbouring capture session at either end.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_PLAY"></i> <i data-glyph="ICON_PAUSE" data-on></i></td><td class="lbl">Cycle
+      through the folder's images</td><td>Plays the series, one image every 1.5 seconds, round and round. Shows the pause
+      icon while playing; click it to stop.</td></tr>
+      <tr><td class="icons"><strong>7/30</strong></td><td class="lbl">Position</td><td>At the right end of the row: the
+      shown image's place among <a href="#image-seek">all the images you can step through</a>.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+<section data-term id="tb-sidebar" data-where="the sidebar">
+  <h3>Sidebar buttons</h3>
+  <div class="table-wrap"><table class="small icons-table">
+    <thead><tr><th>Icon</th><th>Button</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="icons"><i data-glyph="ICON_CHEVRON_LEFT"></i> <i data-glyph="ICON_CHEVRON_RIGHT"></i></td><td
+      class="lbl">Hide or show the selector sidebar</td><td>The tall, slim bar on the pane's left edge. Hiding the sidebar
+      gives the image more room.</td></tr>
+      <tr><td class="icons"><i data-glyph="expand_more"></i> <i data-glyph="chevron_right"></i></td><td class="lbl">Section
+      title</td><td>Opens (arrow down) or folds (arrow right) a section such as <span class="ui">Experiments</span> or
+      <span class="ui">Contrast</span>.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_PREVIOUS"></i> <i data-glyph="ICON_NEXT"></i></td><td class="lbl">Previous
+      experiment (older) / Next experiment (newer) (<kbd>Shift</kbd>+<kbd>Left</kbd>,
+      <kbd>Shift</kbd>+<kbd>Right</kbd>)</td><td>In <span class="ui">Experiments</span>: moves to the neighbouring
+      experiment.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_DELETE"></i></td><td class="lbl">Send experiment folder to trash</td><td>In
+      <span class="ui">Experiments</span>: <a href="#delete-experiment">moves the selected experiment's folder</a> to the
+      Recycle Bin.</td></tr>
+      <tr><td class="icons"><i data-glyph="ICON_OPEN_IN_NEW"></i></td><td class="lbl">Open the metadata in its own
+      window</td><td>In <span class="ui">Metadata</span>: a separate window that follows the shown image.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-find">
+<h2>Finding images</h2>
+<p class="intro">Images are found by where they sit on disk. Each experiment folder has a <code>captures</code> folder; inside
+it, a capture run may make a folder of its own (a capture session), and a session may sort its files into subfolders by kind
+(image groups). The viewer reads that layout back as four choices: experiment, image group, capture session, image.</p>
+
+<section data-term id="browser" data-where="try it">
+  <h3>Try it: the four choices</h3>
+  <p>A made-up Experiments folder with three experiments. Change the choices, step with the buttons, and watch which files are listed (full colour), left out (faded) and shown (highlighted).</p>
+  <figure data-demo="browser">
+    <div class="iv-grid">
+      <div>
+        <div class="iv-form">
+          <label class="lbl" for="iv-exp">Experiment</label><select id="iv-exp"></select>
+          <label class="lbl" for="iv-group">Image Group</label><select id="iv-group"></select>
+          <label class="lbl" for="iv-session">Capture Session</label><select id="iv-session"></select>
+          <label class="lbl row-filter" for="iv-filter">Wavelength</label><select id="iv-filter" class="row-filter"></select>
+          <label class="lbl" for="iv-image">Image</label><select id="iv-image"></select>
+        </div>
+        <div class="iv-nav">
+          <button type="button" id="iv-home" aria-label="Home: back to the current experiment's newest image">⌂ Home</button>
+          <button type="button" id="iv-prev" aria-label="Previous image">◀</button>
+          <button type="button" id="iv-next" aria-label="Next image">▶</button>
+          <span class="pos" id="iv-pos" aria-live="polite"></span>
+        </div>
+        <div class="controls"><label><input type="checkbox" id="iv-plugin"> A plugin adds a filter (made-up
+        <em>Wavelength</em>)</label></div>
+      </div>
+      <ul class="iv-tree" id="iv-tree" aria-label="The selected experiment's captures folder"></ul>
+    </div>
+    <p class="status" id="iv-status" aria-live="polite"></p>
+    <figcaption>Made-up folders, real rules: the sorting into groups and sessions, the "All" choices, the order, the counter
+    and where the arrows go follow the viewer's code. <em>dilution_test</em> is the current experiment. The tags show each
+    file's kind.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="experiment" data-where="Experiments section">
+  <h3>Experiment</h3>
+  <p>Which experiment's images you browse. The section starts folded.</p>
+  <div data-what><p><span class="ui">Experiment</span> lists every folder in the Experiments folder (the folder the current
+  experiment sits in), oldest first by when the folder last changed. Folders with no captures are listed too; choosing one
+  just shows nothing. Choosing an experiment shows its first image, with <span class="ui">Capture Session</span> set to
+  <em>All</em>.</p>
+  <p><span class="ui">Search</span> narrows the list: type words, and only names containing every word stay (capitals do not
+  matter). <span class="ui">Experiment Seek</span> drags through all experiments, oldest to newest, and the two arrow buttons
+  step one at a time.</p></div>
+  <div data-when><p>To look back at an earlier run, or compare two runs. New experiments join the list on their own.</p></div>
+  <div data-read><p>The pane title shows the experiment folder's name. <i data-glyph="ICON_HOME" data-inline
+  data-label="Home"></i> returns to the experiment MicroDrop is recording into.</p></div>
+  <div data-typical><p>The current experiment.</p></div>
+</section>
+
+<section data-term id="image-group" data-where="Image Groups section">
+  <h3>Image Group</h3>
+  <p>The kind of image: the subfolder of a capture session that the files were saved in.</p>
+  <div data-what><p>The list holds <em>All</em> (the start), then <em>None</em> for images saved straight into a session
+  or into the <code>captures</code> folder, then each subfolder name found, for example <code>16bit_raw</code> for the raw
+  frames of a fluorescence capture.</p></div>
+  <div data-when><p>Pick one kind before you step, compare or measure, so that every listed image is of the same kind.</p></div>
+  <div data-read><p><strong>All mixes the kinds.</strong> It merges every group of a session and orders the files by save
+  time. When a capture saves a 16-bit raw frame and an 8-bit display copy of it, the two alternate as you step: the
+  pane title flips between <em>16-bit gray</em> and <em>8-bit gray</em>, and with <a href="#min-max">manual contrast</a> the
+  8-bit copies look black. This is known and left as it is for now; choose the group you mean.</p></div>
+  <div data-typical><p><em>All</em> when the pane opens; <code>16bit_raw</code> for fluorescence measurements.</p></div>
+</section>
+
+<section data-term id="capture-session" data-where="Image Groups section">
+  <h3>Capture Session</h3>
+  <p>One capture run: a folder of its own inside <code>captures</code>.</p>
+  <div data-what><p>A folder directly inside <code>captures</code> counts as a session when it holds subfolders (a
+  fluorescence capture's session always holds its <code>16bit_raw</code> folder). The list is <em>All</em>, then the sessions,
+  oldest first by their first image. <em>ungrouped</em> holds the images outside any session folder, such as the Device
+  Viewer's camera captures, which are saved straight into <code>captures</code>.</p></div>
+  <div data-when><p>To look at one run. <em>All</em> lists every session of the image group in one go.</p></div>
+  <div data-read><p><span class="ui">Session Seek</span> drags through the list, oldest to newest; its first position is
+  <em>All</em>.</p></div>
+  <div data-typical><p>The newest session when the pane opens; <em>All</em> after you choose an experiment.</p></div>
+</section>
+
+<section data-term id="image-seek" data-where="Images section, and the counter at the end of the button row">
+  <h3>Image, Seek and the counter</h3>
+  <p>The images of the chosen session, and where you are among them.</p>
+  <div data-what><p><span class="ui">Image</span> lists the session's files by name, oldest first by save time.
+  <span class="ui">Seek</span> drags through the same list. The counter <em>n/N</em> at the right end of the button row counts
+  across <em>every</em> session of the image group, because the arrows carry on from one session into the next.</p></div>
+  <div data-read><p><em>–/30</em> means the shown image is not among the listed ones. The next arrow click enters the
+  list.</p></div>
+  <div data-typical><p>The newest image when the pane opens.</p></div>
+</section>
+
+<section data-term id="filter" data-where="Images section, only when a plugin adds a filter">
+  <h3>Filter (for example Wavelength)</h3>
+  <p>A further choice that only appears when an installed plugin adds one.</p>
+  <div data-what><p>A plugin can teach the viewer to read a value out of file names, for example the LED wavelength of a
+  fluorescence capture. The row is then named after that value instead of <em>Filter</em>, and lists <em>All</em> plus every
+  value found in the files. MicroDrop on its own adds none, so the row is hidden.</p></div>
+  <div data-when><p>When one session holds captures taken with different light sources and you want one of them.</p></div>
+  <div data-read><p>Changing the filter keeps the shown image if it passes, otherwise shows the first one that does. The
+  counter and the arrows only reach images that pass.</p></div>
+  <div data-typical><p><em>All</em>.</p></div>
+</section>
+
+<section data-term id="following" data-where="automatic">
+  <h3>Following new captures</h3>
+  <p>The viewer keeps its lists up to date while you work.</p>
+  <div data-what><p>It looks for new files every 2 seconds. A picture the Device Viewer's camera has just saved appears at
+  once. Other new files wait until they have not changed for 2 seconds, so a half-written file is never shown.</p></div>
+  <div data-read><p>If you are on the newest image of the newest session (or on the last image with <em>All</em> sessions),
+  the viewer moves to each new capture as it lands. Anywhere else, it stays where you are. While a protocol runs and a drawing tool, the scale ruler
+  or Edit mode is on, it waits until you put the tool away.</p></div>
+</section>
+
+<section data-term id="choose-folder" data-where="button row: folder and home buttons">
+  <h3>Browsing any folder</h3>
+  <p><i data-glyph="ICON_FOLDER_OPEN" data-inline data-label="Choose the image folder"></i> opens any folder, inside an
+  experiment or not.</p>
+  <div data-what><p>The viewer searches the folder and every folder below it for <code>.png</code>, <code>.tif</code>,
+  <code>.tiff</code>, <code>.jpg</code>, <code>.jpeg</code> and <code>.bmp</code> files, and sorts them into groups and sessions
+  by the same rules.</p></div>
+  <div data-read><p>Your ROIs, scale and other analysis settings are saved in an <code>analysis</code> folder: in the
+  experiment folder when you browse an experiment's captures, otherwise in the folder you picked. A new folder therefore
+  starts without them. <i data-glyph="ICON_HOME" data-inline data-label="Home"></i> goes back to following the current
+  experiment.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-display">
+<h2>Seeing an image</h2>
+<p class="intro">A camera frame holds far more brightness levels than a screen can show. The viewer picks which stored value is
+drawn black and which white; everything else is about looking closely.</p>
+
+<section data-term id="bit-depth" data-where="pane title and Metadata">
+  <h3>16-bit and 8-bit images</h3>
+  <p>How many brightness levels each pixel can store.</p>
+  <div data-what><p>A <strong>16-bit</strong> gray image stores values from 0 to 65535. Fluorescence cameras save their raw
+  frames this way, and the signal usually uses only a small part of that range, so shown as it is the frame looks black.
+  An <strong>8-bit</strong> image stores 0 to 255 per channel; display copies, camera snapshots and most ordinary pictures are
+  8-bit.</p></div>
+  <div data-read><p>The pane title ends with the size, the bit depth and <em>gray</em> or <em>RGB</em>, for example
+  <code>2048x1536 16-bit gray</code>. Contrast only applies to gray images: a colour (RGB) image is always shown as stored.
+  A colour image with more than 8 bits per channel is shown at 8 bits per channel.</p></div>
+  <div data-typical><p><code>16bit_raw</code> files: 16-bit gray. Device Viewer camera captures: 8-bit colour.</p></div>
+</section>
+
+<section data-term id="auto-contrast" data-where="Contrast section">
+  <h3>Auto contrast</h3>
+  <p>Picks the black and white points for each image on its own.</p>
+  <div data-what><p>The darkest 0.1 % of the image's pixels are drawn black and the brightest 0.1 % white, so a few very bright
+  (hot) pixels do not wash out the rest. On a very large image the viewer reads an even sample of about a million pixels to
+  find them.</p></div>
+  <div data-when><p>Leave it on for browsing: every image shows its detail, whatever its bit depth.</p></div>
+  <div data-read><p>Each image gets its own black and white points, so two images that look equally bright may not be. To
+  compare brightness by eye, switch it off and use <a href="#min-max">Min and Max</a>. Display only: it never changes a
+  measured number.</p></div>
+  <div data-typical><p>On. MicroDrop remembers the setting the next time it starts.</p></div>
+</section>
+
+<section data-term id="min-max" data-where="Contrast section, when Auto contrast is off">
+  <h3>Min and Max</h3>
+  <p>Your own black point (<em>Min</em>, the value drawn black) and white point (<em>Max</em>, the value drawn white).</p>
+  <div data-what><p>Values at or below Min are black, at or above Max white, and the ones between are spread evenly over the
+  grays. Both sliders run over the 16-bit range, 0 to 65535, and Min always stays below Max. They are greyed out while Auto
+  contrast is on and keep your last values.</p></div>
+  <div data-when><p>To compare images: the same window applies to every image, so a brighter droplet really looks
+  brighter.</p></div>
+  <div data-read><p>Raise Min until the background is just black; lower Max until the brightest droplet is just white. An
+  8-bit image holds nothing above 255, so with Max at thousands it looks black: that is the display, not the file.</p></div>
+  <div data-typical><p>Min 0, Max 10000 to start with; remembered the next time MicroDrop starts.</p></div>
+  <figure data-demo="levels">
+    <div class="iv-canvas-wrap"><canvas id="lv-canvas" width="160" height="100" aria-label="Made-up 16-bit frame with three droplets; hover to read a pixel"></canvas><span class="iv-hud" id="lv-hud"></span></div>
+    <div class="controls">
+      <label><input type="checkbox" id="lv-auto" checked> Auto contrast</label>
+      <label>Min <input type="range" id="lv-min" min="0" max="65534" step="1" value="0"></label><output for="lv-min"></output>
+      <label>Max <input type="range" id="lv-max" min="1" max="65535" step="1" value="10000"></label><output for="lv-max"></output>
+    </div>
+    <div class="controls">
+      <button type="button" id="lv-full">Full range 0–65535</button>
+      <button type="button" id="lv-default">Start values 0–10000</button>
+      <label><input type="checkbox" id="lv-8bit"> Show the 8-bit copy</label>
+    </div>
+    <svg id="lv-hist" viewBox="0 0 600 120" role="img" aria-label="Histogram of the frame's pixel values with the black and white points marked"></svg>
+    <table data-readout id="lv-read"></table>
+    <p class="status" id="lv-status" aria-live="polite"></p>
+    <figcaption>A made-up 16-bit frame, drawn in this page, not a camera image: an unevenly lit background around 600 to 900,
+    three droplets up to about 6000, and a few hot pixels at 65535. Try <em>Full range</em> to see why a raw frame looks
+    black, then untick Auto contrast and close the window in on the droplets. Hover the picture for the pixel readout. Bar
+    heights in the histogram are the square root of the count, so the small bars stay visible.</figcaption>
+  </figure>
+</section>
+
+<section data-term id="zoom" data-where="the image; Zoom Step under Advanced ▸ Measurement">
+  <h3>Zoom, pan, fit and Zoom Step</h3>
+  <p>Moving around a large image.</p>
+  <div data-what><p>The mouse wheel zooms around the point under the cursor; the zoom buttons and
+  <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>-</kbd> zoom around the middle of the pane. Drag the image to pan
+  (while no drawing tool, ruler or Edit mode is on). <i data-glyph="ICON_REFRESH" data-inline data-label="Fit image to the pane"></i> or
+  <kbd>Ctrl</kbd>+<kbd>0</kbd> fits the whole image. <span class="ui">Zoom Step</span> is how much one wheel notch or button
+  click zooms.</p></div>
+  <div data-read><p>Until you zoom, the image refits whenever the pane changes size. Once zoomed, stepping to another image
+  of the same size keeps your zoom and position, so you can watch one droplet through a series; an image of a different size
+  is fitted again.</p></div>
+  <div data-typical><p>Zoom Step 1.25 (allowed 1.05 to 2.0; 1.05 is barely visible, 2.0 doubles per notch).</p></div>
+</section>
+
+<section data-term id="pixel-readout" data-where="bottom-right corner of the image">
+  <h3>Pixel readout</h3>
+  <p>The position and value of the pixel under the cursor, for example <code>(412, 98) = 3517</code>.</p>
+  <div data-what><p>The first two numbers are the column and row, counted from 0 at the top-left corner. After the
+  <code>=</code> comes the value stored in the file: up to 65535 for a 16-bit image, not the gray you see on screen. A colour
+  image shows three numbers, red, green and blue.</p></div>
+  <div data-when><p>To check how bright a droplet or the background really is, or whether a spot is saturated
+  (65535 on a 16-bit image, 255 on an 8-bit one).</p></div>
+  <div data-read><p>With rolling-ball or perspective correction switched on (Image Analysis Tutorial), the image and the
+  readout show the corrected frame, which is what gets measured. The readout disappears when the cursor leaves the
+  image.</p></div>
+</section>
+
+<section data-term id="metadata" data-where="Metadata section">
+  <h3>Metadata</h3>
+  <p>Facts about the shown file and any details saved inside it. The section starts folded.</p>
+  <div data-what><p><strong>File Details</strong> first: Dimensions, Pixel Format (for example <em>16-bit grayscale</em>),
+  File Size and Modified (local time). Then whatever text the file carries. A PNG can hold named blocks of text; a block of
+  settings gets a heading of its own and one line per setting. Rest the cursor on a name to see what it means, when the
+  program that wrote the file says so.</p></div>
+  <div data-read><p>What appears depends on what saved the image. Fluorescence captures (made by the fluorescence plugin,
+  which is installed separately) carry a <em>Capture Details</em> block with their capture settings and the protocol step.
+  MicroDrop's own camera captures carry none and show <em>No embedded metadata</em>.
+  <i data-glyph="ICON_OPEN_IN_NEW" data-inline data-label="Open the metadata in its own window"></i> opens the same text in an
+  <em>Image metadata</em> window that follows you as you step.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-manage">
+<h2>Tidying up experiments</h2>
+<p class="intro">Two ways to clear away experiment folders. Both move folders to the Recycle Bin (Trash on macOS and Linux),
+where you can restore them; neither ever deletes for good.</p>
+
+<section data-term id="delete-experiment" data-where="Experiments section, bin button">
+  <h3>Send an experiment folder to the trash</h3>
+  <p>Removes the experiment chosen in the <span class="ui">Experiment</span> list, with everything in its folder.</p>
+  <div data-what><ol class="howto">
+    <li>Choose the experiment in the <span class="ui">Experiment</span> list, then click <i data-glyph="ICON_DELETE" data-inline data-label="Send experiment folder to
+    trash"></i>.</li>
+    <li>MicroDrop asks <em>Delete experiment '&lt;name&gt;' and everything in its folder?</em> Answer yes to go ahead. Tick
+    <em>Don't ask again</em> to skip this question in future.</li>
+    <li>The folder goes to the Recycle Bin and the list moves to the next newer experiment (or the older one, if it was the
+    newest).</li>
+  </ol></div>
+  <div data-read><p>The experiment MicroDrop is recording into cannot be removed: you get the message <em>'&lt;name&gt;' is the
+  current experiment and cannot be deleted while it is in use.</em> To get the question back after ticking
+  <em>Don't ask again</em>, open <span class="ui">Preferences ▸ Image Viewer</span> and, under
+  <span class="ui">Experiments</span>, tick <span class="ui">Ask for confirmation before deleting an experiment
+  folder</span>.</p></div>
+</section>
+
+<section data-term id="prune" data-where="File ▸ Experiments ▸ Prune Experiments…">
+  <h3>Prune Experiments</h3>
+  <p>Clears away all the experiments that never captured anything.</p>
+  <div data-what><p>It looks for experiment folders that hold only a <code>logs</code> folder (and perhaps empty folders),
+  never the current experiment. MicroDrop asks <em>Delete N experiment folder(s) that hold only logs?</em>; the details list
+  the folder names. When there are none it says <em>No experiments to prune</em>.</p></div>
+  <div data-read><p>Afterwards it reports how many folders it moved. They drop off the Experiment list within a couple of
+  seconds.</p></div>
+</section>
+
+<section data-term id="send2trash" data-where="the first time, on an older installation">
+  <h3>If MicroDrop offers an update first</h3>
+  <p>Moving folders to the trash needs a small extra package, <code>send2trash</code>.</p>
+  <div data-what><p>An installation set up before that package was added shows an <em>Update required</em> message instead:
+  <em>Sending experimental folders to the Trash needs the send2trash package, which this environment does not have. Update
+  the pixi-microdrop repository to install it.</em> It also says what the update resets in the pixi-microdrop folder and which
+  of your installed plugins it adds back.</p></div>
+  <div data-read><p><span class="ui">Update</span> runs the update behind an <em>Updating MicroDrop</em> window, then carries on
+  with the move, without a restart. <span class="ui">Not now</span> leaves everything as it was; nothing is deleted. If the
+  update fails, MicroDrop shows the commands to run by hand.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-handoff">
+<h2>On to the analysis</h2>
+<p class="intro">Just enough to get from a browsed series to the Image Analysis Tutorial, which explains every tool and
+number.</p>
+
+<section data-term id="measured-images" data-where="Image Groups and Images sections">
+  <h3>Which images get measured</h3>
+  <p><i data-glyph="ICON_SHOW_CHART" data-inline data-label="Calculate"></i> <em>Calculate</em> (<kbd>Ctrl</kbd>+<kbd>Return</kbd>)
+  measures exactly the images the sidebar lists.</p>
+  <div data-what><p>That is the chosen Image Group, Capture Session and Filter, less any image marked as excluded. Set the
+  choices first: usually <code>16bit_raw</code> and the session you want, or <em>All</em> sessions for the whole
+  experiment.</p></div>
+  <div data-read><p>With the Image Group on <em>All</em>, raw frames and 8-bit copies are measured together, which mixes two
+  brightness scales in one curve. While a protocol is running, Calculate asks first: <em>A protocol is running; this can stall
+  the app and delay captures. Continue?</em></p></div>
+</section>
+
+<section data-term id="first-roi" data-where="toolbar on the image's right edge">
+  <h3>Drawing a region of interest</h3>
+  <p>An outline around a droplet that MicroDrop measures in every image of the series.</p>
+  <div data-what><p>Pick a shape: <i data-glyph="ICON_CIRCLE" data-inline data-label="Draw ellipse"></i> ellipse
+  (<kbd>O</kbd>), box (<kbd>B</kbd>), capsule (<kbd>C</kbd>) or contour (<kbd>P</kbd>), then drag on the image. The tool stays
+  armed for the next one; <kbd>Esc</kbd> puts it away so dragging pans again. <i data-glyph="ICON_NEGATIVE_MASK" data-inline
+  data-label="Negative mask mode"></i> negative mask mode (<kbd>M</kbd>) makes the next shapes cut holes out of the ROIs they
+  overlap instead, for a reflection or an electrode edge.</p></div>
+  <div data-read><p>ROIs are saved with the experiment. To leave a bad frame out, press <kbd>X</kbd> or tick <span
+  class="ui">Exclude current image from analysis</span> in <span class="ui">Analysis Exclusion</span>; you can still view
+  it.</p></div>
+</section>
+<div class="callout"><strong>Next:</strong> <span class="ui">Help ▸ Tutorials ▸ Image Analysis Tutorial</span> covers ROIs and
+negative masks in detail, the background ring, image scale, perspective correction, AI detection, drift, the ROI
+Intensities plot and its Histogram view, and exporting the numbers.</div>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="part-keys">
+<h2>Keyboard</h2>
+<section data-term id="keys" data-where="the image, after you click it">
+  <h3>Keys for browsing</h3>
+  <p>The viewer's keys work while the image has the keyboard, so click the image first.</p>
+  <div data-what><p><kbd>Left</kbd> / <kbd>Right</kbd> previous and next image; <kbd>Shift</kbd>+<kbd>Left</kbd> /
+  <kbd>Shift</kbd>+<kbd>Right</kbd> previous and next experiment; <kbd>Ctrl</kbd>+<kbd>0</kbd> fit;
+  <kbd>Ctrl</kbd>+<kbd>+</kbd> (or <kbd>Ctrl</kbd>+<kbd>=</kbd>) and <kbd>Ctrl</kbd>+<kbd>-</kbd> zoom.</p></div>
+  <div data-read><p>Press <kbd>F1</kbd> (or <kbd>Ctrl</kbd>+<kbd>/</kbd>) on the image, or choose <span class="ui">Help ▸ Image
+  Viewer Keyboard Shortcuts…</span>, for the full list, drawing keys included. <span class="ui">Help ▸ Tutorials ▸ Shortcuts,
+  Gamepad &amp; Touch Assist Tutorial</span> has a key finder covering every pane.</p></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="caveats">
+<h2>Caveats and limits</h2>
+<div class="callout warn">
+  <ul class="uses">
+    <li><strong>Image Group "All" mixes kinds.</strong> Raw 16-bit frames and their 8-bit copies alternate, and both are
+    measured. Pick one group before comparing or calculating.</li>
+    <li><strong>Auto contrast is per image.</strong> Do not judge brightness changes by eye with it on; use Min and Max, or
+    measure.</li>
+    <li><strong>Analysis settings follow the folder.</strong> Browsing a folder outside an experiment starts a fresh set of
+    ROIs, scale and exclusions, saved in that folder.</li>
+    <li><strong>The current experiment cannot be trashed</strong> from the viewer or by Prune Experiments.</li>
+  </ul>
+</div>
+<section data-term id="performance" data-where="how the viewer stays quick">
+  <h3>Large series</h3>
+  <p>The viewer loads and draws images in the background, so the window stays responsive.</p>
+  <div data-what><p>Dragging a Seek slider never queues up every image you pass: the viewer loads the newest position next and skips
+  the rest. The last 8 images loaded
+  are kept in memory, so going back and forth over them is instant (a full 16-bit frame takes about 20 MB). Contrast changes
+  redraw in the background too, so a dragged slider never freezes the window.</p></div>
+  <div data-read><p>Folders are searched in the background. A folder is only searched again when something in it changed,
+  and in any case every 30 seconds, because some drives do not report changes.</p></div>
+</section>
+<section data-term id="not-supported" data-where="what the viewer does not do">
+  <h3>Not supported</h3>
+  <p>Things you might expect from an image program that the viewer does not offer.</p>
+  <div data-what><ul class="uses">
+    <li>No false-colour maps (colormaps): gray images are shown in gray.</li>
+    <li>No histogram of the whole image in the viewer. The ROI Intensities pane has a Histogram view of the pixels inside your
+    ROIs (Image Analysis Tutorial).</li>
+    <li>No saving or exporting of the shown image, and no copying it to the clipboard. Open its folder with
+    <i data-glyph="ICON_OPEN_IN_NEW" data-inline data-label="Open the shown images' folder"></i> to use the file elsewhere.
+    The numbers and the plot export from the ROI Intensities pane.</li>
+    <li>No contrast for colour images, and no editing of pixels.</li>
+    <li>No videos: the viewer lists image files only.</li>
+  </ul></div>
+</section>
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+  <dt>Experiments folder</dt><dd>The folder that holds one folder per experiment. MicroDrop creates a new experiment folder
+  for each experiment and records into it.</dd>
+  <dt>captures</dt><dd>The folder inside an experiment where MicroDrop saves captured images.</dd>
+  <dt>Capture session</dt><dd>One capture run's own folder inside <code>captures</code>.</dd>
+  <dt>Image group</dt><dd>The subfolder inside a session that sorts images by kind, such as <code>16bit_raw</code>.</dd>
+  <dt>16-bit / 8-bit</dt><dd>How many brightness levels a pixel can store: 65536 or 256.</dd>
+  <dt>Raw frame</dt><dd>The camera's image as measured, before any scaling for display.</dd>
+  <dt>Black point, white point</dt><dd>The stored values drawn as black and as white; together the display window.</dd>
+  <dt>Percentile</dt><dd>The value below which a given share of the pixels lie: the 0.1 percentile has 0.1 % of the pixels
+  below it.</dd>
+  <dt>Hot pixel</dt><dd>A sensor pixel that reads far too bright in every image.</dd>
+  <dt>Saturated</dt><dd>At the top of the range (65535 or 255): the real brightness may have been higher.</dd>
+  <dt>ROI</dt><dd>Region of interest: an outline whose pixels MicroDrop measures.</dd>
+  <dt>Negative mask</dt><dd>A shape that removes pixels from the ROIs it overlaps.</dd>
+  <dt>Recycle Bin / Trash</dt><dd>Where removed folders wait until you restore them or empty it.</dd>
+</dl>
+</section>
+
+<script>
+Tutorial.demo("browser", function (figure, T) {
+  // Made-up experiments: [name, files]; a file is [path inside captures, minutes, kind].
+  var EXPERIMENTS = [
+    ["old_chip_test", [
+      ["overview.png", 1, "8-bit RGB"],
+      ["16bit_raw/frame_001_raw.png", 2, "16-bit gray"],
+      ["16bit_raw/frame_002_raw.png", 3, "16-bit gray"],
+      ["16bit_raw/frame_003_raw.png", 4, "16-bit gray"]
+    ]],
+    ["empty_run", []],
+    ["dilution_test", [
+      ["Step_A_1.1.png", 1, "8-bit RGB"],
+      ["flu_run1/Green_540_nm_1.png", 2, "8-bit gray"],
+      ["flu_run1/16bit_raw/Green_540_nm_1_raw.png", 2.1, "16-bit gray"],
+      ["flu_run1/Red_640_nm_1.png", 3, "8-bit gray"],
+      ["flu_run1/16bit_raw/Red_640_nm_1_raw.png", 3.1, "16-bit gray"],
+      ["flu_run1/Green_540_nm_2.png", 4, "8-bit gray"],
+      ["flu_run1/16bit_raw/Green_540_nm_2_raw.png", 4.1, "16-bit gray"],
+      ["flu_run2/Green_540_nm_1.png", 10, "8-bit gray"],
+      ["flu_run2/16bit_raw/Green_540_nm_1_raw.png", 10.1, "16-bit gray"],
+      ["flu_run2/Red_640_nm_1.png", 11, "8-bit gray"],
+      ["flu_run2/16bit_raw/Red_640_nm_1_raw.png", 11.1, "16-bit gray"]
+    ]]
+  ];
+  var CURRENT = "dilution_test";
+  var q = function (id) { return figure.querySelector("#" + id); };
+  var exp = q("iv-exp"), group = q("iv-group"), session = q("iv-session"), filter = q("iv-filter"), image = q("iv-image");
+  var plugin = q("iv-plugin"), tree = q("iv-tree"), pos = q("iv-pos"), status = q("iv-status");
+  var state = { exp: CURRENT, group: "", session: "", filter: "All", shown: null };
+  var files = {}, groups = {}, bursts = [], paths = [];
+
+  function fill(select, names, value) {
+    select.innerHTML = "";
+    names.forEach(function (name) { var o = document.createElement("option"); o.textContent = name; select.appendChild(o); });
+    select.value = value;
+  }
+
+  function wavelength(path) {
+    var m = /_(\d+)_nm_/.exec(path);
+    return m ? m[1] + " nm" : "";
+  }
+
+  // discovery.py: a first-level folder holding subfolders is a session.
+  function discover(name) {
+    var list = EXPERIMENTS.filter(function (e) { return e[0] === name; })[0][1];
+    var sessions = {}, out = {};
+    files = {};
+    list.forEach(function (f) { var parts = f[0].split("/"); if (parts.length > 2) { sessions[parts[0]] = true; } });
+    list.forEach(function (f) {
+      files[f[0]] = { t: f[1], kind: f[2] };
+      var folders = f[0].split("/").slice(0, -1), s, g;
+      if (folders.length && sessions[folders[0]]) { s = folders[0]; g = folders.slice(1).join("/") || "None"; }
+      else { s = "ungrouped"; g = folders.join("/") || "None"; }
+      ((out[g] = out[g] || {})[s] = out[g][s] || []).push(f[0]);
+    });
+    return out;
+  }
+
+  function sortSessions(bySession) {
+    return Object.keys(bySession).map(function (s) {
+      return [s, bySession[s].slice().sort(function (a, b) { return files[a].t - files[b].t; })];
+    }).sort(function (a, b) { return files[a[1][0]].t - files[b[1][0]].t; });
+  }
+
+  function groupBursts(name) {
+    if (name === "All") {
+      var merged = {};
+      Object.keys(groups).forEach(function (g) {
+        Object.keys(groups[g]).forEach(function (s) { merged[s] = (merged[s] || []).concat(groups[g][s]); });
+      });
+      return sortSessions(merged);
+    }
+    return groups[name] ? sortSessions(groups[name]) : [];
+  }
+
+  function groupNames() {
+    var names = Object.keys(groups).sort(function (a, b) {
+      return (a !== "None") - (b !== "None") || (a < b ? -1 : a > b ? 1 : 0);
+    });
+    return names.length ? ["All"].concat(names) : [];
+  }
+
+  function burstNames() { return bursts.length ? ["All"].concat(bursts.map(function (b) { return b[0]; })) : []; }
+
+  function visible(list) {
+    return state.filter === "All" || !plugin.checked ? list.slice() : list.filter(function (p) { return wavelength(p) === state.filter; });
+  }
+
+  function burstPaths(name) {
+    if (name === "All") { return [].concat.apply([], bursts.map(function (b) { return b[1]; })); }
+    var hit = bursts.filter(function (b) { return b[0] === name; })[0];
+    return hit ? hit[1].slice() : [];
+  }
+
+  function refresh(show) {
+    paths = visible(burstPaths(state.session));
+    if (!paths.length) { state.shown = null; return; }
+    if (show === "keep" && paths.indexOf(state.shown) >= 0) { return; }
+    state.shown = show === "last" ? paths[paths.length - 1] : paths[0];
+  }
+
+  function selectGroup(name, show) {
+    state.group = name;
+    bursts = groupBursts(name);
+    var names = burstNames();
+    if (!names.length) { state.session = ""; paths = []; state.shown = null; return; }
+    if (names.indexOf(state.session) >= 0) { refresh(show || "first"); }
+    else { state.session = names[names.length - 1]; refresh("last"); }
+  }
+
+  function openExperiment(name, home) {
+    state.exp = name;
+    groups = discover(name);
+    var names = groupNames();
+    var keep = names.indexOf(state.group) >= 0 ? state.group : (names.length ? "All" : "");
+    selectGroup(keep);
+    if (!burstNames().length) { return; }
+    if (home) { state.session = burstNames()[burstNames().length - 1]; refresh("last"); }
+    else { state.session = "All"; refresh("first"); }
+  }
+
+  function step(delta) {
+    if (!paths.length) { return; }
+    var i = paths.indexOf(state.shown);
+    if (i < 0) { state.shown = delta > 0 ? paths[0] : paths[paths.length - 1]; return; }
+    var j = i + delta;
+    if (j >= 0 && j < paths.length) { state.shown = paths[j]; return; }
+    if (state.session === "All" || bursts.length <= 1) { state.shown = delta > 0 ? paths[0] : paths[paths.length - 1]; return; }
+    var names = burstNames(), k = names.indexOf(state.session) - 1;
+    k = ((k + delta) % bursts.length + bursts.length) % bursts.length;
+    state.session = names[k + 1];
+    refresh(delta > 0 ? "first" : "last");
+  }
+
+  function position() {
+    var total = 0, before = 0, passed = false;
+    bursts.forEach(function (b) {
+      var n = visible(b[1]).length;
+      if (b[0] === state.session) { passed = true; }
+      if (!passed && state.session !== "All") { before += n; }
+      total += n;
+    });
+    if (!total) { return ""; }
+    var i = paths.indexOf(state.shown);
+    return (i >= 0 ? before + i + 1 : "–") + "/" + total;
+  }
+
+  function draw() {
+    var expNames = EXPERIMENTS.map(function (e) { return e[0]; });
+    fill(exp, expNames, state.exp);
+    fill(group, groupNames(), state.group);
+    fill(session, burstNames(), state.session);
+    var values = {};
+    bursts.forEach(function (b) { b[1].forEach(function (p) { var v = wavelength(p); if (v) { values[v] = true; } }); });
+    fill(filter, ["All"].concat(Object.keys(values).sort()), state.filter);
+    figure.querySelectorAll(".row-filter").forEach(function (node) { node.classList.toggle("row-hidden", !plugin.checked); });
+    fill(image, paths.map(function (p) { return p.split("/").pop(); }), state.shown ? state.shown.split("/").pop() : "");
+    pos.textContent = position();
+
+    T.clear(tree);
+    var root = document.createElement("li");
+    root.className = "dir";
+    root.textContent = state.exp + "/captures/";
+    tree.appendChild(root);
+    var listed = {};
+    paths.forEach(function (p) { listed[p] = true; });
+    var all = Object.keys(files).sort();
+    if (!all.length) {
+      var none = document.createElement("li");
+      none.className = "off";
+      none.textContent = "  (empty: only a logs folder beside it)";
+      tree.appendChild(none);
+    }
+    // Files before subfolders in each folder, files by save time, as a file browser would group them.
+    var nest = { files: [], dirs: {} };
+    all.forEach(function (p) {
+      var node = nest, parts = p.split("/");
+      parts.slice(0, -1).forEach(function (part) { node = node.dirs[part] = node.dirs[part] || { files: [], dirs: {} }; });
+      node.files.push(p);
+    });
+    function line(className, depth, label) {
+      var li = document.createElement("li");
+      li.className = className;
+      li.textContent = new Array(depth + 1).join("  ") + label;
+      tree.appendChild(li);
+      return li;
+    }
+    function walk(node, depth) {
+      node.files.sort(function (a, b) { return files[a].t - files[b].t; }).forEach(function (p) {
+        var li = line(p === state.shown ? "shown" : listed[p] ? "listed" : "off", depth, p.split("/").pop());
+        var tag = document.createElement("span");
+        tag.className = "tag" + (files[p].kind.indexOf("16") === 0 ? " b16" : "");
+        tag.textContent = files[p].kind;
+        li.appendChild(tag);
+      });
+      Object.keys(node.dirs).sort().forEach(function (name) {
+        line("dir", depth, name + "/");
+        walk(node.dirs[name], depth + 1);
+      });
+    }
+    walk(nest, 1);
+
+    if (!state.shown) {
+      status.innerHTML = "Nothing to show: this experiment has no captures yet.";
+      return;
+    }
+    var kinds = {};
+    paths.forEach(function (p) { kinds[files[p].kind.split(" ")[0]] = true; });
+    var mixed = Object.keys(kinds).length > 1;
+    status.innerHTML = "Title: <code>Image Viewer - " + state.exp + " - " + state.shown.split("/").pop() + " - … " +
+      files[state.shown].kind + "</code>. " + (mixed
+        ? '<span class="bad">The list mixes 8-bit and 16-bit images:</span> stepping alternates between them, and Calculate would measure both.'
+        : '<span class="good">Every listed image is ' + Object.keys(kinds)[0] + ".</span>");
+  }
+
+  exp.addEventListener("change", function () { openExperiment(exp.value, false); draw(); });
+  group.addEventListener("change", function () { selectGroup(group.value); draw(); });
+  session.addEventListener("change", function () { state.session = session.value; refresh("first"); draw(); });
+  filter.addEventListener("change", function () { state.filter = filter.value; refresh("keep"); draw(); });
+  image.addEventListener("change", function () {
+    paths.forEach(function (p) { if (p.split("/").pop() === image.value) { state.shown = p; } });
+    draw();
+  });
+  plugin.addEventListener("change", function () { if (!plugin.checked) { state.filter = "All"; } refresh("keep"); draw(); });
+  q("iv-prev").addEventListener("click", function () { step(-1); draw(); });
+  q("iv-next").addEventListener("click", function () { step(1); draw(); });
+  q("iv-home").addEventListener("click", function () { openExperiment(CURRENT, true); draw(); });
+
+  // The pane opening: group "All", newest session, newest image.
+  groups = discover(CURRENT);
+  selectGroup("All");
+  draw();
+});
+
+Tutorial.demo("levels", function (figure, T) {
+  var W = 160, H = 100;
+  var q = function (id) { return figure.querySelector("#" + id); };
+  var canvas = q("lv-canvas"), ctx = canvas.getContext("2d"), hud = q("lv-hud");
+  var auto = q("lv-auto"), min = q("lv-min"), max = q("lv-max"), eight = q("lv-8bit");
+  var hist = q("lv-hist"), table = q("lv-read"), status = q("lv-status");
+  var rand = T.random(7);
+  var raw = new Uint16Array(W * H), copy = new Uint8Array(W * H);
+  var drops = [[42, 52, 20, 2400], [96, 38, 15, 5200], [132, 72, 11, 1400]];
+
+  for (var y = 0; y < H; y++) {
+    for (var x = 0; x < W; x++) {
+      var v = 600 + 300 * x / W + (rand() + rand() + rand() - 1.5) * 70;
+      drops.forEach(function (d) {
+        var r = Math.sqrt((x - d[0]) * (x - d[0]) + (y - d[1]) * (y - d[1])) / d[2];
+        if (r < 1) { v += d[3] * Math.sqrt(1 - r * r); }
+      });
+      raw[y * W + x] = Math.max(0, Math.min(65535, Math.round(v)));
+    }
+  }
+  [[12, 9], [70, 85], [150, 20], [110, 60], [25, 75]].forEach(function (p) { raw[p[1] * W + p[0]] = 65535; });
+
+  var lo = 65535, hi = 0;
+  raw.forEach(function (v) { lo = Math.min(lo, v); hi = Math.max(hi, v); });
+  raw.forEach(function (v, i) { copy[i] = Math.round((v - lo) / (hi - lo) * 255); });
+
+  function percentiles(data) {
+    var sorted = Array.prototype.slice.call(data).sort(function (a, b) { return a - b; });
+    var at = function (p) {
+      var k = p / 100 * (sorted.length - 1), f = Math.floor(k);
+      return sorted[f] + (sorted[Math.min(f + 1, sorted.length - 1)] - sorted[f]) * (k - f);
+    };
+    return [at(0.1), at(99.9)];
+  }
+  var autoRaw = percentiles(raw), autoCopy = percentiles(copy);
+
+  function windowNow() {
+    var data = eight.checked ? copy : raw;
+    var w = auto.checked ? (eight.checked ? autoCopy : autoRaw) : [+min.value, +max.value];
+    if (w[1] <= w[0]) { w = [Math.min.apply(null, data), Math.max.apply(null, data) || 1]; }
+    return { data: data, low: w[0], high: w[1] };
+  }
+
+  function render() {
+    var s = windowNow(), img = ctx.createImageData(W, H), black = 0, white = 0;
+    for (var i = 0; i < s.data.length; i++) {
+      var g = Math.round(Math.max(0, Math.min(255, (s.data[i] - s.low) / (s.high - s.low) * 255)));
+      if (g === 0) { black++; }
+      if (g === 255) { white++; }
+      img.data[4 * i] = img.data[4 * i + 1] = img.data[4 * i + 2] = g;
+      img.data[4 * i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    return { s: s, black: 100 * black / s.data.length, white: 100 * white / s.data.length };
+  }
+
+  function drawHist(s) {
+    T.clear(hist);
+    var axis = eight.checked ? 256 : 8000, bins = 80, counts = [];
+    for (var b = 0; b < bins; b++) { counts.push(0); }
+    var over = 0;
+    s.data.forEach(function (v) { if (v >= axis) { over++; } else { counts[Math.floor(v / axis * bins)]++; } });
+    var peak = Math.sqrt(Math.max.apply(null, counts));
+    var x0 = 40, x1 = 500, y0 = 96, y1 = 10, sx = T.scale(0, axis, x0, x1);
+    T.el("line", { x1: x0, y1: y0, x2: 580, y2: y0, stroke: "var(--line)" }, hist);
+    counts.forEach(function (c, k) {
+      var h = (y0 - y1) * Math.sqrt(c) / peak;
+      T.el("rect", { x: sx(k * axis / bins), y: y0 - h, width: Math.max(1, (x1 - x0) / bins - 1), height: h, fill: "var(--muted)" }, hist);
+    });
+    if (over) {
+      var h2 = Math.max(3, (y0 - y1) * Math.sqrt(over) / peak);
+      T.text(hist, 527, y0 - 3, "≈", { "text-anchor": "middle" });
+      T.el("rect", { x: 550, y: y0 - h2, width: 6, height: h2, fill: "var(--down)" }, hist);
+      T.text(hist, 553, 112, "65535", { "text-anchor": "middle" });
+    }
+    T.text(hist, x0, 112, "0", { "text-anchor": "middle" });
+    T.text(hist, x1, 112, String(axis), { "text-anchor": "middle" });
+    [[s.low, "black", "var(--blue)"], [s.high, "white", "var(--orange)"]].forEach(function (m) {
+      var x = Math.min(x1 + 12, sx(m[0])), beyond = m[0] > axis;
+      T.el("line", { x1: x, y1: y1 - 4, x2: x, y2: y0, stroke: m[2], "stroke-width": 2, "stroke-dasharray": beyond ? "3 3" : "" }, hist);
+      T.text(hist, x + (m[1] === "black" ? -4 : 4), y1 + 4, m[1] + (beyond ? " " + Math.round(m[0]) + " →" : ""),
+        { "text-anchor": m[1] === "black" ? "end" : "start", style: "fill:" + m[2] });
+    });
+  }
+
+  var start = null;
+
+  function update() {
+    if (+min.value >= +max.value) { min.value = +max.value - 1; }
+    min.disabled = max.disabled = auto.checked;
+    minOut.textContent = min.value;
+    maxOut.textContent = max.value;
+    var r = render();
+    drawHist(r.s);
+    var rows = {
+      low: Math.round(r.s.low), high: Math.round(r.s.high), black: r.black, white: r.white
+    };
+    if (!start) { start = rows; }
+    T.readout(table, [
+      { label: "Black point (value drawn black)", now: rows.low, start: start.low },
+      { label: "White point (value drawn white)", now: rows.high, start: start.high },
+      { label: "Pixels drawn pure black", now: rows.black, start: start.black, digits: 1, unit: "%" },
+      { label: "Pixels drawn pure white", now: rows.white, start: start.white, digits: 1, unit: "%" }
+    ]);
+    var notes = [];
+    if (auto.checked) {
+      notes.push("Auto contrast: the window is this image's 0.1 to 99.9 percentiles; Min and Max are greyed out.");
+    }
+    if (eight.checked && !auto.checked && r.s.low < 255 && r.s.high > 1000) {
+      notes.push('<span class="bad">The 8-bit copy holds nothing above 255,</span> so with Max at ' + Math.round(r.s.high) +
+        " it is almost black. This is what Image Group <em>All</em> looks like with manual contrast.");
+    } else if (!eight.checked && r.white < 0.2 && r.s.high > 30000) {
+      notes.push('<span class="bad">Nearly black:</span> the white point is far above the droplets, as when a raw frame is shown over its full range.');
+    } else if (r.white > 5) {
+      notes.push('<span class="bad">Clipped:</span> over 5 % of pixels are pure white; droplet detail above the white point is lost on screen (not in the file).');
+    }
+    status.innerHTML = notes.join(" ");
+  }
+
+  var minOut = figure.querySelector('output[for="lv-min"]'), maxOut = figure.querySelector('output[for="lv-max"]');
+
+  T.bind(min, update);
+  T.bind(max, update);
+  auto.addEventListener("change", update);
+  eight.addEventListener("change", update);
+  q("lv-full").addEventListener("click", function () { auto.checked = false; min.value = 0; max.value = 65535; update(); });
+  q("lv-default").addEventListener("click", function () { auto.checked = false; min.value = 0; max.value = 10000; update(); });
+
+  canvas.addEventListener("mousemove", function (event) {
+    var box = canvas.getBoundingClientRect();
+    var x = Math.floor((event.clientX - box.left) / box.width * W), y = Math.floor((event.clientY - box.top) / box.height * H);
+    if (x < 0 || y < 0 || x >= W || y >= H) { hud.textContent = ""; return; }
+    hud.textContent = "(" + x + ", " + y + ") = " + (eight.checked ? copy : raw)[y * W + x];
+  });
+  canvas.addEventListener("mouseleave", function () { hud.textContent = ""; });
+  update();
+});
+</script>

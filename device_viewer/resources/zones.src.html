@@ -56,8 +56,8 @@ p.zt-msg { font-family: Consolas, "Courier New", monospace; font-size: .82rem; b
   (a name and a colour), then draw <strong>regions</strong> of that type over the electrodes. A protocol step can then say
   "switch on the first parking slot that is still free", without naming electrodes.</p>
   <p>This tutorial covers the <strong>Zones</strong> section of the Device Viewer side panel and the <strong>Zone Target</strong>
-  protocol column. The clips are real screen recordings; they play when they scroll into view. The two interactive figures
-  let you try drawing regions and the Zone Target rule without a chip.</p>
+  protocol column. The clips play when they scroll into view. The two interactive figures let you try drawing regions and the
+  Zone Target rule without a chip.</p>
 </header>
 
 <!-- ============================================================ -->
@@ -370,6 +370,11 @@ or selection, as the last column says.</p>
   <div data-read><p>Only the drawing order changes. It does not change the order in which the
   <a href="#zt-order">Zone Target column checks regions</a>.</p></div>
   <div data-typical><p>The order you added the zone types in.</p></div>
+  <figure class="clip"><video data-clip data-simulated="layer order: Move the zone up / down a layer (sim_toolkit shots/zones_layers.py)" muted loop playsinline controls preload="metadata" width="736" height="476" poster="zones_media/layer-order.webp" aria-label="Simulated clip: a red zone-2 region overlaps the yellow zone-1 region under the small droplet; the zone-2 row is clicked and Move the zone up a layer moves it to the top of the table, so its red is now drawn over the yellow; Move down puts it back"><source src="zones_media/layer-order.webm" type="video/webm"></video>
+  <figcaption><code>zone-2</code> (red) shares
+  two electrodes with region 2 of <code>zone-1</code> (yellow). zone-1 is the first row, so yellow is drawn on top. After the
+  zone-2 row is clicked, <em>Move the zone up a layer</em> takes zone-2 and its region to the top of the table and red is now
+  drawn over yellow; <em>Move the zone down a layer</em> puts it back.</figcaption></figure>
 </section>
 
 <section data-term id="draw-mode" data-where="Draw zones button">
@@ -388,8 +393,13 @@ or selection, as the last column says.</p>
   <p>Makes your boxes take electrodes out of the dashed selection instead of adding them.</p>
   <div data-what><p>The switch for screens without a keyboard; holding <kbd>Ctrl</kbd> while you drag does the same.</p></div>
   <div data-when><p>To carve a notch out of a large box, or to trim a region during Edit region.</p></div>
-  <div data-read><p>The box preview turns red while it removes.</p></div>
+  <div data-read><p>While you drag, the rest of the selection shows red and the electrodes the box touches drop out of it.</p></div>
   <div data-typical><p>Off. Usable only in draw mode.</p></div>
+  <figure class="clip"><video data-clip data-simulated="Undraw: trim a pending selection, then Commit (sim_toolkit shots/zones_undraw.py)" muted loop playsinline controls preload="metadata" width="736" height="476" poster="zones_media/undraw.webp" aria-label="Simulated clip: with Draw zones on, a box selects six electrodes near the top; Undraw is switched on and a second box takes two of them out, the rest of the selection showing red while that box is dragged; Undraw off, Commit zone makes the remaining four electrodes region 3"><source src="zones_media/undraw.webm" type="video/webm"></video>
+  <figcaption>A box selects six electrodes.
+  With <em>Undraw</em> on, a second box removes two of them: while it is dragged, what stays selected shows red and the
+  electrodes it removes drop out. With Undraw off again, <em>Commit zone</em> turns the L-shaped rest into region 3. Holding
+  <kbd>Ctrl</kbd> while dragging does the same as Undraw.</figcaption></figure>
 </section>
 
 <section data-term id="select-mode" data-where="Select zones button">
@@ -429,6 +439,12 @@ or selection, as the last column says.</p>
   <div data-read><p>The button is greyed out while the selection does not qualify, for example when the regions do not touch
   or belong to different zone types.</p></div>
   <div data-typical><p>Off until a qualifying selection exists.</p></div>
+  <figure class="clip"><video data-clip data-simulated="Merge two touching regions (sim_toolkit shots/zones_merge.py)" muted loop playsinline controls preload="metadata" width="736" height="476" poster="zones_media/merge.webp" aria-label="Simulated clip: in Select zones, region 2 is clicked, Multi-select is switched on and region 3 just above it is clicked, so both rows are highlighted and Merge lights up; Merge leaves rows 1 and 2 and a count of 2; after clearing the selection, one click selects all five electrodes of the merged region"><source src="zones_media/merge.webm" type="video/webm"></video>
+  <figcaption>Regions 2 and 3 touch. Click
+  region 2, switch <em>Multi-select</em> on, click region 3: both rows are highlighted and <em>Merge</em> lights up. After
+  Merge the table shows rows 1 and 2 and the count drops to 2; the merged region keeps region 2's place and id. The picture
+  barely changes, because on this chip every region's outline traces each electrode. The last click, on the old region 3,
+  selects all five electrodes: they are one region now.</figcaption></figure>
 </section>
 
 <section data-term id="edit-region" data-where="Edit region button, canvas strip, right-click menu">
@@ -440,6 +456,11 @@ or selection, as the last column says.</p>
   <div data-when><p>To grow, shrink or reshape a region without losing its id.</p></div>
   <div data-read><p><em>Clear selection</em> or <kbd>Esc</kbd> cancels: the region comes back unchanged. Either way you land
   back in select mode.</p></div>
+  <figure class="clip"><video data-clip data-simulated="Edit region: add electrodes, Commit (sim_toolkit shots/zones_edit.py)" muted loop playsinline controls preload="metadata" width="736" height="476" poster="zones_media/edit-region.webp" aria-label="Simulated clip: in Select zones, region 3 near the top is clicked and Edit region is pressed; Draw zones turns on and the region shows as a dashed selection; a box adds the two electrodes to its right; Commit zone fills all four and the tool returns to Select zones with region 3 still selected"><source src="zones_media/edit-region.webm" type="video/webm"></video>
+  <figcaption>Region 3 is selected, then
+  <em>Edit region</em>: the tool switches to Draw zones and the region turns back into a dashed selection. A box adds the two
+  electrodes beside it. <em>Commit zone</em> updates region 3 itself (still row 3, the count stays 3) and returns to Select
+  zones with it selected.</figcaption></figure>
 </section>
 
 <section data-term id="move-region" data-where="select mode, drag a region">
@@ -511,6 +532,12 @@ on "the first region of this type that has (or has no) droplet" without naming e
   place that holds some, for example to pull a droplet out of whichever reservoir is filled.</p></div>
   <div data-read><p>Blank and locked until the Zone Target cell has a zone type.</p></div>
   <div data-typical><p>Has Droplet.</p></div>
+  <figure class="clip"><video data-clip data-simulated="No Droplet run on the walkthrough layout (sim_toolkit shots/zones_run_no_droplet.py)" muted loop playsinline controls preload="metadata" width="736" height="658" poster="zones_media/run-no-droplet-z02.webp" aria-label="Simulated clip: the walkthrough chip runs step 3; the status bar changes from Editing: Step 3 to Running Protocol: Step 3, the step's two blue electrodes stay on, and the empty region 3 near the top turns grey-green while the two regions with droplets stay as they are"><source src="zones_media/run-no-droplet-z02.webm" type="video/webm"></video>
+  <figcaption>The walkthrough chip and its
+  three regions, with step 3 set to <code>zone-1</code> / <em>No Droplet</em>. Regions 1 and 2 hold droplets, so they are
+  skipped; region 3 (zone-1-6) is empty, so it is the one switched on: it turns grey-green next to the step's own two blue
+  electrodes. Built from the real <em>Has Droplet</em> run of step 6, with region 1 kept switched off and region 3 given the
+  look region 1 had when it was switched on.</figcaption></figure>
 </section>
 
 <section data-term id="zt-order" data-where="Zone Target tooltip">
