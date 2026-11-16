@@ -50,28 +50,34 @@ def key_column(name, label):
     )
 
 
-def tick_column(name, label):
-    """A checkbox column as narrow as its header."""
+def tick_column(name, label, tooltip=""):
+    """A checkbox column as narrow as its header; `tooltip` is its cells'
+    help text."""
     return ActiveRowCheckboxColumn(
-        name=name, label=label, resize_mode="resize_to_contents"
+        name=name, label=label, tooltip=tooltip, resize_mode="resize_to_contents"
     )
 
 
-def number_column(name, label, editor=None):
+def number_column(name, label, editor=None, tooltip=""):
     """An editable number column sized to its contents; `editor` swaps the
     default cell editor (e.g. a spin box)."""
     return ActiveRowObjectColumn(
-        name=name, label=label, resize_mode="resize_to_contents", editor=editor
+        name=name,
+        label=label,
+        tooltip=tooltip,
+        resize_mode="resize_to_contents",
+        editor=editor,
     )
 
 
-def slider_column(name, label, low, high, step, value_format, span_name=""):
+def slider_column(name, label, low, high, step, value_format, span_name="", tooltip=""):
     """A slider-edited column sharing the table's spare width. `span_name`
     names the row trait holding the slider's run-time top end (the
     exposure range pick); the value itself is never clamped to it."""
     return ActiveRowObjectColumn(
         name=name,
         label=label,
+        tooltip=tooltip,
         format=value_format,
         resize_mode="stretch",
         editor=SteppedSliderEditor(
@@ -96,8 +102,17 @@ def capture_row_tables(key, settings):
             selected="selected_row",
         )
 
-    manual = table([tick_column("capture", "Capture")])
-    attached = table([tick_column("at_start", "Start"), tick_column("at_end", "End")])
+    manual = table(
+        [tick_column("capture", "Capture", tooltip="Capture this row on Start capture")]
+    )
+    attached = table(
+        [
+            tick_column(
+                "at_start", "Start", tooltip="Capture this row as the step starts"
+            ),
+            tick_column("at_end", "End", tooltip="Capture this row as the step ends"),
+        ]
+    )
 
     return manual, attached
 
@@ -137,8 +152,17 @@ def capture_group(manual_table, attached_table, park_label, extra_buttons=()):
             visible_when="attached_step_id",
         ),
         HGroup(
-            UItem("start_button", enabled_when=f"{ROW_TABLE_ENABLED_WHEN} and rows"),
-            UItem("abort_button", enabled_when="capturing"),
+            UItem(
+                "start_button",
+                tooltip="Capture the ticked rows in table order (a step's Start "
+                "and End rows while one is attached)",
+                enabled_when=f"{ROW_TABLE_ENABLED_WHEN} and rows",
+            ),
+            UItem(
+                "abort_button",
+                tooltip="Stop the running capture; files already saved are kept",
+                enabled_when="capturing",
+            ),
             *extra_buttons,
             Item(
                 "park_motor",
@@ -159,7 +183,11 @@ def results_group(results_table):
     over that run's results table."""
     return VGroup(
         HGroup(
-            UItem("show_results", editor=IconToggleEditor()),
+            UItem(
+                "show_results",
+                editor=IconToggleEditor(),
+                tooltip="Show or hide the results of each capture run",
+            ),
             Label("Results"),
         ),
         VGroup(

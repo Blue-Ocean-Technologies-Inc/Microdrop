@@ -25,12 +25,27 @@ from ..consts import (
     CHIP_CABIN_STATUS_ERROR,
     CHIP_CABIN_STATUS_INDEX,
     CHIP_CABIN_TRAY_ONLY_FLAG,
+    CHIP_ENGAGE_MODE_SMART,
     FILTER_POSITIONS,
     MAGNET_APPLIED,
     MAGNET_HEIGHT_MM_BOUNDS,
     MOTOR_IDS,
+    PAD_ENGAGE_ACTION_ENGAGE,
+    PAD_ENGAGE_ACTION_RETRACT,
+    PAD_ENGAGE_CMD,
+    PAD_ENGAGE_FAILURES,
+    PAD_ENGAGE_MAX_STEPS,
+    PAD_ENGAGE_MODE_CLASSIC,
+    PAD_ENGAGE_MODE_SMART,
+    PAD_ENGAGE_OVERDRIVE_UM,
+    PAD_ENGAGE_PADS_MAY_BE_PRESSED,
+    PAD_ENGAGE_STATUS_MOTOR_ERROR,
+    PAD_ENGAGE_STATUS_OK,
+    PAD_ENGAGE_STEP_UM,
+    SMART_ENGAGE_NEEDS,
     TRAY_ACTION_CODES,
     MoveTrayRequest,
+    chip_lock_failed_publisher,
 )
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
@@ -247,8 +262,86 @@ class PortableDropbotMotorsMixinService(HasTraits):
         """Chip lock IS the pogo pads pressing the chip; a topic of
         its own so panes and protocol steps say what they mean. The
         snapshot afterwards lets chip_on_pad report the result rather
-        than assuming it."""
-        self.on_set_pogo_request(message)
+        than assuming it.
+
+        The chip engage mode preference picks how a lock presses: the
+        motor board's classic press, or the signal board's smart
+        PAD_ENGAGE. An unlock retracts through PAD_ENGAGE whenever a
+        smart engage may hold the pads (smart mode, or the last
+        PAD_ENGAGE left them down), so changing the mode in between
+        never strands them pressed."""
+        lock = str(message) == "True"
+        smart = self.preferences.chip_engage_mode == CHIP_ENGAGE_MODE_SMART
+
+        if lock and smart:
+            self._pad_engage(PAD_ENGAGE_ACTION_ENGAGE, PAD_ENGAGE_MODE_SMART)
+        elif not lock and (smart or self.pads_smart_engaged):
+            self._pad_engage(PAD_ENGAGE_ACTION_RETRACT, PAD_ENGAGE_MODE_CLASSIC)
+        else:
+            self.on_set_pogo_request(message)
+
+    def _pad_engage(self, action, mode):
+        """Run one PAD_ENGAGE with the fixed smart descent. The board
+        replies only once the pads stop (up to 45 s), and the proxy lock
+        is held until then. A failure is published on CHIP_LOCK_FAILED."""
+        engage = action == PAD_ENGAGE_ACTION_ENGAGE
+        context = "smart chip lock" if engage else "chip unlock (pad retract)"
+        logger.info(f"Portable Dropbot {context} requested")
+
+        ok, reply = self._proxy_call(
+            context,
+            lambda: self.proxy.sig.pad_engage(
+                action,
+                mode,
+                PAD_ENGAGE_STEP_UM,
+                PAD_ENGAGE_MAX_STEPS,
+                PAD_ENGAGE_OVERDRIVE_UM,
+            ),
+        )
+        status = reply.status if ok and reply is not None else None
+
+        if status == PAD_ENGAGE_STATUS_OK:
+            logger.info(
+                f"Portable Dropbot {context} --> ok "
+                f"(steps L {reply.l_steps}, R {reply.r_steps})"
+            )
+            self.pads_smart_engaged = engage
+        else:
+            # Unlike every other failure, these may leave the pads down: the
+            # indicator stays locked, so the next click is the retract.
+            if status in PAD_ENGAGE_PADS_MAY_BE_PRESSED:
+                self.pads_smart_engaged = True
+
+            error = self._pad_engage_error(engage, ok, reply)
+            logger.error(f"Portable Dropbot {context} --> FAILED: {error}")
+            chip_lock_failed_publisher.publish(
+                {
+                    "action": "lock" if engage else "unlock",
+                    "error": error,
+                    "pads_may_be_pressed": not engage
+                    or status in PAD_ENGAGE_PADS_MAY_BE_PRESSED,
+                }
+            )
+
+        self._publish_status_snapshot()
+
+    def _pad_engage_error(self, engage, ok, reply):
+        """Why a PAD_ENGAGE failed: the raised error, the driver's account
+        of an unanswered or refused call, or the reply's status."""
+
+        if not ok:
+            return str(reply or "Portable DropBot not connected")
+
+        if reply is None:
+            result = self.proxy.uart.last_result(PAD_ENGAGE_CMD)
+            error = result.describe() if result is not None else "no reply"
+        else:
+            error = PAD_ENGAGE_FAILURES.get(reply.status, f"status {reply.status}")
+
+        if engage and (reply is None or reply.status == PAD_ENGAGE_STATUS_MOTOR_ERROR):
+            error = f"{error}; {SMART_ENGAGE_NEEDS}"
+
+        return error
 
     def on_home_all_request(self, message):
         # The full homing sequence runs tens of seconds; it executes

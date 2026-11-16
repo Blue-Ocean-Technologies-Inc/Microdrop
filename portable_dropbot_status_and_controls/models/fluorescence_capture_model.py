@@ -140,14 +140,18 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
     #: Which span the exposure sliders cover: a narrow range makes the
     #: 0.1 ms notches easy to hit, a wide one reaches long exposures.
     exposure_range = Enum(
-        DEFAULT_FLUORESCENCE_EXPOSURE_RANGE, tuple(FLUORESCENCE_EXPOSURE_RANGES)
+        DEFAULT_FLUORESCENCE_EXPOSURE_RANGE,
+        tuple(FLUORESCENCE_EXPOSURE_RANGES),
+        desc="Span of the Exposure sliders; a narrow one makes 0.1 ms steps easy",
     )
 
     # ---- Manual controls ------------------------------------------------
     #: Chevron toggle for the Manual controls group.
     show_manual = Bool(False)
     #: Moves the wheel as soon as it changes.
-    manual_filter_position = Enum(FILTER_POSITIONS)
+    manual_filter_position = Enum(
+        FILTER_POSITIONS, desc="Filter the wheel moves to when picked"
+    )
     #: True while manual_filter_position is being set to mirror the wheel's
     #: actual position (homing, or a capture's teardown) rather than a user
     #: pick — the controller must not publish a move for this change.
@@ -156,7 +160,9 @@ class PortableDropbotFluorescenceCaptureModel(CapturePaneModel):
     #: The camera settings below are applied as soon as any of them changes.
     manual_auto_exposure = Bool(True, desc="Camera auto exposure")
     manual_exposure_ms = Range(
-        *FLUORESCENCE_EXPOSURE_MS_BOUNDS, FLUORESCENCE_DEFAULT_EXPOSURE_MS
+        *FLUORESCENCE_EXPOSURE_MS_BOUNDS,
+        FLUORESCENCE_DEFAULT_EXPOSURE_MS,
+        desc="Camera exposure, milliseconds; applied as it changes",
     )
     #: The manual exposure slider's upper bound, from the exposure range.
     manual_exposure_max = Property(Float, observe="exposure_range")
