@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from traits.api import Dict, HasTraits, Int, Str, provides
 
 # Microdrop package imports.
+from device_viewer.consts import user_disabled_channels_mirror
 from dropbot_controller.interfaces.i_dropbot_control_mixin_service import (
     IDropbotControlMixinService,
 )
@@ -87,8 +88,12 @@ class ElectrodeStateChangeMixinService(HasTraits):
                     context=self.message_context,
                 )
 
+                # The firmware knows nothing of the user's disables.
+                requested_channels = user_disabled_channels_mirror.drop_from(
+                    model.channels, "DropBot actuation"
+                )
                 actuated_channels = actuate_channels(
-                    self.proxy, list(model.channels), timeout=5, allow_disabled=True
+                    self.proxy, requested_channels, timeout=5, allow_disabled=True
                 )
 
                 app_globals[LAST_CHANNELS_REQUESTED_KEY] = message
@@ -98,10 +103,11 @@ class ElectrodeStateChangeMixinService(HasTraits):
                 logger.debug(f"{self.proxy.state_of_channels}")
 
                 # If requested vs actuated channel counts differ, some
-                # channels were disabled by the hardware
-                if len(model.channels) != len(actuated_channels):
+                # channels were disabled by the hardware. Compared against
+                # the filtered request: the user's disables are no fault.
+                if len(requested_channels) != len(actuated_channels):
                     logger.warning(
-                        f"Actuation discrepancy: requested {len(model.channels)} "
+                        f"Actuation discrepancy: requested {len(requested_channels)} "
                         f"channels, but only {len(actuated_channels)} were "
                         "actuated. Checking disabled channels mask."
                     )

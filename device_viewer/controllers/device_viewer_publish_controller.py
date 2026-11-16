@@ -172,8 +172,8 @@ class DeviceViewerPublishController(HasTraits):
         "model.electrodes.actuated_channels.items"
     )  # When an electrode changes state
     @observe(
-        "model.electrodes.disabled_channels.items"
-    )  # When an electrode is disabled/enabled
+        "model.electrodes.user_disabled_channels.items"
+    )  # When the user disables/enables an electrode
     def model_change_handler_with_message(self, event=None):
         """
         Handle changes to the model and send a message to the device viewer
@@ -234,6 +234,11 @@ class DeviceViewerPublishController(HasTraits):
         # self.publish_model_message()
 
     # ----------------------------------------------------- electrodes
+    # A user (en/dis)able republishes the actuated set so the backend, which
+    # drops user-disabled channels, stops or resumes driving it at once. The
+    # electrodes model mirrors the set to app_globals in its own observer,
+    # registered at its construction and so run before this one.
+    @observe("model.electrodes.user_disabled_channels.items")
     @observe("model.electrodes.actuated_channels.items")
     @observe("model.realtime_mode")
     @observe("model.connected")

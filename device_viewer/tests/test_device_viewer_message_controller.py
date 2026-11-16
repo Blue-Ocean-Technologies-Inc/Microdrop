@@ -66,7 +66,9 @@ def controller_and_actor_factory():
     pane = _StubPane(
         model=SimpleNamespace(
             realtime_mode=False,
-            electrodes=SimpleNamespace(disabled_channels=set()),
+            electrodes=SimpleNamespace(
+                user_disabled_channels={7}, hardware_disabled_channels=set()
+            ),
         ),
         device_viewer_advanced_preferences=SimpleNamespace(
             allow_hardware_disables=True
@@ -125,12 +127,14 @@ def test_realtime_topic_dispatches_to_the_model(controller_and_actor_factory):
     assert controller.pane.model.realtime_mode is True
 
 
-def test_disabled_channels_update_the_electrodes(controller_and_actor_factory):
+def test_disabled_channels_update_only_the_hardware_set(controller_and_actor_factory):
     controller, _ = controller_and_actor_factory
 
     _dispatch(controller, DISABLED_CHANNELS_CHANGED, json.dumps({"channels": [3, 5]}))
 
-    assert controller.pane.model.electrodes.disabled_channels == {3, 5}
+    electrodes = controller.pane.model.electrodes
+    assert electrodes.hardware_disabled_channels == {3, 5}
+    assert electrodes.user_disabled_channels == {7}
 
 
 def test_phase_navigation_mode_is_marshalled_to_the_gui_thread(

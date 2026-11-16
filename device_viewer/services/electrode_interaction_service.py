@@ -278,13 +278,21 @@ class ElectrodeInteractionControllerService(HasTraits):
         self._zone_move_active = False
 
     def detect_droplet(self):
-        """Placeholder for a context menu action."""
-        publish_message(
-            topic=DETECT_DROPLETS,
-            message=json.dumps(
-                list(self.model.electrodes.channels_electrode_ids_map.keys())
-            ),
-        )
+        """Ask the backend to find liquid on the device's enabled channels."""
+        electrodes = self.model.electrodes
+        channels = [
+            channel
+            for channel in electrodes.channels_electrode_ids_map
+            if channel is not None and channel not in electrodes.disabled_channels
+        ]
+
+        # An empty request means "every channel" to the backends.
+        if not channels:
+            logger.info("Find Liquid skipped: every channel is disabled.")
+
+            return
+
+        publish_message(topic=DETECT_DROPLETS, message=json.dumps(channels))
 
     #######################################################################################################
     # Perspective Handlers
@@ -970,41 +978,48 @@ class ElectrodeInteractionControllerService(HasTraits):
                     )
                     context_menu.addSeparator()
 
-                # Bulk enable/disable all electrodes
-                has_disabled = len(self.model.electrodes.disabled_channels) > 0
+                # Bulk enable/disable all electrodes. The menu only edits the
+                # user's disables: lifting the hardware's is the firmware's call.
+                electrodes = self.model.electrodes
 
                 def enable_all_electrodes():
-                    self.model.electrodes.disabled_channels.clear()
+                    electrodes.user_disabled_channels.clear()
 
                 def disable_all_electrodes():
-                    all_channels = set(
-                        self.model.electrodes.channels_electrode_ids_map.keys()
-                    )
-                    self.model.electrodes.disabled_channels = all_channels
+                    electrodes.user_disabled_channels = set(
+                        electrodes.channels_electrode_ids_map
+                    ) - {None}
 
-                if has_disabled:
+                if electrodes.user_disabled_channels:
                     context_menu.addAction(
                         "Enable All Electrodes", enable_all_electrodes
                     )
+
                 context_menu.addAction("Disable All Electrodes", disable_all_electrodes)
                 context_menu.addSeparator()
 
-                if self.model.electrodes.electrode_right_clicked is not None:
-                    right_clicked = self.model.electrodes.electrode_right_clicked
-                    channel = right_clicked.channel
+                if electrodes.electrode_right_clicked is not None:
+                    channel = electrodes.electrode_right_clicked.channel
 
-                    # Disable/Enable electrode toggle
-                    if channel is not None:
-                        is_disabled = channel in self.model.electrodes.disabled_channels
+                    # Disable/Enable electrode toggle; a hardware-disabled one
+                    # is only labelled, since the menu cannot re-enable it.
+                    if channel in electrodes.hardware_disabled_channels:
+                        hardware_disabled_action = context_menu.addAction(
+                            "Electrode Disabled by Hardware"
+                        )
+                        hardware_disabled_action.setEnabled(False)
+
+                    elif channel is not None:
+                        is_disabled = channel in electrodes.user_disabled_channels
                         label = (
                             "Enable Electrode" if is_disabled else "Disable Electrode"
                         )
 
                         def toggle_disable(ch=channel, currently_disabled=is_disabled):
                             if currently_disabled:
-                                self.model.electrodes.disabled_channels.discard(ch)
+                                electrodes.user_disabled_channels.discard(ch)
                             else:
-                                self.model.electrodes.disabled_channels.add(ch)
+                                electrodes.user_disabled_channels.add(ch)
 
                         context_menu.addAction(label, toggle_disable)
 
@@ -1099,7 +1114,8 @@ class ElectrodeInteractionControllerService(HasTraits):
             self._end_channel_label_edit()
 
     @observe("model.electrodes.actuated_channels.items")
-    @observe("model.electrodes.disabled_channels.items")
+    @observe("model.electrodes.user_disabled_channels.items")
+    @observe("model.electrodes.hardware_disabled_channels.items")
     def actuation_state_recolor(self, event):
         """Recolor only the electrodes whose channels changed — the hot
         path during protocol runs (each phase touches a handful of the

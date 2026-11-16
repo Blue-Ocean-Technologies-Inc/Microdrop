@@ -19,6 +19,7 @@ import json
 from traits.api import HasTraits, Str, provides
 
 # Microdrop package imports.
+from device_viewer.consts import user_disabled_channels_mirror
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Microdrop utils imports.
@@ -57,9 +58,9 @@ class PortableDropbotDropletDetectionMixinService(HasTraits):
 
     def on_detect_droplets_request(self, message):
         """Answer DETECT_DROPLETS as the DropBot does: the requested
-        channels (the session's used channels when the list is empty) that
-        read at least their threshold. A refused or failed scan replies with
-        the driver's reason."""
+        channels (the session's used channels when the list is empty), less
+        the user-disabled ones, that read at least their threshold. A refused
+        or failed scan replies with the driver's reason."""
         channels = json.loads(str(message) or "[]")
         threshold_pf = float(
             app_globals.get(
@@ -69,11 +70,17 @@ class PortableDropbotDropletDetectionMixinService(HasTraits):
 
         ok, result = self._proxy_call(
             "droplet detection",
-            lambda: self._find_drops(channels or None, threshold_pf),
+            lambda: self._find_drops(channels, threshold_pf),
         )
 
         if not ok:
             self._publish_droplets_detected(error=str(result or SCAN_FAILED_MESSAGE))
+
+            return
+
+        # Every requested channel is disabled: nothing scanned, nothing found.
+        if result is None:
+            self._publish_droplets_detected()
 
             return
 
@@ -98,10 +105,19 @@ class PortableDropbotDropletDetectionMixinService(HasTraits):
     # ------------------------------------------------------------------ #
 
     def _find_drops(self, channels, threshold_pf):
-        """Scan with ``threshold_pf`` as the session's default drop threshold;
-        its saved per-channel overrides, a fresh baseline and the chip
-        weights still apply on top, as in the vendor app."""
+        """Scan ``channels`` (the used channels when empty) less the
+        user-disabled ones, with ``threshold_pf`` as the session's default
+        drop threshold; its saved per-channel overrides, a fresh baseline and
+        the chip weights still apply on top, as in the vendor app. None when
+        every channel is disabled — an empty list would mean "scan all"."""
         session = self.proxy
+        channels = user_disabled_channels_mirror.drop_from(
+            channels or session.used_channels, "Portable Dropbot droplet detection"
+        )
+
+        if not channels:
+            return None
+
         session.drop_thresholds = session.drop_thresholds.with_default(threshold_pf)
 
         return session.find_drops(channels=channels)

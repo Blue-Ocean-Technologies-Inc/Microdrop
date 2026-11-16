@@ -44,6 +44,7 @@ from ...default_settings import (
     ELECTRODE_NO_CHANNEL,
     ELECTRODE_OFF,
     ELECTRODE_ON,
+    ELECTRODE_USER_DISABLED,
     PERSPECTIVE_RECT_COLOR,
     PERSPECTIVE_RECT_COLOR_EDITING,
     ROUTE_CCW_LOOP,
@@ -392,17 +393,27 @@ class ElectrodeLayer:
         base_color = QColor(base_color)
         base_color.setAlphaF(model.get_alpha(electrode_fill_key))
 
-        # Determine inner color: disabled (red) takes priority over actuation
+        # Determine inner color: disabled takes priority over actuation, and
+        # a hardware disable (red) over a user one (grey).
         channel = electrode_view.electrode.channel
-        is_disabled = channel in model.electrodes.disabled_channels
-        if is_disabled != electrode_view._disabled:
-            # Tooltips only mention the disabled flag, so they need
-            # rebuilding only when it flips — not on every recolor.
-            electrode_view._disabled = is_disabled
+
+        if channel in model.electrodes.hardware_disabled_channels:
+            disabled_by, disabled_color = "hardware", ELECTRODE_DISABLED
+        elif channel in model.electrodes.user_disabled_channels:
+            disabled_by, disabled_color = "user", ELECTRODE_USER_DISABLED
+        else:
+            disabled_by, disabled_color = "", None
+
+        if disabled_by != electrode_view._disabled_by:
+            # Tooltips only mention the disabled kind, so they need
+            # rebuilding only when it changes — not on every recolor.
+            electrode_view._disabled_by = disabled_by
             electrode_view.update_tooltip()
+
         inner_color = None
-        if is_disabled:
-            inner_color = QColor(ELECTRODE_DISABLED)
+
+        if disabled_color:
+            inner_color = QColor(disabled_color)
             inner_color.setAlphaF(model.get_alpha(actuated_electrodes_key))
         elif channel in model.electrodes.actuated_channels:
             inner_color = QColor(ELECTRODE_ON)

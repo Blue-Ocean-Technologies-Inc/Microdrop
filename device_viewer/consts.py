@@ -34,6 +34,7 @@ from device_viewer.interfaces.i_svg_layer_codec import (
     ISvgLayerCodec as ISvgLayerCodec,
 )
 from device_viewer.interfaces.layer_context import LayerContext as LayerContext
+from device_viewer.models.disabled_channels import UserDisabledChannelsMirror
 from device_viewer.models.media import (
     CameraControlsApplied,
     CameraControlsRequest,
@@ -234,6 +235,9 @@ DEVICE_REPO_DIR_KEY = "microdrop.device_repo.dir"  # the user device-SVG repo di
 MEDIA_CAPTURES_KEY = "media_captures"  # serialised camera captures for the active run.
 DEVICE_VIEWER_RECORDING_ACTIVE_KEY = "device_viewer.recording_active"  # recording state
 ZONES_KEY = "microdrop.device.zones"  # JSON snapshot of zone types + regions
+# Sorted list of the channels the user disabled in the device viewer; every
+# hardware backend drops them from actuation and droplet-detection requests.
+USER_DISABLED_CHANNELS_KEY = "microdrop.device.user_disabled_channels"
 
 # Mirrors the live recording state to app_globals (see
 # DEVICE_VIEWER_RECORDING_ACTIVE_KEY).
@@ -245,6 +249,12 @@ recording_state_model = RecordingStateModel(
 # event-driven alternative to polling the captures folder (e.g. the
 # fluorescence image viewer refreshes on it).
 media_capture_event_model = MediaCaptureEventModel()
+
+# Mirrors the user-disabled channels to app_globals (written by the
+# electrodes model) and filters backend requests against them.
+user_disabled_channels_mirror = UserDisabledChannelsMirror(
+    globals_key=USER_DISABLED_CHANNELS_KEY
+)
 
 # Validated publishers for the camera seam. media_captured_publisher is fed
 # by the capture path itself (see services/media_capture_cache.py) so the run
@@ -293,6 +303,7 @@ APP_GLOBALS_KEYS = [
     MEDIA_CAPTURES_KEY,
     DEVICE_VIEWER_RECORDING_ACTIVE_KEY,
     ZONES_KEY,
+    USER_DISABLED_CHANNELS_KEY,
 ]
 
 # ---------------------------------------------------------------------------

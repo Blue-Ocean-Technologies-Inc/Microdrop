@@ -54,7 +54,13 @@ def _isolate_app_globals_writes(monkeypatch):
     (``Electrodes`` writes its area map on each device load), which
     pushed the zone tests past any reasonable timeout.
     """
-    from device_viewer.models import calibration, electrodes, main_model, zones
+    from device_viewer.models import (
+        calibration,
+        disabled_channels,
+        electrodes,
+        main_model,
+        zones,
+    )
 
-    for module in (calibration, electrodes, main_model, zones):
+    for module in (calibration, disabled_channels, electrodes, main_model, zones):
         monkeypatch.setattr(module, "app_globals", {})

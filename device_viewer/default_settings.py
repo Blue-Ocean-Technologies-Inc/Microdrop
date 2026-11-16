@@ -12,6 +12,7 @@
 from microdrop_style.colors import (
     ACCENT_COLOR,
     BLACK,
+    GREY,
     INFO_COLOR,
     PRIMARY_COLOR,
     PRIMARY_SHADE,
@@ -23,7 +24,10 @@ from microdrop_style.colors import (
 ELECTRODE_ON = SECONDARY_SHADE[600]
 ELECTRODE_OFF = SECONDARY_SHADE[900]
 ELECTRODE_NO_CHANNEL = WARNING_COLOR
+# Hardware-disabled (the firmware refuses the channel) is red; user-disabled
+# is a light grey, apart from the navy off fill and the orange no-channel one.
 ELECTRODE_DISABLED = "#CC4444"
+ELECTRODE_USER_DISABLED = GREY["lighter"]
 ELECTRODE_LINE = SECONDARY_SHADE[400]
 ELECTRODE_TEXT_COLOR = WHITE
 ELECTRODE_CHANNEL_EDITING = "teal"

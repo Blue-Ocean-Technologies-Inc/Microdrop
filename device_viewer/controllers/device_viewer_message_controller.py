@@ -265,7 +265,8 @@ class DeviceViewerMessageController(HasTraits):
 
     def _on_disabled_channels_changed_triggered(self, message):
         """Mirror the channels the hardware reports as disabled (after a halt
-        or an actuation discrepancy) onto the electrodes model."""
+        or an actuation discrepancy) onto the electrodes model's hardware
+        set; the user's own disables are left alone."""
         if self.pane.device_viewer_advanced_preferences.allow_hardware_disables:
             data = json.loads(message)
             disabled_set = set(data.get("channels", []))
@@ -274,7 +275,7 @@ class DeviceViewerMessageController(HasTraits):
                 f"DEVICE VIEWER: Received disabled channels change: "
                 f"{len(disabled_set)} channels disabled"
             )
-            self.pane.model.electrodes.disabled_channels = disabled_set
+            self.pane.model.electrodes.hardware_disabled_channels = disabled_set
         else:
             logger.warning(
                 f"Hardware disabled channels ({message}) not applied to view. "
