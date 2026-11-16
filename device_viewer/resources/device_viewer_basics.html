@@ -1143,7 +1143,7 @@ other route has its <span class="ui">Run</span> cell off, so it waits.</figcapti
 </figure>
   <figure class="demo demo" data-demo="loop"><svg class="chip"></svg></figure>
   <dl class="facts"><dt>What it is</dt><dd><p>A loop: drag back onto the starting electrode. Sent round and round, a droplet mixes; sitting still it
-  barely does. The simulation above sends a two-electrode droplet round a 2 × 3 block.</p></dd>
+  barely does. In the simulation above a two-electrode droplet goes round a 2 × 3 block while another runs a straight route.</p></dd>
   <dt>When to use it</dt><dd><p>Mixing, or moving several droplets side by side.</p></dd>
 </dl></article>
 </section>
@@ -3479,16 +3479,23 @@ not move. After <span class="ui">Realtime On</span> the same loop, run again, ca
   });
 
   Tutorial.demo("loop", function (figure, T) {
-    var start = { on: [40, 79], drops: [{ id: "d", at: [40, 79] }] };
+    var line = [24, 25, 94, 95], a = routeFrames(line, RUN, ""), b = routeFrames(LOOP_PATH, RUN, "");
+    var n = Math.max(a.length, b.length), frames = [];
+
+    for (var k = 0; k < n; k++) {
+      var f = a[Math.min(k, a.length - 1)], g = b[Math.min(k, b.length - 1)];
+
+      frames.push({
+        on: f.on.concat(g.on), drops: [{ id: "a", at: f.on }, { id: "d", at: g.on }],
+        routes: [{ through: line, area: f.routes[0].area, tint: "var(--slug-2)" }, g.routes[0]],
+        caption: "Both have Run on: each phase moves both droplets · phase " + (k + 1) + " of " + n, hold: 900, move: 500
+      });
+    }
 
     T.chip(figure, opt({
-      view: [58, 26, 58, 34], numbers: LOOP_PATH.slice(0, -1), numberCorner: true,
-      label: "A loop route around a block of two by three electrodes, with a droplet going round it",
-      frames: [
-        { on: start.on, drops: start.drops, routes: [{ through: LOOP_PATH, upto: 3, selected: true }], caption: "Drag from 40 right, up…" },
-        { on: start.on, drops: start.drops, routes: [{ through: LOOP_PATH, selected: true }], caption: "…back along the top and down onto 40: a loop." },
-        { on: start.on, drops: start.drops, routes: [{ through: LOOP_PATH }], caption: "Not selected, a loop shows its turning direction by colour." }
-      ].concat(routeFrames(LOOP_PATH, RUN, "One lap (Rot Lock on: the droplet keeps lying across)"))
+      view: [58, 26, 58, 47], numbers: LOOP_PATH.slice(0, -1).concat(line), numberCorner: true,
+      label: "Two droplets run together: one along a straight route, one round a loop",
+      frames: frames
     }));
   });
 
