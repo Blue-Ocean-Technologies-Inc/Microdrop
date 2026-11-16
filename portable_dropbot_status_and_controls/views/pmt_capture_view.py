@@ -36,6 +36,7 @@ from traitsui.api import (
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
     PMT_EXPOSURE_S_BOUNDS,
+    PMT_GAIN_BOUNDS,
     PMT_RF_OHMS_BOUNDS,
     PMT_STREAM_AVG_CHOICES,
     PMT_STREAM_OSR_CHOICES,
@@ -99,7 +100,11 @@ def _spot_column():
 
 def _setting_columns():
     return [
-        number_column("gain", "Gain"),
+        number_column(
+            "gain",
+            "Gain",
+            tooltip=f"PMT gain at this spot, {PMT_GAIN_BOUNDS[0]}–{PMT_GAIN_BOUNDS[1]}",
+        ),
         slider_column(
             "exposure_s",
             "Exposure (s)",
@@ -107,6 +112,7 @@ def _setting_columns():
             step=PMT_EXPOSURE_S_STEP,
             value_format="%.1f",
             span_name="exposure_max",
+            tooltip="Seconds the PMT records at this spot, averaged into one result",
         ),
     ]
 
@@ -145,14 +151,24 @@ capture = capture_group(
     pmt_spot_table_manual,
     pmt_spot_table_attached,
     park_label="Park PMT",
-    extra_buttons=(UItem("refresh_button", enabled_when="connected and not busy"),),
+    extra_buttons=(
+        UItem(
+            "refresh_button",
+            tooltip="Re-read the PMT spot positions from the motor board",
+            enabled_when="connected and not busy",
+        ),
+    ),
 )
 
 results = results_group(pmt_results_table)
 
 live = VGroup(
     HGroup(
-        UItem("show_live", editor=IconToggleEditor()),
+        UItem(
+            "show_live",
+            editor=IconToggleEditor(),
+            tooltip="Show or hide the live stream and buffered acquire controls",
+        ),
         Label("Live stream & acquire"),
     ),
     VGroup(
@@ -189,6 +205,7 @@ live = VGroup(
             UItem(
                 "gain_presets",
                 editor=PresetButtonsEditor(target="gain"),
+                tooltip="Set the gain to a preset; edit the presets in Preferences",
                 enabled_when=(
                     "connected and not capturing and not acquiring "
                     "and not protocol_running"
@@ -209,9 +226,22 @@ live = VGroup(
             ),
         ),
         HGroup(
-            UItem("stream_start_button", enabled_when="connected and not busy"),
-            UItem("stream_stop_button", enabled_when="streaming"),
-            UItem("acquire_button", enabled_when="connected and not busy"),
+            UItem(
+                "stream_start_button",
+                tooltip="Power the PMT and plot its signal live until stopped",
+                enabled_when="connected and not busy",
+            ),
+            UItem(
+                "stream_stop_button",
+                tooltip="Stop the live stream and power the PMT off",
+                enabled_when="streaming",
+            ),
+            UItem(
+                "acquire_button",
+                tooltip="Record ~10 s at 1 kHz at the current gain and spot, "
+                "saved to CSV",
+                enabled_when="connected and not busy",
+            ),
         ),
         VGroup(
             Item("live_units", label="Units"),
@@ -232,7 +262,11 @@ live = VGroup(
 
 conversion = VGroup(
     HGroup(
-        UItem("show_conversion", editor=IconToggleEditor()),
+        UItem(
+            "show_conversion",
+            editor=IconToggleEditor(),
+            tooltip="Show or hide the counts-to-volts and current settings",
+        ),
         Label("Conversion"),
     ),
     VGroup(
