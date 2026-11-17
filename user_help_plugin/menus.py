@@ -15,6 +15,7 @@ from pathlib import Path
 
 # Enthought library imports.
 from pyface.action.api import Action, Group, MenuManager
+from pyface.qt import QtCore, QtGui
 from pyface.tasks.action.api import SGroup, SMenu, TaskAction
 from traits.api import Any, Bool, HasTraits, Instance, Int, List, Str, observe
 
@@ -172,12 +173,20 @@ class OpenSciBotsAction(Action):
 
 
 class ContactSupportAction(Action):
-    """Opens the default mail app with a mailto: link."""
+    """Opens the default mail app with a mailto: link.
+
+    ``webbrowser.open`` hands ``mailto:`` to the web browser, which does not
+    launch the mail client on macOS; ``QDesktopServices`` uses the OS URL
+    handler registered for the scheme.
+    """
 
     email = Str()
 
     def perform(self, event):
-        webbrowser.open(f"mailto:{self.email}")
+        url = QtCore.QUrl(f"mailto:{self.email}")
+
+        if not QtGui.QDesktopServices.openUrl(url):
+            logger.error(f"No mail application could be opened for {url.toString()}")
 
 
 class OpenMicrodropLauncherAction(Action):
