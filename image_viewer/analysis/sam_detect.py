@@ -402,10 +402,40 @@ class OsamSession(HasTraits):
             for key, embedding in self._embedding_cache:
                 if key == image_id:
                     return embedding
-        embedding = self.ensure_model().encode_image(image=image)
+
+        try:
+            embedding = self.ensure_model().encode_image(image=image)
+
+        except Exception as error:
+            if not self._encoder_on_gpu():
+                raise
+
+            # A DirectML device reset (driver TDR, sleep/resume -- "GPU
+            # device instance has been suspended") kills the session for
+            # good: drop it and stay on CPU until the preference is
+            # toggled or the app restarts.
+            logger.warning(f"SAM GPU encoder failed, falling back to CPU: {error}")
+            set_gpu_encoder_enabled(False)
+
+            with self._lock:
+                self._model = None
+
+            embedding = self.ensure_model().encode_image(image=image)
+
         with self._lock:
             self._embedding_cache.append((image_id, embedding))
         return embedding
+
+    def _encoder_on_gpu(self):
+        """Whether the loaded model has a session on DirectML."""
+        with self._lock:
+            if self._model is None:
+                return False
+
+            return any(
+                session.get_providers()[0] == "DmlExecutionProvider"
+                for session in self._model._inference_sessions.values()
+            )
 
     def run(self, image, image_id, points, point_labels):
         embedding = self.ensure_embedding(image=image, image_id=image_id)
