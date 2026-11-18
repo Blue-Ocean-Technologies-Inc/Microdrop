@@ -55,6 +55,12 @@ class ImageViewerPreferences(PreferencesHelper):
     # App-wide: an equation re-typed per experiment is not a preset.
     fit_presets = Str("", desc="Saved custom fit equations (JSON)")
 
+    # The experiments the ROI Intensities pane plots, in order, as JSON
+    # [{directory, label, align_to_run_start}, ...] — the viewer's own
+    # among them. The pane's, not any experiment's: switching the
+    # viewer's experiment never drops the others.
+    plotted_experiments = Str("", desc="Experiments plotted in ROI Intensities (JSON)")
+
     # SAM model for AI ROI detection. Weights are downloaded on demand
     # (cancellable dialog); cancel reverts this. The DirectML (GPU)
     # onnxruntime build encodes ~3x faster; Help > Install AI ROI Support

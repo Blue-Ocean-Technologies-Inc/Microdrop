@@ -101,6 +101,7 @@ from .consts import (
     RING_THICKNESS_BOUNDS_PX,
     RING_THICKNESS_PX,
     ROI_ALPHA_BOUNDS_PCT,
+    ROI_LINE_WIDTH_PT,
     ROLLING_BALL_RADIUS_BOUNDS_PX,
     ROLLING_BALL_RADIUS_PX,
     SAVGOL_ORDER,
@@ -174,6 +175,9 @@ class RoiStyle(HasTraits):
     marker = Enum(*MARKER_NAMES)
     marker_size = Float(4.0)
 
+    #: Width (pt) of the ROI's curve and its fits.
+    line_width = Float(ROI_LINE_WIDTH_PT)
+
     #: Whether this ROI is drawn at all, and how opaque on the figure —
     #: the device viewer's eye/alpha pair, as a percentage. A hidden ROI
     #: is drawn neither on the figure nor on the image, where it cannot
@@ -184,12 +188,25 @@ class RoiStyle(HasTraits):
     #: subtracted (see AnalysisSession.negatives_for). Range needs the
     #: explicit default, or it would start every ROI fully transparent.
     visible = Bool(True)
+
+    #: The "Marker α": how opaque its points are — markers, excluded
+    #: points, fit landmarks, bars, violins and histogram fills — as a
+    #: percentage. Its lines take line_alpha.
     alpha = Range(*ROI_ALPHA_BOUNDS_PCT, ROI_ALPHA_BOUNDS_PCT[1], mode="spinner")
+
+    #: How opaque its curve, its fits and their equations are, as a
+    #: percentage.
+    line_alpha = Range(*ROI_ALPHA_BOUNDS_PCT, ROI_ALPHA_BOUNDS_PCT[1], mode="spinner")
 
     @property
     def plot_alpha(self):
         """``alpha`` as the 0-1 fraction matplotlib wants."""
         return self.alpha / 100.0
+
+    @property
+    def plot_line_alpha(self):
+        """``line_alpha`` as the 0-1 fraction matplotlib wants."""
+        return self.line_alpha / 100.0
 
 
 class FigureSettings(HasTraits):
@@ -1166,6 +1183,9 @@ class RoiAnalysisModel(HasTraits):
     #: name another ROI already has merges the two (see
     #: RoiAnalysisController._rename_roi). # (roi_id, name)
     rename_roi_request = Event()
+    #: The ROI table's delete cell, confirmed: remove those ROIs and
+    #: masks from every image, as one undoable step. # [roi_id, ...]
+    delete_roi_request = Event()
     #: Escape out of an armed draw tool (which now stays armed until
     #: told otherwise, so that a series of shapes is one trip to the
     #: toolbar rather than one trip each).

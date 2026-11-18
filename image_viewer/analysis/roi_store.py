@@ -127,7 +127,16 @@ _FIGURE_FIELDS = (
     "show_metrics_group",
     "show_custom_points_group",
 )
-_STYLE_FIELDS = ("color", "line_style", "marker", "marker_size", "visible", "alpha")
+ROI_STYLE_FIELDS = (
+    "color",
+    "line_style",
+    "line_width",
+    "line_alpha",
+    "marker",
+    "marker_size",
+    "visible",
+    "alpha",
+)
 
 #: Persisted TemperaturePlotStyle fields and, per sensor row,
 #: SensorStyle fields (both tolerated-missing on load, and the whole
@@ -271,7 +280,7 @@ def save_session(experiment_directory, session):
                 "absent_at": list(roi.absent_at),
                 "absent_from": roi.absent_from,
                 "absent_until": roi.absent_until,
-                "style": {name: getattr(roi.style, name) for name in _STYLE_FIELDS},
+                "style": {name: getattr(roi.style, name) for name in ROI_STYLE_FIELDS},
                 "is_background_ref": roi.is_background_ref,
                 "expected_fastest_change": roi.expected_fastest_change,
                 "expected_second_derivative_max": roi.expected_second_derivative_max,
@@ -289,15 +298,81 @@ def save_session(experiment_directory, session):
     path.write_text(json.dumps(payload, indent=2))
 
 
+def save_roi_styles(experiment_directory, rois):
+    """Write ``rois``' styles into the experiment's saved session and
+    nothing else, for an experiment plotted but not open in the image
+    viewer. The rest of the file is kept as it stands rather than
+    re-saved from a loaded session, which load_session may have
+    trimmed (it skips unreadable entries)."""
+    path = analysis_directory(experiment_directory) / ROI_CONFIG_FILENAME
+
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        logger.error(f"Could not read {path} to save ROI styles: {error}")
+
+        return
+
+    styles = {
+        roi.roi_id: {name: getattr(roi.style, name) for name in ROI_STYLE_FIELDS}
+        for roi in rois
+    }
+    entries = payload if isinstance(payload, list) else payload.get("rois", [])
+
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("roi_id") in styles:
+            entry["style"] = styles[entry["roi_id"]]
+
+    path.write_text(json.dumps(payload, indent=2))
+
+
+def _without_rois(entries, roi_ids):
+    """Saved ROI ``entries`` less those of ``roi_ids``."""
+    return [
+        entry
+        for entry in entries
+        if not (isinstance(entry, dict) and entry.get("roi_id") in roi_ids)
+    ]
+
+
+def delete_saved_rois(experiment_directory, roi_ids):
+    """Remove the ROIs ``roi_ids`` from the experiment's saved session in
+    one write and change nothing else, for an experiment plotted but not
+    open in the image viewer — the file kept as it stands, as
+    save_roi_styles keeps it. Their stats stay in the stats store, where
+    a key naming no ROI is never read; a visibility_order naming one is
+    filtered on load."""
+    path = analysis_directory(experiment_directory) / ROI_CONFIG_FILENAME
+    roi_ids = set(roi_ids)
+
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        logger.error(f"Could not read {path} to delete ROIs {roi_ids}: {error}")
+
+        return
+
+    if isinstance(payload, list):
+        payload = _without_rois(payload, roi_ids)
+    else:
+        payload["rois"] = _without_rois(payload.get("rois", []), roi_ids)
+
+    path.write_text(json.dumps(payload, indent=2))
+    logger.info(f"Deleted ROIs {sorted(roi_ids)} from {path}")
+
+
 def _roi_from(entry):
+    stored = entry.get("style", {})
     style = RoiStyle()
     style.trait_set(
-        **{
-            name: entry.get("style", {})[name]
-            for name in _STYLE_FIELDS
-            if name in entry.get("style", {})
-        }
+        **{name: stored[name] for name in ROI_STYLE_FIELDS if name in stored}
     )
+
+    # Saved before its lines had an opacity of their own, the ROI's one
+    # alpha covered them too.
+    if "line_alpha" not in stored and "alpha" in stored:
+        style.line_alpha = stored["alpha"]
+
     kind, geometry = normalize(entry["kind"], entry["geometry"])
     return Roi(
         roi_id=entry["roi_id"],
