@@ -570,6 +570,32 @@ class RoiAnalysisController(HasTraits):
         if roi.is_negative:
             self._instant_stats(session.positive_rois)
 
+    @observe("analysis_model:delete_roi_request")
+    def _delete_roi_everywhere(self, event):
+        """Remove the ROIs the table's delete cell names from every image,
+        as one undoable step — the selected-ROI delete with no image to
+        keep them on."""
+        session = self.session
+        rois = [
+            roi
+            for roi in (session.roi_by_id(roi_id) for roi_id in event.new)
+            if roi is not None
+        ]
+
+        if not rois:
+            return
+
+        what = rois[0].name if len(rois) == 1 else f"{len(rois)} ROIs"
+        self._push(RemoveRoisCommand(session=session, rois=rois, name=f"Delete {what}"))
+
+        if self.analysis_model.selected_roi_id in {roi.roi_id for roi in rois}:
+            self.analysis_model.selected_roi_id = ""
+
+        if any(roi.is_negative for roi in rois):
+            self._instant_stats(session.positive_rois)
+
+        self.analysis_model.progress_text = f"Deleted {what}"
+
     def _set_absent_on_shown_image(self, roi, scope, restore):
         """Take ``roi`` off the shown image alone, or off every image
         before or after it, by ``scope`` — or undo that, as one undoable
@@ -1208,6 +1234,8 @@ class RoiAnalysisController(HasTraits):
         "analysis_model:session:custom_points:items:expected, "
         "analysis_model:session:rois:items:style:color, "
         "analysis_model:session:rois:items:style:line_style, "
+        "analysis_model:session:rois:items:style:line_width, "
+        "analysis_model:session:rois:items:style:line_alpha, "
         "analysis_model:session:rois:items:style:marker, "
         "analysis_model:session:rois:items:style:marker_size, "
         "analysis_model:session:rois:items:style:visible, "

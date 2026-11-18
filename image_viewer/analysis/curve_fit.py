@@ -639,3 +639,32 @@ def fastest_change_time(fit, t_start, t_end):
     if fit.inflection is not None and float(t_start) <= fit.inflection <= float(t_end):
         return float(fit.inflection)
     return float(grid[int(np.argmax(speed))])
+
+
+def fit_landmarks(fit, t_start, t_end, metrics):
+    """{metric: t} over [t_start, t_end] for each of ``metrics``
+    (EXPECTED_METRICS keys) the fit has: "zero" where it changes
+    fastest (fastest_change_time), "max" / "min" where its second
+    derivative peaks / troughs (second_derivative_extrema). One it
+    lacks is left out."""
+    found = {}
+
+    if "zero" in metrics:
+        fastest = fastest_change_time(fit, t_start, t_end)
+
+        if fastest is not None:
+            found["zero"] = fastest
+
+    extrema_wanted = [metric for metric in metrics if metric != "zero"]
+
+    if extrema_wanted:
+        extrema = second_derivative_extrema(fit, t_start, t_end)
+        found.update(
+            {
+                metric: extrema[metric][0]
+                for metric in extrema_wanted
+                if metric in extrema
+            }
+        )
+
+    return found

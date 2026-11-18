@@ -50,6 +50,15 @@ LINE_STYLE_NAMES = ("solid", "dashed", "dotted", "dashdot")
 MARKER_NAMES = ("none", ".", "o", "s", "^", "x")
 #: Per-ROI plot opacity, as a percentage.
 ROI_ALPHA_BOUNDS_PCT = (0, 100)
+#: An ROI's line width (pt): matplotlib's default, which ROI curves
+#: and fits were drawn in before it could be set, and the span its
+#: spinner offers.
+ROI_LINE_WIDTH_PT = 1.5
+ROI_LINE_WIDTH_BOUNDS_PT = (0.25, 8.0)
+#: The plot controls' 0-1 sliders (opacities, x magnify): notches fine
+#: enough to tune by, and their readout.
+SLIDER_STEP = 0.05
+SLIDER_FORMAT = "%.2f"
 #: Hampel outlier test: how far from the local median counts (in
 #: scaled MADs, so 3 reads like "3 sigma"), and the window it is
 #: judged in (odd sizes centre; 3 is the fewest with any neighbours).
@@ -244,6 +253,11 @@ ROI_PLOT_CONTROLS_MAX_HEIGHT = 180
 #: Shortest a splitter section may be dragged. Small enough to tuck a
 #: section away, large enough to grab its handle again.
 ROI_PLOT_SECTION_MIN_PX = 40
+
+#: The plot toolbar's copy renders the figure at this many times its
+#: dpi, so the pasted chart stays crisp on a slide or page larger than
+#: it was drawn on screen.
+PLOT_CLIPBOARD_DPI_SCALE = 2
 
 #: The scopes that take an ROI off some images and keep it on the rest;
 #: Roi.absent_by names a deletion the same way.
@@ -512,3 +526,15 @@ RIM_GAP_SEARCH_PX = 30
 #: (centred, so a frame is final once half this many more are traced).
 #: It removes one- or two-frame hops onto a neighbouring ridge.
 RIM_SMOOTH_FRAMES = 7
+
+# --------------------------------------------------------------------------- #
+# Plotted experiments (imported_experiments_model.py)                          #
+# --------------------------------------------------------------------------- #
+#: Joins a plotted experiment's folder and one of its ROI ids into the
+#: key of that ROI's curve while it is not live, which no live ROI id
+#: can be.
+IMPORTED_KEY_SEPARATOR = "::"
+
+#: Between a plotted experiment's label and an ROI's name in the legend
+#: and the copied data, while it is not live.
+IMPORTED_NAME_SEPARATOR = " · "

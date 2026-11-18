@@ -502,9 +502,9 @@ def _x_values(session, filtered_paths, paths, stat_cache):
     return _elapsed(session, filtered_paths, times, stat_cache), 0
 
 
-def _elapsed(session, filtered_paths, epochs, stat_cache):
-    """``epochs`` as elapsed time in the figure's time unit from the
-    curves view's time origin: the earliest filtered capture while the
+def time_origin(session, filtered_paths, stat_cache=None):
+    """The curves view's time origin (epoch s) over the non-empty
+    ``filtered_paths``: the earliest filtered capture while the
     excluded points are shown, so none of them lands before zero, else
     the earliest analysed one (the earliest filtered one when every
     image is excluded).
@@ -517,7 +517,13 @@ def _elapsed(session, filtered_paths, epochs, stat_cache):
     else:
         origin_paths = analysed_paths(session, filtered_paths) or filtered_paths
 
-    start_time = min(session.stat_info(path, stat_cache)[1] for path in origin_paths)
+    return min(session.stat_info(path, stat_cache)[1] for path in origin_paths)
+
+
+def _elapsed(session, filtered_paths, epochs, stat_cache):
+    """``epochs`` as elapsed time in the figure's time unit from the
+    curves view's time_origin."""
+    start_time = time_origin(session, filtered_paths, stat_cache)
     per_second = TIME_UNIT_PER_SECOND[session.figure.time_unit]
 
     return [(epoch - start_time) * per_second for epoch in epochs]
@@ -1156,9 +1162,10 @@ def analysed_series(session, filtered_paths, visible_only=True):
     return series, flags
 
 
-def analysed_and_excluded_series(session, filtered_paths):
-    """analysed_series()'s (series, outlier flags) for the visible ROIs,
-    plus excluded_series() through the same corrections — the
+def analysed_and_excluded_series(session, filtered_paths, visible_only=True):
+    """analysed_series()'s (series, outlier flags) — for the visible
+    ROIs unless ``visible_only`` is off — plus excluded_series() through
+    the same corrections — the
     background references per image, the baseline shift and the
     normalisation each taking its parameters from the analysed curve,
     so an excluded point lands where it would sit were it included
@@ -1168,7 +1175,7 @@ def analysed_and_excluded_series(session, filtered_paths):
     Last, the Area view's area_fit_series through those corrections
     too, so each line runs over the points it was fitted to ({} unless
     the figure has an area_fit_method and the plotted stat is "area")."""
-    return _corrected_series(session, filtered_paths, True, with_excluded=True)
+    return _corrected_series(session, filtered_paths, visible_only, with_excluded=True)
 
 
 def _corrected_series(session, filtered_paths, visible_only, with_excluded):

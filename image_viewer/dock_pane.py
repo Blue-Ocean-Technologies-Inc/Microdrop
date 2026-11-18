@@ -40,6 +40,10 @@ from device_viewer.consts import CAPTURES_DIR_NAME, media_capture_event_model
 # Local imports.
 from .analysis.ai_controller import AiRoiController
 from .analysis.consts import ANALYSIS_RESULT_DRAIN_INTERVAL_MS
+from .analysis.imported_experiments_controller import (
+    ImportedExperimentsViewerController,
+)
+from .analysis.imported_experiments_model import imported_experiments_model
 from .analysis.roi_batch import _shared_executor
 from .analysis.roi_controller import RoiAnalysisController
 from .consts import (
@@ -215,6 +219,11 @@ class ImageViewerDockPane(TraitsDockPane):
     controller = Instance(ImageViewerController)
     analysis_controller = Instance(RoiAnalysisController)
     ai_controller = Instance(AiRoiController)
+
+    #: Keeps the ROI Intensities pane's experiments in the preferences
+    #: and shows the one a section click picks.
+    plotted_experiments_controller = Instance(ImportedExperimentsViewerController)
+
     _poll_timer = Any()
     _play_timer = Any()
     _drain_timer = Any()
@@ -228,6 +237,9 @@ class ImageViewerDockPane(TraitsDockPane):
         )
         self.ai_controller = AiRoiController(
             viewer_model=self.model, analysis_model=self.model.roi_analysis
+        )
+        self.plotted_experiments_controller = ImportedExperimentsViewerController(
+            viewer_model=self.model, model=imported_experiments_model
         )
         # Warm the process pool off-thread so the first Calculate does
         # not pay the Windows spawn cost (~seconds for cv2 workers).
@@ -258,6 +270,9 @@ class ImageViewerDockPane(TraitsDockPane):
             self._on_media_captured, "captured", remove=True
         )
         self.controller.close_metadata_window()
+
+        # Unhooks its observers from the shared plotted-experiments model.
+        self.plotted_experiments_controller.model = None
         super().destroy()
 
     def _on_media_captured(self, event):
