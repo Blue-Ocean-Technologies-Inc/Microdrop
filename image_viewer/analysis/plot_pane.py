@@ -20,6 +20,7 @@ coalesces notification bursts into single redraws. Lines gap where an
 image failed or isn't computed."""
 
 # Standard library imports.
+import io
 import math
 import os
 import re
@@ -36,6 +37,7 @@ from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg,
     NavigationToolbar2QT,
 )
+from matplotlib.colors import to_rgba
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.ticker import (
@@ -55,6 +57,9 @@ from PySide6.QtWidgets import (
 )
 
 from pyface.api import OK, DirectoryDialog, FileDialog
+from pyface.qt.QtCore import QPoint, QRect
+from pyface.qt.QtGui import QAction, QFont, QIcon, QImage, QPainter, QPixmap
+from pyface.qt.QtWidgets import QApplication
 from pyface.tasks.api import DockPane
 from traits.api import Any, Instance, List, observe
 from traitsui.api import (
@@ -71,6 +76,7 @@ from traitsui.api import (
     spring,
 )
 
+from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
     ICON_ADD,
     ICON_COPY,
@@ -125,6 +131,7 @@ from .consts import (
     LEGEND_FONT_SCALE,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
     PLOT_CLICK_SLOP_PX,
+    PLOT_CLIPBOARD_DPI_SCALE,
     PLOT_PICK_RADIUS_PX,
     PLOT_ZOOM_STEP,
     ROI_PLOT_BATCH_COALESCE_MS,
@@ -133,6 +140,8 @@ from .consts import (
     ROI_PLOT_COALESCE_MS,
     ROI_PLOT_CONTROLS_MAX_HEIGHT,
     ROI_PLOT_SECTION_MIN_PX,
+    SLIDER_FORMAT,
+    SLIDER_STEP,
     TIME_UNITS,
     VIEW_MODES,
     X_AXIS_LABELS,
@@ -142,9 +151,8 @@ from .curve_fit import (
     FIT_LABELS,
     FIT_METHODS,
     TREND_METHODS,
-    fastest_change_time,
+    fit_landmarks,
     fit_series,
-    second_derivative_extrema,
     trimmed_note,
 )
 from .fit_equations import FitEquationsTable
@@ -166,6 +174,8 @@ from .histogram_series import (
     smoothed_counts,
     unmagnified,
 )
+from .imported_experiments_controller import ImportedExperimentsController
+from .imported_experiments_model import imported_experiments_model
 from .plot_pick import left_press_point, nearest_point
 from .plot_series import (
     SMOOTH_LABELS,
@@ -190,9 +200,14 @@ from .plot_series import (
 )
 from .roi_compute import measured_pixels
 from .roi_model import PLOT_STATS, CustomPoint, roi_analysis_model
-from .roi_store import analysis_directory
-from .roi_table import RoiStatsTable
+from .roi_store import ROI_STYLE_FIELDS, analysis_directory
+from .roi_table import RoiStatsTable, imports_toolbar_view
 from .temperature_style_view import temperature_style_view
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 #: Human labels for the plotted stat (dropdown + y-axis).
 PLOT_STAT_LABELS = {
@@ -254,6 +269,15 @@ def y_axis_label(
     if subtract_first:
         label = f"{label} (change from first)"
     return f"{label} (% of range)" if normalize else label
+
+
+def _equation_text(name, fit, finite_t, x_unit):
+    """A fitted curve's line in the corner equations: its name, the
+    fitted equation, R² and any trimmed tail."""
+    return (
+        f"{name}: {fit.equation} (R²={fit.r_squared:.3f})"
+        f"{trimmed_note(fit, finite_t.max(), unit=x_unit)}"
+    )
 
 
 def _fit_method_label(key):
@@ -372,11 +396,6 @@ STAT_DROPDOWN_W = -440
 #: A sliding switch's own size hint, as the live histogram's; stretched,
 #: it pushes the state named on its right away from it.
 SWITCH_W = -58
-
-#: The Histogram view's 0-1 sliders (opacities, x magnify): notches
-#: fine enough to tune by, and their readout.
-SLIDER_STEP = 0.05
-SLIDER_FORMAT = "%.2f"
 
 #: Axis-limit spin boxes: wide enough for any intensity the cameras
 #: produce, stepping by a whole count.
@@ -1324,6 +1343,8 @@ _PLOT_STATE = (
     "session:rois:items:name, session:plot_stat, "
     "session:rois:items:style:color, "
     "session:rois:items:style:line_style, "
+    "session:rois:items:style:line_width, "
+    "session:rois:items:style:line_alpha, "
     "session:rois:items:style:marker, "
     "session:rois:items:style:marker_size, "
     "session:rois:items:style:visible, "
@@ -1421,6 +1442,20 @@ _PLOT_STATE = (
     "session:custom_points:items:expected"
 )
 
+#: Everything the other plotted experiments' curves (on the
+#: plotted-experiments model) are drawn from, beside _PLOT_STATE, whose
+#: figure settings they share. Their sessions are read from disk; only
+#: their ROIs' styles change while they are not live.
+_IMPORTS_STATE = (
+    "experiments.items, experiments:items:label, "
+    "experiments:items:align_to_run_start, "
+    "experiments:items:session:rois.items, "
+    + ", ".join(
+        f"experiments:items:session:rois:items:style:{name}"
+        for name in ROI_STYLE_FIELDS
+    )
+)
+
 #: What decides whether the plot pane shows the ROI table or the
 #: temperature view's style panel beneath the chart (a session swap
 #: re-decides it in _on_session_swapped).
@@ -1456,7 +1491,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
     """Chart derived from the analysis model, rendering whichever view
     the session's figure settings select."""
 
-    def __init__(self, model):
+    def __init__(self, model, imports=None):
+        """Chart ``model`` (a RoiAnalysisModel), the live experiment,
+        with the ROIs of the other experiments ``imports`` plots (an
+        ImportedExperimentsModel; None for none) drawn as its own."""
         # No layout engine: one would re-run on every draw and silently
         # discard the margins set through the toolbar's configure-subplots
         # sliders (and re-fit on savefig, breaking preview == export).
@@ -1464,6 +1502,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._figure = Figure(figsize=(4, 3))
         super().__init__(self._figure)
         self._model = model
+        self._imports = imports
         self._axes = self._figure.add_subplot(111)
         self._axes.set_xlabel(x_axis_label(model.session.figure))
         self._axes.set_ylabel("Mean intensity")
@@ -1472,12 +1511,14 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._lines = {}
         self._fit_artists = []
         #: Set per curves-view redraw: (image path, x, y) of every point
-        #: a click can toggle the exclusion of, in data coordinates.
+        #: a click can toggle the exclusion of, in data coordinates — the
+        #: live experiment's alone.
         self._pick_targets = []
         #: Set per redraw: which points the outlier test dropped.
         self._outliers = {}
-        #: This redraw's fits, solved on first use (see _fitted_rois).
-        self._fits = None
+        #: This redraw's fits by curve key, each solved on first use
+        #: (see _fitted_rois); None for a curve that cannot be fitted.
+        self._fits = {}
         #: (signature, measured_pixels result) of the displayed image —
         #: the Histogram view's pixels, read again only when what they
         #: are measured from changes (see _measured_pixels_of).
@@ -1499,6 +1540,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         model.observe(self._on_font_size_changed, "session:figure:font_size")
         model.observe(self._on_fit_requested, _VIEW_RESET_STATE)
         model.observe(self._on_displayed_image_changed, "current_image_path")
+
+        if imports is not None:
+            imports.observe(self._on_plot_state_changed, _IMPORTS_STATE)
+
         for event_name, handler in (
             ("scroll_event", self._on_scroll),
             ("button_press_event", self._on_press),
@@ -1654,6 +1699,11 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._on_font_size_changed, "session:figure:font_size", remove=True
         )
 
+        if self._imports is not None:
+            self._imports.observe(
+                self._on_plot_state_changed, _IMPORTS_STATE, remove=True
+            )
+
     def showEvent(self, event):
         self._schedule_redraw()  # catch up on anything missed hidden
         super().showEvent(event)
@@ -1663,8 +1713,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # just drew with; redrawing for it would only repeat the frame.
         figure_settings = self._model.session.figure
 
+        # A list's items change (the plotted experiments) arrives as a
+        # ListChangeEvent, which has no name.
         if (
-            event.name == "histogram_x_pivot"
+            getattr(event, "name", None) == "histogram_x_pivot"
             and event.object is figure_settings
             and figure_settings.histogram_x_pivot_auto
         ):
@@ -1702,11 +1754,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         session = self._model.session
         # One pipeline, shared with the export, so a saved fit and the
         # drawn one cannot disagree about which points they saw.
-        series, self._outliers, excluded, area_fit = analysed_and_excluded_series(
-            session, self._model.filtered_paths
-        )
+        current = analysed_and_excluded_series(session, self._model.filtered_paths)
+        series, _flags, _excluded, current_area_fit = current
+
+        # The other plotted experiments' curves come through that same
+        # pipeline, keyed apart (imported_key), and are drawn by the same
+        # code as the live ones in every series view. The views reading
+        # the displayed image, the Expected tab and its actual-vs-expected
+        # view keep to ``series``, the live experiment's alone.
+        plotted, self._outliers, excluded, area_fit = self._with_imported(current)
         figure_settings = session.figure
-        self._fits = None
+        self._fits = {}
         self._pick_targets = []
         # The Expected tab and its CSV read these whatever is shown, and
         # the model fits the Actual vs expected trend from them, so they
@@ -1742,23 +1800,23 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._apply_ordinal_ticks(figure_settings, log_x)
 
         if view_mode == "intensity":
-            trim_edges = self._refresh_intensity(series, figure_settings, area_fit)
+            trim_edges = self._refresh_intensity(plotted, figure_settings, area_fit)
         else:
             for roi_id in list(self._lines):
                 self._lines.pop(roi_id).remove()
 
             if view_mode == "first_derivative":
-                trim_edges = self._draw_derivative(series, figure_settings, 1)
+                trim_edges = self._draw_derivative(plotted, figure_settings, 1)
             elif view_mode == "second_derivative":
-                trim_edges = self._draw_derivative(series, figure_settings, 2)
+                trim_edges = self._draw_derivative(plotted, figure_settings, 2)
             elif view_mode == "per_image":
                 trim_edges = self._draw_per_image(series, figure_settings)
             elif view_mode == "distribution":
-                trim_edges = self._draw_distribution(series, figure_settings)
+                trim_edges = self._draw_distribution(plotted, figure_settings)
             elif view_mode == "histogram":
                 trim_edges = self._draw_histogram(series, figure_settings)
             elif view_mode == "fastest_change":
-                trim_edges = self._draw_fastest_change(series, figure_settings)
+                trim_edges = self._draw_fastest_change(plotted, figure_settings)
             elif view_mode == "temperature":
                 trim_edges = self._draw_temperature_over_time(figure_settings)
             else:
@@ -1805,9 +1863,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._draw_excluded_points(excluded)
 
         if view_mode in SERIES_VIEW_MODES:
-            self._note_hidden_points(series, log_x, log_y)
+            self._note_hidden_points(plotted, log_x, log_y)
             self._note_dropped_outliers()
-            self._note_area_fit_fallbacks(series, area_fit)
+            self._note_area_fit_fallbacks(series, current_area_fit)
 
         # The per-ROI stat views draw every value whatever its
         # temperature, so frames the log misses are not missing there.
@@ -1863,10 +1921,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             FuncFormatter(lambda x, _position: step_tick_label(labels, x))
         )
 
-    def _refresh_intensity(self, series, figure_settings, area_fit):
-        session = self._model.session
-        # Smoothing is a display aid, so it goes no further than the
-        # lines: `series` — unsmoothed — is what the fits below see.
+    def _dressed(self, series, figure_settings):
+        """``series`` as its lines are drawn: smoothed, then bridged.
+        Both are display aids, so they go no further than the lines:
+        ``series`` itself — undressed — is what the fits see."""
         drawn = (
             smoothed_series(
                 series,
@@ -1878,10 +1936,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             if figure_settings.smooth_method != "none"
             else series
         )
+
         # After the smoothing, so a bridge spans between the smoothed
         # neighbours rather than cutting under them.
         if figure_settings.interpolate_gaps:
             drawn = interpolated_series(drawn)
+
+        return drawn
+
+    def _refresh_intensity(self, series, figure_settings, area_fit):
+        session = self._model.session
+        drawn = self._dressed(series, figure_settings)
         self._axes.set_ylabel(self._stat_axis_label(figure_settings))
         for roi_id in list(self._lines):
             if roi_id not in drawn:
@@ -1892,13 +1957,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             line = self._lines[roi_id]
             line.set_data(elapsed, values)
             line.set_label(name)
-            roi = self._model.session.roi_by_id(roi_id)
+            roi = self._roi_of(roi_id)
             if roi is not None:
-                line.set_color(roi.style.color)
-                line.set_linestyle(LINE_STYLES[roi.style.line_style])
-                line.set_marker("" if roi.style.marker == "none" else roi.style.marker)
-                line.set_markersize(roi.style.marker_size)
-                line.set_alpha(roi.style.plot_alpha)
+                self._style_line(line, roi.style)
         self._collect_pick_targets(series, drawn)
         self._draw_area_fit(area_fit)
 
@@ -1923,20 +1984,74 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._apply_legend(bool(self._lines) and figure_settings.show_legend)
         return trim_edges
 
+    @staticmethod
+    def _style_line(line, style):
+        """Dress an ROI's curve ``line`` in its RoiStyle ``style``: the
+        line in its line style, width and line alpha, the markers at
+        their size and marker alpha — each opacity carried in its own
+        colour, as a line's one alpha would fade both."""
+        line.set_alpha(None)
+        line.set_color(to_rgba(style.color, style.plot_line_alpha))
+        line.set_linestyle(LINE_STYLES[style.line_style])
+        line.set_linewidth(style.line_width)
+        line.set_marker("" if style.marker == "none" else style.marker)
+        line.set_markersize(style.marker_size)
+        line.set_markerfacecolor(to_rgba(style.color, style.plot_alpha))
+        line.set_markeredgecolor(to_rgba(style.color, style.plot_alpha))
+
+    def _with_imported(self, current):
+        """``current`` — analysed_and_excluded_series' (series, outlier
+        flags, excluded, area fit) of the current experiment — each
+        joined by the imported experiments' (see
+        ImportedExperimentsModel.imported_series), keyed apart."""
+        if self._imports is None:
+            return current
+
+        return tuple(
+            {**mine, **theirs}
+            for mine, theirs in zip(current, self._imports.imported_series())
+        )
+
+    def _roi_of(self, key):
+        """The ROI whose curve ``key`` is: a current ROI's id, or an
+        imported ROI's imported_key. None for neither."""
+        roi = self._model.session.roi_by_id(key)
+
+        if roi is None and self._imports is not None:
+            roi = self._imports.roi_of(key)
+
+        return roi
+
+    def _images_of(self, key):
+        """(session, images, experiment) of the curve ``key``: the live
+        session over the filtered images and None, or another plotted
+        experiment's session over the images of its run and that
+        experiment."""
+        experiment = None
+
+        if self._imports is not None:
+            experiment = self._imports.experiment_of(key)
+
+        if experiment is None:
+            return self._model.session, self._model.filtered_paths, None
+
+        return experiment.session, experiment.paths, experiment
+
     def _draw_excluded_points(self, excluded):
         """Each excluded image's point as a faint hollow marker in its
         ROI's colour, with no line — still visible and clickable, but
         plainly not part of the curve, the fits, the axis limits or
-        anything else. Registers them as pick targets, so a click can
-        bring one back."""
-        session = self._model.session
-        excluded_images = excluded_paths(session, self._model.filtered_paths)
-
-        for roi_id, (_name, x_values, values) in excluded.items():
-            roi = self._model.session.roi_by_id(roi_id)
+        anything else. Registers the live experiment's as pick targets,
+        so a click can bring one back; another experiment's are edited
+        once it is live."""
+        for key, (_name, x_values, values) in excluded.items():
+            roi = self._roi_of(key)
 
             if roi is None:
                 continue
+
+            session, paths, experiment = self._images_of(key)
+            left_out = excluded_paths(session, paths)
 
             (points,) = self._axes.plot(
                 x_values,
@@ -1952,7 +2067,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 scaley=False,
             )
             self._fit_artists.append(points)
-            self._pick_targets.extend(zip(excluded_images, x_values, values))
+
+            if experiment is None:
+                self._pick_targets.extend(zip(left_out, x_values, values))
 
     def _draw_area_fit(self, area_fit):
         """Each ROI's area fit (area_fit_series), dashed in its colour
@@ -1960,7 +2077,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         fit can be judged against what it was fitted to. In x order: on
         a temperature or step axis the images need not arrive in it."""
         for roi_id, (_name, x_values, values) in area_fit.items():
-            roi = self._model.session.roi_by_id(roi_id)
+            roi = self._roi_of(roi_id)
 
             if roi is None:
                 continue
@@ -1971,7 +2088,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 x[order],
                 np.asarray(values, dtype=float)[order],
                 linestyle="--",
-                alpha=0.8 * roi.style.plot_alpha,
+                linewidth=roi.style.line_width,
+                alpha=0.8 * roi.style.plot_line_alpha,
                 color=roi.style.color,
                 label="_nolegend_",
             )
@@ -1980,22 +2098,18 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
     def _mark_area_fit_excluded(self, drawn):
         """Ring each point the area fit leaves out with a larger hollow
         marker in its ROI's colour — on the Area view, where the fitted
-        line runs past them."""
-        session = self._model.session
-        analysed = analysed_paths(session, self._model.filtered_paths)
-        left_out = [
-            index
-            for index, path in enumerate(analysed)
-            if session.is_area_fit_excluded(path)
-        ]
+        line runs past them. An imported ROI's are the ones its own
+        analysis left out."""
+        for key, (_name, x_values, values) in drawn.items():
+            roi = self._roi_of(key)
+            session, paths, _experiment = self._images_of(key)
+            left_out = [
+                index
+                for index, path in enumerate(analysed_paths(session, paths))
+                if session.is_area_fit_excluded(path)
+            ]
 
-        if not left_out:
-            return
-
-        for roi_id, (_name, x_values, values) in drawn.items():
-            roi = session.roi_by_id(roi_id)
-
-            if roi is None:
+            if roi is None or not left_out:
                 continue
 
             (points,) = self._axes.plot(
@@ -2017,10 +2131,14 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         """Remember every curve point a click can land on, with its
         image: where the point is drawn (smoothed, say) but only where
         there is a value — a bridged gap is no image's point. The
-        excluded points register as they are drawn."""
+        excluded points register as they are drawn. The live
+        experiment's alone: another one's are edited once it is live."""
         analysed = analysed_paths(self._model.session, self._model.filtered_paths)
 
         for roi_id, (_name, x_values, values) in drawn.items():
+            if self._model.session.roi_by_id(roi_id) is None:
+                continue
+
             measured = series[roi_id][2]
 
             self._pick_targets.extend(
@@ -2077,9 +2195,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             roi = session.roi_by_id(roi_id)
 
             if roi is not None:
-                entries.append((name, value, roi.style))
+                entries.append((name, value, roi.style.color, roi.style.plot_alpha))
 
-        if not any(value == value for _name, value, _style in entries):
+        if not any(value == value for _name, value, *_look in entries):
             self._draw_hint("No stats computed for the displayed image")
 
             return []
@@ -2092,11 +2210,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         """Violin per visible ROI: the spread of the plotted stat
         across the analysed images, its median marked. A ROI with no
         computed value gets no violin."""
-        session = self._model.session
         samples = []
 
         for roi_id, (name, values) in finite_values(series).items():
-            roi = session.roi_by_id(roi_id)
+            roi = self._roi_of(roi_id)
 
             if roi is not None:
                 samples.append((name, values, roi.style))
@@ -2392,9 +2509,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
     ):
         """One ROI's ``counts`` over ``edges``: a step outline, or with
         Savitzky-Golay smoothing a line through the bin centres — a
-        smoothed count no longer belongs to one bin's flat top — at the
-        bar opacity times the ROI's, and with histogram_bar_fill shaded
-        beneath at that opacity too.
+        smoothed count no longer belongs to one bin's flat top — in the
+        ROI's line width at the bar opacity times its line alpha, and
+        with histogram_bar_fill shaded beneath at the bar opacity times
+        its marker alpha.
 
         With the pixel-count range on — ``selected`` marks the bins it
         keeps, else None — the whole outline is faded and the kept bins
@@ -2402,7 +2520,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         what the fit ignored stays in view. Their fill does the same."""
         # The curves' own line width: matplotlib draws a patch's
         # outline thinner than a line, and these are read as curves.
-        line_width = matplotlib.rcParams["lines.linewidth"]
+        line_width = style.line_width
         smoothing = figure_settings.smooth_method == "savgol"
         heights = (
             smoothed_counts(
@@ -2413,17 +2531,21 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         )
         centres = bin_centres(edges, figure_settings.log_x) if smoothing else None
         fill = figure_settings.histogram_bar_fill
-        bar_alpha = figure_settings.histogram_bar_alpha * style.plot_alpha
-        alpha = bar_alpha
+        bar_alpha = figure_settings.histogram_bar_alpha * style.plot_line_alpha
+        fill_alpha = figure_settings.histogram_bar_alpha * style.plot_alpha
+        alpha, base_fill_alpha = bar_alpha, fill_alpha
         base_label = label
 
         if selected is not None:
             alpha *= HISTOGRAM_FILTERED_BIN_ALPHA
+            base_fill_alpha *= HISTOGRAM_FILTERED_BIN_ALPHA
             base_label = "_nolegend_"
 
         # Before the outline, so the outline lies on top of its fill.
         if fill:
-            self._fill_histogram_bars(heights, edges, centres, style.color, alpha)
+            self._fill_histogram_bars(
+                heights, edges, centres, style.color, base_fill_alpha
+            )
 
         if smoothing:
             self._fit_artists.extend(
@@ -2459,7 +2581,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         kept = np.where(selected, heights, np.nan)
 
         if fill:
-            self._fill_histogram_bars(kept, edges, centres, style.color, bar_alpha)
+            self._fill_histogram_bars(kept, edges, centres, style.color, fill_alpha)
 
         if smoothing:
             self._fit_artists.extend(
@@ -2660,28 +2782,27 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         return self._measured[1]
 
     def _draw_roi_bars(self, entries, figure_settings):
-        """Bar per (name, height, style) entry, coloured and faded by
-        the ROI's style and labelled with its value, filling its slot
-        but for the figure's bar gap. A NaN height keeps its slot as an
-        empty bar marked n/a, so a ROI never shifts along x when one
-        image lacks it."""
+        """Bar per (name, height, colour, alpha) entry, labelled with its
+        value, filling its slot but for the figure's bar gap. A NaN
+        height keeps its slot as an empty bar marked n/a, so a ROI never
+        shifts along x when one image lacks it."""
         positions = list(range(len(entries)))
         # Keep the container, not its bars: its remove() also drops the
         # axes.containers registration the bars alone would leave behind.
         bars = self._axes.bar(
             positions,
-            [0.0 if height != height else height for _name, height, _style in entries],
+            [0.0 if height != height else height for _name, height, *_look in entries],
             width=1.0 - figure_settings.bar_gap,
-            color=[style.color for _name, _height, style in entries],
+            color=[color for _name, _height, color, _alpha in entries],
         )
 
-        for bar, (_name, _height, style) in zip(bars, entries):
-            bar.set_alpha(style.plot_alpha)
+        for bar, (_name, _height, _color, alpha) in zip(bars, entries):
+            bar.set_alpha(alpha)
 
         self._fit_artists.append(bars)
-        self._axes.set_xticks(positions, [name for name, _height, _style in entries])
+        self._axes.set_xticks(positions, [name for name, *_bar in entries])
 
-        for x, (_name, height, _style) in zip(positions, entries):
+        for x, (_name, height, *_look) in zip(positions, entries):
             missing = height != height
 
             self._fit_artists.append(
@@ -2799,43 +2920,50 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         return []  # nothing fitted: no trimmed tail to shade
 
     def _fitted_rois(self, series, figure_settings):
-        """(roi, name, fit, finite_t) per ROI the chosen method fits,
-        finite_t being its x at the finite values — never empty, as
-        fit_series needs two finite points. ROIs that cannot be fitted
-        are skipped. Solved once per redraw: every later call in the
-        same redraw gets the same list."""
-        if self._fits is None:
-            self._fits = list(self._solve_fits(series, figure_settings))
+        """(roi, name, fit, finite_t) per curve of ``series`` the chosen
+        method fits, finite_t being its x at the finite values — never
+        empty, as fit_series needs two finite points. Curves that cannot
+        be fitted are skipped. Each curve is solved once per redraw,
+        whichever of the curves a later call in it asks for."""
+        fitted = []
 
-        return self._fits
+        for key, entry in series.items():
+            if key not in self._fits:
+                self._fits[key] = self._solve_fit(key, entry, figure_settings)
 
-    def _solve_fits(self, series, figure_settings):
-        """Yield the fits _fitted_rois holds for the redraw."""
+            if self._fits[key] is not None:
+                fitted.append(self._fits[key])
+
+        return fitted
+
+    def _solve_fit(self, key, entry, figure_settings):
+        """The (roi, name, fit, finite_t) _fitted_rois holds for the
+        curve ``key``, ``entry`` being its (name, [x], [value]); None
+        when it has no ROI or cannot be fitted."""
+        roi = self._roi_of(key)
+        name, elapsed, values = entry
+
+        if roi is None:
+            return None
+
         method, expression = fit_arguments(figure_settings, self._model.fit_presets)
+        fit = fit_series(
+            elapsed,
+            values,
+            method,
+            figure_settings.trim_poor_fit,
+            expression,
+            figure_settings.initial_guesses,
+        )
 
-        for roi_id, (name, elapsed, values) in series.items():
-            roi = self._model.session.roi_by_id(roi_id)
+        if fit is None:
+            return None
 
-            if roi is None:
-                continue
+        finite_t = np.asarray(elapsed, dtype=float)[
+            np.isfinite(np.asarray(values, dtype=float))
+        ]
 
-            fit = fit_series(
-                elapsed,
-                values,
-                method,
-                figure_settings.trim_poor_fit,
-                expression,
-                figure_settings.initial_guesses,
-            )
-
-            if fit is None:
-                continue
-
-            finite_t = np.asarray(elapsed, dtype=float)[
-                np.isfinite(np.asarray(values, dtype=float))
-            ]
-
-            yield roi, name, fit, finite_t
+        return roi, name, fit, finite_t
 
     def _draw_derivative(self, series, figure_settings, order):
         """One curve per ROI: the fitted model's first or second
@@ -2866,7 +2994,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 dense,
                 curve_values,
                 color=roi.style.color,
-                alpha=roi.style.plot_alpha,
+                linewidth=roi.style.line_width,
+                alpha=roi.style.plot_line_alpha,
                 label=name,
             )
             self._fit_artists.append(curve)
@@ -2876,7 +3005,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 fit,
                 finite_t.min(),
                 finite_t.max(),
-                roi,
+                roi.style.color,
+                roi.style.plot_alpha,
                 figure_settings,
                 marker_y=derivative,
                 with_second_derivative_extrema=order == 2,
@@ -2894,28 +3024,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         where d² peaks / troughs. A landmark the fit lacks (a linear
         fit's rate is flat, a quadratic's d² too) is left out, and so is
         a ROI with none."""
-        extrema_wanted = [
+        metrics = ["zero"] + [
             metric for metric in figure_settings.compared_metrics if metric != "zero"
         ]
         landmarks = []
 
         for roi, name, fit, finite_t in self._fitted_rois(series, figure_settings):
-            t_start, t_end = finite_t.min(), finite_t.max()
-            found = {}
-            fastest = fastest_change_time(fit, t_start, t_end)
-
-            if fastest is not None:
-                found["zero"] = fastest
-
-            if extrema_wanted:
-                extrema = second_derivative_extrema(fit, t_start, t_end)
-                found.update(
-                    {
-                        metric: extrema[metric][0]
-                        for metric in extrema_wanted
-                        if metric in extrema
-                    }
-                )
+            found = fit_landmarks(fit, finite_t.min(), finite_t.max(), metrics)
 
             if found:
                 landmarks.append((roi, name, found))
@@ -2946,18 +3061,25 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
             return []
 
-        # Left to right in the order the ROIs' eyes were switched on, so
-        # the ROI just shown lands rightmost.
-        points = {
-            roi.roi_id: (name, actual, roi.style)
-            for roi, name, actual in self._fastest_change_points(
-                series, figure_settings
-            )
+        session = self._model.session
+        points = self._fastest_change_points(series, figure_settings)
+        current = {
+            roi.roi_id: (name, actual, roi.style.color, roi.style.plot_alpha)
+            for roi, name, actual in points
+            if roi in session.positive_rois
         }
-        entries = [
-            points[roi_id]
-            for roi_id in in_visibility_order(self._model.session, points)
+        imported = [
+            (name, actual, roi.style.color, roi.style.plot_alpha)
+            for roi, name, actual in points
+            if roi not in session.positive_rois
         ]
+
+        # Left to right in the order the ROIs' eyes were switched on, so
+        # the ROI just shown lands rightmost; the imported ROIs after
+        # them, as the ROI table lists them.
+        entries = [
+            current[roi_id] for roi_id in in_visibility_order(session, current)
+        ] + imported
 
         if not entries:
             self._draw_hint(
@@ -3395,7 +3517,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 dense,
                 fit.predict(dense),
                 linestyle="--",
-                alpha=0.8 * roi.style.plot_alpha,
+                linewidth=roi.style.line_width,
+                alpha=0.8 * roi.style.plot_line_alpha,
                 color=roi.style.color,
                 label="_nolegend_",
             )
@@ -3403,19 +3526,20 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             equation_lines.append(
                 (
                     roi.style.color,
-                    roi.style.plot_alpha,
-                    f"{name}: {fit.equation} (R²={fit.r_squared:.3f})"
-                    f"{trimmed_note(fit, finite_t.max(), unit=x_unit)}",
+                    roi.style.plot_line_alpha,
+                    _equation_text(name, fit, finite_t, x_unit),
                 )
             )
             self._draw_extrema(
                 fit,
                 finite_t.min(),
                 finite_t.max(),
-                roi,
+                roi.style.color,
+                roi.style.plot_alpha,
                 figure_settings,
                 marker_y=fit.predict,
             )
+
         if figure_settings.show_fit_equations:
             for index, (color, alpha, text) in enumerate(equation_lines):
                 self._fit_artists.append(
@@ -3438,53 +3562,51 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         fit,
         t_start,
         t_end,
-        roi,
+        color,
+        alpha,
         figure_settings,
         marker_y,
         with_second_derivative_extrema=True,
     ):
-        """Point (plus optional v/h line and coordinates) on
-        ``marker_y`` (a function of t: the curve or one of its
-        derivatives) at each enabled marker's t — where the fitted
-        curve's second derivative peaks/troughs, and where the curve
-        changes fastest. ``with_second_derivative_extrema`` False
+        """Point (plus optional v/h line and coordinates) in ``color``
+        at ``alpha`` on ``marker_y`` (a function of t: the curve or one
+        of its derivatives) at each enabled marker's t — where the
+        fitted curve's second derivative peaks/troughs, and where the
+        curve changes fastest. ``with_second_derivative_extrema`` False
         leaves the d² ones out."""
-        wanted = [
-            key
-            for key, enabled in (
-                ("max", figure_settings.show_second_derivative_max),
-                ("min", figure_settings.show_second_derivative_min),
+        metrics = [
+            metric
+            for metric, enabled in (
+                (
+                    "max",
+                    figure_settings.show_second_derivative_max
+                    and with_second_derivative_extrema,
+                ),
+                (
+                    "min",
+                    figure_settings.show_second_derivative_min
+                    and with_second_derivative_extrema,
+                ),
+                ("zero", figure_settings.show_second_derivative_zero),
             )
-            if enabled and with_second_derivative_extrema
+            if enabled
         ]
-        times = []
 
-        if wanted:
-            extrema = second_derivative_extrema(fit, t_start, t_end)
-            times.extend(extrema[key][0] for key in wanted if key in extrema)
-
-        if figure_settings.show_second_derivative_zero:
-            t_star = fastest_change_time(fit, t_start, t_end)
-
-            if t_star is not None:
-                times.append(t_star)
-
-        for t_star in times:
+        for t_star in fit_landmarks(fit, t_start, t_end, metrics).values():
             self._draw_extremum_marker(
-                t_star, float(marker_y(t_star)), roi, figure_settings
+                t_star, float(marker_y(t_star)), color, alpha, figure_settings
             )
 
-    def _draw_extremum_marker(self, t_star, y_star, roi, figure_settings):
+    def _draw_extremum_marker(self, t_star, y_star, color, alpha, figure_settings):
         """One marker at (t_star, y_star) — on the fitted curve in the
         intensity view, on the derivative's curve in a derivative view."""
-        alpha = roi.style.plot_alpha
         (point,) = self._axes.plot(
             [t_star],
             [y_star],
             marker="o",
             linestyle="",
             alpha=alpha,
-            color=roi.style.color,
+            color=color,
             markeredgecolor="black",
             label="_nolegend_",
         )
@@ -3492,13 +3614,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if figure_settings.second_derivative_vline:
             self._fit_artists.append(
                 self._axes.axvline(
-                    t_star, color=roi.style.color, linestyle=":", alpha=0.6 * alpha
+                    t_star, color=color, linestyle=":", alpha=0.6 * alpha
                 )
             )
         if figure_settings.second_derivative_hline:
             self._fit_artists.append(
                 self._axes.axhline(
-                    y_star, color=roi.style.color, linestyle=":", alpha=0.6 * alpha
+                    y_star, color=color, linestyle=":", alpha=0.6 * alpha
                 )
             )
         if figure_settings.second_derivative_coords:
@@ -3509,7 +3631,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     textcoords="offset points",
                     xytext=(6, 6),
                     fontsize=self._font_size(ANNOTATION_FONT_SCALE),
-                    color=roi.style.color,
+                    color=color,
                     alpha=alpha,
                 )
             )
@@ -3518,11 +3640,72 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 class _PlotToolbar(NavigationToolbar2QT):
     """The standard navigation toolbar, with Home also releasing the
     view the user zoomed or panned into — otherwise the next redraw
-    would restore what Home just cleared."""
+    would restore what Home just cleared — and a copy button beside
+    Save, putting the figure on the clipboard to paste into slides or
+    documents."""
+
+    def __init__(self, canvas, parent=None):
+        super().__init__(canvas, parent)
+        copy = QAction(self._glyph_icon(ICON_COPY), "Copy", self)
+        copy.setToolTip("Copy plot to the clipboard")
+        copy.triggered.connect(self.copy_figure)
+
+        # Right after Save: before the coordinates readout that follows it.
+        actions = self.actions()
+        after_save = actions.index(self._actions["save_figure"]) + 1
+
+        if after_save < len(actions):
+            self.insertAction(actions[after_save], copy)
+        else:
+            self.addAction(copy)
+
+        self._actions["copy_figure"] = copy
+
+    def _glyph_icon(self, glyph):
+        """The icon-font ``glyph`` as a toolbar icon, in the toolbar's
+        text colour so it sits with matplotlib's own icons, light theme
+        or dark."""
+        size = self.iconSize()
+        ratio = self.devicePixelRatioF() or 1.0
+        pixmap = QPixmap(size * ratio)
+        pixmap.setDevicePixelRatio(ratio)
+        pixmap.fill(Qt.GlobalColor.transparent)
+
+        font = QFont(ICON_FONT_FAMILY)
+        font.setPixelSize(size.height())
+
+        painter = QPainter(pixmap)
+        painter.setFont(font)
+        painter.setPen(self.palette().color(self.foregroundRole()))
+        painter.drawText(QRect(QPoint(0, 0), size), Qt.AlignmentFlag.AlignCenter, glyph)
+        painter.end()
+
+        return QIcon(pixmap)
 
     def home(self, *args):
         self.canvas.release_view()
         super().home(*args)
+
+    def copy_figure(self):
+        """Put the figure on the clipboard as drawn — the view, legend,
+        fits and equations, whatever view mode — rendered afresh at
+        PLOT_CLIPBOARD_DPI_SCALE times its dpi rather than grabbed off
+        the screen, so it stays crisp pasted larger."""
+        figure = self.canvas.figure
+        buffer = io.BytesIO()
+        figure.savefig(
+            buffer,
+            format="png",
+            dpi=figure.dpi * PLOT_CLIPBOARD_DPI_SCALE,
+            facecolor=figure.get_facecolor(),
+        )
+        image = QImage.fromData(buffer.getvalue(), "PNG")
+
+        QApplication.clipboard().setImage(image)
+        roi_analysis_model.progress_text = "Copied the plot"
+        logger.info(
+            f"Copied the plot to the clipboard ({image.width()}×{image.height()} px)"
+        )
 
 
 def _save_figure(canvas):
@@ -3559,10 +3742,19 @@ class RoiPlotDockPane(DockPane):
     _table_clipboard_filters = List()
     _equations_ui = Any()
 
+    #: Answers the ROI table's import buttons.
+    _imports_controller = Instance(ImportedExperimentsController)
+
+    #: The import buttons above the ROI table.
+    _imports_toolbar_ui = Any()
+
     def create_contents(self, parent):
         widget = QWidget(parent)
         layout = QVBoxLayout(widget)
-        self.canvas = RoiPlotCanvas(roi_analysis_model)
+        self._imports_controller = ImportedExperimentsController(
+            model=imported_experiments_model
+        )
+        self.canvas = RoiPlotCanvas(roi_analysis_model, imported_experiments_model)
         self.canvas.setMinimumSize(
             ROI_PLOT_CANVAS_MIN_WIDTH, ROI_PLOT_CANVAS_MIN_HEIGHT
         )
@@ -3584,8 +3776,7 @@ class RoiPlotDockPane(DockPane):
         # The ROI table, or — while the Temperature over time view is
         # up, where it has nothing to say — that view's style panel.
         self._table_stack = QStackedWidget(splitter)
-        self.table = RoiStatsTable(roi_analysis_model, self._table_stack)
-        self._table_stack.addWidget(self.table)
+        self._table_stack.addWidget(self._build_table_page(self._table_stack))
         self._style_ui = self._build_style_panel(self._table_stack)
         self._table_stack.addWidget(self._style_ui.control)
         splitter.addWidget(self._table_stack)
@@ -3620,6 +3811,23 @@ class RoiPlotDockPane(DockPane):
         scroll.setWidgetResizable(True)
         scroll.setWidget(widget)
         return scroll
+
+    def _build_table_page(self, parent):
+        """The ROI table's page of the stack: the import buttons over
+        the tree of every experiment's ROIs."""
+        page = QWidget(parent)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._imports_toolbar_ui = imported_experiments_model.edit_traits(
+            view=imports_toolbar_view, kind="subpanel", parent=page
+        )
+        page_layout.addWidget(self._imports_toolbar_ui.control)
+
+        self.table = RoiStatsTable(roi_analysis_model, imported_experiments_model, page)
+        page_layout.addWidget(self.table, 1)
+
+        return page
 
     def _build_controls(self, parent):
         session = roi_analysis_model.session
@@ -3680,7 +3888,7 @@ class RoiPlotDockPane(DockPane):
         """The style panel while the Temperature over time view is up,
         the ROI table under every other view."""
         temperature = roi_analysis_model.session.figure.view_mode == "temperature"
-        page = self._style_ui.control if temperature else self.table
+        page = self._style_ui.control if temperature else self.table.parent()
 
         self._table_stack.setCurrentWidget(page)
 
@@ -3720,6 +3928,7 @@ class RoiPlotDockPane(DockPane):
             roi_analysis_model.plot_visible = False
             self.canvas.detach()
             self.table.detach()
+            self._imports_toolbar_ui.dispose()
             self._controls_ui.dispose()
             self._style_ui.dispose()
             roi_analysis_model.observe(
@@ -3740,4 +3949,6 @@ class RoiPlotDockPane(DockPane):
             roi_analysis_model.observe(
                 self._on_heater_dir, "heater_dir_button", remove=True
             )
+            # Unhooks its observers from the shared imports model.
+            self._imports_controller.model = None
         super().destroy()
