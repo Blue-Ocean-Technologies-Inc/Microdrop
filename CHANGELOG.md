@@ -1,3 +1,35 @@
+## [v1.46.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.46.0) (2026-11-18)
+
+### Feat
+
+- **image_viewer**: ROI tree with a section per experiment ([`5a4ae80`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5a4ae80114df36dd2faef81df48b2fa4bd38a8fe))
+- **image_viewer**: plot ROIs from several experiments ([`fdc1258`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fdc1258b446aadd2f3215be87d98560f890a8576))
+- **image_viewer**: copy the image with its annotations ([`6d4f13b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6d4f13ba915e360c62ab0bd90096bbf26277d5ec))
+- **user_help**: style the simulations contents tree ([`89c6360`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/89c6360f61a89fd0d9b294383bf4b94e0cf8dffe))
+- **user_help**: contents tree for tutorial simulations ([`d245520`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d245520b68a40eec9a3aaacd8d9e246e7a39c43f))
+- **user-help**: open the installed launcher from Help ([`4155a4f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4155a4f0ddfd0ccb1e399dbafa4ad338ac920b30))
+
+### Fix
+
+- **image_viewer**: fall back to CPU on a SAM GPU reset ([`5beeb95`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5beeb9591a34f38b243179547693e8dbfa514e54))
+- **utils**: keep armed mode buttons checked ([`ec86474`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ec86474c234a01c771d861d36193f48729521e62))
+- **device-viewer**: keep alignment on bundled-device copy ([`9fe72e1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9fe72e180fbd8ce7e843848468bdb3b796ed7434))
+- **device-viewer**: load default device from bundled file ([`7860756`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/78607569c889a79ef164919c99427dc69eeb7af3))
+
+### Docs
+
+- **device-viewer**: fix bundled-device rows in tutorial ([`79aed23`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/79aed230ee9a8ae54d9e8e1ad29d4a794908887b))
+- **device-viewer**: describe bundled devices in tutorial ([`785dec9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/785dec9c12588360cfe08e054d7152ba4c67ae75))
+
+### Test
+
+- **image_viewer**: cover plotted experiments; add demo ([`483c020`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/483c020e1d4758fd686c41d995aefb0f3eed94fe))
+- **tools**: unit test the file-length ratchet hook ([`cea511c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cea511c8d5583a4af7bf44e46a556438e14da675))
+
+### Chore
+
+- **tools**: add file-length ratchet pre-commit hook ([`f50f43a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f50f43a2e50fbff083344c90e9ae4c582be4692b))
+
 ## [v1.45.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.45.0) (2026-11-16)
 
 ### Feat
