@@ -277,6 +277,8 @@ class ImageViewerModel(HasTraits):
     zoom_out_button = Button()
     previous_button = Button()
     next_button = Button()
+    #: Copy the shown image, with its annotations, to the clipboard.
+    copy_image_button = Button()
     #: Step the experiment seek one experiment back / forward.
     previous_experiment_button = Button()
     next_experiment_button = Button()

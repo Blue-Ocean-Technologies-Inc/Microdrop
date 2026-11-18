@@ -15,6 +15,7 @@ and the image canvas editor (zoom/pan QGraphicsView rendering the model's
 
 # Standard library imports.
 from functools import partial
+from pathlib import Path
 
 # Third-party imports.
 from PySide6.QtCore import QRectF, Qt, QTimer
@@ -28,7 +29,8 @@ from PySide6.QtWidgets import (
 )
 
 # Enthought library imports.
-from traits.api import Enum, Float, HasTraits
+from pyface.qt import QtWidgets
+from traits.api import Enum, Float, HasTraits, observe
 from traitsui.api import (
     BasicEditorFactory,
     ButtonEditor,
@@ -110,6 +112,7 @@ from .analysis.consts import (
 )
 from .analysis.roi_canvas_layer import RoiCanvasLayer
 from .analysis.roi_shortcut_service import RoiShortcutService
+from .canvas_snapshot import render_image_with_annotations
 from .consts import (
     IMAGE_ZOOM_STEP_BOUNDS,
     IMAGE_ZOOM_STEP_DEFAULT,
@@ -126,6 +129,11 @@ from .scale_bar import (
     nice_scale,
 )
 from .scale_layer import ScaleCanvasLayer
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 #: Inset of the scale bar from the viewport's bottom-left corner.
 SCALE_BAR_MARGIN_PX = 12
@@ -626,6 +634,26 @@ class _ImageCanvasEditor(QtEditor):
     def _on_zoom_request(self, event):
         self.control.zoom(event.new)
 
+    @observe("object:copy_image_button")
+    def _on_copy_image_button(self, event):
+        """Copy the image as shown, overlays included, at its full
+        resolution whatever the zoom; the status row confirms it."""
+        image = render_image_with_annotations(self._scene, self._pixmap_item)
+        analysis = self.object.roi_analysis
+
+        if image is None:
+            analysis.progress_text = "No image to copy"
+            return
+
+        QtWidgets.QApplication.clipboard().setImage(image)
+        name = Path(self.object.current_path).name
+        analysis.progress_text = f"Copied {name} with its annotations"
+
+        logger.info(
+            f"Copied {self.object.current_path} ({image.width()}x{image.height()}) "
+            "with its annotations to the clipboard"
+        )
+
     def _on_roi_state_changed(self, event):
         self._sync_roi_layer()
 
@@ -897,6 +925,16 @@ buttons_group = HGroup(
             "analysis folder (calculates first if "
             "needed)",
         ),
+    ),
+    # sharing: the shown image with its annotations
+    "12",
+    UItem(
+        "copy_image_button",
+        editor=IconButtonEditor(
+            glyph=ICON_COPY,
+            tooltip="Copy image with annotations to the clipboard",
+        ),
+        enabled_when="display_frame is not None",
     ),
     # Takes the row's leftover width so the cluster gaps above stay at
     # their fixed 12 px (the numeric spacers are growable Minimum
