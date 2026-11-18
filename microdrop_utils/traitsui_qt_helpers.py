@@ -2013,11 +2013,12 @@ class _IconModeButtonEditor(_IconButtonEditor):
         return getattr(self.object, self.factory.mode_trait) == self.factory.mode
 
     def _on_click(self):
-        # Qt has already flipped the check state on its own; the mode
-        # trait is the authority, so put it back and let whatever the
-        # click triggers set it.
+        # Not the base's: it would then restore its own `checked` trait,
+        # always False without a checked_name, unchecking the button the
+        # click just armed. Qt's own toggle is overruled the same way —
+        # the mode trait, set by whatever the click triggers, decides.
+        self.value = True
         self.control.setChecked(self._armed())
-        super()._on_click()
 
     def _on_mode_changed(self, event):
         self.control.setChecked(self._armed())
