@@ -150,3 +150,99 @@ def test_retry_allowed_again_once_abandoned_call_returns(fresh_runner):
     directshow._retry_stalled_com_thread()
 
     assert directshow._run_on_com_thread(lambda: "ok") == "ok"
+
+
+# --- _run_on_com_thread_async ----------------------------------------------------
+
+
+class _Outcomes:
+    """An on_done callback recording every (result, error) it gets."""
+
+    def __init__(self):
+        self.calls = []
+        self.reported = threading.Event()
+
+    def __call__(self, result, error):
+        self.calls.append((result, error))
+        self.reported.set()
+
+    def wait(self):
+        assert self.reported.wait(RELEASE_WAIT_S)
+
+        return self.calls[0]
+
+
+def _run_async(function, *args):
+    """Start ``function(*args)`` asynchronously; return its _Outcomes."""
+    outcomes = _Outcomes()
+    progress = {"step": "testing"}
+
+    directshow._run_on_com_thread_async(function, args, progress, outcomes)
+
+    return outcomes
+
+
+def test_async_result_reported_once():
+    outcomes = _run_async(lambda a, b: a + b, 2, 3)
+
+    assert outcomes.wait() == (5, None)
+
+    # Past the timeout, the cancelled watchdog reports nothing more.
+    threading.Event().wait(0.2)
+    assert len(outcomes.calls) == 1
+
+
+def test_async_exception_reported():
+    def fail():
+        raise ValueError("rejected value")
+
+    _result, error = _run_async(fail).wait()
+
+    assert isinstance(error, ValueError)
+
+
+def test_async_stall_reported_without_blocking_the_caller(fresh_runner):
+    release = threading.Event()
+    fresh_runner.append(release)
+
+    outcomes = _run_async(release.wait)
+
+    # The call is still blocked, yet the caller is already back.
+    assert not outcomes.calls
+
+    result, error = outcomes.wait()
+
+    assert result is None
+    assert isinstance(error, DirectShowStallError)
+    assert error.step == "testing"
+    assert directshow._com_thread_stalled()
+
+    # The late return is dropped.
+    stalled_call = directshow._stalled_call[0]
+    release.set()
+    stalled_call.result(timeout=RELEASE_WAIT_S)
+
+    # Done callbacks run just after result() wakes up.
+    threading.Event().wait(0.1)
+    assert len(outcomes.calls) == 1
+
+
+def test_async_call_retries_on_fresh_thread_after_stall(fresh_runner):
+    _stall(fresh_runner)
+    stalled_call = directshow._stalled_call[0]
+
+    assert _run_async(lambda: "ok").wait() == ("ok", None)
+    assert not stalled_call.done()
+
+
+def test_async_call_refused_once_retry_cap_reached(fresh_runner):
+    for _abandoned in range(directshow.DIRECTSHOW_MAX_ABANDONED_THREADS):
+        _stall(fresh_runner)
+        directshow._retry_stalled_com_thread()
+
+    _stall(fresh_runner)
+
+    result, error = _run_async(lambda: "ok").wait()
+
+    assert result is None
+    assert error.retry_exhausted
