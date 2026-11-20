@@ -42,6 +42,7 @@ from examples.plugin_consts import (  # noqa: E402
     SERVER_CONTEXT,
     SERVICE_PLUGINS,
     _lazy_load_portable_dropbot_plugins,
+    with_updates_panel,
 )
 
 from logger.logger_service import get_logger  # noqa: E402
@@ -89,6 +90,9 @@ def main(plugins, contexts, application, persist):
     app_instance = QApplication.instance() or QApplication(sys.argv)
 
     style_app(app_instance)
+
+    # Launchers pass saved plugin lists, which may predate the Updates panel.
+    plugins = with_updates_panel(plugins)
 
     print(f"Instantiating application {application} with plugins {plugins}")
 
