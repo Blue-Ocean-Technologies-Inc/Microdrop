@@ -127,6 +127,15 @@ def switch_failed_message(target, variable=None):
     return text
 
 
+def check_failed_message():
+    """Return the PLAIN-text message for a check for updates that failed;
+    the dialog shows git's output, which says why, below it."""
+    return (
+        "Could not check for updates. If this computer is offline, check the "
+        "internet connection and try again."
+    )
+
+
 def state_line(state, reason):
     """Return the PLAIN-text line explaining why versions cannot be switched
     in this checkout ``state``, or "" for a managed checkout. It is shown in

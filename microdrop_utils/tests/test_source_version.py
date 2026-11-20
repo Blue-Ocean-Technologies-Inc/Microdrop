@@ -57,9 +57,9 @@ def _fail_git_command(monkeypatch, subcommand, failure):
     command still runs."""
     real_git = source_version._git
 
-    def fake_git(repo_root, *args, input=None):
+    def fake_git(repo_root, *args, **kwargs):
         if args[0] != subcommand:
-            return real_git(repo_root, *args, input=input)
+            return real_git(repo_root, *args, **kwargs)
 
         if isinstance(failure, Exception):
             raise failure
@@ -372,6 +372,40 @@ def test_fetch_tags_brings_new_tag(source_repo, clone, tmp_path):
         run_git(source_repo, "tag", "-d", "v1.11.0")
 
     assert list_release_tags(clone)[0].name == "v1.11.0"
+
+
+def test_fetch_tags_has_its_own_timeout_and_ends_a_stalled_transfer(
+    tmp_path, monkeypatch
+):
+    runs = []
+
+    def fake_run(argv, **kwargs):
+        runs.append((argv, kwargs["timeout"]))
+
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(source_version.subprocess, "run", fake_run)
+
+    fetch_tags(tmp_path)
+
+    assert runs == [
+        (
+            [
+                "git",
+                "-c",
+                "http.lowSpeedLimit=1000",
+                "-c",
+                "http.lowSpeedTime=30",
+                "fetch",
+                "--tags",
+                "--quiet",
+                "origin",
+            ],
+            source_version.FETCH_TIMEOUT_S,
+        )
+    ]
+    assert source_version.FETCH_TIMEOUT_S == 120
 
 
 def test_fetch_tags_raises_without_remote(clone):

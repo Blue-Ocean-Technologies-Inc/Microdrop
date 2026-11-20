@@ -44,6 +44,7 @@ from microdrop_utils.user_environment import manual_unset_command
 from .changelog_html import themed_changelog_html
 from .consts import SET_AND_SWITCH, SWITCH_WITHOUT_IT
 from .messages import (
+    check_failed_message,
     close_message,
     forced_pull_warning,
     no_panel_warning,
@@ -256,7 +257,7 @@ class UpdatesController(Controller):
         information(
             parent=info.ui.control,
             title="Check for updates",
-            message="Could not check for updates. Check the internet connection.",
+            message=check_failed_message(),
             detail=_git_output(exc),
             cancel=False,
         )

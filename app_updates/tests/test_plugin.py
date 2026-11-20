@@ -14,6 +14,7 @@ variable. The plugin runs without an application; its preferences are in
 memory."""
 
 # Standard library imports.
+import logging
 from types import SimpleNamespace
 
 # Third-party imports.
@@ -25,7 +26,14 @@ from apptools.preferences.api import Preferences
 from envisage.ui.tasks.api import TasksApplication
 
 # Microdrop utils imports.
-from microdrop_utils.source_version import DEVELOPMENT, MANAGED, NO_GIT
+from microdrop_utils.source_version import (
+    DEVELOPMENT,
+    HAS_PANEL,
+    MANAGED,
+    NO_GIT,
+    ReleaseTag,
+    SourceVersionError,
+)
 
 # Local imports.
 from .. import plugin as plugin_module
@@ -144,3 +152,55 @@ def test_a_managed_checkout_is_fetched(plugin, monkeypatch, fetches):
     plugin._run_launch_check(POLICY_LATEST, "")
 
     assert len(fetches) == 1
+
+
+# --- a failed fetch ------------------------------------------------------------
+
+
+@pytest.fixture
+def offline_with_a_new_release(monkeypatch):
+    """A managed checkout on v1.46.0 whose fetch fails, with v1.47.0 already
+    present locally; return the calls handed to the GUI thread."""
+    invoked = []
+
+    def fail_fetch(repo_root):
+        raise SourceVersionError(
+            "`git fetch` exited with code 128", "fatal: unable to access origin"
+        )
+
+    _checkout(monkeypatch, MANAGED, skip_variable_set=False)
+    monkeypatch.setattr(plugin_module, "fetch_tags", fail_fetch)
+    monkeypatch.setattr(
+        plugin_module,
+        "list_release_tags",
+        lambda root: [ReleaseTag("v1.47.0", (1, 47, 0), "2026-11-20", HAS_PANEL)],
+    )
+    monkeypatch.setattr(plugin_module, "current_release", lambda root: "v1.46.0")
+    monkeypatch.setattr(
+        plugin_module,
+        "GUI",
+        SimpleNamespace(invoke_later=lambda *args: invoked.append(args)),
+    )
+
+    return invoked
+
+
+def test_a_failed_fetch_is_a_warning_and_the_check_still_logs(
+    plugin, offline_with_a_new_release, caplog
+):
+    with caplog.at_level(logging.INFO, logger=plugin_module.__name__):
+        plugin._run_launch_check(POLICY_LATEST, "")
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+
+    assert len(warnings) == 1
+    assert "fatal: unable to access origin" in warnings[0].getMessage()
+    assert "MicroDrop v1.47.0 downloaded" in caplog.text
+
+
+def test_a_failed_fetch_still_announces_a_local_release(
+    plugin, offline_with_a_new_release
+):
+    plugin._run_launch_check(POLICY_STAY, "")
+
+    assert offline_with_a_new_release == [(plugin._announce_release, "v1.47.0")]

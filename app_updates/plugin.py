@@ -160,12 +160,12 @@ class AppUpdatesPlugin(Plugin):
 
             return
 
+        # A failed fetch still leaves the tags fetched before: a release
+        # already here must still be logged or announced.
         try:
             fetch_tags(PROJECT_ROOT)
         except SourceVersionError as e:
-            logger.info(f"Could not check for updates: {e}")
-
-            return
+            logger.warning(f"Could not fetch the MicroDrop releases: {e}: {e.output}")
 
         newest = newest_panel_tag(list_release_tags(PROJECT_ROOT))
 

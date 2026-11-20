@@ -19,6 +19,7 @@ from microdrop_utils.source_version import DEVELOPMENT, MANAGED, NO_GIT
 
 # Local imports.
 from ..messages import (
+    check_failed_message,
     close_message,
     forced_pull_warning,
     newer_version_notice,
@@ -128,6 +129,15 @@ def test_skip_variable_line_is_plain_text():
     assert "Automatic updates are off" in text
     assert SKIP_GIT_UPDATE_ENV_VAR in text
     assert "<" not in text
+
+
+def test_check_failed_message_only_suggests_the_connection():
+    text = check_failed_message()
+
+    assert text.startswith("Could not check for updates.")
+    assert "internet connection" in text
+    # A suggestion, not a diagnosis: git's own output says what failed.
+    assert "Check the internet connection." not in text
 
 
 def test_newer_version_notice():

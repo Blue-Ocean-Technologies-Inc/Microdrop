@@ -39,6 +39,13 @@ logger = get_logger(__name__)
 #: Per-command timeout, so a flaky network delays the caller by at most this.
 GIT_TIMEOUT_S = 30
 
+#: The fetch's own timeout: 60+ tags over a slow link take longer than other
+#: commands, and a stalled transfer is ended sooner by ``FETCH_GIT_CONFIG``.
+FETCH_TIMEOUT_S = 120
+
+#: Abort a fetch whose transfer stays under 1000 bytes/s for 30 seconds.
+FETCH_GIT_CONFIG = ("-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=30")
+
 #: The branch a managed checkout follows.
 DEFAULT_BRANCH = "main"
 
@@ -83,11 +90,11 @@ class SourceVersionError(Exception):
         self.output = output
 
 
-def _git(repo_root, *args, input=None):
+def _git(repo_root, *args, input=None, timeout=GIT_TIMEOUT_S):
     """Run ``git *args`` in ``repo_root`` and return the CompletedProcess.
 
     Raises SourceVersionError when ``repo_root`` is not a checkout or git
-    cannot run (missing, or past ``GIT_TIMEOUT_S``)."""
+    cannot run (missing, or past ``timeout`` seconds)."""
     command = " ".join(("git", *args))
 
     # Without its own .git, git would walk up and act on an enclosing
@@ -107,7 +114,7 @@ def _git(repo_root, *args, input=None):
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=GIT_TIMEOUT_S,
+            timeout=timeout,
             # A console-less app on Windows would flash a window per call.
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
@@ -132,9 +139,9 @@ def _output(repo_root, *args):
     return result.stdout.strip()
 
 
-def _run_or_raise(repo_root, *args):
+def _run_or_raise(repo_root, *args, timeout=GIT_TIMEOUT_S):
     """Run ``git *args``, raising SourceVersionError when it fails."""
-    result = _git(repo_root, *args)
+    result = _git(repo_root, *args, timeout=timeout)
 
     if result.returncode != 0:
         raise SourceVersionError(
@@ -392,7 +399,15 @@ def fetch_tags(repo_root):
     fails."""
     # No --force: a release tag re-pointed on origin must fail loudly, not
     # silently replace the local one.
-    _run_or_raise(repo_root, "fetch", "--tags", "--quiet", "origin")
+    _run_or_raise(
+        repo_root,
+        *FETCH_GIT_CONFIG,
+        "fetch",
+        "--tags",
+        "--quiet",
+        "origin",
+        timeout=FETCH_TIMEOUT_S,
+    )
 
 
 def changelog_section(repo_root, tag_name):
