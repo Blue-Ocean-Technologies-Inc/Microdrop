@@ -27,10 +27,11 @@ from envisage.api import SERVICE_OFFERS, TASK_EXTENSIONS, Plugin, ServiceOffer
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
 from pyface.api import GUI
-from traits.api import Any, Bool, List, Str, observe
+from traits.api import Any, Bool, Instance, List, Str, observe
 
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
+from microdrop_status_bar.consts import STATUS_BAR_ICONS
 from user_help_plugin.consts import TUTORIAL_ORDER_MANAGEMENT, TUTORIALS, TutorialEntry
 
 # Microdrop utils imports.
@@ -72,13 +73,28 @@ class PluginManagementPlugin(Plugin):
     #: rebuilds the menu bar when TASK_EXTENSIONS change at runtime.
     _live_task_exts = Any()
 
+    #: The plugin load-status indicator while the plugin runs.
+    status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
+
+    #: Keeps the indicator in step with the application's load records.
+    _load_status_indicator = Instance(
+        "plugin_management.load_status_view.PluginLoadStatusIndicator"
+    )
+
+    #: Opens the load-status panel when the indicator is clicked.
+    _load_status_controller = Instance(
+        "plugin_management.load_status_controller.PluginLoadStatusController"
+    )
+
     def start(self):
         """Listen for runtime TASK_EXTENSIONS changes so a hot-loaded plugin's
         dock panes get mounted and the menu bar rebuilt reactively (debounced).
         Uses the same registry mechanism connect_extension_point_traits() uses,
         applied as a consumer of the TasksApplication-owned TASK_EXTENSIONS
-        extension point."""
+        extension point. Also contributes the plugin load-status indicator."""
         super().start()
+        self._contribute_load_status_indicator()
+
         # Guard against a double start() (envisage starts a plugin once, but
         # add_extension_point_listener does not dedup — a second registration
         # would fire two reconciles per delta).
@@ -94,6 +110,8 @@ class PluginManagementPlugin(Plugin):
 
     def stop(self):
         super().stop()
+        self._withdraw_load_status_indicator()
+
         try:
             self.application.remove_extension_point_listener(
                 self._on_task_extensions_changed, TASK_EXTENSIONS
@@ -107,6 +125,50 @@ class PluginManagementPlugin(Plugin):
         TaskExtensions. Forward the delta to the debounced controller."""
         if self._live_task_exts is not None:
             self._live_task_exts.on_changed(list(event.added), list(event.removed))
+
+    # --- plugin load-status indicator ------------------------------------
+
+    def _contribute_load_status_indicator(self):
+        """Put the load-status indicator in the status bar.
+
+        Built in ``start()``, like the battery icon: the QApplication exists
+        by then, and the status-bar plugin places contributions made before
+        its window exists once it builds the bar at application_initialized.
+        The records are the application's ``plugin_load_status``.
+        """
+        if self._load_status_indicator is not None:
+            return
+
+        from .load_status_controller import PluginLoadStatusController
+        from .load_status_model import PluginLoadStatusPanelModel
+        from .load_status_view import PluginLoadStatusIndicator
+
+        status = self.application.plugin_load_status
+
+        self._load_status_indicator = PluginLoadStatusIndicator(status=status)
+        self._load_status_controller = PluginLoadStatusController(
+            model=PluginLoadStatusPanelModel(status=status)
+        )
+
+        # The panel is parented to the icon's window, not the icon: the icon's
+        # colour style sheet would cascade into every child widget.
+        widget = self._load_status_indicator.widget
+        widget.clicked.connect(
+            lambda: self._load_status_controller.show_panel(widget.window())
+        )
+
+        self.status_bar_icons.append(widget)
+
+    def _withdraw_load_status_indicator(self):
+        """Close the panel and take the indicator out of the status bar."""
+        if self._load_status_indicator is None:
+            return
+
+        self._load_status_controller.close_panel()
+        self.status_bar_icons.remove(self._load_status_indicator.widget)
+
+        self._load_status_indicator = None
+        self._load_status_controller = None
 
     # --- group-manager service -----------------------------------------
 
@@ -128,7 +190,9 @@ class PluginManagementPlugin(Plugin):
         if self._manager is None:
             from .group_manager import PluginGroupManager
 
-            self._manager = PluginGroupManager()
+            self._manager = PluginGroupManager(
+                load_status=self.application.plugin_load_status
+            )
         return self._manager
 
     # --- menu contribution ----------------------------------------------
