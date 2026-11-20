@@ -20,6 +20,7 @@ off it.
 from traits.api import (
     Bool,
     Enum,
+    Event,
     HasTraits,
     Instance,
     List,
@@ -122,8 +123,11 @@ class UpdatesModel(HasTraits):
     #: The backend runs in its own process, which a switch does not restart.
     frontend_only = Bool(False)
 
-    #: The checkout state (MANAGED, DEVELOPMENT or NO_GIT) and why.
+    #: The checkout state: MANAGED, DEVELOPMENT or NO_GIT.
     state = Str()
+
+    #: Why the checkout is in ``state``: the branch, the local changes, or
+    #: why git is unavailable; "" when managed.
     state_reason = Str()
 
     #: The checkout's version as git describes it: "v1.45.0", or
@@ -135,6 +139,10 @@ class UpdatesModel(HasTraits):
 
     #: The row whose changelog is shown — and, under POLICY_STAY, the target.
     selected = Instance(VersionRow)
+
+    #: A row was clicked, as the table reports it: ``(row, column)``. Fires
+    #: for the row already selected too, which ``selected`` cannot show.
+    row_clicked = Event()
 
     #: Saved to the preferences the moment it changes.
     policy = Enum(POLICY_LATEST, POLICY_STAY)
@@ -150,16 +158,27 @@ class UpdatesModel(HasTraits):
     target = Property(Instance(VersionRow), observe="policy, selected, versions.items")
 
     #: The action button's caption.
-    action_label = Property(Str, observe="target, policy, selected, _built_on_release")
+    action_label = Property(
+        Str, observe="target, policy, selected, _built_on_release, _selection_is_users"
+    )
 
     #: The action may run: the checkout is managed and the target is new.
-    action_enabled = Property(Bool, observe="target, state, _built_on_release")
+    action_enabled = Property(
+        Bool, observe="target, state, _built_on_release, _selection_is_users"
+    )
 
     #: The checkout may be moved.
     is_managed = Property(Bool, observe="state")
 
     #: The newest release HEAD is built on, "" when none is.
     _built_on_release = Str()
+
+    #: The user chose ``selected``. The row ``refresh`` picks to fill the
+    #: changelog pane is not a choice, so under POLICY_STAY it arms nothing.
+    _selection_is_users = Bool(False)
+
+    #: ``refresh`` is setting ``selected``.
+    _auto_selecting = Bool(False)
 
     # --- property getters ----------------------------------------------
 
@@ -170,7 +189,9 @@ class UpdatesModel(HasTraits):
         return next((row for row in self.versions if row.is_latest), None)
 
     def _get_action_label(self):
-        if self.policy == POLICY_STAY and self.selected is None:
+        if self.policy == POLICY_STAY and not (
+            self.selected and self._selection_is_users
+        ):
             return "Select a version"
 
         if not self._target_is_new():
@@ -189,7 +210,7 @@ class UpdatesModel(HasTraits):
     def refresh(self):
         """Re-read the checkout and the preferences; keep the selected row by
         name, else select the current one, else the release HEAD is built on,
-        else the newest."""
+        else the newest. Only a kept selection the user made stays chosen."""
         self.state, self.state_reason = checkout_state(self.repo_root)
         self.skip_variable_set = skip_variable_is_set()
         self._read_policy()
@@ -198,7 +219,7 @@ class UpdatesModel(HasTraits):
             self.current_description = UNKNOWN_VERSION_TEXT
             self._built_on_release = ""
             self.versions = []
-            self.selected = None
+            self._select_row(None, by_user=False)
 
             return
 
@@ -221,11 +242,14 @@ class UpdatesModel(HasTraits):
             for tag in tags
         ]
 
-        self.selected = (
-            self._row_named(selected_name)
+        kept = self._row_named(selected_name)
+
+        self._select_row(
+            kept
             or next((row for row in self.versions if row.is_current), None)
             or self._row_named(self._built_on_release)
-            or next(iter(self.versions), None)
+            or next(iter(self.versions), None),
+            by_user=kept is not None and self._selection_is_users,
         )
 
     def fetch(self):
@@ -295,6 +319,18 @@ class UpdatesModel(HasTraits):
             logger.error(f"Could not save {AUTO_UPDATE_PREFERENCE_PATH}: {e}")
 
     @observe("selected")
+    def _note_users_pick(self, event):
+        if not self._auto_selecting:
+            self._selection_is_users = True
+
+    @observe("row_clicked")
+    def _pick_clicked_row(self, event):
+        row, column = event.new
+
+        self.selected = row
+        self._selection_is_users = True
+
+    @observe("selected")
     def _show_selected_changelog(self, event):
         if self.selected is None:
             self.changelog_markdown = ""
@@ -307,6 +343,17 @@ class UpdatesModel(HasTraits):
 
     # --- helpers --------------------------------------------------------
 
+    def _select_row(self, row, by_user):
+        """Select ``row`` from ``refresh``; ``by_user`` keeps a user's choice
+        chosen."""
+        self._selection_is_users = by_user
+        self._auto_selecting = True
+
+        try:
+            self.selected = row
+        finally:
+            self._auto_selecting = False
+
     def _row_named(self, name):
         return next((row for row in self.versions if row.name == name), None)
 
@@ -316,14 +363,15 @@ class UpdatesModel(HasTraits):
 
     def _target_is_new(self):
         """Return True when switching to the target would change the
-        checkout: under POLICY_LATEST, only to a newer release."""
+        checkout as asked: under POLICY_LATEST, only to a newer release;
+        under POLICY_STAY, only to a row the user picked."""
         target = self.target
 
         if target is None or target.is_current:
             return False
 
         if self.policy == POLICY_STAY:
-            return True
+            return self._selection_is_users
 
         return is_newer_release(target.name, self._built_on_release)
 

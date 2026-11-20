@@ -60,6 +60,11 @@ def _row(model, name):
     return next(row for row in model.versions if row.name == name)
 
 
+def _click(model, name):
+    """Click a row as the table reports it, even the row already selected."""
+    model.row_clicked = (_row(model, name), None)
+
+
 def test_rows_mark_latest_current_and_missing_panel(model_at_v1_2):
     markers = {row.name: (row.marker, row.panel_note) for row in model_at_v1_2.versions}
 
@@ -105,7 +110,7 @@ def test_latest_policy_disabled_when_ahead_of_newest_tag(model_on_main_tip):
 
 def test_stay_policy_targets_selection_and_disables_on_current(model_at_v1_2):
     model_at_v1_2.policy = POLICY_STAY
-    model_at_v1_2.selected = _row(model_at_v1_2, "v1.2.0")
+    _click(model_at_v1_2, "v1.2.0")
 
     assert model_at_v1_2.target.name == "v1.2.0"
     assert model_at_v1_2.action_enabled is False
@@ -178,7 +183,7 @@ def test_action_notifies_when_policy_or_selection_changes(model_at_v1_2):
     model_at_v1_2.policy = POLICY_STAY
     model_at_v1_2.selected = _row(model_at_v1_2, "v1.1.0")
 
-    assert labels[0] == "Up to date"
+    assert labels[0] == "Select a version"
     assert labels[-1] == "Switch to v1.1.0 and close"
 
 
@@ -186,7 +191,7 @@ def test_stay_policy_allows_stepping_back_from_unreleased_commits(
     model_on_main_tip,
 ):
     model_on_main_tip.policy = POLICY_STAY
-    model_on_main_tip.selected = _row(model_on_main_tip, "v1.10.0")
+    _click(model_on_main_tip, "v1.10.0")
 
     assert model_on_main_tip.action_enabled is True
     assert model_on_main_tip.action_label == "Switch to v1.10.0 and close"
@@ -315,6 +320,65 @@ def test_initial_selection_between_releases_is_the_built_on_release(
 ):
     assert model_on_main_tip.selected.name == "v1.10.0"
     assert model_on_main_tip.changelog_markdown.startswith("## [v1.10.0]")
+
+
+def test_stay_policy_needs_an_explicit_pick(model_on_main_tip):
+    head = _head(model_on_main_tip.repo_root)
+
+    # The row picked to fill the changelog pane does not arm a step back.
+    model_on_main_tip.policy = POLICY_STAY
+
+    assert model_on_main_tip.selected.name == "v1.10.0"
+    assert model_on_main_tip.action_label == "Select a version"
+    assert model_on_main_tip.action_enabled is False
+
+    with pytest.raises(SourceVersionError):
+        model_on_main_tip.switch()
+
+    assert _head(model_on_main_tip.repo_root) == head
+
+    # Clicking the highlighted row is a choice, though the selection stays.
+    _click(model_on_main_tip, "v1.10.0")
+
+    assert model_on_main_tip.action_label == "Switch to v1.10.0 and close"
+    assert model_on_main_tip.action_enabled is True
+
+
+def test_selecting_another_row_is_an_explicit_pick(model_on_main_tip):
+    model_on_main_tip.policy = POLICY_STAY
+
+    # Assigned as the table does when the user moves the selection.
+    model_on_main_tip.selected = _row(model_on_main_tip, "v1.1.0")
+
+    assert model_on_main_tip.action_label == "Switch to v1.1.0 and close"
+    assert model_on_main_tip.action_enabled is True
+
+
+def test_refresh_keeps_an_explicit_pick_armed(model_on_main_tip):
+    model_on_main_tip.policy = POLICY_STAY
+    model_on_main_tip.selected = _row(model_on_main_tip, "v1.2.0")
+
+    model_on_main_tip.refresh()
+
+    assert model_on_main_tip.selected.name == "v1.2.0"
+    assert model_on_main_tip.action_enabled is True
+
+
+def test_refresh_keeps_an_automatic_pick_disarmed(model_on_main_tip):
+    model_on_main_tip.refresh()
+    model_on_main_tip.policy = POLICY_STAY
+
+    assert model_on_main_tip.selected.name == "v1.10.0"
+    assert model_on_main_tip.action_enabled is False
+
+
+def test_policy_change_to_stay_does_not_arm_the_automatic_pick(model_at_v1_2):
+    assert model_at_v1_2.policy == POLICY_LATEST
+
+    model_at_v1_2.policy = POLICY_STAY
+
+    assert model_at_v1_2.action_label == "Select a version"
+    assert model_at_v1_2.action_enabled is False
 
 
 def test_switch_moves_checkout(model_at_v1_2):

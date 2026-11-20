@@ -43,7 +43,7 @@ def test_plain_confirmation(drops_unreleased, frontend_only):
 
 
 def test_no_panel_warning_points_to_the_commands_below():
-    text = no_panel_warning("v1.40.0")
+    text = no_panel_warning("v1.40.0", False)
 
     assert "v1.40.0" in text
     assert "no Updates panel" in text
@@ -54,8 +54,17 @@ def test_no_panel_warning_points_to_the_commands_below():
     assert "git checkout" not in text
 
 
+@pytest.mark.parametrize("drops_unreleased", [True, False])
+def test_warnings_say_when_unreleased_commits_are_dropped(drops_unreleased):
+    plain = no_panel_warning("v1.40.0", drops_unreleased)
+    forced = forced_pull_warning("v1.30.0", drops_unreleased, SKIP_GIT_UPDATE_ENV_VAR)
+
+    assert ("unreleased" in plain) == drops_unreleased
+    assert ("unreleased" in forced) == drops_unreleased
+
+
 def test_forced_pull_warning():
-    text = forced_pull_warning("v1.30.0", "SKIP_<VAR>")
+    text = forced_pull_warning("v1.30.0", False, "SKIP_<VAR>")
 
     assert "v1.30.0" in text
     assert "no Updates panel" in text

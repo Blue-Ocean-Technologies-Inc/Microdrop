@@ -29,48 +29,18 @@ from traitsui.api import (
 )
 
 # Microdrop style imports.
-from microdrop_style.colors import BLACK, GREY, PRIMARY_SHADE, WHITE
+from microdrop_style.colors import GREY
 from microdrop_style.helpers import is_dark_mode
 
 # Microdrop utils imports.
-from microdrop_utils.pyside_helpers import markdown_text_to_html
 from microdrop_utils.source_version import NO_GIT
 from microdrop_utils.traitsui_qt_helpers import ObjectColumn
 
 # Local imports.
 from .consts import POLICY_LATEST, POLICY_STAY
 
-#: Overrides the colours and fonts QTextDocument writes inline into the
-#: rendered changelog, so the page matches the dialog's theme.
-CHANGELOG_STYLE = """<style>
-html, body {{ background: {background} !important; }}
-body {{ margin: 8px; }}
-body, body * {{
-    color: {text} !important;
-    font-family: "Inter", "Segoe UI", sans-serif !important;
-}}
-a, a * {{ color: {link} !important; }}
-</style>"""
-
 #: Without git there is only the version to show.
 HAS_GIT = f"state != {NO_GIT!r}"
-
-
-def themed_changelog_html(markdown_text):
-    """Render ``markdown_text`` with the dialog's background, text colour,
-    link colour and font, in light and dark mode."""
-    if is_dark_mode():
-        colors = {
-            "background": GREY["darker"],
-            "text": WHITE,
-            "link": PRIMARY_SHADE[300],
-        }
-    else:
-        colors = {"background": WHITE, "text": BLACK, "link": PRIMARY_SHADE[800]}
-
-    style = CHANGELOG_STYLE.format(**colors)
-
-    return markdown_text_to_html(markdown_text).replace("</head>", f"{style}</head>", 1)
 
 
 class MutedColumn(ObjectColumn):
@@ -101,6 +71,7 @@ versions_table = TableEditor(
     editable=False,
     sortable=False,
     selected="selected",
+    click="row_clicked",
     auto_size=True,
 )
 

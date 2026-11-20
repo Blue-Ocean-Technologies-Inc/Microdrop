@@ -27,25 +27,33 @@ def _paragraphs(*paragraphs):
     return "<br><br>".join(paragraphs)
 
 
-def _no_panel_paragraphs(target):
-    return (
+def _unreleased_paragraphs(target, drops_unreleased):
+    if not drops_unreleased:
+        return []
+
+    return [
+        f"You are running unreleased commits made after the last release; "
+        f"{target} does not include them."
+    ]
+
+
+def _no_panel_paragraphs(target, drops_unreleased):
+    return [
         f"{target} has no Updates panel, so MicroDrop cannot bring you back "
         f"from inside the app.",
+        *_unreleased_paragraphs(target, drops_unreleased),
         "To return to the latest version, use the Setup &amp; Launcher, or "
         "run the commands below.",
-    )
+    ]
 
 
 def plain_confirmation(target, drops_unreleased, frontend_only):
     """Return the confirmation for switching to a release with the Updates
     panel."""
-    paragraphs = [f"Switch MicroDrop to {target}? MicroDrop closes once it is done."]
-
-    if drops_unreleased:
-        paragraphs.append(
-            f"You are running unreleased commits made after the last release; "
-            f"{target} does not include them."
-        )
+    paragraphs = [
+        f"Switch MicroDrop to {target}? MicroDrop closes once it is done.",
+        *_unreleased_paragraphs(target, drops_unreleased),
+    ]
 
     if frontend_only:
         paragraphs.append(
@@ -56,21 +64,21 @@ def plain_confirmation(target, drops_unreleased, frontend_only):
     return _paragraphs(*paragraphs)
 
 
-def no_panel_warning(target):
+def no_panel_warning(target, drops_unreleased):
     """Return the warning for switching to a release without the Updates
     panel; the dialog shows the return commands below it."""
     return _paragraphs(
-        *_no_panel_paragraphs(target),
+        *_no_panel_paragraphs(target, drops_unreleased),
         f"Switch to {target} anyway?",
     )
 
 
-def forced_pull_warning(target, variable):
+def forced_pull_warning(target, drops_unreleased, variable):
     """Return the warning for switching to a release that pulls ``main`` at
     every start unless ``variable`` is set; the dialog shows the return
     commands and the command removing the variable below it."""
     return _paragraphs(
-        *_no_panel_paragraphs(target),
+        *_no_panel_paragraphs(target, drops_unreleased),
         f"{target} also updates itself: at its next start it checks out "
         f"{DEFAULT_BRANCH} and pulls, so it will not stay on {target} unless "
         f"the {html.escape(variable)} environment variable is set.",

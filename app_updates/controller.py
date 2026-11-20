@@ -41,6 +41,7 @@ from microdrop_utils.threaded_progress import run_with_wait
 from microdrop_utils.user_environment import manual_unset_command
 
 # Local imports.
+from .changelog_html import themed_changelog_html
 from .consts import SET_AND_SWITCH, SWITCH_WITHOUT_IT
 from .messages import (
     close_message,
@@ -53,7 +54,6 @@ from .messages import (
     still_running_warning,
     switch_failed_message,
 )
-from .view import themed_changelog_html
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -71,9 +71,11 @@ def _git_output(exc):
 
 
 def _line_count(text):
-    """Return the lines a details block needs to show all of ``text``
-    without scrolling: one more than it holds, as the block's padding clips
-    the last line otherwise."""
+    """Return the lines a details block needs to show all of ``text``.
+
+    One more than ``text`` holds: the block's padding clips the last line
+    otherwise, and the block would scroll.
+    """
     return text.count("\n") + 2
 
 
@@ -194,7 +196,9 @@ class UpdatesController(Controller):
             answer = confirm(
                 parent=parent,
                 title="Switch version",
-                informative=no_panel_warning(target.name),
+                informative=no_panel_warning(
+                    target.name, self.model.drops_unreleased_commits()
+                ),
                 detail=commands,
                 detail_collapsible=False,
                 detail_visible_lines=_line_count(commands),
@@ -211,7 +215,11 @@ class UpdatesController(Controller):
             choice = choose(
                 parent=parent,
                 title="Switch version",
-                informative=forced_pull_warning(target.name, SKIP_GIT_UPDATE_ENV_VAR),
+                informative=forced_pull_warning(
+                    target.name,
+                    self.model.drops_unreleased_commits(),
+                    SKIP_GIT_UPDATE_ENV_VAR,
+                ),
                 detail=detail,
                 detail_collapsible=False,
                 detail_visible_lines=_line_count(detail),
@@ -243,7 +251,6 @@ class UpdatesController(Controller):
         self.model.switch()
 
     def _fetch_failed(self, info, exc):
-        logger.error(f"Could not check for updates: {exc}")
         self.model.refresh()
 
         information(
@@ -264,16 +271,30 @@ class UpdatesController(Controller):
 
         info.ui.dispose()
 
-        # A window may veto the exit (an unsaved protocol, a failed layout
-        # save), leaving the old version running on the new source.
-        if self.application is not None and self.application.exit() is not True:
-            logger.error(f"MicroDrop did not close after switching to {target_name}")
-            warning(
-                parent=None,
-                title="Restart MicroDrop",
-                message=still_running_warning(target_name),
-                cancel=False,
+        if self.application is None:
+            return
+
+        # A window's closing veto (the unsaved-protocol prompt) makes exit()
+        # return False, and an exiting observer may raise; either way the old
+        # version keeps running on the new source.
+        try:
+            exited = self.application.exit()
+        except Exception:
+            logger.exception(
+                f"MicroDrop failed to close after switching to {target_name}"
             )
+        else:
+            if exited is True:
+                return
+
+            logger.error(f"MicroDrop did not close after switching to {target_name}")
+
+        warning(
+            parent=None,
+            title="Restart MicroDrop",
+            message=still_running_warning(target_name),
+            cancel=False,
+        )
 
     def _switch_failed(self, info, exc, target_name, set_variable):
         if isinstance(exc, SkipVariableNotSet):
@@ -282,7 +303,6 @@ class UpdatesController(Controller):
             variable = SKIP_GIT_UPDATE_ENV_VAR if set_variable else None
             message = switch_failed_message(target_name, variable)
 
-        logger.error(f"{message} {exc}")
         self.model.refresh()
 
         error(
@@ -293,7 +313,6 @@ class UpdatesController(Controller):
         )
 
     def _remove_failed(self, info, exc):
-        logger.error(f"Could not remove {SKIP_GIT_UPDATE_ENV_VAR}: {exc}")
         self.model.refresh()
 
         error(
