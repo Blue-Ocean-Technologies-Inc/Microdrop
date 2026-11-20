@@ -61,10 +61,6 @@ ReleaseTag = namedtuple("ReleaseTag", "name version date kind")
 
 _RELEASE_PATTERN = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 
-# describe's globs cannot spell "digits only", so the exclude drops any tag
-# with another character after the "v" (v2.0.0rc1).
-_RELEASE_TAG_GLOBS = ("--match", "v[0-9]*", "--exclude", "v*[!0-9.]*")
-
 
 class SourceVersionError(Exception):
     """A git command could not run or failed; ``output`` holds what git
@@ -100,6 +96,8 @@ def _git(repo_root, *args, input=None):
             encoding="utf-8",
             errors="replace",
             timeout=GIT_TIMEOUT_S,
+            # A console-less app on Windows would flash a window per call.
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.SubprocessError) as e:
         raise SourceVersionError(f"`{command}` could not run: {e}") from e
@@ -115,7 +113,7 @@ def _output(repo_root, *args):
         return ""
 
     if result.returncode != 0:
-        logger.debug(f"`git {' '.join(args)}` failed: {result.stderr.strip()}")
+        logger.warning(f"`git {' '.join(args)}` failed: {result.stderr.strip()}")
 
         return ""
 
@@ -167,7 +165,17 @@ def checkout_state(repo_root):
     if status.stdout.strip():
         return DEVELOPMENT, "local changes"
 
-    branch = current_branch(repo_root)
+    try:
+        head = _git(repo_root, "symbolic-ref", "--short", "-q", "HEAD")
+    except SourceVersionError as e:
+        return NO_GIT, str(e)
+
+    # Exit 1 is a detached HEAD. Any other failure leaves the branch unknown,
+    # and an unknown branch must not pass for a detached, managed one.
+    if head.returncode not in (0, 1):
+        return NO_GIT, f"git symbolic-ref failed: {head.stderr.strip()}"
+
+    branch = head.stdout.strip()
 
     if branch not in ("", DEFAULT_BRANCH):
         return DEVELOPMENT, f"branch {branch}"
@@ -186,21 +194,25 @@ def current_branch(repo_root):
     return _output(repo_root, "branch", "--show-current")
 
 
-def current_release(repo_root):
-    """The nearest release tag reachable from HEAD, or None."""
-    name = _output(repo_root, "describe", "--tags", "--abbrev=0", *_RELEASE_TAG_GLOBS)
+def _newest_release(repo_root, selection):
+    """The newest-version release tag among ``git tag <selection> HEAD``, or
+    None. Near-miss names (v1.47, v1.2.3.4, v2.0.0rc1) never count."""
+    names = _output(repo_root, "tag", selection, "HEAD", "--list", "v*")
+    releases = [name for name in names.splitlines() if parse_release(name)]
 
-    return name if parse_release(name) else None
+    return max(releases, key=parse_release, default=None)
+
+
+def current_release(repo_root):
+    """The newest release tag reachable from HEAD, or None. Releases are cut
+    along ``main``'s linear history, where that is also the nearest one."""
+    return _newest_release(repo_root, "--merged")
 
 
 def exact_release(repo_root):
     """The release tag HEAD is exactly at (the newest, when several are), or
     None."""
-    names = _output(
-        repo_root, "tag", "--points-at", "HEAD", "--sort=-v:refname", "--list", "v*"
-    )
-
-    return next((name for name in names.splitlines() if parse_release(name)), None)
+    return _newest_release(repo_root, "--points-at")
 
 
 def list_release_tags(repo_root):
@@ -213,7 +225,9 @@ def list_release_tags(repo_root):
         repo_root,
         "for-each-ref",
         "--sort=-v:refname",
-        "--format=%(refname:short) %(creatordate:short)",
+        # Not refname:short — a branch sharing a tag's name makes that print
+        # "tags/<name>", which would drop the tag.
+        "--format=%(refname:strip=2) %(creatordate:short)",
         "refs/tags/v*",
     )
 
@@ -312,18 +326,32 @@ def pending_update(repo_root):
 def fetch_tags(repo_root):
     """Fetch the tags of ``origin``. Raises SourceVersionError when that
     fails."""
+    # No --force: a release tag re-pointed on origin must fail loudly, not
+    # silently replace the local one.
     _run_or_raise(repo_root, "fetch", "--tags", "--quiet", "origin")
 
 
 def changelog_section(repo_root, tag_name):
     """The ``CHANGELOG.md`` section of release ``tag_name``, as it stands in
     that tag, or "" when the tag has no changelog or no such section."""
-    changelog = _output(repo_root, "show", f"{tag_name}:CHANGELOG.md")
+    try:
+        shown = _git(repo_root, "show", f"{tag_name}:CHANGELOG.md")
+    except SourceVersionError as e:
+        logger.warning(f"{e}")
+
+        return ""
+
+    # Releases older than the changelog have none, which git reports as a
+    # failure; for them no section is the answer.
+    if shown.returncode != 0:
+        logger.debug(f"No changelog in {tag_name}: {shown.stderr.strip()}")
+
+        return ""
 
     heading = f"## [{tag_name}]"
     section = []
 
-    for line in changelog.splitlines():
+    for line in shown.stdout.splitlines():
         if section and line.startswith("## "):
             break
 

@@ -21,6 +21,7 @@ import subprocess
 import pytest
 
 # Microdrop utils imports.
+from microdrop_utils import source_version
 from microdrop_utils.source_version import (
     DEVELOPMENT,
     FORCED_PULL,
@@ -32,6 +33,7 @@ from microdrop_utils.source_version import (
     changelog_section,
     checkout_state,
     current_branch,
+    current_release,
     describe,
     exact_release,
     fetch_tags,
@@ -73,6 +75,7 @@ def _isolate(repo, hooks):
 def _clone(source, destination):
     """A fresh clone of the ``source_repo`` fixture at ``destination``."""
     hooks = source.parent / "no-hooks"
+
     _run_git(
         destination.parent,
         "clone",
@@ -86,6 +89,24 @@ def _clone(source, destination):
     return destination
 
 
+def _fail_git_command(monkeypatch, subcommand, failure):
+    """Make the module's ``git <subcommand>`` fail with ``failure`` — a
+    CompletedProcess to answer, or an exception to raise; every other git
+    command still runs."""
+    real_git = source_version._git
+
+    def fake_git(repo_root, *args, input=None):
+        if args[0] != subcommand:
+            return real_git(repo_root, *args, input=input)
+
+        if isinstance(failure, Exception):
+            raise failure
+
+        return failure
+
+    monkeypatch.setattr(source_version, "_git", fake_git)
+
+
 def _commit_release(repo, tag, changelog, annotated=True):
     """Prepend ``tag``'s section to the changelog, commit everything, tag it."""
     section = (
@@ -93,6 +114,7 @@ def _commit_release(repo, tag, changelog, annotated=True):
         f"- the {tag} release\n\n"
     )
     changelog = section + changelog
+
     (repo / "CHANGELOG.md").write_text(changelog)
     _run_git(repo, "add", "--all")
     _run_git(repo, "commit", "-m", f"chore: release {tag}")
@@ -112,13 +134,14 @@ def source_repo(tmp_path_factory):
     root = tmp_path_factory.mktemp("source_version")
     hooks = root / "no-hooks"
     repo = root / "source"
+
     hooks.mkdir()
     repo.mkdir()
-
     _run_git(repo, "init", "-b", "main")
     _isolate(repo, hooks)
 
     helpers = repo / "microdrop_utils" / "app_setup_helpers.py"
+
     helpers.parent.mkdir()
     helpers.write_text("x = 1\n")
     _run_git(repo, "add", "--all")
@@ -129,6 +152,7 @@ def source_repo(tmp_path_factory):
     changelog = _commit_release(repo, "v1.1.0", "", annotated=False)
 
     panel = repo / "app_updates" / "plugin.py"
+
     panel.parent.mkdir()
     panel.write_text("PANEL = True\n")
     changelog = _commit_release(repo, "v1.2.0", changelog)
@@ -207,6 +231,66 @@ def test_state_no_git_without_dot_git(tmp_path):
     assert describe(tmp_path) == ""
 
 
+def test_state_no_git_when_git_status_fails(clone, monkeypatch):
+    failure = subprocess.CompletedProcess(
+        ["git", "status"], 128, "", "fatal: detected dubious ownership\n"
+    )
+    _fail_git_command(monkeypatch, "status", failure)
+
+    assert checkout_state(clone) == (
+        NO_GIT,
+        "git status failed: fatal: detected dubious ownership",
+    )
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        subprocess.CompletedProcess(["git", "symbolic-ref"], 128, "", "fatal: bad\n"),
+        SourceVersionError("`git symbolic-ref` could not run: timed out"),
+    ],
+    ids=["exit-code", "timeout"],
+)
+def test_state_no_git_when_the_branch_cannot_be_read(clone, monkeypatch, failure):
+    # On a feature branch, so a failed read passing for "detached" would
+    # misreport the checkout as managed.
+    _run_git(clone, "checkout", "-b", "feat/x")
+    _fail_git_command(monkeypatch, "symbolic-ref", failure)
+
+    assert checkout_state(clone)[0] == NO_GIT
+
+
+def test_current_release_is_the_newest_reachable_release(clone):
+    assert current_release(clone) == "v1.10.0"
+
+    _run_git(clone, "checkout", "--detach", "v1.2.0")
+
+    assert current_release(clone) == "v1.2.0"
+
+
+def test_near_miss_tags_never_count_as_releases(clone):
+    _run_git(clone, "tag", "v1.47")
+    _run_git(clone, "tag", "v1.2.3.4")
+
+    assert current_release(clone) == "v1.10.0"
+    assert exact_release(clone) is None
+    assert pending_update(clone) is None
+
+
+def test_exact_release_at_and_off_a_tag(clone):
+    assert exact_release(clone) is None
+
+    _run_git(clone, "checkout", "--detach", "v1.10.0")
+
+    assert exact_release(clone) == "v1.10.0"
+
+
+def test_a_branch_named_like_a_tag_does_not_hide_it(clone):
+    _run_git(clone, "branch", "v1.2.0")
+
+    assert "v1.2.0" in [t.name for t in list_release_tags(clone)]
+
+
 def test_pending_update_is_none_when_ahead_of_newest_tag(clone):
     assert describe(clone).startswith("v1.10.0-1-g")
     assert pending_update(clone) is None
@@ -263,6 +347,7 @@ def test_switch_to_raises_on_unknown_tag(clone):
 
 def test_fetch_tags_brings_new_tag(source_repo, clone, tmp_path):
     publisher = _clone(source_repo, tmp_path / "publisher")
+
     _run_git(publisher, "tag", "v1.11.0")
 
     assert "v1.11.0" not in [t.name for t in list_release_tags(clone)]
