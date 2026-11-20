@@ -27,25 +27,14 @@ def may_check(state, skip_variable_set):
     return state == MANAGED and not skip_variable_set
 
 
-def launch_check_action(
-    state,
-    skip_variable_set,
-    policy,
-    pending_tag,
-    newest_panel_tag,
-    current_release,
-    last_announced,
-):
-    """Return what the check does, as ``(action, tag_name)``.
+def launch_check_action(policy, newest_panel_tag, current_release, last_announced):
+    """Return what the check does on a checkout ``may_check`` allowed, as
+    ``(action, tag_name)``.
 
     Parameters
     ----------
-    state, skip_variable_set
-        The checkout state and whether the skip variable is set.
     policy
         POLICY_LATEST or POLICY_STAY.
-    pending_tag
-        The release the next start moves to, or None.
     newest_panel_tag
         The newest release with the Updates panel, or None.
     current_release
@@ -55,22 +44,20 @@ def launch_check_action(
 
     Returns
     -------
-    ``(NO_ACTION, None)``, ``(LOG_DOWNLOADED, pending_tag)`` under
-    POLICY_LATEST, or ``(ANNOUNCE, newest_panel_tag)`` under POLICY_STAY.
+    ``(NO_ACTION, None)``; under POLICY_LATEST ``(LOG_DOWNLOADED, tag)`` for
+    the release the next start moves to; under POLICY_STAY
+    ``(ANNOUNCE, tag)`` for a release not announced before.
     """
-    if not may_check(state, skip_variable_set):
+    # On a managed checkout, a newer panel release is exactly what the next
+    # start moves to under POLICY_LATEST (``pending_update``). No release
+    # (None) is never newer.
+    if not is_newer_release(newest_panel_tag, current_release):
         return NO_ACTION, None
 
     if policy == POLICY_LATEST:
-        if pending_tag is None:
-            return NO_ACTION, None
+        return LOG_DOWNLOADED, newest_panel_tag
 
-        return LOG_DOWNLOADED, pending_tag
-
-    if newest_panel_tag is None or newest_panel_tag == last_announced:
-        return NO_ACTION, None
-
-    if not is_newer_release(newest_panel_tag, current_release):
+    if newest_panel_tag == last_announced:
         return NO_ACTION, None
 
     return ANNOUNCE, newest_panel_tag

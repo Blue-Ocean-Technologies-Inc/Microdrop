@@ -11,13 +11,13 @@
 """AppUpdatesPlugin — Help > "Check for Updates…" and the background check
 after startup.
 
-The check fetches the release tags once per launch, off the GUI thread. Under
+The check fetches the release tags once per launch, on a thread of its own. Under
 the "latest" policy it only logs that the next start moves to a new release;
 under "stay" it announces each new release once.
 """
 
-# Third-party imports.
-import dramatiq
+# Standard library imports.
+import threading
 
 # Enthought library imports.
 from envisage.api import TASK_EXTENSIONS, Plugin
@@ -45,7 +45,6 @@ from microdrop_utils.source_version import (
     fetch_tags,
     list_release_tags,
     newest_panel_tag,
-    pending_update,
 )
 
 # Local imports.
@@ -65,10 +64,6 @@ from .preferences import AppUpdatesPreferences
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-
-def _tag_name(tag):
-    return None if tag is None else tag.name
 
 
 class AppUpdatesPlugin(Plugin):
@@ -125,38 +120,35 @@ class AppUpdatesPlugin(Plugin):
     @observe("application:application_initialized")
     def _check_for_updates_on_launch(self, event):
         """Start the background check, once per launch. The preferences are
-        read here, on the GUI thread, and handed to the worker."""
+        read here, on the GUI thread, and handed to the worker; nothing here
+        may raise into startup."""
         if self._launch_check_started:
             return
 
         self._launch_check_started = True
 
-        policy = POLICY_LATEST if self.preferences.auto_update else POLICY_STAY
+        try:
+            policy = POLICY_LATEST if self.preferences.auto_update else POLICY_STAY
 
-        self._make_launch_check_actor().send(
-            policy, self.preferences.last_announced_version
-        )
+            threading.Thread(
+                target=self._check_in_background,
+                args=(policy, self.preferences.last_announced_version),
+                daemon=True,
+                name="app-updates-launch-check",
+            ).start()
+        except Exception as e:
+            logger.warning(f"Could not start the update check: {e!r}", exc_info=True)
 
-    def _make_launch_check_actor(self):
-        """Declare the one-shot launch-check actor on the shared broker.
-
-        max_retries=0: a crash escaping the guards must not make the Retries
-        middleware re-run the check (repeated fetches, repeated notices) — a
-        failed check just waits for the next launch.
-        """
-
-        @dramatiq.actor(max_retries=0)
-        def app_updates_launch_check(policy, last_announced):
-            # Every failure is logged only: the check never interrupts the user.
-            try:
-                self._run_launch_check(policy, last_announced)
-            except Exception as e:
-                logger.warning(f"Update check failed: {e!r}", exc_info=True)
-
-        return app_updates_launch_check
+    def _check_in_background(self, policy, last_announced):
+        """Worker thread: run the check; every failure is logged only, the
+        check never interrupts the user."""
+        try:
+            self._run_launch_check(policy, last_announced)
+        except Exception as e:
+            logger.warning(f"Update check failed: {e!r}", exc_info=True)
 
     def _run_launch_check(self, policy, last_announced):
-        """Worker: gather the facts, then act on ``launch_check_action``."""
+        """Worker: gather the facts once, then act on ``launch_check_action``."""
         state, reason = checkout_state(PROJECT_ROOT)
         skip_variable_set = skip_variable_is_set()
 
@@ -175,14 +167,11 @@ class AppUpdatesPlugin(Plugin):
 
             return
 
+        newest = newest_panel_tag(list_release_tags(PROJECT_ROOT))
+
         action, tag_name = launch_check_action(
-            state=state,
-            skip_variable_set=skip_variable_set,
             policy=policy,
-            pending_tag=_tag_name(pending_update(PROJECT_ROOT)),
-            newest_panel_tag=_tag_name(
-                newest_panel_tag(list_release_tags(PROJECT_ROOT))
-            ),
+            newest_panel_tag=None if newest is None else newest.name,
             current_release=current_release(PROJECT_ROOT),
             last_announced=last_announced,
         )
@@ -197,6 +186,16 @@ class AppUpdatesPlugin(Plugin):
             GUI.invoke_later(self._announce_release, tag_name)
 
     def _announce_release(self, tag_name):
+        """GUI thread: announce ``tag_name``. Failures are logged only, never
+        raised into the Qt event loop."""
+        try:
+            self._remember_and_offer_release(tag_name)
+        except Exception as e:
+            logger.warning(
+                f"Could not announce MicroDrop {tag_name}: {e!r}", exc_info=True
+            )
+
+    def _remember_and_offer_release(self, tag_name):
         """Remember ``tag_name`` as announced, then offer the Updates dialog."""
         self.preferences.last_announced_version = tag_name
 

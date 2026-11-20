@@ -84,6 +84,8 @@ MOCK_CHANGELOG = (
 
 
 def main():
+    # QtWebEngine must be imported before the QApplication is created; the
+    # web_view_dialog import above does that.
     app = QApplication(sys.argv)
 
     whats_new_delta = changelog_sections_added_since(
