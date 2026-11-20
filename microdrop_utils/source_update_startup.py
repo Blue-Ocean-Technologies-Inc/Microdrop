@@ -37,6 +37,7 @@ from microdrop_utils.source_version import (
     pending_update,
     switch_to,
 )
+from microdrop_utils.user_environment import user_environment_variable
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -74,6 +75,16 @@ def source_version_line(repo_root):
     branch = current_branch(repo_root) or "pinned release"
 
     return f"MicroDrop source version: {describe(repo_root)} ({branch})"
+
+
+def skip_variable_is_set():
+    """Return True when ``SKIP_GIT_UPDATE_ENV_VAR`` is set in this process or
+    saved for the user — a process started before it was saved does not see
+    it, yet must treat automatic updates as off just the same."""
+    if os.environ.get(SKIP_GIT_UPDATE_ENV_VAR):
+        return True
+
+    return bool(user_environment_variable(SKIP_GIT_UPDATE_ENV_VAR))
 
 
 def _switch_with_retries(repo_root, tag_name):
@@ -172,15 +183,17 @@ def apply_source_update_policy(repo_root=PROJECT_ROOT):
 
         return
 
+    # Popped before anything that can fail, so what this run starts later
+    # (the in-app relaunch) is a fresh start that may update again.
+    update_applied = os.environ.pop(UPDATE_APPLIED_ENV_VAR, None)
+
     try:
         logger.info(source_version_line(repo_root))
 
-        # Popped, so what this run starts later (the in-app relaunch) is a
-        # fresh start that may update again.
-        if os.environ.pop(UPDATE_APPLIED_ENV_VAR, None):
+        if update_applied:
             return
 
-        if os.environ.get(SKIP_GIT_UPDATE_ENV_VAR):
+        if skip_variable_is_set():
             logger.info(
                 f"Automatic source updates skipped ({SKIP_GIT_UPDATE_ENV_VAR} is set)"
             )

@@ -29,6 +29,7 @@ from microdrop_utils.source_update_startup import (
     SKIP_GIT_UPDATE_ENV_VAR,
     UPDATE_APPLIED_ENV_VAR,
     apply_source_update_policy,
+    skip_variable_is_set,
     source_version_line,
 )
 from microdrop_utils.source_version import SourceVersionError, exact_release
@@ -86,9 +87,9 @@ class FakeChild:
 def calls(monkeypatch):
     """The restarts the step started; none ever starts a real process.
 
-    Also clears both variables (this machine may set them), answers the
-    auto-update preference with its default, and makes the retry sleeps
-    instant."""
+    Also clears both variables (this machine may set them, in its process or
+    persisted for the user), answers the auto-update preference with its
+    default, and makes the retry sleeps instant."""
     recorded = []
 
     def fake_restart(argv, env):
@@ -98,6 +99,9 @@ def calls(monkeypatch):
 
     monkeypatch.delenv(SKIP_GIT_UPDATE_ENV_VAR, raising=False)
     monkeypatch.delenv(UPDATE_APPLIED_ENV_VAR, raising=False)
+    monkeypatch.setattr(
+        source_update_startup, "user_environment_variable", lambda name: None
+    )
     monkeypatch.setattr(
         source_update_startup, "read_bool_preference", lambda path, default: default
     )
@@ -171,6 +175,53 @@ def test_skip_variable_stops_the_update(clone_at_v1_2, monkeypatch, calls, caplo
     assert _head(clone_at_v1_2) == head
     assert calls == []
     assert SKIP_GIT_UPDATE_ENV_VAR in caplog.text
+
+
+def test_persisted_skip_variable_stops_the_update(clone_at_v1_2, monkeypatch, calls):
+    # Saved for the user after this process started: its environment is stale.
+    persisted = {SKIP_GIT_UPDATE_ENV_VAR: "1"}
+
+    monkeypatch.setattr(
+        source_update_startup, "user_environment_variable", persisted.get
+    )
+    head = _head(clone_at_v1_2)
+
+    apply_source_update_policy(clone_at_v1_2)
+
+    assert _head(clone_at_v1_2) == head
+    assert calls == []
+
+
+def test_skip_variable_is_set_reads_process_and_user_environment(monkeypatch):
+    persisted = {}
+
+    monkeypatch.setattr(
+        source_update_startup, "user_environment_variable", persisted.get
+    )
+
+    assert skip_variable_is_set() is False
+
+    monkeypatch.setenv(SKIP_GIT_UPDATE_ENV_VAR, "1")
+
+    assert skip_variable_is_set() is True
+
+    monkeypatch.delenv(SKIP_GIT_UPDATE_ENV_VAR)
+    persisted[SKIP_GIT_UPDATE_ENV_VAR] = "1"
+
+    assert skip_variable_is_set() is True
+
+
+def test_applied_variable_is_dropped_when_the_version_line_fails(monkeypatch, calls):
+    def broken(repo_root):
+        raise RuntimeError("describe failed")
+
+    monkeypatch.setenv(UPDATE_APPLIED_ENV_VAR, "1")
+    monkeypatch.setattr(source_update_startup, "source_version_line", broken)
+
+    apply_source_update_policy()
+
+    assert UPDATE_APPLIED_ENV_VAR not in os.environ
+    assert calls == []
 
 
 def test_development_checkout_is_left_alone(clone, calls):
