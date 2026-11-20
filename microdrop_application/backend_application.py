@@ -8,32 +8,32 @@
 #
 # Thanks for using Microdrop open source!
 
-# sys imports
+# Standard library imports.
 from pathlib import Path
-
-from .helpers import get_microdrop_redis_globals_manager
-# Local imports.
-from .preferences import MicrodropPreferences
 
 # Enthought library imports.
 from envisage.api import Application
-from traits.etsconfig.api import ETSConfig
-from traits.api import Instance, Property, Directory, Event
+from traits.api import Directory, Event, Instance, Property
 
+# Microdrop utils imports.
+from microdrop_utils.application_home import configure_application_home
+
+# Local imports.
 from .consts import EXPERIMENT_DIR
+from .helpers import get_microdrop_redis_globals_manager
+from .preferences import MicrodropPreferences
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
-# set some global consts used application wide.
-ETSConfig.company = "Sci-Bots"
-ETSConfig.user_data = str(Path.home() / "Documents" / ETSConfig.company / "Microdrop")
-ETSConfig.application_home = str(Path(ETSConfig.application_data) / "Microdrop")
+configure_application_home()
 
 
 class MicrodropBackendApplication(Application):
-    """Device Viewer application based on enthought envisage's The chaotic attractors Tasks application."""
+    """The MicroDrop backend Envisage application, without a GUI."""
 
     #### 'IApplication' interface #############################################
 
@@ -53,9 +53,7 @@ class MicrodropBackendApplication(Application):
     preferences_helper = Instance(MicrodropPreferences)
 
     def _preferences_helper_default(self):
-        """
-        Retrieve the preferences from the preferences file using the DeviceViewerPreferences class.
-        """
+        """Wrap the application preferences in the MicroDrop preferences helper."""
         return MicrodropPreferences(preferences=self.preferences)
 
     def _get_experiments_directory(self) -> Path:
@@ -84,7 +82,10 @@ class MicrodropBackendApplication(Application):
 
         self.experiment_changed = True
 
-    ############################# Initialization ############################################################
+    #### Initialization #######################################################
     def traits_init(self):
         self.current_experiment_directory.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Initialized microdrop application. Current experiment directory: {self.current_experiment_directory}")
+        logger.info(
+            f"Initialized microdrop application. Current experiment directory: "
+            f"{self.current_experiment_directory}"
+        )

@@ -39,6 +39,7 @@ from microdrop_style.helpers import (
 )
 
 # Microdrop utils imports.
+from microdrop_utils.application_home import configure_application_home
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.system_config import is_rpi
 from microdrop_utils.tasks_runtime_helpers import describe_dock_widgets
@@ -58,10 +59,7 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-# set some global consts used application wide.
-ETSConfig.company = "Sci-Bots"
-ETSConfig.user_data = str(Path.home() / "Documents" / ETSConfig.company / "Microdrop")
-ETSConfig.application_home = str(Path(ETSConfig.application_data) / "Microdrop")
+configure_application_home()
 
 
 def _show_beta_disclaimer():
