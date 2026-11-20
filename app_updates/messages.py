@@ -8,10 +8,12 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The texts of the updates dialogs, as HTML message bodies.
+"""The texts of the updates dialogs.
 
-Version names are ``vX.Y.Z`` and go in as they are; every other value is
-escaped, so a path or a command is never taken as markup.
+The dialog bodies are HTML: version names are ``vX.Y.Z`` and go in as they
+are, and every other value is escaped, so a path or a command is never taken
+as markup. ``state_line`` and ``skip_variable_line`` are plain text for plain
+labels.
 """
 
 # Standard library imports.
@@ -92,23 +94,25 @@ def close_message(target):
 
 
 def state_line(state, reason):
-    """Return the line explaining why versions cannot be switched in this
-    checkout ``state``, or "" for a managed checkout."""
+    """Return the PLAIN-text line explaining why versions cannot be switched
+    in this checkout ``state``, or "" for a managed checkout. It is shown in
+    a plain label, so ``reason`` goes in unescaped."""
     if state == DEVELOPMENT:
         return (
-            f"This is a development checkout ({html.escape(reason)}): versions "
-            f"can be browsed, not switched."
+            f"This is a development checkout ({reason}): versions can be "
+            f"browsed, not switched."
         )
 
     if state == NO_GIT:
-        return f"Versions cannot be listed ({html.escape(reason)})."
+        return f"Versions cannot be listed ({reason})."
 
     return ""
 
 
 def skip_variable_line(variable):
-    """Return the line saying ``variable`` turns automatic updates off."""
-    return f"Automatic updates are off because {html.escape(variable)} is set."
+    """Return the PLAIN-text line saying ``variable`` turns automatic updates
+    off, for a plain label."""
+    return f"Automatic updates are off because {variable} is set."
 
 
 def newer_version_notice(tag_name):

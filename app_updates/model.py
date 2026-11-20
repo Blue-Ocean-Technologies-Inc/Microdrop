@@ -30,6 +30,7 @@ from traits.api import (
 
 # Microdrop utils imports.
 from microdrop_utils.source_update_startup import (
+    AUTO_UPDATE_PREFERENCE_PATH,
     PROJECT_ROOT,
     SKIP_GIT_UPDATE_ENV_VAR,
     skip_variable_is_set,
@@ -45,9 +46,9 @@ from microdrop_utils.source_version import (
     describe,
     exact_release,
     fetch_tags,
+    is_newer_release,
     list_release_tags,
     newest_panel_tag,
-    parse_release,
     switch_to,
 )
 from microdrop_utils.user_environment import (
@@ -142,7 +143,7 @@ class UpdatesModel(HasTraits):
     target = Property(Instance(VersionRow), observe="policy, selected, versions.items")
 
     #: The action button's caption.
-    action_label = Property(Str, observe="target, _built_on_release")
+    action_label = Property(Str, observe="target, policy, selected, _built_on_release")
 
     #: The action may run: the checkout is managed and the target is new.
     action_enabled = Property(Bool, observe="target, state, _built_on_release")
@@ -162,6 +163,9 @@ class UpdatesModel(HasTraits):
         return next((row for row in self.versions if row.is_latest), None)
 
     def _get_action_label(self):
+        if self.policy == POLICY_STAY and self.selected is None:
+            return "Select a version"
+
         if not self._target_is_new():
             return "Up to date"
 
@@ -222,12 +226,15 @@ class UpdatesModel(HasTraits):
         fetch_tags(self.repo_root)
 
     def switch(self):
-        """Check out the target release. Raises SourceVersionError when the
-        checkout is not managed, there is no target, or git refuses."""
-        target = self.target
+        """Check out the target release. Raises SourceVersionError whenever
+        ``action_enabled`` is False — so a caller can never step back
+        silently — or when git refuses."""
+        if not self.action_enabled:
+            raise SourceVersionError(
+                f"Cannot switch versions: {self.state_reason or self.action_label}"
+            )
 
-        if target is None:
-            raise SourceVersionError("There is no version to switch to")
+        target = self.target
 
         self._require_managed(f"switch to {target.name}")
 
@@ -243,7 +250,7 @@ class UpdatesModel(HasTraits):
         if any(row.is_current for row in self.versions):
             return False
 
-        return parse_release(self.target.name) <= parse_release(self._built_on_release)
+        return not is_newer_release(self.target.name, self._built_on_release)
 
     def set_skip_variable(self):
         """Save SKIP_GIT_UPDATE_ENV_VAR for the user; may block for seconds.
@@ -257,7 +264,7 @@ class UpdatesModel(HasTraits):
 
     # --- observers ------------------------------------------------------
 
-    @observe("preferences")
+    @observe("preferences.auto_update")
     def _policy_from_preferences(self, event):
         self._read_policy()
 
@@ -269,7 +276,13 @@ class UpdatesModel(HasTraits):
             return
 
         self.preferences.auto_update = auto_update
-        self.preferences.preferences.flush()
+
+        # A read-only or locked preferences file must not break the dialog;
+        # the policy then holds for this session only.
+        try:
+            self.preferences.preferences.flush()
+        except OSError as e:
+            logger.error(f"Could not save {AUTO_UPDATE_PREFERENCE_PATH}: {e}")
 
     @observe("selected")
     def _show_selected_changelog(self, event):
@@ -299,10 +312,7 @@ class UpdatesModel(HasTraits):
         if self.policy == POLICY_STAY:
             return True
 
-        # A checkout built on no release is older than any.
-        built_on = parse_release(self._built_on_release) or (0, 0, 0)
-
-        return parse_release(target.name) > built_on
+        return is_newer_release(target.name, self._built_on_release)
 
     def _require_managed(self, action):
         """Raise SourceVersionError unless the checkout is managed now — it

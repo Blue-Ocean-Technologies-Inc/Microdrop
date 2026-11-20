@@ -76,19 +76,21 @@ def test_close_message():
     assert "start MicroDrop again" in text
 
 
-def test_state_line():
+def test_state_line_is_plain_text():
     assert state_line(MANAGED, "") == ""
-    assert "branch feat/<x>" not in state_line(DEVELOPMENT, "branch feat/<x>")
-    assert "branch feat/&lt;x&gt;" in state_line(DEVELOPMENT, "branch feat/<x>")
+    # Shown in a plain label: a branch name appears verbatim, never escaped.
+    assert "branch R&D" in state_line(DEVELOPMENT, "branch R&D")
+    assert "&amp;" not in state_line(DEVELOPMENT, "branch R&D")
     assert "local changes" in state_line(DEVELOPMENT, "local changes")
     assert "git is not installed" in state_line(NO_GIT, "git is not installed")
 
 
-def test_skip_variable_line():
+def test_skip_variable_line_is_plain_text():
     text = skip_variable_line(SKIP_GIT_UPDATE_ENV_VAR)
 
     assert "Automatic updates are off" in text
     assert SKIP_GIT_UPDATE_ENV_VAR in text
+    assert "<" not in text
 
 
 def test_newer_version_notice():

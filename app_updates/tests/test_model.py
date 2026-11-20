@@ -12,6 +12,7 @@
 real throwaway git repositories."""
 
 # Standard library imports.
+import logging
 import shutil
 
 # Third-party imports.
@@ -24,6 +25,7 @@ from apptools.preferences.api import Preferences
 from microdrop_utils import source_update_startup
 from microdrop_utils.source_update_startup import (
     AUTO_UPDATE_PREFERENCE_PATH,
+    LAST_ANNOUNCED_PREFERENCE_PATH,
     PROJECT_ROOT,
     SKIP_GIT_UPDATE_ENV_VAR,
 )
@@ -31,6 +33,7 @@ from microdrop_utils.source_version import (
     DEVELOPMENT,
     NO_GIT,
     SourceVersionError,
+    describe,
     exact_release,
 )
 from microdrop_utils.tests.git_repo_fixtures import run_git
@@ -40,7 +43,7 @@ from .. import model as model_module
 from ..consts import NO_CHANGELOG_TEXT, POLICY_LATEST, POLICY_STAY, PREFERENCES_PATH
 from ..model import UpdatesModel
 from ..preferences import AppUpdatesPreferences
-from .conftest import make_model
+from .model_factory import make_model
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git is not installed"
@@ -110,6 +113,55 @@ def test_stay_policy_targets_selection_and_disables_on_current(model_at_v1_2):
     assert model_at_v1_2.drops_unreleased_commits() is False
 
 
+def test_stay_policy_without_selection_asks_for_one(model_at_v1_2):
+    model_at_v1_2.policy = POLICY_STAY
+    model_at_v1_2.selected = None
+
+    assert model_at_v1_2.target is None
+    assert model_at_v1_2.action_enabled is False
+    assert model_at_v1_2.action_label == "Select a version"
+
+
+def test_latest_is_the_newest_tag_with_the_panel(clone, preferences):
+    run_git(clone, "rm", "-q", "app_updates/plugin.py")
+    run_git(clone, "commit", "-m", "chore: release v1.11.0")
+    run_git(clone, "tag", "v1.11.0")
+    run_git(clone, "checkout", "--detach", "v1.2.0")
+
+    model = make_model(clone, preferences)
+
+    assert model.versions[0].name == "v1.11.0"
+    assert model.versions[0].marker == "no update panel"
+    assert _row(model, "v1.10.0").marker == "latest"
+    assert model.target.name == "v1.10.0"
+    assert model.action_label == "Switch to v1.10.0 and close"
+
+
+def _head(repo_root):
+    return run_git(repo_root, "rev-parse", "HEAD").stdout.strip()
+
+
+def test_switch_refuses_under_latest_when_ahead_of_newest_tag(model_on_main_tip):
+    head = _head(model_on_main_tip.repo_root)
+
+    assert model_on_main_tip.action_enabled is False
+
+    with pytest.raises(SourceVersionError):
+        model_on_main_tip.switch()
+
+    assert _head(model_on_main_tip.repo_root) == head
+
+
+def test_switch_refuses_to_the_current_release(model_at_v1_2):
+    model_at_v1_2.policy = POLICY_STAY
+    model_at_v1_2.selected = _row(model_at_v1_2, "v1.2.0")
+
+    with pytest.raises(SourceVersionError):
+        model_at_v1_2.switch()
+
+    assert describe(model_at_v1_2.repo_root) == "v1.2.0"
+
+
 def test_action_notifies_when_policy_or_selection_changes(model_at_v1_2):
     labels = []
 
@@ -156,6 +208,46 @@ def test_policy_initialises_from_saved_preference(clone_at_v1_2, preferences):
     model = make_model(clone_at_v1_2, preferences)
 
     assert model.policy == POLICY_STAY
+
+
+def test_saved_policy_is_read_without_writing(clone_at_v1_2, preferences, monkeypatch):
+    preferences.set(AUTO_UPDATE_PREFERENCE_PATH, "False")
+    writes = []
+
+    monkeypatch.setattr(preferences, "flush", lambda: writes.append("flush"))
+    monkeypatch.setattr(
+        preferences, "set", lambda path, value: writes.append((path, value))
+    )
+
+    model = make_model(clone_at_v1_2, preferences)
+    model.refresh()
+
+    assert model.policy == POLICY_STAY
+    assert writes == []
+
+
+def test_outside_preference_change_updates_policy(model_at_v1_2):
+    model_at_v1_2.preferences.auto_update = False
+
+    assert model_at_v1_2.policy == POLICY_STAY
+
+    model_at_v1_2.preferences.auto_update = True
+
+    assert model_at_v1_2.policy == POLICY_LATEST
+
+
+def test_failed_save_is_logged(model_at_v1_2, preferences, monkeypatch, caplog):
+    def locked():
+        raise PermissionError(13, "Permission denied", preferences.filename)
+
+    monkeypatch.setattr(preferences, "flush", locked)
+
+    with caplog.at_level(logging.ERROR, logger=model_module.__name__):
+        model_at_v1_2.policy = POLICY_STAY
+
+    assert model_at_v1_2.policy == POLICY_STAY
+    assert "Permission denied" in caplog.text
+    assert AUTO_UPDATE_PREFERENCE_PATH in caplog.text
 
 
 def test_changelog_follows_selection_with_fallback(model_at_v1_2):
@@ -271,6 +363,9 @@ def test_default_repo_root_is_the_source_checkout():
 
 def test_preferences_path_matches_startup_constant():
     assert AUTO_UPDATE_PREFERENCE_PATH == f"{PREFERENCES_PATH}.auto_update"
+    assert LAST_ANNOUNCED_PREFERENCE_PATH == (
+        f"{PREFERENCES_PATH}.last_announced_version"
+    )
     helper = AppUpdatesPreferences(preferences=Preferences())
 
     assert helper.preferences_path == PREFERENCES_PATH

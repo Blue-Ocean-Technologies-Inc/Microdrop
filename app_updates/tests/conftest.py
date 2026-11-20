@@ -34,8 +34,7 @@ from microdrop_utils.tests.git_repo_fixtures import (  # noqa: F401
 
 # Local imports.
 from .. import model as model_module
-from ..model import UpdatesModel
-from ..preferences import AppUpdatesPreferences
+from .model_factory import make_model
 
 
 @pytest.fixture(autouse=True)
@@ -59,17 +58,6 @@ def no_user_environment(monkeypatch):
 def preferences(tmp_path):
     """Preferences backed by a temporary file, so a flush can be read back."""
     return Preferences(filename=str(tmp_path / "preferences.ini"))
-
-
-def make_model(repo_root, preferences):
-    """A refreshed updates model on ``repo_root``."""
-    model = UpdatesModel(
-        repo_root=str(repo_root),
-        preferences=AppUpdatesPreferences(preferences=preferences),
-    )
-    model.refresh()
-
-    return model
 
 
 @pytest.fixture

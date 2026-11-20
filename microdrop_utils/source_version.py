@@ -142,6 +142,16 @@ def parse_release(name):
     return tuple(int(part) for part in match.groups())
 
 
+def is_newer_release(tag_name, built_on_name):
+    """Return True when release ``tag_name`` is newer than ``built_on_name``,
+    the release a checkout is built on; a checkout built on none (None or
+    "") is older than any release."""
+    version = parse_release(tag_name)
+    built_on = parse_release(built_on_name) or (0, 0, 0)
+
+    return version is not None and version > built_on
+
+
 def checkout_state(repo_root):
     """The checkout's state and why: ``(MANAGED, "")``, ``(DEVELOPMENT,
     "local changes" | "branch <name>")``, or ``(NO_GIT, <reason>)``.
@@ -318,9 +328,10 @@ def pending_update(repo_root):
     if newest is None:
         return None
 
-    current = parse_release(current_release(repo_root)) or (0, 0, 0)
+    if not is_newer_release(newest.name, current_release(repo_root)):
+        return None
 
-    return newest if newest.version > current else None
+    return newest
 
 
 def fetch_tags(repo_root):

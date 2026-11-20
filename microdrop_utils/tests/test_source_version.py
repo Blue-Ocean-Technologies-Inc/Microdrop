@@ -37,6 +37,7 @@ from microdrop_utils.source_version import (
     describe,
     exact_release,
     fetch_tags,
+    is_newer_release,
     list_release_tags,
     parse_release,
     pending_update,
@@ -73,6 +74,16 @@ def test_parse_release_accepts_only_three_part_versions():
     assert parse_release("v2.0.0rc1") is None
     assert parse_release("nightly") is None
     assert parse_release("v1.46") is None
+
+
+def test_is_newer_release_compares_versions_and_treats_no_release_as_oldest():
+    assert is_newer_release("v1.10.0", "v1.2.0") is True
+    assert is_newer_release("v1.2.0", "v1.10.0") is False
+    assert is_newer_release("v1.10.0", "v1.10.0") is False
+    # A checkout built on no release is older than any.
+    assert is_newer_release("v0.0.1", None) is True
+    assert is_newer_release("v0.0.1", "") is True
+    assert is_newer_release("nightly", "v1.2.0") is False
 
 
 def test_release_tags_are_newest_first_by_version_and_skip_odd_tags(clone):
