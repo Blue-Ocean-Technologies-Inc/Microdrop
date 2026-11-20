@@ -47,44 +47,65 @@ def _no_panel_paragraphs(target, drops_unreleased):
     ]
 
 
+def _backend_paragraphs(target, frontend_only):
+    if not frontend_only:
+        return []
+
+    return [
+        f"The backend runs separately: restart the backend too, so it also "
+        f"runs {target}."
+    ]
+
+
 def plain_confirmation(target, drops_unreleased, frontend_only):
     """Return the confirmation for switching to a release with the Updates
     panel."""
-    paragraphs = [
+    return _paragraphs(
         f"Switch MicroDrop to {target}? MicroDrop closes once it is done.",
         *_unreleased_paragraphs(target, drops_unreleased),
-    ]
-
-    if frontend_only:
-        paragraphs.append(
-            f"The backend runs separately: restart the backend too, so it also "
-            f"runs {target}."
-        )
-
-    return _paragraphs(*paragraphs)
+        *_backend_paragraphs(target, frontend_only),
+    )
 
 
-def no_panel_warning(target, drops_unreleased):
+def no_panel_warning(target, drops_unreleased, frontend_only):
     """Return the warning for switching to a release without the Updates
     panel; the dialog shows the return commands below it."""
     return _paragraphs(
         *_no_panel_paragraphs(target, drops_unreleased),
+        *_backend_paragraphs(target, frontend_only),
         f"Switch to {target} anyway?",
     )
 
 
-def forced_pull_warning(target, drops_unreleased, variable):
+def forced_pull_warning(
+    target, drops_unreleased, variable, frontend_only, needs_new_login
+):
     """Return the warning for switching to a release that pulls ``main`` at
     every start unless ``variable`` is set; the dialog shows the return
-    commands and the command removing the variable below it."""
+    commands and the command removing the variable below it.
+
+    ``needs_new_login``: a saved variable reaches new programs only after
+    the user signs out and in again, as with a login profile."""
+    if needs_new_login:
+        takes_effect = (
+            f"It takes effect only after you sign out and in again (or "
+            f"restart the computer): do that before starting {target}, or it "
+            f"will update itself away at its first start."
+        )
+    else:
+        takes_effect = (
+            "It takes effect for programs started after it is set; an "
+            "already-open Setup &amp; Launcher must be reopened to pass it on."
+        )
+
     return _paragraphs(
         *_no_panel_paragraphs(target, drops_unreleased),
+        *_backend_paragraphs(target, frontend_only),
         f"{target} also updates itself: at its next start it checks out "
         f"{DEFAULT_BRANCH} and pulls, so it will not stay on {target} unless "
         f"the {html.escape(variable)} environment variable is set.",
-        "Set it for your user account now? It takes effect for programs "
-        "started after it is set; an already-open Setup &amp; Launcher must be "
-        "reopened to pass it on. The last command below removes it by hand.",
+        f"Set it for your user account now? {takes_effect} The last command "
+        f"below removes it by hand.",
     )
 
 

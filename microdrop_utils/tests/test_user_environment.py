@@ -26,6 +26,7 @@ import pytest
 from microdrop_utils import user_environment
 from microdrop_utils.user_environment import (
     manual_unset_command,
+    needs_new_login,
     set_user_environment_variable,
     unset_user_environment_variable,
     user_environment_variable,
@@ -388,6 +389,18 @@ def test_set_and_unset_update_os_environ(home):
     unset_user_environment_variable(NAME)
 
     assert NAME not in os.environ
+
+
+def test_only_windows_hands_the_variable_to_new_programs_without_a_new_login(
+    monkeypatch,
+):
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    assert needs_new_login() is False
+
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    assert needs_new_login() is True
 
 
 @pytest.mark.parametrize(

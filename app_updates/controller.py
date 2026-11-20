@@ -38,7 +38,7 @@ from microdrop_utils.source_version import (
     return_commands,
 )
 from microdrop_utils.threaded_progress import run_with_wait
-from microdrop_utils.user_environment import manual_unset_command
+from microdrop_utils.user_environment import manual_unset_command, needs_new_login
 
 # Local imports.
 from .changelog_html import themed_changelog_html
@@ -198,7 +198,9 @@ class UpdatesController(Controller):
                 parent=parent,
                 title="Switch version",
                 informative=no_panel_warning(
-                    target.name, self.model.drops_unreleased_commits()
+                    target.name,
+                    self.model.drops_unreleased_commits(),
+                    self.model.frontend_only,
                 ),
                 detail=commands,
                 detail_collapsible=False,
@@ -220,6 +222,8 @@ class UpdatesController(Controller):
                     target.name,
                     self.model.drops_unreleased_commits(),
                     SKIP_GIT_UPDATE_ENV_VAR,
+                    frontend_only=self.model.frontend_only,
+                    needs_new_login=needs_new_login(),
                 ),
                 detail=detail,
                 detail_collapsible=False,

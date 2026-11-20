@@ -363,6 +363,14 @@ def unset_user_environment_variable(name):
     os.environ.pop(name, None)
 
 
+def needs_new_login():
+    """Return True when a saved variable reaches newly started programs only
+    after the user signs out and in again — a login profile is read at
+    login — and False on Windows, where programs started after it is saved
+    see it."""
+    return not _is_windows()
+
+
 def manual_unset_command(name):
     """Return the one shell line that removes the user variable ``name`` by
     hand on this platform."""

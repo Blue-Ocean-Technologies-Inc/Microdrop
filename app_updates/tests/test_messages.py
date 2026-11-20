@@ -43,8 +43,23 @@ def test_plain_confirmation(drops_unreleased, frontend_only):
     assert ("restart the backend" in text.lower()) == frontend_only
 
 
+def _forced_pull_warning(
+    drops_unreleased=False,
+    variable=SKIP_GIT_UPDATE_ENV_VAR,
+    frontend_only=False,
+    needs_new_login=False,
+):
+    return forced_pull_warning(
+        "v1.30.0",
+        drops_unreleased,
+        variable,
+        frontend_only=frontend_only,
+        needs_new_login=needs_new_login,
+    )
+
+
 def test_no_panel_warning_points_to_the_commands_below():
-    text = no_panel_warning("v1.40.0", False)
+    text = no_panel_warning("v1.40.0", False, frontend_only=False)
 
     assert "v1.40.0" in text
     assert "no Updates panel" in text
@@ -57,15 +72,24 @@ def test_no_panel_warning_points_to_the_commands_below():
 
 @pytest.mark.parametrize("drops_unreleased", [True, False])
 def test_warnings_say_when_unreleased_commits_are_dropped(drops_unreleased):
-    plain = no_panel_warning("v1.40.0", drops_unreleased)
-    forced = forced_pull_warning("v1.30.0", drops_unreleased, SKIP_GIT_UPDATE_ENV_VAR)
+    plain = no_panel_warning("v1.40.0", drops_unreleased, frontend_only=False)
+    forced = _forced_pull_warning(drops_unreleased=drops_unreleased)
 
     assert ("unreleased" in plain) == drops_unreleased
     assert ("unreleased" in forced) == drops_unreleased
 
 
+@pytest.mark.parametrize("frontend_only", [True, False])
+def test_warnings_say_when_the_backend_must_be_restarted_too(frontend_only):
+    plain = no_panel_warning("v1.40.0", False, frontend_only=frontend_only)
+    forced = _forced_pull_warning(frontend_only=frontend_only)
+
+    assert ("restart the backend" in plain.lower()) == frontend_only
+    assert ("restart the backend" in forced.lower()) == frontend_only
+
+
 def test_forced_pull_warning():
-    text = forced_pull_warning("v1.30.0", False, "SKIP_<VAR>")
+    text = _forced_pull_warning(variable="SKIP_<VAR>")
 
     assert "v1.30.0" in text
     assert "no Updates panel" in text
@@ -73,11 +97,27 @@ def test_forced_pull_warning():
     assert "checks out main" in text
     assert "pulls" in text
     assert "next start" in text
-    assert "reopen" in text.lower()
     assert "below" in text
     assert "<pre>" not in text
     # The variable name is escaped, never taken as markup.
     assert "SKIP_&lt;VAR&gt;" in text
+
+
+def test_forced_pull_warning_where_new_programs_see_the_variable():
+    text = _forced_pull_warning(needs_new_login=False)
+
+    assert "programs started after it is set" in text
+    assert "reopen" in text.lower()
+    assert "sign out" not in text.lower()
+
+
+def test_forced_pull_warning_where_the_variable_needs_a_new_login():
+    text = _forced_pull_warning(needs_new_login=True)
+
+    assert "sign out and in again" in text.lower()
+    assert "restart" in text.lower()
+    assert "before starting v1.30.0" in text
+    assert "programs started after it is set" not in text
 
 
 def test_close_message_stays_true_if_the_exit_is_refused():
