@@ -9,11 +9,12 @@
 # Thanks for using Microdrop open source!
 
 """The signal board reports chip_on_pad as a 3-bit contact mask (debounced
-presence, left pogo, right pogo); under the default both-pogos rule the
-status snapshot publishes a chip only when all three are set, and the raw
-mask rides along as chip_pad_contacts. The driver's readings are already in
-engineering units, so the snapshot publishes them unscaled. Hardware-free,
-no Redis."""
+presence, left pogo, right pogo); under the default presence rule (the
+vendor's) the status snapshot publishes a chip whenever the debounced bit is
+set, and the raw mask rides along as chip_pad_contacts. The driver's
+readings are already in engineering units, so the snapshot publishes them
+unscaled; hv_state bit3 adds the halt flag, and the driver's STATUS tail
+adds the board's HV setpoint and faults. Hardware-free, no Redis."""
 
 # Standard library imports.
 import json
@@ -51,9 +52,9 @@ class _Harness(PortableDropbotControllerBase):
 
 @pytest.mark.parametrize(
     ("chip_on_pad", "expected"),
-    [(0, False), (3, False), (5, False), (7, True)],
+    [(0, False), (1, True), (3, True), (5, True), (6, False), (7, True)],
 )
-def test_chip_on_pad_needs_every_contact_bit(monkeypatch, chip_on_pad, expected):
+def test_chip_on_pad_follows_the_debounced_bit(monkeypatch, chip_on_pad, expected):
     published = []
     monkeypatch.setattr(
         portable_dropbot_controller_base,
@@ -90,3 +91,61 @@ def test_engineering_units_are_published_unscaled(monkeypatch):
     harness._publish_status_snapshot()
 
     assert published == [signal]
+
+
+@pytest.mark.parametrize(
+    ("hv_state", "halted"), [(0, False), (0b0011, False), (0b1000, True)]
+)
+def test_hv_state_bit3_publishes_the_halt_latch(monkeypatch, hv_state, halted):
+    published = []
+    monkeypatch.setattr(
+        portable_dropbot_controller_base,
+        "publish_message",
+        lambda topic, message: published.append(json.loads(message)),
+    )
+
+    harness = _Harness()
+    harness.status = {"signal": {"hv_state": hv_state}}
+
+    harness._publish_status_snapshot()
+
+    assert published == [{"hv_state": hv_state, "halted": halted}]
+
+
+def test_status_tail_rides_along_when_the_driver_captured_one(monkeypatch):
+    published = []
+    monkeypatch.setattr(
+        portable_dropbot_controller_base,
+        "publish_message",
+        lambda topic, message: published.append(json.loads(message)),
+    )
+
+    tail = {
+        "hv_setpoint": 120.0,
+        "fault_flags": 2,
+        "faults": ["output-current-exceeded"],
+    }
+    harness = _Harness()
+    harness.proxy = SimpleNamespace(uart=SimpleNamespace(last_status_tail=tail))
+    harness.status = {"signal": {"hv_vol": 119.5}}
+
+    harness._publish_status_snapshot()
+
+    assert published == [{"hv_vol": 119.5, **tail}]
+
+
+def test_no_status_tail_on_firmware_without_one(monkeypatch):
+    published = []
+    monkeypatch.setattr(
+        portable_dropbot_controller_base,
+        "publish_message",
+        lambda topic, message: published.append(json.loads(message)),
+    )
+
+    harness = _Harness()
+    harness.proxy = SimpleNamespace(uart=SimpleNamespace(last_status_tail=None))
+    harness.status = {"signal": {"hv_vol": 119.5}}
+
+    harness._publish_status_snapshot()
+
+    assert published == [{"hv_vol": 119.5}]
