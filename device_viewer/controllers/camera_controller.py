@@ -30,7 +30,18 @@ from pathlib import Path
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from pyface.timer.api import CallbackTimer
-from traits.api import Any, Bool, Callable, Float, HasTraits, Instance, Set, observe
+from traits.api import (
+    Any,
+    Bool,
+    Callable,
+    Float,
+    HasTraits,
+    Instance,
+    List,
+    Set,
+    observe,
+)
+from traits.observation.api import trait
 
 # Microdrop package imports.
 from microdrop_application.helpers import get_current_experiment_directory
@@ -141,6 +152,15 @@ class CameraController(HasTraits):
     #: Qt reports focus support only for a started camera.
     _settings_awaiting_start = Any()
 
+    #: The latest CameraSettingsRequest that arrived while the camera's
+    #: properties were still being looked up, applied once they are in.
+    _settings_awaiting_controls = Any()
+
+    #: The CameraControlsRequests that arrived while the camera's properties
+    #: were still being looked up, applied (and answered) in order once they
+    #: are in — kept across source selections, so each gets its answer.
+    _controls_awaiting_lookup = List()
+
     #: (camera, warning) pairs already shown to the user for the selected
     #: camera; cleared on every source selection.
     _shown_settings_warnings = Set()
@@ -232,6 +252,7 @@ class CameraController(HasTraits):
         self.cancel_autofocus("camera changed")
         self.focus_edits.cancel()
         self._settings_awaiting_start = None
+        self._settings_awaiting_controls = None
         self._shown_settings_warnings = set()
 
         if remembered_as:
@@ -253,6 +274,37 @@ class CameraController(HasTraits):
 
         self.refresh_focus()
         self.refresh_image_settings()
+
+    @observe(
+        trait("camera", notify=False).trait("native_controls_loading", optional=True)
+    )
+    def _follow_native_controls_lookup(self, event):
+        """Mirror the camera's background controls lookup into the model;
+        once its outcome is in, refresh the focus row and image controls
+        (select_source refreshed them while it was still running) and apply
+        the requests held meanwhile, each once."""
+        model = self.model
+        model.camera_properties_loading = event.new
+        model.focus.loading = event.new
+
+        if event.new:
+            return
+
+        self.refresh_focus()
+        self.refresh_image_settings()
+
+        # Now against the camera's real controls, which may be none.
+        settings_request = self._settings_awaiting_controls
+        self._settings_awaiting_controls = None
+
+        if settings_request is not None:
+            self._replay_settings(settings_request, "after the properties lookup")
+
+        controls_requests = self._controls_awaiting_lookup
+        self._controls_awaiting_lookup = []
+
+        for request in controls_requests:
+            self.apply_camera_controls(request)
 
     @staticmethod
     def match_source_label(labels, label):
@@ -505,13 +557,21 @@ class CameraController(HasTraits):
         DEVICE_VIEWER_CAMERA_CONTROLS_APPLIED. Manual focus falls back to
         v4l2-ctl on cameras where Qt cannot drive it (see _apply_focus). A
         provider feed (no QCamera) or an unsupported mode answers ok=False
-        rather than raising."""
+        rather than raising. While the camera's properties are still being
+        looked up, the request waits for them (see
+        _follow_native_controls_lookup)."""
         request = request if isinstance(request, dict) else {}
         reply = {"request_id": str(request.get("request_id", "")), "ok": False}
 
         if self.model.provider_feed_active or not self.camera.has_camera():
             reply["error"] = "no QCamera is selected"
             camera_controls_applied_publisher.publish(reply)
+
+            return
+
+        # Its focus may only be drivable once the lookup is in.
+        if self.model.camera_properties_loading:
+            self._controls_awaiting_lookup.append(request)
 
             return
 
@@ -794,14 +854,20 @@ class CameraController(HasTraits):
     def announce_settings(self):
         """Publish the snapshot once pending changes settle — after a source
         selection or a restored format, so a listener always holds the
-        current setup."""
+        current setup. While the camera's properties are still being looked
+        up, the end of the lookup announces it instead."""
 
-        if self._applying_settings:
+        if self._applying_settings or self.model.camera_properties_loading:
             return
 
         self.settings_edits.submit(None)
 
     def _publish_settings(self, _value=None):
+        # A snapshot pending from before the lookup would carry none of the
+        # camera's properties; the end of the lookup submits it again.
+        if self.model.camera_properties_loading:
+            return
+
         user_edit = self._settings_user_edit
         self._settings_user_edit = False
 
@@ -823,7 +889,15 @@ class CameraController(HasTraits):
         (see begin_applying_settings); returns the warnings for what the
         camera could not take. A control the camera lacks is skipped, a
         value outside its range clamped. While the camera is off, focus
-        waits for its start, and the controls are applied again then."""
+        waits for its start, and the controls are applied again then. While
+        the camera's properties are still being looked up, the request waits
+        for them instead, without warnings."""
+
+        if self.model.camera_properties_loading:
+            self._settings_awaiting_controls = request
+
+            return []
+
         warnings = []
         camera = self.model.selected_camera
         settings_by_name = {
@@ -931,16 +1005,23 @@ class CameraController(HasTraits):
             return
 
         self._settings_awaiting_start = None
-        self._applying_settings = True
 
         # The camera is on now, so this applies the focus as well.
+        self._replay_settings(request, "on camera start")
+
+    def _replay_settings(self, request, when):
+        """Apply a held CameraSettingsRequest, ``when`` it can be: its
+        requester was answered already, so what the camera cannot take is
+        only logged."""
+        self._applying_settings = True
+
         try:
             warnings = self.apply_settings(request)
         finally:
             self._applying_settings = False
 
         for text in warnings:
-            logger.warning(f"Capture setup on camera start: {text}")
+            logger.warning(f"Capture setup {when}: {text}")
 
     # ------------------------------------------------------------------ #
     # Autofocus (one-shot contrast sweep)                                  #

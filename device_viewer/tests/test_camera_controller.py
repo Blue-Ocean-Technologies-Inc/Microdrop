@@ -24,7 +24,7 @@ import pytest
 # Enthought library imports.
 from apptools.preferences.api import Preferences, PreferencesHelper
 from pyface.qt.QtWidgets import QApplication
-from traits.api import Bool, Float, HasTraits, Str, provides
+from traits.api import Bool, Dict, Float, HasTraits, List, Str, provides
 
 # Microdrop package imports.
 from device_viewer.controllers import camera_controller
@@ -32,6 +32,9 @@ from device_viewer.controllers.camera_controller import CameraController
 from device_viewer.interfaces.i_camera_device import ICameraDevice
 from device_viewer.models.camera import CameraModel
 from device_viewer.models.media import MediaType
+
+# Microdrop utils imports.
+from microdrop_utils.camera_image_controls import ImageControlRange
 
 
 class StubPreferences(PreferencesHelper):
@@ -968,3 +971,151 @@ def test_failed_lens_write_cancels_autofocus(sweeping, monkeypatch):
     focus.autofocus_button = True
 
     assert not focus.autofocusing
+
+
+# --------------------------------------------------------------------------- #
+# Requests held while the camera's properties are looked up                    #
+# --------------------------------------------------------------------------- #
+class LookupCamera(StubCamera):
+    """A StubCamera whose focus and image controls only come with a
+    background lookup, as QtCameraDevice's DirectShow ones do."""
+
+    #: As QtCameraDevice.native_controls_loading.
+    native_controls_loading = Bool(False)
+
+    #: The image controls the lookup has found so far.
+    ranges = List()
+
+    #: The image controls' values by name.
+    values = Dict()
+
+    #: (name, value, auto) of every image control write.
+    writes = List()
+
+    def supports_manual_focus(self):
+        return self.manual_focus_supported and not self.native_controls_loading
+
+    def image_control_ranges(self):
+        return self.ranges
+
+    def image_control(self, name):
+        return self.values[name], False
+
+    def set_image_control(self, name, value, auto=False):
+        self.writes.append((name, value, auto))
+
+    def describe_image_control(self, name, value):
+        return ""
+
+
+@pytest.fixture
+def looking_up(controller, monkeypatch):
+    """The controller on a LookupCamera whose lookup is under way for the
+    just-selected "Cam A"; returns the controller, a callable that ends the
+    lookup with a brightness control, and the published snapshots."""
+    snapshots = Recorder()
+    monkeypatch.setattr(camera_controller, "camera_settings_publisher", snapshots)
+    camera = LookupCamera()
+    controller.camera = camera
+    controller.turn_camera_on = lambda: setattr(camera, "active", True)
+    controller.model.resolution = (640, 480)
+
+    # As a bind starts the lookup, just before the selection.
+    camera.native_controls_loading = True
+    controller.select_source("Cam A")
+
+    def end_lookup():
+        camera.values = {"brightness": 50}
+        camera.ranges = [
+            ImageControlRange(name="brightness", low=0, high=100, default=50)
+        ]
+        camera.native_controls_loading = False
+
+    return controller, end_lookup, snapshots.calls
+
+
+def _settings_request(brightness, focus=None):
+    return {
+        "camera": "Cam A",
+        "resolution": None,
+        "image_controls": {"brightness": {"value": brightness, "auto": False}},
+        "focus": focus,
+        "request_id": "s1",
+        "context": "",
+    }
+
+
+def test_settings_held_while_loading_are_applied_once_at_its_end(looking_up):
+    controller, end_lookup, _snapshots = looking_up
+
+    assert controller.model.camera_properties_loading
+    assert controller.apply_settings(_settings_request(40)) == []
+    assert controller.model.image_settings == []
+
+    end_lookup()
+
+    assert not controller.model.camera_properties_loading
+    assert [setting.value for setting in controller.model.image_settings] == [40]
+    assert controller.camera.writes == [("brightness", 40, False)]
+
+
+def test_settings_held_while_loading_with_the_camera_off_focus_on_start(looking_up):
+    controller, end_lookup, _snapshots = looking_up
+    controller.apply_settings(_settings_request(40, {"auto": False, "distance": 0.3}))
+
+    end_lookup()
+
+    # The controls are in; the focus waits for the camera's start.
+    assert controller.camera.writes == [("brightness", 40, False)]
+    assert controller.camera.distance == 0.0
+
+    controller.model.camera_active = True
+
+    assert controller.camera.distance == 0.3
+
+
+def test_held_settings_are_dropped_by_a_new_selection(looking_up):
+    controller, end_lookup, _snapshots = looking_up
+    controller.apply_settings(_settings_request(40))
+
+    controller.select_source("Cam B")
+    end_lookup()
+
+    assert controller.camera.writes == []
+    assert [setting.value for setting in controller.model.image_settings] == [50]
+
+
+def test_controls_request_held_while_loading_is_answered_once(looking_up, published):
+    controller, end_lookup, _snapshots = looking_up
+
+    controller.apply_camera_controls({"request_id": "c1", "focus_distance": 0.4})
+
+    assert published == []
+
+    end_lookup()
+
+    assert len(published) == 1
+    assert published[0]["ok"] is True
+    assert published[0]["focus_distance"] == 0.4
+
+
+def test_snapshot_waits_for_the_end_of_loading(looking_up):
+    controller, end_lookup, snapshots = looking_up
+
+    # Neither announced while loading, nor published if pending from before.
+    controller.announce_settings()
+
+    assert not controller.settings_edits.pending
+
+    controller.settings_edits.submit(None)
+    controller.settings_edits.flush()
+
+    assert snapshots == []
+
+    end_lookup()
+    controller.settings_edits.flush()
+
+    assert len(snapshots) == 1
+    assert snapshots[0]["image_controls"] == {
+        "brightness": {"value": 50, "auto": False}
+    }
