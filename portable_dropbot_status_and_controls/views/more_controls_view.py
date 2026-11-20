@@ -60,7 +60,11 @@ temperature = VGroup(
         Label("Temperature Control (per channel)"),
     ),
     VGroup(
-        Item("temp_channel", label="Channel"),
+        Item(
+            "temp_channel",
+            label="Channel",
+            tooltip="Heater loop: channel 0 is Heater 1, channel 1 is Heater 2",
+        ),
         HGroup(
             Item("temp_target_c", label="Target (°C)", editor=_target_spin_box),
             UItem(
@@ -121,9 +125,11 @@ temperature = VGroup(
                     ),
                     UItem(
                         "apply_pid_button",
-                        tooltip="Write these PID settings to the selected channel",
+                        tooltip="Write these PID settings to the selected "
+                        "channel; gains 0–100, Kp and Ki not both 0",
                     ),
                 ),
+                Item("pid_status", style="readonly", label="Status"),
                 visible_when="show_pid",
             ),
         ),

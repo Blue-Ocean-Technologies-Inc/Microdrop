@@ -46,9 +46,18 @@ class PortableDropbotMoreControlsModel(BaseStatusModel):
     show_pmt = Bool(False)
 
     # ---- Temperature control (per channel) ---------------------------
-    temp_channel = Range(0, TEMP_CHANNEL_MAX, 0, mode="spinner", desc="Heater channel")
+    temp_channel = Range(
+        0,
+        TEMP_CHANNEL_MAX,
+        0,
+        mode="spinner",
+        desc="heater loop: channel 0 is Heater 1, channel 1 is Heater 2",
+    )
     temp_target_c = Range(
-        *TEMP_TARGET_C_BOUNDS, 37.0, desc="Heater target temperature (°C)"
+        *TEMP_TARGET_C_BOUNDS,
+        37.0,
+        desc="heater target temperature (°C); the board refuses targets "
+        "within 5 °C of its heater max temperature (120 °C by default)",
     )
     set_target_button = Button("Set Target")
     #: Target quick picks (°C), from the Portable DropBot Settings
@@ -63,15 +72,19 @@ class PortableDropbotMoreControlsModel(BaseStatusModel):
 
     # ---- PID tuning (chevron-collapsed) ------------------------------
     show_pid = Bool(False)
-    pid_kp = Range(*TEMP_PID_GAIN_BOUNDS, 0.0, desc="Heater PID proportional gain")
-    pid_ki = Range(*TEMP_PID_GAIN_BOUNDS, 0.0, desc="Heater PID integral gain")
-    pid_kd = Range(*TEMP_PID_GAIN_BOUNDS, 0.0, desc="Heater PID derivative gain")
+    #: The gains start empty and are filled from the board (read on connect
+    #: and on a channel switch), as in the vendor UI: there is no safe
+    #: default set, and Apply refuses the Kp = Ki = 0 the firmware refuses.
+    pid_kp = Range(*TEMP_PID_GAIN_BOUNDS, 0.0, desc="heater PID proportional gain")
+    pid_ki = Range(*TEMP_PID_GAIN_BOUNDS, 0.0, desc="heater PID integral gain")
+    pid_kd = Range(*TEMP_PID_GAIN_BOUNDS, 0.0, desc="heater PID derivative gain")
     pid_period_ms = Range(
         *TEMP_PID_PERIOD_MS_BOUNDS,
         1000,
         mode="spinner",
-        desc="Heater PID control period (ms)",
+        desc="heater PID control period (ms)",
     )
+    pid_status = Str("-", desc="last PID read / apply outcome")
     read_pid_button = Button("Read PID")
     apply_pid_button = Button("Apply PID")
 

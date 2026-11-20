@@ -8,19 +8,26 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from traits.api import Instance
 
-from microdrop_utils.decorators import timestamped_value
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+# Microdrop package imports.
 from portable_dropbot_controller.consts import (
-    READ_CAL_CAPS, READ_ELECTRODE_GAIN,
+    READ_CAL_CAPS,
+    READ_ELECTRODE_GAIN,
 )
 from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.decorators import timestamped_value
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# Local imports.
 from ..models.calibration_model import PortableDropbotCalibrationModel
 
 
@@ -42,14 +49,20 @@ class PortableDropbotCalibrationMessageHandler(BaseMessageHandler):
     def _on_calibration_updated_triggered(self, body):
         data = json.loads(str(body))
         if "stage" in data:
-            if data["stage"] == "done":
+            error = data.get("error", "")
+
+            if data["stage"] != "done":
+                outcome = "ok" if data.get("ok") else f"FAILED: {error}"
+                self.model.calibration_status = f"{data['stage']} — {outcome}"
+            elif data.get("ok"):
+                self.model.calibration_status = "Calibration complete"
+            elif data.get("retry"):
                 self.model.calibration_status = (
-                    "Calibration complete" if data.get("ok")
-                    else "Calibration FAILED — see log")
+                    f"Calibration not run, board busy — retry ({error})"
+                )
             else:
-                outcome = "ok" if data.get("ok") else "FAILED"
-                self.model.calibration_status = \
-                    f"{data['stage']} — {outcome}"
+                self.model.calibration_status = f"Calibration FAILED — {error}"
+
         if "electrode_gain" in data:
             self.model.electrode_gain = int(data["electrode_gain"])
         if data.get("cal_caps") in (3, 5):

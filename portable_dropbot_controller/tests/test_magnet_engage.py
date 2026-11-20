@@ -18,6 +18,7 @@ import struct
 
 # Third-party imports.
 import pytest
+from dropbot_portable.param_layout import MOTOR_FIELDS, encode_motor_blob
 
 # Enthought library imports.
 from traits.api import Any, HasTraits
@@ -25,7 +26,6 @@ from traits.api import Any, HasTraits
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
     MAGNET_DEFAULTS_FORMAT,
-    MOTOR_PARAM_FIELDS,
     MagnetEngageUpdated,
 )
 from portable_dropbot_controller.services import (
@@ -40,11 +40,19 @@ SOFT_LIMIT_UM = 16000.0
 
 
 def _motor_blob(pl_pos):
-    """A 16-field mechanical param struct with this pl_pos."""
-    values = [0.0, pl_pos, 0.0, 0.0, 0.0, 0.0] + [0] * 10
-    fmt = ">" + "".join(fmt for _, fmt in MOTOR_PARAM_FIELDS)
+    """A current (72 B) mechanical param struct with this pl_pos."""
+    fields = {name: 0 for name, _ in MOTOR_FIELDS}
+    fields.update(pl_pos=pl_pos, subdiv=16)
 
-    return struct.pack(fmt, *values)
+    return encode_motor_blob(fields)
+
+
+class _SpeedUnits:
+    factor = 1.0
+    confirmed = True
+
+    def describe(self):
+        return "real um/s (motor layout 2.0)"
 
 
 class _Uart:
@@ -61,6 +69,9 @@ class _Uart:
         key, blob = blobs[param]
 
         return key + b"\x00" + blob
+
+    def motor_speed_units(self):
+        return _SpeedUnits()
 
     def setParams(self, board, key, value):
         self.writes.append((board, key, value))

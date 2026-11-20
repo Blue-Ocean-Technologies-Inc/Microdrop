@@ -24,6 +24,7 @@ from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 from portable_dropbot_controller.consts import (
     CHIP_DETECT_RULE_ANY_POGO,
     CHIP_DETECT_RULE_BOTH_POGOS,
+    CHIP_DETECT_RULE_PRESENCE,
     CHIP_ENGAGE_MODE_CLASSIC,
     CHIP_ENGAGE_MODE_SMART,
     FLUORESCENCE_CAPTURE_DONE,
@@ -61,8 +62,9 @@ FAN_BOARD_LABELS = {
     "motor": "Motor board fans",
 }
 CHIP_DETECT_RULE_LABELS = {
-    CHIP_DETECT_RULE_BOTH_POGOS: "Both pogo pads touching the chip",
-    CHIP_DETECT_RULE_ANY_POGO: "At least one pogo pad touching the chip",
+    CHIP_DETECT_RULE_PRESENCE: "The chip sensor detects it (vendor default)",
+    CHIP_DETECT_RULE_BOTH_POGOS: "Both pogo pads touching the chip (raw)",
+    CHIP_DETECT_RULE_ANY_POGO: "At least one pogo pad touching the chip (raw)",
 }
 CHIP_ENGAGE_MODE_LABELS = {
     CHIP_ENGAGE_MODE_CLASSIC: "Classic",
@@ -165,6 +167,13 @@ ACTOR_TOPIC_DICT = {
 #: Alarms/errors kept in the status pane's Alarms box; older ones drop off.
 ALARM_LOG_LENGTH = 20
 
+#: STATUS dev_temp / dev_hum raw value while the humidity sensor (HDC1080)
+#: is not answering (alarm 05004); the driver scales it to 655.35.
+HUMIDITY_SENSOR_DEAD_RAW = 0xFFFF
+#: STATUS fan_duty is a bitmask of the fans commanded on, not a duty cycle:
+#: bit0 fan 1 (every board), bit1 fan 2 (MCU05 boards only).
+FAN_DUTY_BITS = {"Fan 1": 0x01, "Fan 2": 0x02}
+
 #: Rolling window of live PMT stream values kept for the plot and stats.
 PMT_LIVE_WINDOW_SAMPLES = 3000
 
@@ -218,9 +227,14 @@ DEFAULT_TEMPERATURE_PRESETS = "25, 37, 55, 95"
 DEFAULT_MOVE_PRESETS = "-10, -1, -0.1, 0.1, 1, 10"
 PRESET_SLOTS_MAX = 8
 
-#: Runtime run-speed bounds (µm/s): the driver measured ~40 mm/s as
-#: the clean ceiling (42 mm/s stalls); the vendor UI defaults to 1000.
-MOTOR_SPEED_UM_PER_S_BOUNDS = (0, 40_000)
+#: Runtime run-speed bounds in REAL µm/s (the driver converts for motor
+#: firmware before layout 2.0): the vendor Motors tab's range, up to its
+#: MOTOR_SPEED_SET ceiling (param_layout.MOTOR_SPEED_MAX_REAL_UM_S); it
+#: defaults to 1000. The old ~40 mm/s clean ceiling (42 stalled) was
+#: measured in the old nominal units, about 28.6 mm/s real. The speed
+#: lasts until the motor board reboots and homing's leave-origin phase
+#: runs at it too (the driver's setMotorSpeed CAUTION; see the tooltip).
+MOTOR_SPEED_UM_PER_S_BOUNDS = (1, 143_000)
 
 #: Macro-button labels per target motor for the motor panel, in the
 #: original portable pane's dynamic-button style: the buttons relabel

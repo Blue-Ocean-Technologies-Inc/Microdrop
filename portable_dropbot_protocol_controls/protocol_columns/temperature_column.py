@@ -51,6 +51,7 @@ from portable_dropbot_controller.consts import (
     TEMP_CONTROL,
     TEMP_TARGET_C_BOUNDS,
     TEMPERATURE_REACHED,
+    TemperatureReached,
 )
 
 # Microdrop utils imports.
@@ -65,6 +66,10 @@ TARGET_DEFAULT = 40.0
 TOLERANCE_DEFAULT = 1.0
 TARGET_MIN, TARGET_MAX = TEMP_TARGET_C_BOUNDS
 TOLERANCE_MIN, TOLERANCE_MAX = 0.0, 20.0
+
+#: Protocol scratch flag: a step of this run drove the heater, so its loop
+#: is held until the run ends and a failsafe alarm on it must fail the run.
+HEATER_ARMED_SCRATCH_KEY = "portable_dropbot_protocol_controls.heater_armed"
 
 
 class TemperatureCompoundModel(BaseCompoundColumnModel):
@@ -103,11 +108,17 @@ class TemperatureSetpointSpinBoxView(DoubleSpinBoxColumnView):
 
 
 class TemperatureHandler(BaseCompoundColumnHandler):
-    """Publishes the step's target + tolerance and waits for the reached ack.
+    """Publishes the step's target + tolerance and waits for the reached ack;
+    an ack carrying an error (refused setpoint, heater failsafe alarm) fails
+    the step.
 
     Priority 20 — same bucket as the magnet column, before routes (30).
     The ack wait comes from the Protocol Settings grid; set it to 0 there
     to run fire-and-forget (set the target without blocking).
+
+    Once a step drove the heater, the backend holds that loop until the run
+    ends; a failsafe alarm on it later arrives on the same topic, and every
+    following step boundary checks for it and fails the run.
     """
 
     priority = 20
@@ -116,6 +127,34 @@ class TemperatureHandler(BaseCompoundColumnHandler):
     # than the magnet column's (40 s).
     default_ack_time_s = 120.0
 
+    def on_pre_step(self, row, ctx):
+        self._raise_on_held_loop_failure(ctx)
+
+    def on_post_step(self, row, ctx):
+        self._raise_on_held_loop_failure(ctx)
+
+    def _raise_on_held_loop_failure(self, ctx):
+        """Fail the run if the heater loop an earlier step armed reported a
+        failure (a failsafe alarm while holding its setpoint)."""
+
+        if not ctx.protocol.scratch.get(HEATER_ARMED_SCRATCH_KEY):
+            return
+
+        try:
+            failure = ctx.wait_for(
+                TEMPERATURE_REACHED,
+                timeout=0,
+                predicate=lambda payload: bool(
+                    TemperatureReached.model_validate_json(payload).error
+                ),
+            )
+        except TimeoutError:
+            return
+
+        error = TemperatureReached.model_validate_json(failure).error
+
+        raise RuntimeError(f"Heater failed: {error}")
+
     def on_step(self, row, ctx):
         if getattr(ctx.protocol, "preview_mode", False):
             return
@@ -123,6 +162,8 @@ class TemperatureHandler(BaseCompoundColumnHandler):
         # publish, no reached-ack wait.
         if not getattr(row, SET_TEMPERATURE_FIELD_ID, False):
             return
+
+        ctx.protocol.scratch[HEATER_ARMED_SCRATCH_KEY] = True
         publish_message(
             topic=PROTOCOL_SET_TEMPERATURE,
             message=json.dumps(
@@ -133,8 +174,21 @@ class TemperatureHandler(BaseCompoundColumnHandler):
                 }
             ),
         )
-        if self.ack_time_s > 0:
-            ctx.wait_for(TEMPERATURE_REACHED, timeout=self.ack_time_s)
+
+        if self.ack_time_s <= 0:
+            return
+
+        # The backend answers a refused setpoint or a heater failsafe alarm
+        # on the same topic, with the reason.
+        reached = ctx.wait_for(TEMPERATURE_REACHED, timeout=self.ack_time_s)
+
+        if reached is None:
+            return
+
+        outcome = TemperatureReached.model_validate_json(reached)
+
+        if outcome.error:
+            raise RuntimeError(f"Heater step failed: {outcome.error}")
 
     def on_post_protocol_end(self, ctx):
         """Turn the heater channel off — unconditional at the end of every

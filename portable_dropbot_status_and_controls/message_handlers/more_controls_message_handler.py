@@ -15,9 +15,14 @@ import json
 from traits.api import Instance
 
 # Microdrop package imports.
+from portable_dropbot_controller.consts import TEMP_PID_GAIN_BOUNDS, TEMP_READ_PID
 from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.decorators import timestamped_value
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
 from ..models.more_controls_model import PortableDropbotMoreControlsModel
@@ -30,23 +35,57 @@ class PortableDropbotMoreControlsMessageHandler(BaseMessageHandler):
 
     model = Instance(PortableDropbotMoreControlsModel)
 
+    @timestamped_value("connected_message")
+    def _on_connected_triggered(self, body):
+        self.model.connected = True
+        # Fill the PID fields from the board: Apply needs them.
+        publish_message(topic=TEMP_READ_PID, message=str(self.model.temp_channel))
+
     def _on_temp_updated_triggered(self, body):
         data = json.loads(str(body))
         channel = data.get("channel")
-        if "pid" in data:
-            if channel == self.model.temp_channel:
-                pid = data["pid"]
-                self.model.pid_kp = float(pid["kp"])
-                self.model.pid_ki = float(pid["ki"])
-                self.model.pid_kd = float(pid["kd"])
-                self.model.pid_period_ms = int(pid["period_ms"])
-            return
-        if "current_c" in data:
+        # PID readbacks and outcomes belong to the selected channel only.
+        selected = channel == self.model.temp_channel
+
+        if "pid" in data and selected:
+            self._adopt_pid(data["pid"])
+        elif "pid_applied" in data and selected:
+            if data["pid_error"]:
+                self.model.pid_status = f"Not applied: {data['pid_error']}"
+            elif data["pid_applied"]:
+                self.model.pid_status = "Applied"
+            else:
+                self.model.pid_status = "Apply FAILED — see log"
+        elif "current_c" in data:
             self.model.temp_info_display = (
                 f"ch{channel}: {data['current_c']:.2f} °C "
                 f"(target {data['target_c']:.2f} °C, "
                 f"output {data['output_pct']:.1f} %)"
             )
+
+    def _adopt_pid(self, pid):
+        """Show a PID readback; gains the firmware would now refuse (stored
+        by older firmware) are reported instead of loaded."""
+        low, high = TEMP_PID_GAIN_BOUNDS
+        gains = {name: float(pid[name]) for name in ("kp", "ki", "kd")}
+        outside = [
+            f"{name}={value:g}"
+            for name, value in gains.items()
+            if not low <= value <= high
+        ]
+
+        if outside:
+            self.model.pid_status = (
+                f"Board holds gains outside {low:g}–{high:g} "
+                f"({', '.join(outside)}): enter new ones"
+            )
+            return
+
+        self.model.pid_kp = gains["kp"]
+        self.model.pid_ki = gains["ki"]
+        self.model.pid_kd = gains["kd"]
+        self.model.pid_period_ms = int(pid["period_ms"])
+        self.model.pid_status = "Read from the board"
 
     def _on_pmt_updated_triggered(self, body):
         data = json.loads(str(body))

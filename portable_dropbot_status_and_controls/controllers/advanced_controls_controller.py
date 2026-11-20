@@ -8,26 +8,43 @@
 #
 # Thanks for using Microdrop open source!
 
-import json
-
+# Enthought library imports.
 from pyface.api import YES
 from traits.api import observe
 from traitsui.api import Controller
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import confirm
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from portable_dropbot_controller.consts import (
-    MOTOR_PARAMS_PRESET, MOTOR_PARAMS_READ, MOTOR_PARAMS_WRITE,
-    REBOOT_MOTOR_BOARD, SET_BUZZER,
+    MOTOR_PARAMS_PRESET,
+    MOTOR_PARAMS_READ,
+    REBOOT_MOTOR_BOARD,
+    SET_BUZZER,
+    motor_params_write_publisher,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
+#: The vendor's MOTOR_HOME_PAIR_FIELDS / MOTOR_HOME_PAIR_WARNING, paraphrased
+#: for a frontend running without the driver package.
+HOME_PAIR_FIELDS_FALLBACK = ("motor_polarity", "home_dir")
+HOME_PAIR_WARNING_FALLBACK = (
+    "Home direction and polarity must change together, or homing runs the "
+    "wrong way; a home direction change un-homes the axis, so re-home it "
+    "after the write."
+)
+
 
 class AdvancedControlsController(Controller):
-    """Toggles and buttons -> request topics. Flash persistence and
-    the reboot are behind confirms — both outlive the session."""
+    """Toggles and buttons -> request topics. Flash persistence, the
+    reboot and a home direction / polarity edit are behind confirms —
+    each outlives the session or can send homing the wrong way."""
 
     # ------------------------------------------------------------------ #
     # Power system                                                          #
@@ -35,8 +52,9 @@ class AdvancedControlsController(Controller):
     @observe("model:buzzer_state")
     def _buzzer_state_change(self, event):
         publish_message(topic=SET_BUZZER, message=str(event.new))
-        logger.debug(f"Buzzer state change to {event.new} requested: "
-                     f"published to {SET_BUZZER}")
+        logger.debug(
+            f"Buzzer state change to {event.new} requested: published to {SET_BUZZER}"
+        )
 
     # ------------------------------------------------------------------ #
     # Motor params                                                          #
@@ -47,46 +65,97 @@ class AdvancedControlsController(Controller):
         # require a fresh read before they can be written anywhere.
         self.model.params_loaded = False
         self.model.loaded_fields = []
+        self.model.board_values = {}
+        self.model.params_layout = "-"
         self.model.params_status = "-"
+
         if self.model.connected:
-            publish_message(topic=MOTOR_PARAMS_READ,
-                            message=self.model.selected_motor)
+            publish_message(topic=MOTOR_PARAMS_READ, message=self.model.selected_motor)
 
     @observe("model:read_button")
     def _read(self, event):
-        publish_message(topic=MOTOR_PARAMS_READ,
-                        message=self.model.selected_motor)
+        publish_message(topic=MOTOR_PARAMS_READ, message=self.model.selected_motor)
 
     @observe("model:write_button")
     def _write(self, event):
-        publish_message(topic=MOTOR_PARAMS_WRITE, message=json.dumps({
-            "motor": self.model.selected_motor,
-            "fields": {name: getattr(self.model, name)
-                       for name in self.model.loaded_fields},
-        }))
-        logger.info(f"Requested {self.model.selected_motor} params "
-                    f"write ({len(self.model.loaded_fields)} fields)")
+        motor_params_write_publisher.publish(
+            {
+                "motor": self.model.selected_motor,
+                "fields": {
+                    name: getattr(self.model, name) for name in self.model.loaded_fields
+                },
+            }
+        )
+        logger.info(
+            f"Requested {self.model.selected_motor} params write "
+            f"({len(self.model.loaded_fields)} fields)"
+        )
+
+    @observe("model:[motor_polarity,home_dir]")
+    def _confirm_home_pair(self, event):
+        """Home direction and polarity are one setting (the vendor's pairing
+        warning): an edit of either asks first, and No puts back the
+        board's value."""
+        baseline = self.model.board_values.get(event.name)
+
+        if not self.model.params_loaded or baseline is None or event.new == baseline:
+            return
+
+        # The frontend may run without the driver package; only this
+        # confirm needs the vendor's own pairing text, and without it the
+        # confirm still runs on a paraphrase — the edit is never let through
+        # unasked.
+        try:
+            from dropbot_portable.param_layout import (
+                MOTOR_HOME_PAIR_FIELDS,
+                MOTOR_HOME_PAIR_WARNING,
+            )
+        except ImportError:
+            logger.warning("dropbot_portable missing: home pair warning paraphrased")
+            MOTOR_HOME_PAIR_FIELDS = HOME_PAIR_FIELDS_FALLBACK
+            MOTOR_HOME_PAIR_WARNING = HOME_PAIR_WARNING_FALLBACK
+
+        other = next(name for name in MOTOR_HOME_PAIR_FIELDS if name != event.name)
+        answer = confirm(
+            None,
+            f"{self.model.selected_motor} {event.name}: {baseline} → {event.new}."
+            f"\n\n{MOTOR_HOME_PAIR_WARNING}\n\nCheck {other} before Write. "
+            f"Keep this edit?",
+            title="Home direction and polarity",
+        )
+
+        if answer != YES:
+            setattr(self.model, event.name, baseline)
 
     @observe("model:preset_button")
     def _preset(self, event):
         motor = self.model.selected_motor
-        if confirm(
-                None,
-                f"Persist the {motor} motor's CURRENT on-device params "
-                f"to flash (survives reboot)? Write first if you have "
-                f"unsaved edits.",
-                title="Preset to Flash") != YES:
+        answer = confirm(
+            None,
+            f"Persist the {motor} motor's CURRENT on-device params "
+            f"to flash (survives reboot)? Write first if you have "
+            f"unsaved edits.",
+            title="Preset to Flash",
+        )
+
+        if answer != YES:
             return
+
         publish_message(topic=MOTOR_PARAMS_PRESET, message=motor)
 
     @observe("model:reboot_button")
     def _reboot(self, event):
-        if confirm(
-                None,
-                "Reboot the motor board so flashed params take effect? "
-                "All motors stop and lose their homing — run Home All "
-                "from the motor panel afterwards.",
-                title="Reboot Motor Board") != YES:
+        answer = confirm(
+            None,
+            "Soft-reset the motor board? Params already apply live on a "
+            "write, so this is only needed for boot-only settings. The "
+            "board re-runs its boot homing afterwards (all axes move, "
+            "~30 s); motor commands answer busy until it finishes.",
+            title="Reboot Motor Board",
+        )
+
+        if answer != YES:
             return
+
         self.model.params_status = "rebooting motor board..."
         publish_message(topic=REBOOT_MOTOR_BOARD, message="")
