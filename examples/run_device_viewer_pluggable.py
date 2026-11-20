@@ -8,6 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
+"""Run MicroDrop's plugin layers.
+
+Only light modules are imported at module level: :func:`cli` runs the
+source update step and opens the splash before any plugin module is
+imported, so a moved checkout can never leave this process with mixed
+versions.
+"""
+
 # Standard library imports.
 import contextlib
 import os
@@ -23,39 +31,20 @@ from pyface.qt.QtWidgets import QApplication
 # Microdrop utils imports.
 from microdrop_utils.app_setup_helpers import microdrop_runner_setup
 
-microdrop_runner_setup()
-
-from examples.plugin_consts import (  # noqa: E402
-    BACKEND_APPLICATION,
-    BACKEND_PLUGINS,
-    DROPBOT_BACKEND_PLUGINS,
-    DROPBOT_FRONTEND_PLUGINS,
-    FRONTEND_APPLICATION,
-    FRONTEND_PLUGINS,
-    MOCK_DROPBOT_BACKEND_PLUGINS,
-    MOCK_DROPBOT_FRONTEND_PLUGINS,
-    OPENDROP_BACKEND_PLUGINS,
-    OPENDROP_FRONTEND_PLUGINS,
-    PORTABLE_DROPBOT_FRONTEND_PLUGINS,
-    REQUIRED_CONTEXT,
-    REQUIRED_PLUGINS,
-    SERVER_CONTEXT,
-    SERVICE_PLUGINS,
-    _lazy_load_portable_dropbot_plugins,
-    with_updates_panel,
-)
-
-from logger.logger_service import get_logger  # noqa: E402
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-from microdrop_style.helpers import style_app  # noqa: E402
 
-from microdrop_utils.libcamera_tuning import disable_libcamera_autofocus  # noqa: E402
-from microdrop_utils.system_config import is_rpi  # noqa: E402
+def _configure_raspberry_pi():
+    """Set the Raspberry Pi's Qt media backend and camera tuning."""
+    from microdrop_utils.libcamera_tuning import disable_libcamera_autofocus
+    from microdrop_utils.system_config import is_rpi
 
-# Set environment variables for Qt for pi
-if is_rpi():
+    if not is_rpi():
+        return
+
     os.environ["QT_MEDIA_BACKEND"] = "gstreamer"
     print("Detected Raspberry Pi. Setting QT_MEDIA_BACKEND to gstreamer")
 
@@ -74,7 +63,7 @@ def stop_app(app, signum, frame):
     sys.exit(0)
 
 
-def main(plugins, contexts, application, persist):
+def main(plugins, contexts, application, persist, splash_screen=None):
     """
     Run the application.
 
@@ -85,7 +74,14 @@ def main(plugins, contexts, application, persist):
     The dialog contributed by the plugin listed first will be used. That is
     how the envisage application get_service method works.
 
+    ``splash_screen`` is a splash the launcher already opened; the
+    application takes it over instead of opening its own.
     """
+    from examples.plugin_consts import with_updates_panel
+
+    from microdrop_style.helpers import style_app
+
+    _configure_raspberry_pi()
 
     app_instance = QApplication.instance() or QApplication(sys.argv)
 
@@ -99,6 +95,11 @@ def main(plugins, contexts, application, persist):
     # Instantiate plugins
     plugin_instances = [plugin() for plugin in plugins]
 
+    application_traits = {"plugins": plugin_instances}
+
+    if splash_screen is not None:
+        application_traits["splash_screen"] = splash_screen
+
     #### Startup application with context
 
     # contextlib.ExitStack is a context manager that allows you to stack
@@ -108,7 +109,7 @@ def main(plugins, contexts, application, persist):
             stack.enter_context(context(**kwargs))
 
         # Instantiate application
-        app = application(plugins=plugin_instances)
+        app = application(**application_traits)
 
         # Register signal handlers
         stop_app_func = partial(stop_app, app)
@@ -159,6 +160,34 @@ def cli():
     args = parser.parse_args()
     selected = set(args.plugins)
 
+    # A GUI process when the frontend is loaded; otherwise a persistent
+    # headless backend process.
+    has_frontend = "frontend" in selected
+
+    # The splash goes up right after the local source update step and before
+    # the plugin imports, the slow part of startup; the plugin modules load
+    # only once the update step has returned.
+    splash_screen = microdrop_runner_setup(show_splash_screen=has_frontend)
+
+    from examples.plugin_consts import (
+        BACKEND_APPLICATION,
+        BACKEND_PLUGINS,
+        DROPBOT_BACKEND_PLUGINS,
+        DROPBOT_FRONTEND_PLUGINS,
+        FRONTEND_APPLICATION,
+        FRONTEND_PLUGINS,
+        MOCK_DROPBOT_BACKEND_PLUGINS,
+        MOCK_DROPBOT_FRONTEND_PLUGINS,
+        OPENDROP_BACKEND_PLUGINS,
+        OPENDROP_FRONTEND_PLUGINS,
+        PORTABLE_DROPBOT_FRONTEND_PLUGINS,
+        REQUIRED_CONTEXT,
+        REQUIRED_PLUGINS,
+        SERVER_CONTEXT,
+        SERVICE_PLUGINS,
+        _lazy_load_portable_dropbot_plugins,
+    )
+
     plugins = list(REQUIRED_PLUGINS)
 
     if "frontend" in selected:
@@ -191,10 +220,6 @@ def cli():
     # De-duplicate while preserving load order (matters for service priority).
     plugins = list(dict.fromkeys(plugins))
 
-    # A GUI process when the frontend is loaded; otherwise a persistent
-    # headless backend process.
-    has_frontend = "frontend" in selected
-
     # The frontend host owns the Redis server; a backend-only process is
     # assumed to be remote and connects to an already-running Redis.
     contexts = (SERVER_CONTEXT + REQUIRED_CONTEXT) if has_frontend else REQUIRED_CONTEXT
@@ -204,6 +229,7 @@ def cli():
         contexts=contexts,
         application=FRONTEND_APPLICATION if has_frontend else BACKEND_APPLICATION,
         persist=not has_frontend,
+        splash_screen=splash_screen,
     )
 
 
