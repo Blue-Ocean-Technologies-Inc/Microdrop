@@ -8,10 +8,11 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The launch check's start and gate: it starts once, never raises into
-startup, and touches git only on a managed checkout without the skip
-variable. The plugin runs without an application; its preferences are in
-memory."""
+"""The launch check's start, gate and failed fetch: it starts once, never
+raises into startup, touches git only on a managed checkout without the skip
+variable, and still decides when the fetch fails. The plugin belongs to a
+TasksApplication that is built but never started; the application's own
+preferences are in memory, the update settings in a temporary file."""
 
 # Standard library imports.
 import logging

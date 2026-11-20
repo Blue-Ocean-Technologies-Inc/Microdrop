@@ -129,6 +129,11 @@ def _switch_with_retries(repo_root, tag_name):
     return False
 
 
+def _is_posix():
+    # Read at call time, so tests can exercise both restarts anywhere.
+    return os.name == "posix"
+
+
 def _restart_app(argv, env):
     """Run ``argv`` with ``env`` in place of this process and exit with its
     exit code. Raise OSError when it cannot be started.
@@ -136,7 +141,7 @@ def _restart_app(argv, env):
     The app handles Ctrl+C itself and shuts down gracefully (Envisage exit,
     Redis, the hardware backend), so this process must never cut that short.
     """
-    if os.name == "posix":
+    if _is_posix():
         # Same PID: signals and the exit code go straight to the app.
         os.execve(sys.executable, argv, env)
 

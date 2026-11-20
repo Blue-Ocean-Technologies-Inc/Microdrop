@@ -378,7 +378,7 @@ def _restart_env():
 def test_posix_restart_replaces_the_process(monkeypatch, real_restart):
     execs = []
 
-    monkeypatch.setattr(source_update_startup.os, "name", "posix")
+    monkeypatch.setattr(source_update_startup, "_is_posix", lambda: True)
     monkeypatch.setattr(
         source_update_startup.os, "execve", lambda *args: execs.append(args)
     )
@@ -394,7 +394,7 @@ def test_posix_restart_failure_raises(monkeypatch, real_restart):
     def cannot_exec(*args):
         raise OSError("exec format error")
 
-    monkeypatch.setattr(source_update_startup.os, "name", "posix")
+    monkeypatch.setattr(source_update_startup, "_is_posix", lambda: True)
     monkeypatch.setattr(source_update_startup.os, "execve", cannot_exec)
 
     with pytest.raises(OSError):
@@ -410,7 +410,7 @@ def _spawn(monkeypatch, child):
 
         return child
 
-    monkeypatch.setattr(source_update_startup.os, "name", "nt")
+    monkeypatch.setattr(source_update_startup, "_is_posix", lambda: False)
     monkeypatch.setattr(source_update_startup.subprocess, "Popen", fake_popen)
 
     return spawns

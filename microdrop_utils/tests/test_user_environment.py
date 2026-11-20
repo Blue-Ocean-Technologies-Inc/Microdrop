@@ -14,8 +14,8 @@ or environment — the POSIX tests use ``tmp_path`` as home, the Windows tests a
 fake ``winreg``."""
 
 # Standard library imports.
+import logging
 import os
-import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -102,7 +102,7 @@ def isolated_variable(monkeypatch):
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     """Make the user a Linux user whose home is ``tmp_path``."""
-    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(user_environment, "_platform", lambda: "linux")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
 
     return tmp_path
@@ -111,7 +111,7 @@ def home(tmp_path, monkeypatch):
 @pytest.fixture
 def mac_home(home, monkeypatch):
     """Make the user a macOS user whose home is ``tmp_path``."""
-    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(user_environment, "_platform", lambda: "darwin")
 
     return home
 
@@ -133,18 +133,25 @@ def fake_winreg(monkeypatch, broadcasts):
     """Make the user a Windows user whose registry is a ``FakeWinreg``."""
     registry = FakeWinreg()
 
-    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(user_environment, "_platform", lambda: "win32")
     monkeypatch.setattr(user_environment, "_winreg_module", lambda: registry)
 
     return registry
 
 
 @pytest.fixture
-def warnings(monkeypatch):
-    """Record the module's logged warnings."""
-    messages = []
+def logged_warnings(caplog):
+    """Capture the module's warnings; return a function listing their
+    messages so far."""
+    caplog.set_level(logging.WARNING, logger=user_environment.__name__)
 
-    monkeypatch.setattr(user_environment.logger, "warning", messages.append)
+    def messages():
+        return [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == user_environment.__name__
+            and record.levelno >= logging.WARNING
+        ]
 
     return messages
 
@@ -226,26 +233,26 @@ def test_posix_read_ignores_unmarked_lines(home):
     assert user_environment_variable(NAME) is None
 
 
-def test_posix_read_failure_is_none(home, warnings):
+def test_posix_read_failure_is_none(home, logged_warnings):
     (home / ".profile").mkdir()
 
     assert user_environment_variable(NAME) is None
-    assert warnings
+    assert logged_warnings()
 
 
-def test_read_without_a_home_is_none(home, monkeypatch, warnings):
+def test_read_without_a_home_is_none(home, monkeypatch, logged_warnings):
     def no_home(cls):
         raise RuntimeError("Could not determine home directory.")
 
     monkeypatch.setattr(Path, "home", classmethod(no_home))
 
     assert user_environment_variable(NAME) is None
-    assert warnings
+    assert logged_warnings()
 
 
-def test_read_with_invalid_name_is_none(home, warnings):
+def test_read_with_invalid_name_is_none(home, logged_warnings):
     assert user_environment_variable("MY-VAR") is None
-    assert warnings
+    assert logged_warnings()
 
 
 def test_posix_write_failure_propagates(home):
@@ -340,12 +347,12 @@ def test_windows_unset_absent_value_is_quiet(fake_winreg):
     assert fake_winreg.values == {}
 
 
-def test_windows_read_failure_is_none(fake_winreg, warnings):
+def test_windows_read_failure_is_none(fake_winreg, logged_warnings):
     fake_winreg.values[NAME] = ("1", FakeWinreg.REG_SZ)
     fake_winreg.failure = PermissionError(5, "Access is denied")
 
     assert user_environment_variable(NAME) is None
-    assert warnings
+    assert logged_warnings()
 
 
 def test_windows_read_only_string_values(fake_winreg):
@@ -368,7 +375,9 @@ def test_windows_write_failure_propagates(fake_winreg, broadcasts):
     assert broadcasts == []
 
 
-def test_windows_broadcast_failure_is_a_warning(fake_winreg, monkeypatch, warnings):
+def test_windows_broadcast_failure_is_a_warning(
+    fake_winreg, monkeypatch, logged_warnings
+):
     def failing_send():
         raise OSError(1460, "This operation returned because the timeout period")
 
@@ -378,7 +387,7 @@ def test_windows_broadcast_failure_is_a_warning(fake_winreg, monkeypatch, warnin
 
     assert fake_winreg.values[NAME] == ("1", FakeWinreg.REG_SZ)
     assert os.environ[NAME] == "1"
-    assert warnings
+    assert logged_warnings()
 
 
 def test_set_and_unset_update_os_environ(home):
@@ -394,11 +403,11 @@ def test_set_and_unset_update_os_environ(home):
 def test_only_windows_hands_the_variable_to_new_programs_without_a_new_login(
     monkeypatch,
 ):
-    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(user_environment, "_platform", lambda: "win32")
 
     assert needs_new_login() is False
 
-    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(user_environment, "_platform", lambda: "linux")
 
     assert needs_new_login() is True
 
@@ -418,6 +427,6 @@ def test_only_windows_hands_the_variable_to_new_programs_without_a_new_login(
     ],
 )
 def test_manual_unset_command_per_platform(monkeypatch, platform, command):
-    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(user_environment, "_platform", lambda: platform)
 
     assert manual_unset_command(NAME) == command

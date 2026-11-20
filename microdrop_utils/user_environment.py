@@ -59,9 +59,14 @@ _NEW_PROFILE_MODE = 0o644
 _NAME_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
+def _platform():
+    # Read at call time, and the one platform seam tests replace, so they
+    # can exercise every platform anywhere without patching sys.platform.
+    return sys.platform
+
+
 def _is_windows():
-    # Read at call time, so tests can exercise every platform anywhere.
-    return sys.platform == "win32"
+    return _platform() == "win32"
 
 
 def _winreg_module():
@@ -90,7 +95,7 @@ def _check_value(value):
 
 def _profile_name():
     """Return the file name of this platform's login shell profile."""
-    return ".zprofile" if sys.platform == "darwin" else ".profile"
+    return ".zprofile" if _platform() == "darwin" else ".profile"
 
 
 def _profile_path():
@@ -150,7 +155,9 @@ def _write_profile_lines(path, lines):
         os.chmod(temporary, mode)
         os.replace(temporary, path)
     except BaseException:
-        # A failed cleanup must not mask the error that got us here.
+        # The temporary file is already gone when the interruption came
+        # after the replace. Any other failure to remove it propagates,
+        # chained to the error that got us here.
         with suppress(FileNotFoundError):
             os.unlink(temporary)
 
@@ -219,7 +226,7 @@ def _read_from_profile(name):
 def _send_setting_change():
     """Broadcast WM_SETTINGCHANGE for "Environment" to every top-level window.
 
-    Raises OSError when the broadcast fails or a window times out."""
+    Raises OSError when SendMessageTimeoutW reports a failure."""
     from ctypes import wintypes
 
     # A private handle on user32, so these argtypes never leak into
