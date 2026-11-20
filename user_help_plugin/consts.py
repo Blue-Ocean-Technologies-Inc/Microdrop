@@ -48,6 +48,11 @@ SCIBOTS_URL = "https://sci-bots.com"
 INFO_EMAIL = "info@sci-bots.com"
 SUPPORT_EMAIL = "support@sci-bots.com"
 
+#: The id of the schema addition holding the Help menu's main group, for a
+#: contributor's ``SchemaAddition(after=...)``: before/after match an
+#: addition's id, not its group's.
+HELP_ACTIONS_ADDITION_ID = f"{PKG}.help_actions"
+
 # Extension point: Help > Tutorials. Contributions are TutorialEntry records;
 # a plugin offers its tutorials with ``List(contributes_to=TUTORIALS)``, and
 # the submenu follows plugins loaded or unloaded at runtime. Contributors,

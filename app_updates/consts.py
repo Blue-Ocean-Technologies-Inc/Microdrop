@@ -25,6 +25,12 @@ PREFERENCES_PATH = AUTO_UPDATE_PREFERENCE_PATH.rpartition(".")[0]
 POLICY_LATEST = "latest"
 POLICY_STAY = "stay"
 
+#: What the background check after startup does: nothing, log that a
+#: release was downloaded for the next start, or announce a release.
+NO_ACTION = "no action"
+LOG_DOWNLOADED = "log downloaded"
+ANNOUNCE = "announce"
+
 #: Shown in place of a changelog section the selected release does not have.
 NO_CHANGELOG_TEXT = "No changelog for this version."
 

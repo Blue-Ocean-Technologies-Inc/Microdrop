@@ -13,6 +13,7 @@ from envisage.api import CorePlugin
 from envisage.ui.tasks.api import TasksPlugin
 
 # Microdrop package imports.
+from app_updates.plugin import AppUpdatesPlugin
 from device_viewer.plugin import DeviceViewerPlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
 from dropbot_preferences_ui.plugin import DropbotPreferencesPlugin
@@ -95,6 +96,7 @@ FRONTEND_PLUGINS = [
     StatusBarPlugin,
     LoggerUIPlugin,
     PluginManagementPlugin,
+    AppUpdatesPlugin,
     DeviceViewerPlugin,
     ImageViewerPlugin,
     UserHelpPlugin,
