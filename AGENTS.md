@@ -112,7 +112,7 @@ Three plugin categories:
 - **Required:** `CorePlugin`, `MessageRouterPlugin`, `LoggerPlugin`
 - **Frontend (UI):** `MicrodropPlugin`, `DeviceViewerPlugin`,
   `ManualControlsPlugin`, `DropbotStatusPlugin`,
-  `ProtocolGridControllerUIPlugin`, etc.
+  `ProtocolGridControllerUIPlugin`, `AppUpdatesPlugin`, etc.
 - **Backend (hardware):** `DropbotControllerPlugin`,
   `ElectrodeControllerPlugin`, `PeripheralControllerPlugin`
 
@@ -171,6 +171,23 @@ Electrode zones (#596): `device_viewer/models/zones.py` holds
 of truth, outlines computed by shapely union + gap closing). Regions
 persist in the device SVG's `Zones` layer, zone types in preferences, and
 the whole snapshot in app_globals under `ZONES_KEY`.
+
+### Source Updates
+
+The app no longer pulls `main` at startup. Moving the source checkout is
+owned by the `app_updates` plugin (Help > "Check for Updates…") plus
+`microdrop_utils/source_version.py` (git) and `source_update_startup.py`
+(the startup step). The policy is "always the latest release" (default) or
+"stay on this release"; latest means the newest `vX.Y.Z` tag whose tree has
+the Updates panel, never the tip of `main`. Tags are fetched in the
+background after startup and applied locally at the next start, which then
+re-runs itself on the new code. A development checkout — any branch other
+than `main`, or modified tracked files — is never moved, so running from a
+feature-branch worktree moves nothing. `MICRODROP_SKIP_GIT_UPDATE` (set in
+the environment or saved for the user) turns the automatic part off.
+pixi-microdrop and the environment are still updated by the Setup &
+Launcher. Tests of this code build their own git repos
+(`microdrop_utils/tests/git_repo_fixtures.py`), never the real checkout.
 
 ### DropBot Python API
 
