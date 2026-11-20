@@ -21,6 +21,7 @@ from traitsui.api import (
     HGroup,
     InstanceEditor,
     Item,
+    Label,
     ListEditor,
     RangeEditor,
     UItem,
@@ -28,6 +29,9 @@ from traitsui.api import (
     View,
     spring,
 )
+
+# Local imports.
+from ...consts import CAMERA_PROPERTIES_LOADING_TEXT
 
 #: One control's row; the fixed-width name lines the sliders up.
 image_setting_row_view = View(
@@ -45,6 +49,12 @@ image_setting_row_view = View(
 )
 
 camera_image_settings_view = View(
+    # Disabled whenever shown, so it reads as muted text.
+    VGroup(
+        Label(CAMERA_PROPERTIES_LOADING_TEXT),
+        visible_when="camera_properties_loading",
+        enabled_when="not camera_properties_loading",
+    ),
     VGroup(
         UItem(
             "image_settings",
@@ -59,6 +69,7 @@ camera_image_settings_view = View(
         ),
         HGroup(spring, UItem("reset_image_settings")),
         visible_when="image_settings",
+        enabled_when="not camera_properties_loading",
     ),
     # Resizable, or TraitsUI fixes the panel at its build-time size: the
     # rows come and go with the selected camera.
