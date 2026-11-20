@@ -243,18 +243,54 @@ def test_up_to_date_checkout_does_nothing(clone, calls):
     assert calls == []
 
 
-def test_failed_checkout_warns_and_continues(clone_at_v1_2, monkeypatch, calls, caplog):
+def _refuse_checkout(monkeypatch, output):
+    """Make every checkout fail with git printing ``output``; return the
+    list of attempts and the list of sleeps between them."""
+    attempts = []
+    sleeps = []
+
     def refuse(repo_root, tag_name):
-        raise SourceVersionError("`git checkout` exited with code 1", "index.lock")
+        attempts.append(tag_name)
+
+        raise SourceVersionError("`git checkout` exited with code 1", output)
 
     monkeypatch.setattr(source_update_startup, "switch_to", refuse)
+    monkeypatch.setattr(source_update_startup.time, "sleep", sleeps.append)
+
+    return attempts, sleeps
+
+
+def test_checkout_blocked_by_the_index_lock_is_retried(
+    clone_at_v1_2, monkeypatch, calls, caplog
+):
+    lock_message = "fatal: Unable to create '.git/index.lock': File exists."
+    attempts, sleeps = _refuse_checkout(monkeypatch, lock_message)
 
     with caplog.at_level(logging.WARNING, logger=source_update_startup.__name__):
         apply_source_update_policy(clone_at_v1_2)
 
     assert exact_release(clone_at_v1_2) == "v1.2.0"
     assert calls == []
+    assert len(attempts) == source_update_startup.CHECKOUT_RETRY_COUNT + 1
+    assert len(sleeps) == source_update_startup.CHECKOUT_RETRY_COUNT
     assert "index.lock" in caplog.text
+
+
+def test_checkout_refused_for_another_reason_warns_once_without_waiting(
+    clone_at_v1_2, monkeypatch, calls, caplog
+):
+    in_the_way = "error: untracked working tree files would be overwritten"
+    attempts, sleeps = _refuse_checkout(monkeypatch, in_the_way)
+
+    with caplog.at_level(logging.WARNING, logger=source_update_startup.__name__):
+        apply_source_update_policy(clone_at_v1_2)
+
+    assert exact_release(clone_at_v1_2) == "v1.2.0"
+    assert calls == []
+    assert attempts == ["v1.10.0"]
+    assert sleeps == []
+    assert caplog.text.count("Could not switch the MicroDrop source") == 1
+    assert "would be overwritten" in caplog.text
 
 
 def test_checkout_lost_to_another_process_counts_as_switched(
@@ -289,6 +325,23 @@ def test_failed_restart_warns_and_continues_on_the_new_tag(
     assert "now on v1.10.0" in caplog.text
     assert "no such interpreter" in caplog.text
     assert "restart MicroDrop" in caplog.text
+
+
+def test_unexpected_restart_error_still_says_the_source_moved(
+    clone_at_v1_2, monkeypatch, calls, caplog
+):
+    def broken(argv, env):
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(source_update_startup, "_restart_app", broken)
+
+    with caplog.at_level(logging.WARNING, logger=source_update_startup.__name__):
+        assert apply_source_update_policy(clone_at_v1_2) is None
+
+    assert exact_release(clone_at_v1_2) == "v1.10.0"
+    assert "now on v1.10.0" in caplog.text
+    assert "restart MicroDrop" in caplog.text
+    assert "Source update at startup failed" not in caplog.text
 
 
 def test_unexpected_error_never_escapes(monkeypatch, tmp_path, calls, caplog):

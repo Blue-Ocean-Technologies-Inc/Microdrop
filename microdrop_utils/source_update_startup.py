@@ -60,9 +60,13 @@ AUTO_UPDATE_PREFERENCE_PATH = "microdrop.app_updates.auto_update"
 #: The newest release the user has been told about.
 LAST_ANNOUNCED_PREFERENCE_PATH = "microdrop.app_updates.last_announced_version"
 
-#: How often, and how many seconds apart, a refused checkout is retried.
+#: How often, and how many seconds apart, a checkout refused for git's index
+#: lock is retried.
 CHECKOUT_RETRY_COUNT = 5
 CHECKOUT_RETRY_DELAY_S = 1
+
+#: Git names this file when another git process holds the checkout.
+INDEX_LOCK_NAME = "index.lock"
 
 
 def source_version_line(repo_root):
@@ -88,18 +92,16 @@ def skip_variable_is_set():
 
 
 def _switch_with_retries(repo_root, tag_name):
-    """Check out ``tag_name``, retrying while git refuses. Return True once
-    the checkout is at the tag, whichever process moved it."""
-    error = None
+    """Check out ``tag_name``. Return True once the checkout is at the tag,
+    whichever process moved it.
 
+    Only git's index lock is waited out: a second instance starting at the
+    same moment holds it while it makes the very same switch. Any other
+    refusal (a file in the way) would only refuse again, delaying every
+    start."""
     for attempt in range(CHECKOUT_RETRY_COUNT + 1):
-        # A second instance starting at the same moment holds git's index
-        # lock while it makes the very same switch.
         if attempt > 0:
             time.sleep(CHECKOUT_RETRY_DELAY_S)
-
-            if exact_release(repo_root) == tag_name:
-                return True
 
         try:
             switch_to(repo_root, tag_name)
@@ -109,6 +111,12 @@ def _switch_with_retries(repo_root, tag_name):
 
         else:
             return True
+
+        if exact_release(repo_root) == tag_name:
+            return True
+
+        if INDEX_LOCK_NAME not in error.output:
+            break
 
     logger.warning(
         f"Could not switch the MicroDrop source to {tag_name}; starting on the "
@@ -222,13 +230,13 @@ def apply_source_update_policy(repo_root=PROJECT_ROOT):
             _rerun_and_exit()
 
         # Starting anyway keeps the app usable, though modules it imports
-        # from here on come from the new release.
-        except OSError as e:
+        # from here on come from the new release. SystemExit from the re-run
+        # is not an Exception, so it passes through.
+        except Exception as e:
             logger.warning(
                 f"MicroDrop source is now on {tag.name}, but the restart could "
                 f"not be started ({e}); restart MicroDrop to run the new version."
             )
 
-    # SystemExit from the re-run is not an Exception, so it passes through.
     except Exception as e:
         logger.warning(f"Source update at startup failed: {e}")
