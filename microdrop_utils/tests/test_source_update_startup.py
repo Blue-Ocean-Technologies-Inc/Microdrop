@@ -1,0 +1,211 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+"""source_update_startup: the startup step moves a managed checkout to the
+newest release by the user's preference and re-runs the app — against real
+git repositories, with the re-run, the preference, and the sleeps faked."""
+
+# Standard library imports.
+import logging
+import shutil
+import sys
+from collections import namedtuple
+
+# Third-party imports.
+import pytest
+
+# Microdrop utils imports.
+from microdrop_utils import source_update_startup
+from microdrop_utils.source_update_startup import (
+    AUTO_UPDATE_PREFERENCE_PATH,
+    SKIP_GIT_UPDATE_ENV_VAR,
+    UPDATE_APPLIED_ENV_VAR,
+    apply_source_update_policy,
+    source_version_line,
+)
+from microdrop_utils.source_version import SourceVersionError, exact_release
+from microdrop_utils.tests.git_repo_fixtures import run_git
+
+pytestmark = pytest.mark.skipif(
+    shutil.which("git") is None, reason="git is not installed"
+)
+
+#: One faked re-run of the app.
+RerunCall = namedtuple("RerunCall", "argv env")
+
+
+def _head(repo):
+    return run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+@pytest.fixture(autouse=True)
+def calls(monkeypatch):
+    """The re-runs the step started; none ever starts a real process.
+
+    Also clears both variables (this machine may set them), answers the
+    auto-update preference with its default, and makes the retry sleeps
+    instant."""
+    recorded = []
+
+    def fake_call(argv, env=None):
+        recorded.append(RerunCall(argv, env))
+
+        return 7
+
+    monkeypatch.delenv(SKIP_GIT_UPDATE_ENV_VAR, raising=False)
+    monkeypatch.delenv(UPDATE_APPLIED_ENV_VAR, raising=False)
+    monkeypatch.setattr(
+        source_update_startup, "read_bool_preference", lambda path, default: default
+    )
+    monkeypatch.setattr(source_update_startup.subprocess, "call", fake_call)
+    monkeypatch.setattr(source_update_startup.time, "sleep", lambda seconds: None)
+
+    return recorded
+
+
+def test_stay_policy_never_moves_the_checkout(clone_at_v1_2, monkeypatch, calls):
+    paths = []
+
+    def stay(path, default):
+        paths.append(path)
+
+        return False
+
+    monkeypatch.setattr(source_update_startup, "read_bool_preference", stay)
+    head = _head(clone_at_v1_2)
+
+    apply_source_update_policy(clone_at_v1_2)
+
+    assert paths == [AUTO_UPDATE_PREFERENCE_PATH]
+    assert _head(clone_at_v1_2) == head
+    assert calls == []
+
+
+def test_latest_policy_switches_and_reruns(clone_at_v1_2, calls):
+    with pytest.raises(SystemExit) as exit_info:
+        apply_source_update_policy(clone_at_v1_2)
+
+    assert exit_info.value.code == 7
+    assert exact_release(clone_at_v1_2) == "v1.10.0"
+    assert len(calls) == 1
+    assert calls[0].argv == [sys.executable, *sys.orig_argv[1:]]
+    assert calls[0].env[UPDATE_APPLIED_ENV_VAR] == "1"
+
+
+def test_child_does_not_apply_again(clone_at_v1_2, monkeypatch, calls):
+    monkeypatch.setenv(UPDATE_APPLIED_ENV_VAR, "1")
+    head = _head(clone_at_v1_2)
+
+    apply_source_update_policy(clone_at_v1_2)
+
+    assert _head(clone_at_v1_2) == head
+    assert calls == []
+
+
+def test_skip_variable_stops_the_update(clone_at_v1_2, monkeypatch, calls, caplog):
+    monkeypatch.setenv(SKIP_GIT_UPDATE_ENV_VAR, "1")
+    head = _head(clone_at_v1_2)
+
+    with caplog.at_level(logging.INFO, logger=source_update_startup.__name__):
+        apply_source_update_policy(clone_at_v1_2)
+
+    assert _head(clone_at_v1_2) == head
+    assert calls == []
+    assert SKIP_GIT_UPDATE_ENV_VAR in caplog.text
+
+
+def test_development_checkout_is_left_alone(clone, calls):
+    run_git(clone, "checkout", "-b", "feat/x", "v1.2.0")
+    head = _head(clone)
+
+    apply_source_update_policy(clone)
+
+    assert _head(clone) == head
+    assert calls == []
+
+
+def test_up_to_date_checkout_does_nothing(clone, calls):
+    head = _head(clone)
+
+    apply_source_update_policy(clone)
+
+    assert _head(clone) == head
+    assert calls == []
+
+
+def test_failed_checkout_warns_and_continues(clone_at_v1_2, monkeypatch, calls, caplog):
+    def refuse(repo_root, tag_name):
+        raise SourceVersionError("`git checkout` exited with code 1", "index.lock")
+
+    monkeypatch.setattr(source_update_startup, "switch_to", refuse)
+
+    with caplog.at_level(logging.WARNING, logger=source_update_startup.__name__):
+        apply_source_update_policy(clone_at_v1_2)
+
+    assert exact_release(clone_at_v1_2) == "v1.2.0"
+    assert calls == []
+    assert "index.lock" in caplog.text
+
+
+def test_checkout_lost_to_another_process_counts_as_switched(
+    clone_at_v1_2, monkeypatch, calls
+):
+    def switched_elsewhere(repo_root, tag_name):
+        run_git(repo_root, "checkout", "--detach", tag_name)
+
+        raise SourceVersionError("`git checkout` exited with code 1", "index.lock")
+
+    monkeypatch.setattr(source_update_startup, "switch_to", switched_elsewhere)
+
+    with pytest.raises(SystemExit):
+        apply_source_update_policy(clone_at_v1_2)
+
+    assert exact_release(clone_at_v1_2) == "v1.10.0"
+    assert len(calls) == 1
+
+
+def test_unexpected_error_never_escapes(monkeypatch, tmp_path, calls):
+    def broken(repo_root):
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(source_update_startup, "pending_update", broken)
+
+    assert apply_source_update_policy(tmp_path) is None
+    assert calls == []
+
+
+def test_version_line_for_branch_pinned_and_no_git(clone, tmp_path):
+    assert source_version_line(clone).startswith(
+        "MicroDrop source version: v1.10.0-1-g"
+    )
+    assert source_version_line(clone).endswith(" (main)")
+
+    run_git(clone, "checkout", "--detach", "v1.2.0")
+
+    assert source_version_line(clone) == (
+        "MicroDrop source version: v1.2.0 (pinned release)"
+    )
+    assert source_version_line(tmp_path) == (
+        "MicroDrop source version: unknown (not a git checkout)"
+    )
+
+
+def test_worker_process_does_nothing(monkeypatch, calls):
+    def never(repo_root):
+        raise AssertionError("a worker process must not read the checkout")
+
+    monkeypatch.setattr(
+        source_update_startup.multiprocessing, "parent_process", lambda: object()
+    )
+    monkeypatch.setattr(source_update_startup, "source_version_line", never)
+    monkeypatch.setattr(source_update_startup, "checkout_state", never)
+
+    assert apply_source_update_policy() is None
+    assert calls == []
