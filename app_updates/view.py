@@ -71,7 +71,7 @@ versions_table = TableEditor(
     editable=False,
     sortable=False,
     selected="selected",
-    click="row_clicked",
+    click="handler.row_clicked",
     auto_size=True,
 )
 

@@ -61,9 +61,9 @@ def _row(model, name):
     return next(row for row in model.versions if row.name == name)
 
 
-def _click(model, name):
-    """Click a row as the table reports it, even the row already selected."""
-    model.row_clicked = (_row(model, name), None)
+def _choose(model, name):
+    """Make the row ``name`` the user's choice, even the row already selected."""
+    model.choose(_row(model, name))
 
 
 def test_rows_mark_latest_current_and_missing_panel(model_at_v1_2):
@@ -111,7 +111,7 @@ def test_latest_policy_disabled_when_ahead_of_newest_tag(model_on_main_tip):
 
 def test_stay_policy_targets_selection_and_disables_on_current(model_at_v1_2):
     model_at_v1_2.policy = POLICY_STAY
-    _click(model_at_v1_2, "v1.2.0")
+    _choose(model_at_v1_2, "v1.2.0")
 
     assert model_at_v1_2.target.name == "v1.2.0"
     assert model_at_v1_2.action_enabled is False
@@ -192,7 +192,7 @@ def test_stay_policy_allows_stepping_back_from_unreleased_commits(
     model_on_main_tip,
 ):
     model_on_main_tip.policy = POLICY_STAY
-    _click(model_on_main_tip, "v1.10.0")
+    _choose(model_on_main_tip, "v1.10.0")
 
     assert model_on_main_tip.action_enabled is True
     assert model_on_main_tip.action_label == "Switch to v1.10.0 and close"
@@ -361,7 +361,7 @@ def test_stay_policy_needs_an_explicit_pick(model_on_main_tip):
     assert _head(model_on_main_tip.repo_root) == head
 
     # Clicking the highlighted row is a choice, though the selection stays.
-    _click(model_on_main_tip, "v1.10.0")
+    _choose(model_on_main_tip, "v1.10.0")
 
     assert model_on_main_tip.action_label == "Switch to v1.10.0 and close"
     assert model_on_main_tip.action_enabled is True
@@ -388,6 +388,21 @@ def test_refresh_keeps_an_explicit_pick_armed(model_on_main_tip):
 
 
 def test_refresh_keeps_an_automatic_pick_disarmed(model_on_main_tip):
+    model_on_main_tip.refresh()
+    model_on_main_tip.policy = POLICY_STAY
+
+    assert model_on_main_tip.selected.name == "v1.10.0"
+    assert model_on_main_tip.action_enabled is False
+
+
+def test_refresh_ignores_a_selection_written_while_the_rows_change(
+    model_on_main_tip,
+):
+    def drop_selection(event):
+        model_on_main_tip.selected = None
+
+    # As an open list does when its rows are replaced.
+    model_on_main_tip.observe(drop_selection, "versions")
     model_on_main_tip.refresh()
     model_on_main_tip.policy = POLICY_STAY
 

@@ -20,7 +20,6 @@ off it.
 from traits.api import (
     Bool,
     Enum,
-    Event,
     HasTraits,
     Instance,
     List,
@@ -140,10 +139,6 @@ class UpdatesModel(HasTraits):
     #: The row whose changelog is shown — and, under POLICY_STAY, the target.
     selected = Instance(VersionRow)
 
-    #: A row was clicked, as the table reports it: ``(row, column)``. Fires
-    #: for the row already selected too, which ``selected`` cannot show.
-    row_clicked = Event()
-
     #: Saved to the preferences the moment it changes.
     policy = Enum(POLICY_LATEST, POLICY_STAY)
 
@@ -229,7 +224,10 @@ class UpdatesModel(HasTraits):
         tags = list_release_tags(self.repo_root)
         latest = newest_panel_tag(tags)
         exact = exact_release(self.repo_root)
+
+        # Read before the rows change: a view may write ``selected`` then.
         selected_name = self.selected.name if self.selected else None
+        selection_was_users = self._selection_is_users
 
         self.versions = [
             VersionRow(
@@ -249,8 +247,14 @@ class UpdatesModel(HasTraits):
             or next((row for row in self.versions if row.is_current), None)
             or self._row_named(self._built_on_release)
             or next(iter(self.versions), None),
-            by_user=kept is not None and self._selection_is_users,
+            by_user=kept is not None and selection_was_users,
         )
+
+    def choose(self, row):
+        """Make ``row`` the user's choice of version, even when it is
+        already selected; under POLICY_STAY that makes it the target."""
+        self.selected = row
+        self._selection_is_users = True
 
     def fetch(self):
         """Fetch the release tags of ``origin``; the caller refreshes after.
@@ -323,13 +327,6 @@ class UpdatesModel(HasTraits):
         if not self._auto_selecting:
             self._selection_is_users = True
 
-    @observe("row_clicked")
-    def _pick_clicked_row(self, event):
-        row, column = event.new
-
-        self.selected = row
-        self._selection_is_users = True
-
     @observe("selected")
     def _show_selected_changelog(self, event):
         if self.selected is None:
@@ -344,8 +341,9 @@ class UpdatesModel(HasTraits):
     # --- helpers --------------------------------------------------------
 
     def _select_row(self, row, by_user):
-        """Select ``row`` from ``refresh``; ``by_user`` keeps a user's choice
-        chosen."""
+        """Select ``row`` for ``refresh``. It counts as the user's choice
+        only when ``by_user`` is True: the user chose it before the
+        refresh."""
         self._selection_is_users = by_user
         self._auto_selecting = True
 

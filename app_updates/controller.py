@@ -16,7 +16,7 @@ the model is refreshed afterwards on the GUI thread, never from the worker.
 """
 
 # Enthought library imports.
-from traits.api import Any, Button, Property, Str, observe
+from traits.api import Any, Button, Event, Property, Str, observe
 from traitsui.api import Controller
 
 # Microdrop package imports.
@@ -102,6 +102,10 @@ class UpdatesController(Controller):
     #: Unsets the skip variable; an in-body button beside its line.
     remove_button = Button("Remove")
 
+    #: A row of the versions table was clicked: ``(row, column)``. Fires for
+    #: the row already selected too, which the table's selection cannot show.
+    row_clicked = Event()
+
     # --- property getters ----------------------------------------------
 
     def _get_changelog_html(self):
@@ -171,6 +175,12 @@ class UpdatesController(Controller):
     @observe("remove_button")
     def _remove_button_clicked(self, event):
         self.remove_skip_variable(self.info)
+
+    @observe("row_clicked")
+    def _choose_clicked_row(self, event):
+        row, column = event.new
+
+        self.model.choose(row)
 
     # --- helpers --------------------------------------------------------
 
