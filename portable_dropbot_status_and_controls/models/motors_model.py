@@ -58,11 +58,13 @@ class PortableDropbotMotorsModel(BaseStatusModel):
     #: release/press around the move. Not persisted.
     tray_only = Bool(False)
     home_button = Button("Home")
-    #: The coordinated resets (cabin+mag, pushpads, filter, PMT) —
-    #: mechanism macros are silently rejected until these have run
-    #: after a motor-board power-up; the per-motor Home above does
-    #: NOT initialize that motion coordinator.
+    #: The vendor UI's Home all: its host plan of coordinated resets
+    #: (PMT, magnet, pads, tray, filter by default), behind its "deck is
+    #: clear" confirmation; realtime mode and HV go off first.
     home_all_button = Button("Home All")
+    #: EMERGENCY STOP — MOTORS: every axis ramps down at once, aborting any
+    #: move, home or Home All. Motors only, never behind a confirmation.
+    estop_button = Button("E-STOP Motors")
 
     # ---- Manual Move (mm; converted to the firmware's 0.001 mm
     # units when published; spin boxes in the view for touch use) -------
@@ -73,8 +75,9 @@ class PortableDropbotMotorsModel(BaseStatusModel):
     move_presets = List(Float)
     move_to_mm = Range(*MOVE_DISTANCE_MM_BOUNDS, 0.0)
     move_to_button = Button("Go")
-    #: Runtime-only per-motor run speed; reverts to the flashed
-    #: default on reboot.
+    #: Runtime-only per-motor run speed; reverts to the flashed default
+    #: on reboot. Homing's leave-origin phase runs at it too (the driver's
+    #: setMotorSpeed CAUTION), so raise it only for a stroke.
     speed_um_per_s = Range(*MOTOR_SPEED_UM_PER_S_BOUNDS, 1000, mode="spinner")
     set_speed_button = Button("Set Speed")
 

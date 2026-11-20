@@ -41,10 +41,22 @@ _mm_spin_box = DoubleSpinBoxEditor(
 )
 
 select_motor = VGroup(
-    Item(
-        "selected_motor",
-        label="Target Motor",
-        tooltip="Motor the macros, Home and manual moves act on",
+    HGroup(
+        Item(
+            "selected_motor",
+            label="Target Motor",
+            tooltip="Motor the macros, Home and manual moves act on",
+        ),
+        UItem(
+            "estop_button",
+            tooltip=(
+                "EMERGENCY STOP — MOTORS: stop ALL motor axes immediately (ramp "
+                "down at max deceleration, holding current kept). Aborts any "
+                "move, homing or Home All in flight; an aborted homing "
+                "invalidates that axis's homed flag.\n\nMOTORS ONLY: it does "
+                "NOT turn HV, the PMT supply, heaters or any power rail off."
+            ),
+        ),
     ),
     label="Select Motor",
     show_border=True,
@@ -88,8 +100,9 @@ macros = VGroup(
         UItem(
             "home_all_button",
             tooltip=(
-                "Home every mechanism (takes tens of seconds); macros need "
-                "it after a motor-board power-up"
+                "Home every mechanism, one unit at a time (minutes; asks you "
+                "to confirm the deck is clear, and turns realtime mode and HV "
+                "off first); macros need it after a motor-board power-up"
             ),
         ),
     ),
@@ -150,7 +163,14 @@ manual_move = VGroup(
         Item(
             "speed_um_per_s",
             label="Speed (μm/s)",
-            tooltip="Run speed for the selected motor; homing uses it too",
+            tooltip=(
+                "Run speed in real μm/s (MOTOR_SPEED_SET); the board clamps "
+                "it to [72 steps/s, 3x the axis rspd, 143000 μm/s].\n\n"
+                "CAUTION: homing's leave-origin phase also runs at this "
+                "speed, and it lasts until the motor board reboots. Raise it "
+                "only for a stroke and set the default back afterwards, so "
+                "homing never runs fast (it can slam or stall)."
+            ),
         ),
         UItem(
             "set_speed_button",
