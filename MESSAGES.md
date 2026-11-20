@@ -539,6 +539,33 @@ the camera lives in the frontend process.
 
 **Protocol-step captures (`portable_dropbot_protocol_controls`'s `fluorescence_capture` column, `FluorescenceCaptureHandler`)** — the same `step_uuid`-style correlation pattern as `pmt_capture`: `on_pre_step` runs entries ticked `at_start`, `on_post_step` those ticked `at_end`, each phase publishing one `FLUORESCENCE_CAPTURE` with `request_id=f"{row.uuid}:{phase}"` and `label` sanitised to `PMT_CAPTURE_LABEL_PATTERN` (e.g. `step1.2-end`), then waiting on `FLUORESCENCE_CAPTURE_DONE` with a `predicate=` matching that `request_id` — a pane-initiated capture or a stale done from an earlier step can never satisfy it. Timeout is `len(entries) * FLUORESCENCE_STEP_PER_ENTRY_OVERHEAD_S + FLUORESCENCE_STEP_TIMEOUT_MARGIN_S` (no per-entry exposure sum like the PMT column's — the per-entry overhead already covers the filter's up-to-60 s move plus both camera stages); `ack_time_s == 0` on the Protocol Settings grid means fire-and-forget, as for magnet/heater/PMT. `done.ok == False` raises `RuntimeError(done.error)`; an `AbortError` publishes `FLUORESCENCE_CAPTURE_ABORT` before re-raising, and `on_post_protocol_end` publishes it unconditionally (including in preview mode) so an interrupted run never leaves a capture going. The captures folder lands in the report as one metadata row (`{"Fluorescence Captures Folder": done.directory}`); the PNGs themselves reach the report's Media Captures section on their own through the now-live `DEVICE_VIEWER_MEDIA_CAPTURED`, so there is no per-image contribution.
 
+### Portable DropBot self-tests
+
+The self-test hub (`portable_dropbot_self_tests`, Tools > Self Tests...) runs the vendor's `dropbot_portable.self_test` catalogue on the portable backend (`portable_dropbot_controller`'s self-test mixin service). The whole contract (topics, Pydantic models, publishers) lives in `portable_dropbot_self_tests/consts.py`, which the backend imports (consts-only).
+
+**Requests (frontend hub panel -> backend; handlers `on_<segment>_request`)**
+- `SELF_TEST_RUN = "portable_dropbot/requests/self_test_run"` — `SelfTestRunRequest {run_id, tests, test_kwargs, chip_absent_acknowledged}` via `self_test_run_publisher`; handler `on_self_test_run_request`.
+- `SELF_TEST_ABORT = "portable_dropbot/requests/self_test_abort"` — `SelfTestAbortRequest {run_id}` (empty aborts any run) via `self_test_abort_publisher`; stops at the next step, the restore still runs.
+- `SELF_TEST_PREFLIGHT_READ = "portable_dropbot/requests/self_test_preflight_read"` — empty message; answered on `SELF_TEST_PREFLIGHT_UPDATED`.
+- `SELF_TEST_SAVE_CALIBRATION = "portable_dropbot/requests/self_test_save_calibration"` — `SelfTestSaveCalibrationRequest {calibration, tare}` via `self_test_save_calibration_publisher`; answered on `SELF_TEST_CALIBRATION_SAVED`.
+
+**Signals (backend -> hub's plugin-lifetime listener `SELF_TEST_LISTENER`, so the model survives the panel closing)**
+- `SELF_TEST_PREFLIGHT_UPDATED = "portable_dropbot/signals/self_test_preflight_updated"` — `SelfTestPreflight {tray_in, pads_pressed, chip_on_pad_mask, chip_res, board_detected, running, run_id, unsaved, error}` via `self_test_preflight_publisher` (also lets a reopened panel resync).
+- `SELF_TEST_PROGRESS = "portable_dropbot/signals/self_test_progress"` — `SelfTestProgress {run_id, phase, index, total, name, step, steps, text, error, cancelled}`; `phase` is `choreography` (HV-off / pad moves / restore between tests) or the vendor's `start`/`step`/`done`.
+- `SELF_TEST_RESULT = "portable_dropbot/signals/self_test_result"` — `SelfTestResult {run_id, name, title, verdict, duration, utc_timestamp, error, cancelled, restore_errors, result, results_path}`.
+- `SELF_TEST_FINISHED = "portable_dropbot/signals/self_test_finished"` — `SelfTestFinished {run_id, refused_reason, cancelled, error, restore_note, verdicts, unsaved, directory}`.
+- `SELF_TEST_CALIBRATION_SAVED = "portable_dropbot/signals/self_test_calibration_saved"` — `SelfTestCalibrationSaved {calibration_status, calibration_text, tare_ok, unsaved, error}`.
+
+Each signal has a matching `self_test_*_publisher` (`ValidatedTopicPublisher`) in the same consts module.
+
+**Behaviour rules**
+- The frontend mints a `run_id` per run; every progress/result/finished message carries it and the frontend ignores any other id (a second frontend or stale message cannot corrupt its model).
+- Per run request the backend publishes EXACTLY ONE `SELF_TEST_FINISHED`, always last. A refused run publishes only that message with `refused_reason` set; an accepted run publishes per test progress (start, steps, done) then one result, interleaved with `choreography` progress.
+- Refusals (before any HV change or pad move): a run already in progress; a PMT or fluorescence session holds the board; realtime mode on or a protocol running; unknown test name or `test_kwargs` key; pad state unknown while a selected test needs pads moved; no board detected by the backend's own chip read and `chip_absent_acknowledged` False. Preflight reads and calibration saves report refusals/failures in the reply's `error`.
+- Exclusive ownership: while a run is in progress the backend refuses every other `portable_dropbot/requests/*` topic except abort and preflight read (connection requests that are no-ops while connected also pass), with a logged warning. A disconnect request during a run becomes an abort, so the port is never closed under a running test.
+- Unsaved calibration: the feedback-cap calibration and electrode tare live in board RAM until saved. `unsaved` (`calibration` / `tare`) is backend-owned: set when a run leaves either captured-but-unsaved, cleared by a successful save and on disconnect, reported on finished, preflight and save replies.
+- Verdicts and titles are computed by the backend so every frontend shows the same judgement. `SelfTestResult.result` is the vendor result made JSON-safe (arrays to lists, NaN to None); the backend also writes each test's JSON under the experiment directory (`results_path` / `directory`, reference only) and the frontend regenerates any Markdown/HTML report locally from the inline results, so a remote frontend works.
+
 ### Protocol columns → Device Viewer: camera source selection around a run
 
 Lets a plugin column (the fluorescence plugin's, in its own repo) show a given camera source for a run, learn whether that worked, and put the previous source back afterwards. Payload models live in `device_viewer/models/media.py`, re-exported with the topics and their `ValidatedTopicPublisher`s (`camera_select_source_publisher`, `camera_source_selected_publisher`, `camera_state_publisher`) from `device_viewer/consts.py`.

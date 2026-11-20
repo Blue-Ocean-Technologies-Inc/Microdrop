@@ -242,21 +242,27 @@ class PortableDropbotMotorsMixinService(HasTraits):
         self._publish_status_snapshot()
 
     def on_set_pogo_request(self, message):
+        self._set_pogo(str(message) == "True")
+        self._publish_status_snapshot()
+
+    def _set_pogo(self, engaged):
+        """The classic motor-board pad press (True) or release; True when
+        the board accepted the move."""
         # Hardware truth (vendor test UI, HW-confirmed): 1 = press
         # (engage), 0 = release. Acts on BOTH pads as a coordinated
         # pair — no per-side mechanism command exists; a single pad
         # moves only via the raw per-motor moves/home.
-        engaged = str(message) == "True"
         action = "press" if engaged else "release"
         logger.info(f"Portable Dropbot pogo {action} requested")
         ok, result = self._proxy_call(
             f"pogo {action}", lambda: self.proxy.uart.setPogo(1 if engaged else 0)
         )
+        accepted = ok and result not in (None, False)
         logger.info(
-            f"Portable Dropbot pogo {action} --> "
-            f"{'ok' if ok and result not in (None, False) else 'FAILED'}"
+            f"Portable Dropbot pogo {action} --> {'ok' if accepted else 'FAILED'}"
         )
-        self._publish_status_snapshot()
+
+        return accepted
 
     def on_lock_chip_request(self, message):
         """Chip lock IS the pogo pads pressing the chip; a topic of
