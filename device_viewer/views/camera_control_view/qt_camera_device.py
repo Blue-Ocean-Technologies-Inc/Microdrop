@@ -52,6 +52,7 @@ from traits.api import (
     HasTraits,
     Instance,
     List,
+    Str,
     observe,
     provides,
 )
@@ -65,6 +66,7 @@ from microdrop_utils.camera_image_controls import (
 )
 from microdrop_utils.directshow_camera_controls import (
     DirectShowCameraControls,
+    DirectShowStallError,
     open_directshow_camera_controls,
 )
 from microdrop_utils.v4l2_fps_getter import (
@@ -122,6 +124,11 @@ class QtCameraDevice(HasTraits):
 
     #: The bound camera's image controls; None for a camera without any.
     image_controls = Instance(ICameraImageControls)
+
+    #: Why the bound camera's native controls are unavailable although it
+    #: has some (a stalled driver), for the user; empty otherwise. Reset by
+    #: every bind.
+    native_controls_problem = Str()
 
     #: True from a libcamera camera's stop until its camera, session and
     #: sink are replaced (see the module docstring).
@@ -231,6 +238,7 @@ class QtCameraDevice(HasTraits):
         docstring)."""
         self.directshow_controls = None
         self.image_controls = None
+        self.native_controls_problem = ""
 
         if self.device is None:
             return
@@ -242,7 +250,15 @@ class QtCameraDevice(HasTraits):
 
             return
 
-        directshow = open_directshow_camera_controls(self.device.id())
+        # A stalled driver costs the camera its properties, not the camera.
+        try:
+            directshow = open_directshow_camera_controls(self.device.id())
+        except DirectShowStallError as error:
+            logger.error(f"No camera properties for {description}: {error}")
+            self.native_controls_problem = _directshow_stall_message(description, error)
+
+            return
+
         self.directshow_controls = directshow
 
         if directshow is not None:
@@ -597,7 +613,13 @@ class QtCameraDevice(HasTraits):
         if self.image_controls is None:
             return []
 
-        return self.image_controls.ranges()
+        # A stalled DirectShow driver raises instead of blocking.
+        try:
+            return self.image_controls.ranges()
+        except RuntimeError as error:
+            logger.error(f"Camera image controls not read: {error}")
+
+            return []
 
     def image_control(self, name):
         return self.image_controls.get(name)
@@ -669,3 +691,22 @@ def _qt_camera_device(selected_device):
         return selected_device
 
     return None
+
+
+def _directshow_stall_message(description, error):
+    """The user-facing message for camera ``description``'s DirectShow
+    stall ``error`` (a DirectShowStallError)."""
+    if error.retry_exhausted:
+        retry = "MicroDrop must be restarted to try again."
+    else:
+        retry = (
+            'To try again, reselect the camera or press "Refresh Camera List" '
+            "in the camera panel."
+        )
+
+    return (
+        f"The Windows camera driver (DirectShow) of {description} did not "
+        f"respond while MicroDrop read its focus and image properties.<br><br>"
+        f"The camera itself still works, but its Camera Properties (focus, "
+        f"exposure, brightness, ...) are unavailable.<br><br>{retry}"
+    )
