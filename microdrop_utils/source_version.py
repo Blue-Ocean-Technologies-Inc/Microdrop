@@ -11,8 +11,9 @@
 """Git facts about the MicroDrop source checkout, and moving it between
 release tags.
 
-A managed checkout — on ``main`` or a detached release tag, with no local
-changes to tracked files — is one the app may move itself. Release tags are
+A managed checkout — on ``main``, or detached at a release tag or a commit of
+``origin/main``, with no local changes to tracked files and no git operation
+in progress — is one the app may move itself. Release tags are
 ``vX.Y.Z`` and come in three kinds, by what their tree holds: the Updates
 panel (``HAS_PANEL``), the older startup self-update that forces a pull of
 ``main`` (``FORCED_PULL``), or neither (``PLAIN``).
@@ -51,6 +52,17 @@ FORCED_PULL_MARKER_TEXT = "self_update_source_repo"
 
 #: Checkout states.
 MANAGED, DEVELOPMENT, NO_GIT = "managed", "development", "no_git"
+
+#: Files git keeps in its directory while a bisect, rebase, merge, cherry-pick
+#: or revert is under way.
+OPERATION_MARKERS = (
+    "BISECT_LOG",
+    "rebase-merge",
+    "rebase-apply",
+    "MERGE_HEAD",
+    "CHERRY_PICK_HEAD",
+    "REVERT_HEAD",
+)
 
 #: Release tag kinds.
 HAS_PANEL, FORCED_PULL, PLAIN = "has_panel", "forced_pull", "plain"
@@ -154,9 +166,13 @@ def is_newer_release(tag_name, built_on_name):
 
 def checkout_state(repo_root):
     """The checkout's state and why: ``(MANAGED, "")``, ``(DEVELOPMENT,
-    "local changes" | "branch <name>")``, or ``(NO_GIT, <reason>)``.
+    <reason>)``, or ``(NO_GIT, <reason>)``.
 
-    Untracked files leave a checkout managed — switching tags keeps them."""
+    Managed is ``main``, or a detached HEAD exactly at a release tag or on
+    ``origin/main``. Local changes to tracked files, a git operation in
+    progress (a bisect, a paused rebase), any other branch, and any other
+    detached commit are development. Untracked files leave a checkout
+    managed — switching tags keeps them."""
     if shutil.which("git") is None:
         return NO_GIT, "git is not installed"
 
@@ -165,6 +181,12 @@ def checkout_state(repo_root):
 
     try:
         status = _git(repo_root, "status", "--porcelain", "--untracked-files=no")
+        operation_paths = _git(
+            repo_root,
+            "rev-parse",
+            *(option for name in OPERATION_MARKERS for option in ("--git-path", name)),
+        )
+        head = _git(repo_root, "symbolic-ref", "--short", "-q", "HEAD")
     except SourceVersionError as e:
         return NO_GIT, str(e)
 
@@ -175,10 +197,16 @@ def checkout_state(repo_root):
     if status.stdout.strip():
         return DEVELOPMENT, "local changes"
 
-    try:
-        head = _git(repo_root, "symbolic-ref", "--short", "-q", "HEAD")
-    except SourceVersionError as e:
-        return NO_GIT, str(e)
+    if operation_paths.returncode != 0:
+        return NO_GIT, f"git rev-parse failed: {operation_paths.stderr.strip()}"
+
+    # The paths are relative to the checkout, or absolute in a worktree or
+    # submodule; joining keeps an absolute one as it is.
+    if any(
+        (Path(repo_root) / path).exists()
+        for path in operation_paths.stdout.splitlines()
+    ):
+        return DEVELOPMENT, "git operation in progress"
 
     # Exit 1 is a detached HEAD. Any other failure leaves the branch unknown,
     # and an unknown branch must not pass for a detached, managed one.
@@ -187,10 +215,35 @@ def checkout_state(repo_root):
 
     branch = head.stdout.strip()
 
-    if branch not in ("", DEFAULT_BRANCH):
+    if branch == DEFAULT_BRANCH:
+        return MANAGED, ""
+
+    if branch:
         return DEVELOPMENT, f"branch {branch}"
 
-    return MANAGED, ""
+    if exact_release(repo_root) or _head_is_on_origin_main(repo_root):
+        return MANAGED, ""
+
+    return DEVELOPMENT, f"detached at a commit that is not on {DEFAULT_BRANCH}"
+
+
+def _head_is_on_origin_main(repo_root):
+    """Return True when HEAD is an ancestor of ``origin/main``, and False when
+    it is not, that ref is missing, or git fails."""
+    try:
+        ancestor = _git(
+            repo_root,
+            "merge-base",
+            "--is-ancestor",
+            "HEAD",
+            f"refs/remotes/origin/{DEFAULT_BRANCH}",
+        )
+    except SourceVersionError as e:
+        logger.warning(f"{e}")
+
+        return False
+
+    return ancestor.returncode == 0
 
 
 def describe(repo_root):

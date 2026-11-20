@@ -103,7 +103,15 @@ def test_tag_kinds(clone):
     }
 
 
-def test_state_managed_on_main_and_when_detached(clone):
+def _commit_off_main(repo):
+    """Commit on a new branch ``feat/x`` off ``main`` and stay on it."""
+    run_git(repo, "checkout", "-b", "feat/x")
+    (repo / "feature.txt").write_text("feature work\n")
+    run_git(repo, "add", "feature.txt")
+    run_git(repo, "commit", "-m", "feat: work not on main")
+
+
+def test_state_managed_on_main_and_when_detached_at_a_release(clone):
     assert checkout_state(clone) == (MANAGED, "")
     assert current_branch(clone) == "main"
 
@@ -111,6 +119,104 @@ def test_state_managed_on_main_and_when_detached(clone):
 
     assert checkout_state(clone) == (MANAGED, "")
     assert current_branch(clone) == ""
+
+
+def test_state_managed_detached_at_an_untagged_commit_on_origin_main(clone):
+    # Where the launcher pins a fresh install: on main, between releases.
+    run_git(clone, "checkout", "--detach", "HEAD")
+
+    assert exact_release(clone) is None
+    assert checkout_state(clone) == (MANAGED, "")
+
+
+def test_state_managed_detached_at_a_release_tag_off_main(clone):
+    _commit_off_main(clone)
+    run_git(clone, "tag", "v1.11.0")
+    run_git(clone, "checkout", "--detach", "v1.11.0")
+
+    assert checkout_state(clone) == (MANAGED, "")
+
+
+def test_state_development_detached_at_a_commit_not_on_main(clone):
+    _commit_off_main(clone)
+    run_git(clone, "checkout", "--detach", "feat/x")
+
+    assert checkout_state(clone) == (
+        DEVELOPMENT,
+        "detached at a commit that is not on main",
+    )
+
+
+def test_state_without_origin_main_only_a_release_tag_is_managed(clone):
+    run_git(clone, "remote", "remove", "origin")
+    run_git(clone, "checkout", "--detach", "HEAD")
+
+    assert checkout_state(clone) == (
+        DEVELOPMENT,
+        "detached at a commit that is not on main",
+    )
+
+    run_git(clone, "checkout", "--detach", "v1.2.0")
+
+    assert checkout_state(clone) == (MANAGED, "")
+
+
+def test_state_development_while_bisecting(clone):
+    # Bisecting detaches HEAD at commits on main, release tags among them.
+    run_git(clone, "bisect", "start", "HEAD", "v1.0.0")
+
+    assert current_branch(clone) == ""
+    assert checkout_state(clone) == (DEVELOPMENT, "git operation in progress")
+
+    run_git(clone, "bisect", "reset")
+
+    assert checkout_state(clone) == (MANAGED, "")
+
+
+def test_state_development_while_rebasing(clone):
+    run_git(clone, "checkout", "--detach", "v1.2.0")
+
+    # The exec step fails, so the rebase stops half way.
+    stopped = subprocess.run(
+        ["git", "rebase", "--force-rebase", "--exec", "false", "v1.1.0"],
+        cwd=str(clone),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+    )
+
+    assert stopped.returncode != 0
+    assert (clone / ".git" / "rebase-merge").is_dir()
+    assert checkout_state(clone) == (DEVELOPMENT, "git operation in progress")
+
+
+def test_state_no_git_when_the_operation_check_fails(clone, monkeypatch):
+    failure = subprocess.CompletedProcess(["git", "rev-parse"], 128, "", "fatal\n")
+    _fail_git_command(monkeypatch, "rev-parse", failure)
+
+    assert checkout_state(clone)[0] == NO_GIT
+
+
+def test_a_worktree_checkout_with_a_dot_git_file(clone, tmp_path):
+    # The real install is a submodule, whose .git is a file, as here.
+    worktree = tmp_path / "worktree"
+
+    run_git(clone, "worktree", "add", "--detach", str(worktree), "v1.2.0")
+
+    assert (worktree / ".git").is_file()
+    assert checkout_state(worktree) == (MANAGED, "")
+    assert [t.name for t in list_release_tags(worktree)] == [
+        "v1.10.0",
+        "v1.2.0",
+        "v1.1.0",
+        "v1.0.0",
+    ]
+    assert pending_update(worktree).name == "v1.10.0"
+
+    # Its operation files live in the main repository's .git/worktrees/.
+    run_git(worktree, "bisect", "start", "HEAD", "v1.0.0")
+
+    assert checkout_state(worktree) == (DEVELOPMENT, "git operation in progress")
+    assert checkout_state(clone) == (MANAGED, "")
 
 
 def test_state_development_on_feature_branch(clone):
