@@ -26,6 +26,10 @@ from apptools.preferences.api import Preferences
 from envisage.ui.tasks.api import TasksApplication
 
 # Microdrop utils imports.
+from microdrop_utils.source_update_startup import (
+    AUTO_UPDATE_PREFERENCE_PATH,
+    LAST_ANNOUNCED_PREFERENCE_PATH,
+)
 from microdrop_utils.source_version import (
     DEVELOPMENT,
     HAS_PANEL,
@@ -43,11 +47,8 @@ from ..plugin import AppUpdatesPlugin
 
 @pytest.fixture
 def plugin(monkeypatch):
-    """The plugin of an application whose preferences are in memory.
-
-    The preferences come through the application: Envisage's
-    ``Plugin._anytrait_changed`` reads a trait's old value on every set, so
-    setting ``preferences`` directly resolves its default without one."""
+    """The plugin of an application whose own preferences are in memory; the
+    update settings are in the conftest's temporary file."""
     # An envisage application installs its preferences as the process-wide
     # default node; restore it so later PreferencesHelper tests don't share it.
     monkeypatch.setattr(package_globals, "_default_preferences", None)
@@ -97,14 +98,36 @@ def _checkout(monkeypatch, state, skip_variable_set):
 # --- start -------------------------------------------------------------------
 
 
-def test_the_check_starts_once_with_the_saved_preferences(plugin, started_checks):
-    plugin.preferences.auto_update = False
-    plugin.preferences.last_announced_version = "v1.46.0"
+def test_the_check_starts_once_with_the_saved_preferences(
+    plugin, started_checks, preferences
+):
+    preferences.set(AUTO_UPDATE_PREFERENCE_PATH, "False")
+    preferences.set(LAST_ANNOUNCED_PREFERENCE_PATH, "v1.46.0")
+    preferences.flush()
 
     plugin._check_for_updates_on_launch(None)
     plugin._check_for_updates_on_launch(None)
 
     assert started_checks == [(POLICY_STAY, "v1.46.0")]
+
+
+def test_an_announced_release_is_saved_in_the_updates_file(
+    plugin, preferences, monkeypatch
+):
+    questions = []
+
+    monkeypatch.setattr(
+        plugin_module, "confirm", lambda *args, **kwargs: questions.append(args)
+    )
+
+    plugin._remember_and_offer_release("v1.47.0")
+
+    saved = Preferences(filename=preferences.filename)
+
+    assert len(questions) == 1
+    assert saved.get(LAST_ANNOUNCED_PREFERENCE_PATH) == "v1.47.0"
+    # Never the application's preferences, which every process saves at exit.
+    assert plugin.application.preferences.get(LAST_ANNOUNCED_PREFERENCE_PATH) is None
 
 
 def test_a_thread_that_cannot_start_does_not_raise(plugin, monkeypatch):

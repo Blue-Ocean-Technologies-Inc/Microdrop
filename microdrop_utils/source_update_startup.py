@@ -26,7 +26,10 @@ import time
 from pathlib import Path
 
 # Microdrop utils imports.
-from microdrop_utils.application_home import read_bool_preference
+from microdrop_utils.application_home import (
+    read_bool_preference,
+    updates_preferences_file_path,
+)
 from microdrop_utils.source_version import (
     NO_GIT,
     SourceVersionError,
@@ -208,7 +211,11 @@ def apply_source_update_policy(repo_root=PROJECT_ROOT):
 
             return
 
-        if not read_bool_preference(AUTO_UPDATE_PREFERENCE_PATH, True):
+        auto_update = read_bool_preference(
+            AUTO_UPDATE_PREFERENCE_PATH, True, filename=updates_preferences_file_path()
+        )
+
+        if not auto_update:
             return
 
         tag = pending_update(repo_root)

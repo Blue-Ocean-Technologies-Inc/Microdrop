@@ -184,7 +184,12 @@ background after startup and applied locally at the next start, which then
 re-runs itself on the new code. A development checkout — any branch other
 than `main`, or modified tracked files — is never moved, so running from a
 feature-branch worktree moves nothing. `MICRODROP_SKIP_GIT_UPDATE` (set in
-the environment or saved for the user) turns the automatic part off.
+the environment or saved for the user) turns the automatic part off. The
+policy lives in its own `app_updates.ini` in the application home, not in
+`preferences.ini`: every frontend and backend process saves its start-time
+copy of `preferences.ini` when it stops, which would undo a policy changed
+meanwhile; only the `app_updates` plugin writes `app_updates.ini`, the moment
+the policy changes.
 pixi-microdrop and the environment are still updated by the Setup &
 Launcher. Tests of this code build their own git repos
 (`microdrop_utils/tests/git_repo_fixtures.py`), never the real checkout.

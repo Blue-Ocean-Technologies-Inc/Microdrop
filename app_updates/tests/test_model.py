@@ -23,6 +23,7 @@ from apptools.preferences.api import Preferences
 
 # Microdrop utils imports.
 from microdrop_utils import source_update_startup
+from microdrop_utils.application_home import read_bool_preference
 from microdrop_utils.source_update_startup import (
     AUTO_UPDATE_PREFERENCE_PATH,
     LAST_ANNOUNCED_PREFERENCE_PATH,
@@ -48,7 +49,7 @@ from ..consts import (
     UNKNOWN_VERSION_TEXT,
 )
 from ..model import UpdatesModel
-from ..preferences import AppUpdatesPreferences
+from ..preferences import AppUpdatesPreferences, app_updates_preferences
 from .model_factory import make_model
 
 pytestmark = pytest.mark.skipif(
@@ -207,6 +208,28 @@ def test_policy_change_is_saved_immediately(model_at_v1_2, preferences):
     saved = Preferences(filename=preferences.filename)
 
     assert saved.get(AUTO_UPDATE_PREFERENCE_PATH) == "False"
+
+
+def test_policy_round_trips_through_its_own_file(
+    clone_at_v1_2, updates_preferences_file
+):
+    model = UpdatesModel(
+        repo_root=str(clone_at_v1_2), preferences=app_updates_preferences()
+    )
+    model.refresh()
+
+    # No file yet: the default.
+    assert model.policy == POLICY_LATEST
+
+    model.policy = POLICY_STAY
+
+    # Read back as the next startup reads it, before the application exists.
+    assert (
+        read_bool_preference(
+            AUTO_UPDATE_PREFERENCE_PATH, True, filename=updates_preferences_file
+        )
+        is False
+    )
 
 
 def test_default_policy_is_latest(model_at_v1_2, preferences):

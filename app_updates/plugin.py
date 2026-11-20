@@ -24,7 +24,7 @@ from envisage.api import TASK_EXTENSIONS, Plugin
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.api import SchemaAddition
 from pyface.api import GUI
-from traits.api import Bool, Instance, List, Str, observe
+from traits.api import Bool, List, Str, observe
 
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
@@ -58,7 +58,7 @@ from .consts import (
 )
 from .launch_check import launch_check_action, may_check
 from .messages import newer_version_notice
-from .preferences import AppUpdatesPreferences
+from .preferences import app_updates_preferences
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -77,15 +77,8 @@ class AppUpdatesPlugin(Plugin):
 
     contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
 
-    #: The update settings: read on the GUI thread before the check starts,
-    #: written there when a release is announced.
-    preferences = Instance(AppUpdatesPreferences)
-
     #: True once the launch check has started (it runs exactly once).
     _launch_check_started = Bool(False)
-
-    def _preferences_default(self):
-        return AppUpdatesPreferences(preferences=self.application.preferences)
 
     # --- menu contribution ----------------------------------------------
 
@@ -128,11 +121,12 @@ class AppUpdatesPlugin(Plugin):
         self._launch_check_started = True
 
         try:
-            policy = POLICY_LATEST if self.preferences.auto_update else POLICY_STAY
+            preferences = app_updates_preferences()
+            policy = POLICY_LATEST if preferences.auto_update else POLICY_STAY
 
             threading.Thread(
                 target=self._check_in_background,
-                args=(policy, self.preferences.last_announced_version),
+                args=(policy, preferences.last_announced_version),
                 daemon=True,
                 name="app-updates-launch-check",
             ).start()
@@ -197,12 +191,15 @@ class AppUpdatesPlugin(Plugin):
 
     def _remember_and_offer_release(self, tag_name):
         """Remember ``tag_name`` as announced, then offer the Updates dialog."""
-        self.preferences.last_announced_version = tag_name
+        # Read afresh: a copy from the start of the check would save back a
+        # policy the user may have changed since in the Updates dialog.
+        preferences = app_updates_preferences()
+        preferences.last_announced_version = tag_name
 
         # Saved before the notice shows, so a crash while it is open cannot
         # announce the same release at every start.
         try:
-            self.preferences.preferences.flush()
+            preferences.preferences.flush()
         except OSError as e:
             logger.warning(f"Could not save {LAST_ANNOUNCED_PREFERENCE_PATH}: {e}")
 

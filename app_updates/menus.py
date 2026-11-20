@@ -20,7 +20,7 @@ from electrode_controller.consts import PKG as electrode_controller_PKG
 # Local imports.
 from .controller import UpdatesController
 from .model import UpdatesModel
-from .preferences import AppUpdatesPreferences
+from .preferences import app_updates_preferences
 from .view import updates_view
 
 # Logger import.
@@ -36,7 +36,7 @@ def open_updates_dialog(application):
     backend_plugin = application.get_plugin(f"{electrode_controller_PKG}.plugin")
 
     model = UpdatesModel(
-        preferences=AppUpdatesPreferences(preferences=application.preferences),
+        preferences=app_updates_preferences(),
         frontend_only=backend_plugin is None,
     )
     model.refresh()

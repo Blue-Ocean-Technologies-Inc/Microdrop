@@ -9,15 +9,18 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from apptools.preferences.api import PreferencesHelper
+from apptools.preferences.api import Preferences, PreferencesHelper
 from traits.api import Bool, Str
+
+# Microdrop utils imports.
+from microdrop_utils.application_home import updates_preferences_file_path
 
 # Local imports.
 from .consts import PREFERENCES_PATH
 
 
 class AppUpdatesPreferences(PreferencesHelper):
-    """Update settings, attached to the application's global preferences."""
+    """Update settings, on whichever preferences node they are given."""
 
     preferences_path = PREFERENCES_PATH
 
@@ -26,3 +29,13 @@ class AppUpdatesPreferences(PreferencesHelper):
 
     #: The newest release the user has been told about.
     last_announced_version = Str()
+
+
+def app_updates_preferences():
+    """Return the update settings as saved now, on their own file
+    (``updates_preferences_file_path``) rather than the application's
+    preferences, which every process saves at exit. A missing file means
+    the defaults; flushing the returned helper's ``preferences`` saves."""
+    preferences = Preferences(filename=str(updates_preferences_file_path()))
+
+    return AppUpdatesPreferences(preferences=preferences)

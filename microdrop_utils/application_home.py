@@ -31,6 +31,12 @@ logger = get_logger(__name__)
 #: Envisage keeps the app's preferences in this file inside the application home.
 PREFERENCES_FILENAME = "preferences.ini"
 
+#: The update policy's own file in the application home. Every frontend and
+#: backend process saves its start-time copy of ``PREFERENCES_FILENAME`` when
+#: it stops, which would undo a policy changed meanwhile in another process;
+#: only the app_updates plugin writes this one, the moment it changes.
+UPDATES_PREFERENCES_FILENAME = "app_updates.ini"
+
 
 def configure_application_home():
     """Point ``ETSConfig`` at the MicroDrop company, user-data and home folders."""
@@ -48,8 +54,15 @@ def preferences_file_path():
     return Path(ETSConfig.application_home) / PREFERENCES_FILENAME
 
 
-def read_bool_preference(path, default):
-    """Read one ``True``/``False`` preference straight from the preferences file.
+def updates_preferences_file_path():
+    """Return the path of the update policy's own preferences file."""
+    configure_application_home()
+
+    return Path(ETSConfig.application_home) / UPDATES_PREFERENCES_FILENAME
+
+
+def read_bool_preference(path, default, filename=None):
+    """Read one ``True``/``False`` preference straight from a preferences file.
 
     Parameters
     ----------
@@ -58,10 +71,15 @@ def read_bool_preference(path, default):
     default : bool
         Returned when the file or key is missing, the value is not a boolean,
         or the preferences file cannot be located or read.
+    filename : str or Path, optional
+        The file to read; the app's preferences file when omitted.
     """
     # Startup calls this before the app exists, so any failure falls back.
     try:
-        value = Preferences(filename=str(preferences_file_path())).get(path)
+        if filename is None:
+            filename = preferences_file_path()
+
+        value = Preferences(filename=str(filename)).get(path)
 
     except Exception:
         logger.warning(f"Could not read preference {path}", exc_info=True)

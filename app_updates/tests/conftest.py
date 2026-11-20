@@ -9,8 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """Fixtures for the app_updates tests: updates models on throwaway git
-repositories, with preferences in a temporary file and the user's real
-environment variables out of reach.
+repositories, with the update settings in a temporary file and the user's
+real settings and environment variables out of reach.
 
 The git repository fixtures are imported for pytest to register; the model
 fixtures request them by those same names, which ruff reads as
@@ -24,6 +24,7 @@ from apptools.preferences.api import Preferences
 
 # Microdrop utils imports.
 from microdrop_utils import source_update_startup
+from microdrop_utils.application_home import UPDATES_PREFERENCES_FILENAME
 from microdrop_utils.source_update_startup import SKIP_GIT_UPDATE_ENV_VAR
 from microdrop_utils.tests.git_repo_fixtures import (  # noqa: F401
     clone,
@@ -34,6 +35,7 @@ from microdrop_utils.tests.git_repo_fixtures import (  # noqa: F401
 
 # Local imports.
 from .. import model as model_module
+from .. import preferences as preferences_module
 from .model_factory import make_model
 
 
@@ -54,10 +56,24 @@ def no_user_environment(monkeypatch):
     monkeypatch.setattr(model_module, "unset_user_environment_variable", refuse)
 
 
+@pytest.fixture(autouse=True)
+def updates_preferences_file(tmp_path, monkeypatch):
+    """Point the update settings at a temporary file, so no test reads or
+    writes the user's real one; it does not exist until a test saves."""
+    path = tmp_path / UPDATES_PREFERENCES_FILENAME
+
+    monkeypatch.setattr(
+        preferences_module, "updates_preferences_file_path", lambda: path
+    )
+
+    return path
+
+
 @pytest.fixture
-def preferences(tmp_path):
-    """Preferences backed by a temporary file, so a flush can be read back."""
-    return Preferences(filename=str(tmp_path / "preferences.ini"))
+def preferences(updates_preferences_file):
+    """Preferences on the temporary updates file, so a flush can be read
+    back — by these and by any settings the plugin builds."""
+    return Preferences(filename=str(updates_preferences_file))
 
 
 @pytest.fixture

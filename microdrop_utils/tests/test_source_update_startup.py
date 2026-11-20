@@ -18,6 +18,7 @@ import os
 import shutil
 import sys
 from collections import namedtuple
+from pathlib import Path
 
 # Third-party imports.
 import pytest
@@ -83,13 +84,18 @@ class FakeChild:
         self.calls.append("terminate")
 
 
+#: Stands in for the updates preferences file; the step must ask for it.
+UPDATES_PREFERENCES_FILE = Path("app-home") / "app_updates.ini"
+
+
 @pytest.fixture(autouse=True)
 def calls(monkeypatch):
     """The restarts the step started; none ever starts a real process.
 
     Also clears both variables (this machine may set them, in its process or
     persisted for the user), answers the auto-update preference with its
-    default, and makes the retry sleeps instant."""
+    default without locating or reading the real file, and makes the retry
+    sleeps instant."""
     recorded = []
 
     def fake_restart(argv, env):
@@ -103,7 +109,14 @@ def calls(monkeypatch):
         source_update_startup, "user_environment_variable", lambda name: None
     )
     monkeypatch.setattr(
-        source_update_startup, "read_bool_preference", lambda path, default: default
+        source_update_startup,
+        "updates_preferences_file_path",
+        lambda: UPDATES_PREFERENCES_FILE,
+    )
+    monkeypatch.setattr(
+        source_update_startup,
+        "read_bool_preference",
+        lambda path, default, filename=None: default,
     )
     monkeypatch.setattr(source_update_startup, "_restart_app", fake_restart)
     monkeypatch.setattr(source_update_startup.time, "sleep", lambda seconds: None)
@@ -125,10 +138,10 @@ def real_restart(monkeypatch):
 
 
 def test_stay_policy_never_moves_the_checkout(clone_at_v1_2, monkeypatch, calls):
-    paths = []
+    reads = []
 
-    def stay(path, default):
-        paths.append(path)
+    def stay(path, default, filename=None):
+        reads.append((path, filename))
 
         return False
 
@@ -137,7 +150,8 @@ def test_stay_policy_never_moves_the_checkout(clone_at_v1_2, monkeypatch, calls)
 
     apply_source_update_policy(clone_at_v1_2)
 
-    assert paths == [AUTO_UPDATE_PREFERENCE_PATH]
+    # The policy has a file of its own, never the app's preferences.ini.
+    assert reads == [(AUTO_UPDATE_PREFERENCE_PATH, UPDATES_PREFERENCES_FILE)]
     assert _head(clone_at_v1_2) == head
     assert calls == []
 

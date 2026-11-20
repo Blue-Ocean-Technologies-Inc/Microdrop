@@ -23,9 +23,11 @@ from traits.etsconfig.api import ETSConfig
 from microdrop_utils import application_home
 from microdrop_utils.application_home import (
     PREFERENCES_FILENAME,
+    UPDATES_PREFERENCES_FILENAME,
     configure_application_home,
     preferences_file_path,
     read_bool_preference,
+    updates_preferences_file_path,
 )
 
 AUTO_UPDATE_PATH = "microdrop.app_updates.auto_update"
@@ -91,8 +93,32 @@ def test_unlocatable_preferences_file_gives_default_and_does_not_raise(
     assert read_bool_preference(AUTO_UPDATE_PATH, True) is True
 
 
+def test_reads_the_named_file_instead(home, tmp_path):
+    named = tmp_path / "elsewhere" / UPDATES_PREFERENCES_FILENAME
+
+    named.parent.mkdir()
+    named.write_text("[microdrop.app_updates]\nauto_update = False\n")
+    _write_preferences(home, "[microdrop.app_updates]\nauto_update = True\n")
+
+    assert read_bool_preference(AUTO_UPDATE_PATH, True, filename=named) is False
+    assert read_bool_preference(AUTO_UPDATE_PATH, False) is True
+
+
+def test_missing_named_file_gives_default(home, tmp_path):
+    missing = tmp_path / UPDATES_PREFERENCES_FILENAME
+
+    assert read_bool_preference(AUTO_UPDATE_PATH, True, filename=missing) is True
+
+
 def test_preferences_file_path_is_under_application_home(home):
     assert preferences_file_path() == Path(home) / PREFERENCES_FILENAME
+
+
+def test_updates_preferences_file_is_its_own_file_under_application_home(home):
+    assert updates_preferences_file_path() == (
+        Path(home) / UPDATES_PREFERENCES_FILENAME
+    )
+    assert UPDATES_PREFERENCES_FILENAME != PREFERENCES_FILENAME
 
 
 def test_configure_application_home_sets_the_microdrop_folders(tmp_path, monkeypatch):
