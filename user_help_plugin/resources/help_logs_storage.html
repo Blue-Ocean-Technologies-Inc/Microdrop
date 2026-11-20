@@ -560,7 +560,7 @@ figure.demo .rp-page svg text { font: 9px sans-serif; fill: #222; }
   <li><a href="#part-help">The Help menu</a>
     <ol>
       <li><a href="#help-contact">Feedback, issue or support email</a></li>
-      <li><a href="#help-changelog">Changelog and What's New</a></li>
+      <li><a href="#help-updates">Updates and What's New</a></li>
       <li><a href="#help-tutorials">Tutorials</a></li>
       <li><a href="#help-startup">Beta notice</a></li>
     </ol>
@@ -655,7 +655,7 @@ too. Do not keep your own files in it.</p>
 <p class="intro">Five steps: find help, read the log, find the log file, report a problem, and open the folders.</p>
 <ol class="steps">
   <li class="step">
-    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 250" role="img" aria-label="The Help menu open below the menu bar, listing Send Feedback, Report an Issue, Sci-Bots Website, Contact Support, Changelog, Tutorials, About MicroDrop, the image viewer entries and Download MicroDrop Launcher">
+    <figure class="step-panel"><svg class="sch" viewBox="0 0 300 250" role="img" aria-label="The Help menu open below the menu bar, listing Send Feedback, Report an Issue, Sci-Bots Website, Contact Support, Tutorials, About MicroDrop, Check for Updates, the image viewer entries and Download MicroDrop Launcher">
       <rect x="0.5" y="0.5" width="299" height="249" rx="6" fill="var(--surface)" stroke="var(--line)"/>
       <rect x="1" y="1" width="298" height="22" rx="5" fill="var(--surface-2)"/>
       <g font-size="11" fill="var(--ink)">
@@ -668,25 +668,27 @@ too. Do not keep your own files in it.</p>
         <text x="146" y="55">Report an Issue...</text>
         <text x="146" y="70">Sci-Bots Website</text>
         <text x="146" y="85">Contact Support</text><text x="284" y="85" text-anchor="end">▸</text>
-        <text x="146" y="100" style="font-weight:700">Changelog...</text>
-        <text x="146" y="115">Tutorials</text><text x="284" y="115" text-anchor="end">▸</text>
-        <text x="146" y="130" style="font-weight:700">About MicroDrop...</text>
-        <line x1="142" y1="139" x2="288" y2="139" stroke="var(--line)"/>
-        <text x="146" y="154">Image Viewer Keyboard</text>
-        <text x="146" y="166">  Shortcuts…</text>
-        <text x="146" y="181">Install AI ROI Support...</text>
-        <line x1="142" y1="190" x2="288" y2="190" stroke="var(--line)"/>
-        <text x="146" y="205">Download MicroDrop</text>
-        <text x="146" y="217">  Launcher...</text>
+        <text x="146" y="100">Tutorials</text><text x="284" y="100" text-anchor="end">▸</text>
+        <text x="146" y="115" style="font-weight:700">About MicroDrop...</text>
+        <line x1="142" y1="124" x2="288" y2="124" stroke="var(--line)"/>
+        <text x="146" y="139" style="font-weight:700">Check for Updates…</text>
+        <line x1="142" y1="148" x2="288" y2="148" stroke="var(--line)"/>
+        <text x="146" y="163">Image Viewer Keyboard</text>
+        <text x="146" y="175">  Shortcuts…</text>
+        <text x="146" y="190">Install AI ROI Support...</text>
+        <line x1="142" y1="199" x2="288" y2="199" stroke="var(--line)"/>
+        <text x="146" y="214">Download MicroDrop</text>
+        <text x="146" y="226">  Launcher...</text>
       </g>
       <text x="10" y="60" style="font-size:10;fill:var(--muted)">Lines split the</text>
       <text x="10" y="73" style="font-size:10;fill:var(--muted)">menu into groups;</text>
       <text x="10" y="86" style="font-size:10;fill:var(--muted)">their order can vary.</text>
     </svg></figure>
     <div class="step-text"><h4><span class="step-n">1</span>Tour the Help menu</h4>
-    <p>Click <span class="ui">Help</span>, the last menu in the menu bar. Open <span class="ui">Changelog...</span>: the
-    window <em>MicroDrop Changelog</em> lists the changes in each release, newest first. The first heading is the newest
-    release your copy contains; quote it when you ask for support. Close it and open <span class="ui">About
+    <p>Click <span class="ui">Help</span>, the last menu in the menu bar. Open <span class="ui">Check for Updates…</span>: the
+    window <em>MicroDrop Updates</em> shows the version you run on its <span class="ui">Running</span> line; quote it
+    when you ask for support. Below it are the releases, newest first, with the changes in the one you select. Close it
+    and open <span class="ui">About
     MicroDrop...</span>, an illustrated overview of how MicroDrop is built.</p>
     <p><span class="ui">Tutorials ▸</span> lists these pages. Each entry is described in
     <a href="#part-help">The Help menu</a>.</p></div>
@@ -807,9 +809,9 @@ groups that come from different parts of MicroDrop, so the order of the groups c
     <tr><td class="ui">Sci-Bots Website</td><td>Opens sci-bots.com in your web browser.</td><td>Yes</td></tr>
     <tr><td class="ui">Contact Support ▸ Technical Support</td><td>Starts a new email to <code>support@sci-bots.com</code> in your email program.</td><td>To send it</td></tr>
     <tr><td class="ui">Contact Support ▸ General Inquiries</td><td>Starts a new email to <code>info@sci-bots.com</code>.</td><td>To send it</td></tr>
-    <tr><td class="ui">Changelog...</td><td>Shows the list of changes in each release, newest first.</td><td>No. Online it is formatted by GitHub, offline plainly.</td></tr>
     <tr><td class="ui">Tutorials ▸</td><td>One entry per tutorial page, in reading order; plugins add their own.</td><td>No</td></tr>
     <tr><td class="ui">About MicroDrop...</td><td>An illustrated overview of how MicroDrop is built: its parts and how they talk.</td><td>No (its fonts look best online)</td></tr>
+    <tr><td class="ui">Check for Updates…</td><td>Shows the version you run, every release with its changes, and whether MicroDrop updates itself.</td><td>Only to check for new releases</td></tr>
     <tr><td class="ui">Image Viewer Keyboard Shortcuts…</td><td>Lists the keys the image viewer answers to while it has focus.</td><td>No</td></tr>
     <tr><td class="ui">Install AI ROI Support...</td><td>Installs the optional AI shape finder for image analysis (the <em>osam</em> package).</td><td>Yes</td></tr>
     <tr><td class="ui">Download MicroDrop Launcher...</td><td>Shows the MicroDrop Launcher's read-me, with download instructions. Always last.</td><td>Yes</td></tr>
@@ -830,15 +832,16 @@ groups that come from different parts of MicroDrop, so the order of the groups c
   <a href="#support-checklist">What to send support</a>.</p></dd>
 </dl></article>
 
-<article class="term" id="help-changelog">
-  <h3>Changelog and What's New <span class="where">Help ▸ Changelog... and the What's New? window at start</span></h3>
-  <p>What changed in each release of MicroDrop.</p>
-  <dl class="facts"><dt>What it is</dt><dd><p><span class="ui">Changelog...</span> opens the whole list in the window <em>MicroDrop
-  Changelog</em>. At start, when MicroDrop has been updated since you last ran it, a <em>What's New?</em> window shows only
-  the sections added since then.</p></dd>
+<article class="term" id="help-updates">
+  <h3>Updates and What's New <span class="where">Help ▸ Check for Updates… and the What's New? window at start</span></h3>
+  <p>Which release of MicroDrop you run, and what changed in each.</p>
+  <dl class="facts"><dt>What it is</dt><dd><p><span class="ui">Check for Updates…</span> opens the window <em>MicroDrop Updates</em>: the version
+  you run, every release newest first, and the changes in the one you select. At start, when MicroDrop has been updated
+  since you last ran it, a <em>What's New?</em> window shows only the sections added since then.</p></dd>
   <dt>When to use it</dt><dd><p>After an update, to see what is different. Before asking for support, to read which release you
   have.</p></dd>
-  <dt>How to read it</dt><dd><p>Newest release first. The first heading is the newest release your copy contains.</p></dd>
+  <dt>How to read it</dt><dd><p>The <span class="ui">Running</span> line is the version you run. <code>v1.45.0</code> is a release;
+  a longer name such as <code>v1.45.0-3-gabc1234</code> means 3 changes made after v1.45.0.</p></dd>
   <dt>Typical value</dt><dd><p>The very first start shows no <em>What's New?</em>: MicroDrop only notes the list then. It keeps
   that copy as <code>.previous_changelog</code> in the settings folder.</p></dd>
 </dl></article>
@@ -2615,7 +2618,7 @@ Tutorial.demo("support", function (figure, T) {
       item("What you did, what you expected, what happened, and when (the time helps to find it in the log).", null),
       item("The log file of that experiment.", "d", EXP.concat(["logs", "microdrop.frontend.<computer>-<process>.log"])),
       item("A screenshot of MicroDrop showing the problem.", null),
-      item("The release you run: the first heading in Help ▸ Changelog...", null)
+      item("The version you run: the Running line in Help ▸ Check for Updates…", null)
     ];
 
     if (ticks.run.checked) {
