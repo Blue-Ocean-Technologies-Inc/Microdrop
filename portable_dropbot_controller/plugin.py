@@ -46,6 +46,12 @@ from .services.portable_dropbot_motors_mixin_service import (
 from .services.portable_dropbot_pmt_mixin_service import (
     PortableDropbotPmtMixinService,
 )
+from .services.portable_dropbot_self_test_mixin_service import (
+    PortableDropbotSelfTestMixinService,
+)
+from .services.portable_dropbot_self_test_state_mixin_service import (
+    PortableDropbotSelfTestStateMixinService,
+)
 from .services.portable_dropbot_states_setting_mixin_service import (
     PortableDropbotStatesSettingMixinService,
 )
@@ -111,6 +117,14 @@ class PortableDropbotControllerPlugin(Plugin):
                 protocol=IPortableDropbotControlMixinService,
                 factory=self._create_system_service,
             ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_self_test_service,
+            ),
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_self_test_state_service,
+            ),
         ]
 
     @staticmethod
@@ -152,6 +166,14 @@ class PortableDropbotControllerPlugin(Plugin):
     @staticmethod
     def _create_system_service(*args, **kwargs):
         return PortableDropbotSystemMixinService
+
+    @staticmethod
+    def _create_self_test_service(*args, **kwargs):
+        return PortableDropbotSelfTestMixinService
+
+    @staticmethod
+    def _create_self_test_state_service(*args, **kwargs):
+        return PortableDropbotSelfTestStateMixinService
 
     def start(self):
         services = self.application.get_services(

@@ -157,13 +157,23 @@ class PortableDropbotControllerBase(HasTraits):
             requested_method = f"on_{specific_sub_topic}_request"
 
         elif primary_sub_topic == "requests":
-            if self.portable_dropbot_connection_active:
-                requested_method = f"on_{specific_sub_topic}_request"
-            else:
+            owner_reason = self._exclusive_owner_reason(topic)
+
+            if not self.portable_dropbot_connection_active:
                 logger.warning(
                     f"Request for '{specific_sub_topic}' denied: "
                     f"Portable Dropbot is disconnected."
                 )
+                self._on_request_refused(
+                    topic, timestamped_message, "Portable Dropbot is disconnected"
+                )
+            elif owner_reason:
+                logger.warning(
+                    f"Request for '{specific_sub_topic}' refused: {owner_reason}."
+                )
+                self._on_request_refused(topic, timestamped_message, owner_reason)
+            else:
+                requested_method = f"on_{specific_sub_topic}_request"
 
         elif hasattr(self, f"on_{specific_sub_topic}_signal"):
             # Any other subscribed topic is another plugin's signal (the
@@ -191,6 +201,18 @@ class PortableDropbotControllerBase(HasTraits):
 
         if err_msg:
             logger.error(f"Error handling topic {topic}: {err_msg}")
+
+    def _exclusive_owner_reason(self, topic):
+        """Why a routine that owns the board exclusively refuses the request
+        on ``topic``; "" when nothing owns it or the topic is allowed. A mixin
+        running such a routine (the self-test run) overrides this."""
+        return ""
+
+    def _on_request_refused(self, topic, message, reason):
+        """Called for a request the listener refused (disconnected, or an
+        exclusive owner holds the board). A mixin whose request contract
+        promises a reply even then (the self-test hub's) overrides this and
+        answers with ``reason``."""
 
     def traits_init(self):
         logger.info("Starting PortableDropbotController listener")
