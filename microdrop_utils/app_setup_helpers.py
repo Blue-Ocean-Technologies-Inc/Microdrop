@@ -10,19 +10,19 @@
 
 # Standard library imports.
 import sys
-from pathlib import Path
 
 # Microdrop utils imports.
 from microdrop_utils.broker_server_helpers import configure_dramatiq_broker
-from microdrop_utils.source_update_startup import apply_source_update_policy
+from microdrop_utils.source_update_startup import (
+    PROJECT_ROOT,
+    apply_source_update_policy,
+)
 from microdrop_utils.web_engine_guard import block_web_engine_views_on_linux
 
 # Logger import.
 from logger.logger_service import get_logger, init_logger
 
 logger = get_logger(__name__)
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def microdrop_runner_setup():

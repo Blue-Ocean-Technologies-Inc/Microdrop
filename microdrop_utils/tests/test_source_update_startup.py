@@ -14,6 +14,7 @@ git repositories, with the re-run, the preference, and the sleeps faked."""
 
 # Standard library imports.
 import logging
+import os
 import shutil
 import sys
 from collections import namedtuple
@@ -37,6 +38,9 @@ pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git is not installed"
 )
 
+#: The real restart, before the autouse fixture replaces it.
+ORIGINAL_RESTART_APP = source_update_startup._restart_app
+
 #: One faked re-run of the app.
 RerunCall = namedtuple("RerunCall", "argv env")
 
@@ -45,29 +49,75 @@ def _head(repo):
     return run_git(repo, "rev-parse", "HEAD").stdout.strip()
 
 
+class FakeChild:
+    """A Popen stand-in that records every call made on it; its ``wait``
+    answers ``waits`` in turn — an exception to raise, or an exit code."""
+
+    def __init__(self, *waits):
+        self.waits = list(waits)
+        self.calls = []
+        self.returncode = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        self.calls.append("exit")
+
+    def wait(self):
+        self.calls.append("wait")
+        answer = self.waits.pop(0)
+
+        if isinstance(answer, BaseException):
+            raise answer
+
+        self.returncode = answer
+
+        return answer
+
+    def kill(self):
+        self.calls.append("kill")
+
+    def terminate(self):
+        self.calls.append("terminate")
+
+
 @pytest.fixture(autouse=True)
 def calls(monkeypatch):
-    """The re-runs the step started; none ever starts a real process.
+    """The restarts the step started; none ever starts a real process.
 
     Also clears both variables (this machine may set them), answers the
     auto-update preference with its default, and makes the retry sleeps
     instant."""
     recorded = []
 
-    def fake_call(argv, env=None):
+    def fake_restart(argv, env):
         recorded.append(RerunCall(argv, env))
 
-        return 7
+        raise SystemExit(7)
 
     monkeypatch.delenv(SKIP_GIT_UPDATE_ENV_VAR, raising=False)
     monkeypatch.delenv(UPDATE_APPLIED_ENV_VAR, raising=False)
     monkeypatch.setattr(
         source_update_startup, "read_bool_preference", lambda path, default: default
     )
-    monkeypatch.setattr(source_update_startup.subprocess, "call", fake_call)
+    monkeypatch.setattr(source_update_startup, "_restart_app", fake_restart)
     monkeypatch.setattr(source_update_startup.time, "sleep", lambda seconds: None)
 
     return recorded
+
+
+@pytest.fixture
+def real_restart(monkeypatch):
+    """Undo the fixture's fake restart; exec and Popen are the test's to fake,
+    and spawning refuses outright unless the test replaces it."""
+    monkeypatch.setattr(source_update_startup, "_restart_app", ORIGINAL_RESTART_APP)
+
+    def refuse_spawn(*args, **kwargs):
+        raise AssertionError("the restart spawned a process")
+
+    monkeypatch.setattr(source_update_startup.subprocess, "Popen", refuse_spawn)
+    monkeypatch.setattr(source_update_startup.os, "execve", refuse_spawn)
 
 
 def test_stay_policy_never_moves_the_checkout(clone_at_v1_2, monkeypatch, calls):
@@ -107,6 +157,8 @@ def test_child_does_not_apply_again(clone_at_v1_2, monkeypatch, calls):
 
     assert _head(clone_at_v1_2) == head
     assert calls == []
+    # Whatever the re-run starts later (the in-app relaunch) updates again.
+    assert UPDATE_APPLIED_ENV_VAR not in os.environ
 
 
 def test_skip_variable_stops_the_update(clone_at_v1_2, monkeypatch, calls, caplog):
@@ -171,14 +223,103 @@ def test_checkout_lost_to_another_process_counts_as_switched(
     assert len(calls) == 1
 
 
-def test_unexpected_error_never_escapes(monkeypatch, tmp_path, calls):
+def test_failed_restart_warns_and_continues_on_the_new_tag(
+    clone_at_v1_2, monkeypatch, calls, caplog
+):
+    def cannot_start(argv, env):
+        raise OSError("no such interpreter")
+
+    monkeypatch.setattr(source_update_startup, "_restart_app", cannot_start)
+
+    with caplog.at_level(logging.WARNING, logger=source_update_startup.__name__):
+        assert apply_source_update_policy(clone_at_v1_2) is None
+
+    assert exact_release(clone_at_v1_2) == "v1.10.0"
+    assert "now on v1.10.0" in caplog.text
+    assert "no such interpreter" in caplog.text
+    assert "restart MicroDrop" in caplog.text
+
+
+def test_unexpected_error_never_escapes(monkeypatch, tmp_path, calls, caplog):
     def broken(repo_root):
         raise RuntimeError("unexpected")
 
     monkeypatch.setattr(source_update_startup, "pending_update", broken)
 
-    assert apply_source_update_policy(tmp_path) is None
+    with caplog.at_level(logging.WARNING, logger=source_update_startup.__name__):
+        assert apply_source_update_policy(tmp_path) is None
+
     assert calls == []
+    assert "unexpected" in caplog.text
+
+
+def _restart_env():
+    return {**os.environ, UPDATE_APPLIED_ENV_VAR: "1"}
+
+
+def test_posix_restart_replaces_the_process(monkeypatch, real_restart):
+    execs = []
+
+    monkeypatch.setattr(source_update_startup.os, "name", "posix")
+    monkeypatch.setattr(
+        source_update_startup.os, "execve", lambda *args: execs.append(args)
+    )
+
+    source_update_startup._rerun_and_exit()
+
+    assert execs == [
+        (sys.executable, [sys.executable, *sys.orig_argv[1:]], _restart_env())
+    ]
+
+
+def test_posix_restart_failure_raises(monkeypatch, real_restart):
+    def cannot_exec(*args):
+        raise OSError("exec format error")
+
+    monkeypatch.setattr(source_update_startup.os, "name", "posix")
+    monkeypatch.setattr(source_update_startup.os, "execve", cannot_exec)
+
+    with pytest.raises(OSError):
+        source_update_startup._rerun_and_exit()
+
+
+def _spawn(monkeypatch, child):
+    """Make the Windows restart spawn ``child``; return the spawn records."""
+    spawns = []
+
+    def fake_popen(argv, env=None):
+        spawns.append(RerunCall(argv, env))
+
+        return child
+
+    monkeypatch.setattr(source_update_startup.os, "name", "nt")
+    monkeypatch.setattr(source_update_startup.subprocess, "Popen", fake_popen)
+
+    return spawns
+
+
+def test_windows_restart_exits_with_the_child_code(monkeypatch, real_restart):
+    child = FakeChild(3)
+    spawns = _spawn(monkeypatch, child)
+
+    with pytest.raises(SystemExit) as exit_info:
+        source_update_startup._rerun_and_exit()
+
+    assert exit_info.value.code == 3
+    assert spawns == [RerunCall([sys.executable, *sys.orig_argv[1:]], _restart_env())]
+    assert child.calls == ["wait", "exit"]
+
+
+def test_windows_restart_outlives_ctrl_c(monkeypatch, real_restart):
+    child = FakeChild(KeyboardInterrupt(), 3)
+    _spawn(monkeypatch, child)
+
+    with pytest.raises(SystemExit) as exit_info:
+        source_update_startup._rerun_and_exit()
+
+    assert exit_info.value.code == 3
+    # Never killed: the child got the same Ctrl+C and is shutting down.
+    assert child.calls == ["wait", "wait", "exit"]
 
 
 def test_version_line_for_branch_pinned_and_no_git(clone, tmp_path):

@@ -63,9 +63,6 @@ LAST_ANNOUNCED_PREFERENCE_PATH = "microdrop.app_updates.last_announced_version"
 CHECKOUT_RETRY_COUNT = 5
 CHECKOUT_RETRY_DELAY_S = 1
 
-#: The exit code of a process ended by Ctrl+C.
-_INTERRUPTED_EXIT_CODE = 130
-
 
 def source_version_line(repo_root):
     """Return the line logged at every start: the checkout's version and
@@ -110,10 +107,39 @@ def _switch_with_retries(repo_root, tag_name):
     return False
 
 
+def _restart_app(argv, env):
+    """Run ``argv`` with ``env`` in place of this process and exit with its
+    exit code. Raise OSError when it cannot be started.
+
+    The app handles Ctrl+C itself and shuts down gracefully (Envisage exit,
+    Redis, the hardware backend), so this process must never cut that short.
+    """
+    if os.name == "posix":
+        # Same PID: signals and the exit code go straight to the app.
+        os.execve(sys.executable, argv, env)
+
+    else:
+        # Windows has no exec that keeps the process, so wait on a child
+        # sharing the console.
+        with subprocess.Popen(argv, env=env) as child:
+            while child.returncode is None:
+                try:
+                    child.wait()
+
+                # The child got the same console event and is shutting
+                # itself down; outlive it, and never kill it.
+                except KeyboardInterrupt:
+                    pass
+
+        sys.exit(child.returncode)
+
+
 def _rerun_and_exit():
-    """Run this command again in a child process on the switched checkout,
-    then exit with the child's exit code."""
-    # The child shares the console, so the parent's last lines go out first.
+    """Run this command again on the switched checkout, in place of this
+    process, and exit with its exit code. Raise OSError when it cannot be
+    started."""
+    # exec discards unwritten buffers and a child shares the console, so this
+    # process's last lines go out first.
     for handler in logging.getLogger().handlers:
         handler.flush()
 
@@ -126,14 +152,7 @@ def _rerun_and_exit():
     argv = [sys.executable, *sys.orig_argv[1:]]
     env = {**os.environ, UPDATE_APPLIED_ENV_VAR: "1"}
 
-    # Ctrl+C reaches the child too; the parent just ends without a traceback.
-    try:
-        code = subprocess.call(argv, env=env)
-
-    except KeyboardInterrupt:
-        code = _INTERRUPTED_EXIT_CODE
-
-    sys.exit(code)
+    _restart_app(argv, env)
 
 
 def apply_source_update_policy(repo_root=PROJECT_ROOT):
@@ -142,7 +161,8 @@ def apply_source_update_policy(repo_root=PROJECT_ROOT):
     When the checkout is managed, the preference allows it, and a newer
     release with the Updates panel exists, check that release out and re-run
     the app on it — this call then does not return. Every failure is a
-    logged warning; the app starts on the version it has.
+    logged warning and the app goes on starting; only a restart that cannot
+    be started leaves it on a checkout already moved.
     """
     # A spawned child re-imports the launcher, so without this every worker
     # in a pool would run its own update — the app's own ROI batch once
@@ -155,7 +175,9 @@ def apply_source_update_policy(repo_root=PROJECT_ROOT):
     try:
         logger.info(source_version_line(repo_root))
 
-        if os.environ.get(UPDATE_APPLIED_ENV_VAR):
+        # Popped, so what this run starts later (the in-app relaunch) is a
+        # fresh start that may update again.
+        if os.environ.pop(UPDATE_APPLIED_ENV_VAR, None):
             return
 
         if os.environ.get(SKIP_GIT_UPDATE_ENV_VAR):
@@ -182,7 +204,17 @@ def apply_source_update_policy(repo_root=PROJECT_ROOT):
             f"MicroDrop source updated ({old_version} -> {tag.name}); "
             f"restarting on the new version."
         )
-        _rerun_and_exit()
+
+        try:
+            _rerun_and_exit()
+
+        # Starting anyway keeps the app usable, though modules it imports
+        # from here on come from the new release.
+        except OSError as e:
+            logger.warning(
+                f"MicroDrop source is now on {tag.name}, but the restart could "
+                f"not be started ({e}); restart MicroDrop to run the new version."
+            )
 
     # SystemExit from the re-run is not an Exception, so it passes through.
     except Exception as e:
