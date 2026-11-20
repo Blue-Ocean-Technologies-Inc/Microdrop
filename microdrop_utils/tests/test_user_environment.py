@@ -8,9 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
-"""user_environment: the permanent per-user variable in ``~/.profile`` and in
-the Windows registry. Never touches this machine's real profile, registry or
-environment — the POSIX tests use ``tmp_path`` as home, the Windows tests a
+"""user_environment: the permanent per-user variable in the shell profile and
+in the Windows registry. Never touches this machine's real profile, registry
+or environment — the POSIX tests use ``tmp_path`` as home, the Windows tests a
 fake ``winreg``."""
 
 # Standard library imports.
@@ -38,12 +38,14 @@ MARKED_LINE = f"export {NAME}='1'  # added by MicroDrop\n"
 
 
 class FakeWinreg:
-    """The slice of ``winreg`` the module uses, over a dict of values."""
+    """Stand in for the slice of ``winreg`` the module uses, over a dict."""
 
     HKEY_CURRENT_USER = "HKEY_CURRENT_USER"
     KEY_READ = 0x20019
     KEY_SET_VALUE = 0x0002
     REG_SZ = 1
+    REG_EXPAND_SZ = 2
+    REG_DWORD = 4
 
     def __init__(self):
         #: name -> (value, type) under HKEY_CURRENT_USER\Environment.
@@ -85,23 +87,41 @@ class FakeWinreg:
         del self.values[name]
 
 
+@pytest.fixture(autouse=True)
+def isolated_variable(monkeypatch):
+    """Start every test without ``NAME`` and remove it again afterwards.
+
+    delenv of an absent name records nothing to undo, so a value the module
+    sets would outlive the test; setenv first makes pytest record the
+    absence."""
+    monkeypatch.setenv(NAME, "")
+    monkeypatch.delenv(NAME)
+
+
 @pytest.fixture
 def home(tmp_path, monkeypatch):
-    """A Linux user whose home is ``tmp_path``."""
+    """Make the user a Linux user whose home is ``tmp_path``."""
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    monkeypatch.delenv(NAME, raising=False)
 
     return tmp_path
 
 
 @pytest.fixture
+def mac_home(home, monkeypatch):
+    """Make the user a macOS user whose home is ``tmp_path``."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+
+    return home
+
+
+@pytest.fixture
 def broadcasts(monkeypatch):
-    """The WM_SETTINGCHANGE broadcasts made, one entry per call."""
+    """Record the WM_SETTINGCHANGE broadcasts made, one entry per call."""
     calls = []
 
     monkeypatch.setattr(
-        user_environment, "_broadcast_environment_change", lambda: calls.append(1)
+        user_environment, "_send_setting_change", lambda: calls.append(1)
     )
 
     return calls
@@ -109,14 +129,23 @@ def broadcasts(monkeypatch):
 
 @pytest.fixture
 def fake_winreg(monkeypatch, broadcasts):
-    """A Windows user whose registry is a ``FakeWinreg``."""
+    """Make the user a Windows user whose registry is a ``FakeWinreg``."""
     registry = FakeWinreg()
 
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(user_environment, "_winreg_module", lambda: registry)
-    monkeypatch.delenv(NAME, raising=False)
 
     return registry
+
+
+@pytest.fixture
+def warnings(monkeypatch):
+    """Record the module's logged warnings."""
+    messages = []
+
+    monkeypatch.setattr(user_environment.logger, "warning", messages.append)
+
+    return messages
 
 
 def test_posix_set_appends_marked_line_and_keeps_other_lines(home):
@@ -143,6 +172,18 @@ def test_posix_set_twice_leaves_one_line(home):
 
     assert (home / ".profile").read_text() == (
         f"umask 022\nexport {NAME}='2'  # added by MicroDrop\n"
+    )
+
+
+def test_posix_set_keeps_the_replaced_line_ending(home):
+    (home / ".profile").write_bytes(
+        f"export {NAME}='1'  # added by MicroDrop\r\numask 022\r\n".encode()
+    )
+
+    set_user_environment_variable(NAME, "2")
+
+    assert (home / ".profile").read_bytes() == (
+        f"export {NAME}='2'  # added by MicroDrop\r\numask 022\r\n".encode()
     )
 
 
@@ -184,10 +225,26 @@ def test_posix_read_ignores_unmarked_lines(home):
     assert user_environment_variable(NAME) is None
 
 
-def test_posix_read_failure_is_none(home):
+def test_posix_read_failure_is_none(home, warnings):
     (home / ".profile").mkdir()
 
     assert user_environment_variable(NAME) is None
+    assert warnings
+
+
+def test_read_without_a_home_is_none(home, monkeypatch, warnings):
+    def no_home(cls):
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(Path, "home", classmethod(no_home))
+
+    assert user_environment_variable(NAME) is None
+    assert warnings
+
+
+def test_read_with_invalid_name_is_none(home, warnings):
+    assert user_environment_variable("MY-VAR") is None
+    assert warnings
 
 
 def test_posix_write_failure_propagates(home):
@@ -197,6 +254,36 @@ def test_posix_write_failure_propagates(home):
         set_user_environment_variable(NAME, "1")
 
     assert NAME not in os.environ
+
+
+def test_posix_failed_replace_leaves_profile_intact(home, monkeypatch):
+    original = b"umask 022\r\nexport PATH=/opt/bin:$PATH"
+    (home / ".profile").write_bytes(original)
+
+    def failing_replace(source, destination):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(user_environment.os, "replace", failing_replace)
+
+    with pytest.raises(PermissionError):
+        set_user_environment_variable(NAME, "1")
+
+    assert (home / ".profile").read_bytes() == original
+    assert [path.name for path in home.iterdir()] == [".profile"]
+    assert NAME not in os.environ
+
+
+def test_mac_uses_zprofile(mac_home):
+    set_user_environment_variable(NAME, "1")
+
+    assert (mac_home / ".zprofile").read_text() == MARKED_LINE
+    assert not (mac_home / ".profile").exists()
+    assert user_environment_variable(NAME) == "1"
+
+    unset_user_environment_variable(NAME)
+
+    assert (mac_home / ".zprofile").read_text() == ""
+    assert user_environment_variable(NAME) is None
 
 
 @pytest.mark.parametrize("name", ["", "1ST", "MY-VAR", "X;rm -rf ~", "X Y"])
@@ -213,7 +300,7 @@ def test_invalid_name_is_rejected(home, name):
     assert not (home / ".profile").exists()
 
 
-@pytest.mark.parametrize("value", ["1\nrm -rf ~", "1\r", "it's"])
+@pytest.mark.parametrize("value", ["1\nrm -rf ~", "1\r", "it's", "1\0"])
 def test_value_that_could_escape_the_profile_line_is_rejected(home, value):
     with pytest.raises(ValueError):
         set_user_environment_variable(NAME, value)
@@ -252,11 +339,22 @@ def test_windows_unset_absent_value_is_quiet(fake_winreg):
     assert fake_winreg.values == {}
 
 
-def test_windows_read_failure_is_none(fake_winreg):
+def test_windows_read_failure_is_none(fake_winreg, warnings):
     fake_winreg.values[NAME] = ("1", FakeWinreg.REG_SZ)
     fake_winreg.failure = PermissionError(5, "Access is denied")
 
     assert user_environment_variable(NAME) is None
+    assert warnings
+
+
+def test_windows_read_only_string_values(fake_winreg):
+    fake_winreg.values[NAME] = (1, FakeWinreg.REG_DWORD)
+
+    assert user_environment_variable(NAME) is None
+
+    fake_winreg.values[NAME] = ("%USERPROFILE%", FakeWinreg.REG_EXPAND_SZ)
+
+    assert user_environment_variable(NAME) == "%USERPROFILE%"
 
 
 def test_windows_write_failure_propagates(fake_winreg, broadcasts):
@@ -269,7 +367,20 @@ def test_windows_write_failure_propagates(fake_winreg, broadcasts):
     assert broadcasts == []
 
 
-def test_set_and_unset_update_os_environ(home, monkeypatch):
+def test_windows_broadcast_failure_is_a_warning(fake_winreg, monkeypatch, warnings):
+    def failing_send():
+        raise OSError(1460, "This operation returned because the timeout period")
+
+    monkeypatch.setattr(user_environment, "_send_setting_change", failing_send)
+
+    set_user_environment_variable(NAME, "1")
+
+    assert fake_winreg.values[NAME] == ("1", FakeWinreg.REG_SZ)
+    assert os.environ[NAME] == "1"
+    assert warnings
+
+
+def test_set_and_unset_update_os_environ(home):
     set_user_environment_variable(NAME, "1")
 
     assert os.environ[NAME] == "1"
@@ -279,13 +390,21 @@ def test_set_and_unset_update_os_environ(home, monkeypatch):
     assert NAME not in os.environ
 
 
-def test_manual_unset_command_per_platform(monkeypatch):
-    monkeypatch.setattr(sys, "platform", "win32")
+@pytest.mark.parametrize(
+    "platform, command",
+    [
+        ("win32", f"reg delete HKCU\\Environment /v {NAME} /f"),
+        (
+            "linux",
+            f"sed -i.bak '/^export {NAME}=.*# added by MicroDrop$/d' ~/.profile",
+        ),
+        (
+            "darwin",
+            f"sed -i.bak '/^export {NAME}=.*# added by MicroDrop$/d' ~/.zprofile",
+        ),
+    ],
+)
+def test_manual_unset_command_per_platform(monkeypatch, platform, command):
+    monkeypatch.setattr(sys, "platform", platform)
 
-    assert manual_unset_command(NAME) == f"reg delete HKCU\\Environment /v {NAME} /f"
-
-    monkeypatch.setattr(sys, "platform", "linux")
-
-    assert manual_unset_command(NAME) == (
-        f"sed -i '/^export {NAME}=.*# added by MicroDrop$/d' ~/.profile"
-    )
+    assert manual_unset_command(NAME) == command
