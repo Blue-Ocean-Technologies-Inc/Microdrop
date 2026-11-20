@@ -37,6 +37,7 @@ from plugin_management.plugin import PluginManagementPlugin
 from portable_dropbot_protocol_controls.plugin import (
     PortableDropbotProtocolControlsPlugin,
 )
+from portable_dropbot_self_tests.plugin import PortableDropbotSelfTestsPlugin
 from portable_dropbot_status_and_controls.plugin import (
     PortableDropbotStatusAndControlsPlugin,
 )
@@ -125,6 +126,7 @@ OPENDROP_FRONTEND_PLUGINS = [OpendropStatusAndControlsPlugin]
 
 PORTABLE_DROPBOT_FRONTEND_PLUGINS = [
     PortableDropbotStatusAndControlsPlugin,
+    PortableDropbotSelfTestsPlugin,
     PortableDropbotProtocolControlsPlugin,
     # The status-bar battery icon is the built-in "rpi_battery_ui" plugin
     # group (plugin_management/consts.py), toggled in Manage Plugins — never
