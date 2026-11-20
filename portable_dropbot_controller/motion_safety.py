@@ -50,7 +50,11 @@ from .consts import (
     MOTOR_IDS,
     TRAY_RESET_CMD,
 )
-from .motion_replies import describe_last_result, motor_command_failure
+from .motion_replies import (
+    describe_last_result,
+    mechanism_failure,
+    motor_command_failure,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -207,8 +211,9 @@ def home_step_failure(step, reply, uart):
 
 
 class MotionSafetyMixin(HasTraits):
-    """Home All and the E-STOP for the motors mixin. Composes into the
-    controller, which provides ``proxy``, ``pads_smart_engaged``,
+    """Home All, the stops and ``_motion_call``, the judged motion call
+    every motion handler goes through, for the motors mixin. Composes into
+    the controller, which provides ``proxy``, ``pads_smart_engaged``,
     ``_proxy_call``, the publish helpers and the states mixin's
     ``_leave_realtime_mode``."""
 
@@ -225,6 +230,43 @@ class MotionSafetyMixin(HasTraits):
 
     def __home_all_lock_default(self):
         return threading.Lock()
+
+    def _motion_call(
+        self, context, call, cmd, failure=mechanism_failure, motor_id=None
+    ):
+        """Run one motion command and judge its reply; True when it moved.
+
+        ``failure`` reads the reply the driver's way: ``mechanism_failure``
+        judges the coordinated tray / magnet / pogo / filter commands,
+        ``motor_command_failure`` a raw per-motor command. A refusal, a
+        timeout or a FAULT is published as an error, like a driver call
+        that raised, unless a stop was sent to ``motor_id`` meanwhile.
+
+        Every motion skips the proxy lock (see ``_proxy_call``): the
+        firmware refuses conflicting motion with BUSY on its own. Skipping
+        takes nothing and releases nothing, so a caller already holding the
+        lock (the self-test hub's HV off then pad move) keeps the pair whole.
+        """
+        ok, reply = self._proxy_call(context, call, serialize=False)
+
+        # A raised failure has already been reported by _proxy_call.
+        if not ok:
+            logger.info(f"Portable Dropbot {context} --> FAILED")
+            return False
+
+        error = failure(reply, getattr(self.proxy, "uart", None), cmd)
+
+        if error is not None and motor_id in self._stopped_motor_ids:
+            logger.info(f"Portable Dropbot {context} --> stopped ({error})")
+            return False
+
+        if error is not None:
+            self._publish_error(context, error)
+            return False
+
+        logger.info(f"Portable Dropbot {context} --> ok")
+
+        return True
 
     def on_motor_stop_request(self, message):
         """Stop one motor (MOTOR_CONTROL STOP). The driver matches each
@@ -252,6 +294,7 @@ class MotionSafetyMixin(HasTraits):
         the vendor's: HV, the PMT supply, heaters and the rails stay as
         they are. It skips the proxy lock like a motor stop; the board
         answers at once with the axes that were moving."""
+        self._on_motor_estop()
         self._home_all_estopped = True
         self._stopped_motor_ids.update(MOTOR_IDS.values())
         logger.warning("Portable Dropbot E-STOP: stopping ALL motor axes")
