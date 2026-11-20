@@ -29,14 +29,48 @@ from traitsui.api import (
 )
 
 # Microdrop style imports.
-from microdrop_style.colors import GREY
+from microdrop_style.colors import BLACK, GREY, PRIMARY_SHADE, WHITE
 from microdrop_style.helpers import is_dark_mode
 
 # Microdrop utils imports.
+from microdrop_utils.pyside_helpers import markdown_text_to_html
+from microdrop_utils.source_version import NO_GIT
 from microdrop_utils.traitsui_qt_helpers import ObjectColumn
 
 # Local imports.
 from .consts import POLICY_LATEST, POLICY_STAY
+
+#: Overrides the colours and fonts QTextDocument writes inline into the
+#: rendered changelog, so the page matches the dialog's theme.
+CHANGELOG_STYLE = """<style>
+html, body {{ background: {background} !important; }}
+body {{ margin: 8px; }}
+body, body * {{
+    color: {text} !important;
+    font-family: "Inter", "Segoe UI", sans-serif !important;
+}}
+a, a * {{ color: {link} !important; }}
+</style>"""
+
+#: Without git there is only the version to show.
+HAS_GIT = f"state != {NO_GIT!r}"
+
+
+def themed_changelog_html(markdown_text):
+    """Render ``markdown_text`` with the dialog's background, text colour,
+    link colour and font, in light and dark mode."""
+    if is_dark_mode():
+        colors = {
+            "background": GREY["darker"],
+            "text": WHITE,
+            "link": PRIMARY_SHADE[300],
+        }
+    else:
+        colors = {"background": WHITE, "text": BLACK, "link": PRIMARY_SHADE[800]}
+
+    style = CHANGELOG_STYLE.format(**colors)
+
+    return markdown_text_to_html(markdown_text).replace("</head>", f"{style}</head>", 1)
 
 
 class MutedColumn(ObjectColumn):
@@ -52,6 +86,7 @@ switch_action = Action(
     name="Switch and close",
     action="switch_version",
     enabled_when="action_enabled",
+    visible_when=HAS_GIT,
 )
 close_action = Action(name="Close", action="do_close")
 
@@ -59,7 +94,9 @@ versions_table = TableEditor(
     columns=[
         ObjectColumn(name="name", label="Version", editable=False),
         ObjectColumn(name="date", label="Date", editable=False),
-        MutedColumn(name="marker", label="", editable=False),
+        ObjectColumn(name="marker", label="", editable=False),
+        # Stretches to the table's edge, so no empty header is left after it.
+        MutedColumn(name="panel_note", label="", editable=False, resize_mode="stretch"),
     ],
     editable=False,
     sortable=False,
@@ -73,13 +110,17 @@ version_line = HGroup(
     UItem("handler.check_button", enabled_when="is_managed"),
 )
 
-state_lines = VGroup(
-    UItem("handler.state_text", style="readonly", visible_when="not is_managed"),
-    HGroup(
-        UItem("handler.skip_variable_text", style="readonly"),
-        UItem("handler.remove_button"),
+state_row = UItem("handler.state_text", style="readonly", visible_when="not is_managed")
+
+# The condition sits on the items: on the group, TraitsUI would wrap it in a
+# panel with margins, indenting the line.
+skip_variable_row = HGroup(
+    UItem(
+        "handler.skip_variable_text",
+        style="readonly",
         visible_when="skip_variable_set",
     ),
+    UItem("handler.remove_button", visible_when="skip_variable_set"),
 )
 
 policy_choice = UItem(
@@ -93,6 +134,7 @@ policy_choice = UItem(
         cols=1,
     ),
     enabled_when="is_managed",
+    visible_when=HAS_GIT,
 )
 
 # The table stays enabled in every state: browsing the releases and their
@@ -100,6 +142,7 @@ policy_choice = UItem(
 versions_and_changelog = HSplit(
     UItem("versions", editor=versions_table),
     UItem("handler.changelog_html", editor=HTMLEditor(open_externally=True)),
+    visible_when=HAS_GIT,
 )
 
 footer = VGroup(
@@ -107,11 +150,21 @@ footer = VGroup(
         "The environment and pixi-microdrop are updated from the "
         "Setup & Launcher, not here."
     ),
-    HGroup(spring, UItem("action_label", style="readonly")),
+    HGroup(
+        spring,
+        UItem("action_label", style="readonly", visible_when="is_managed"),
+    ),
 )
 
 updates_view = View(
-    VGroup(version_line, state_lines, policy_choice, versions_and_changelog, footer),
+    VGroup(
+        version_line,
+        state_row,
+        skip_variable_row,
+        policy_choice,
+        versions_and_changelog,
+        footer,
+    ),
     title="MicroDrop Updates",
     width=760,
     height=480,

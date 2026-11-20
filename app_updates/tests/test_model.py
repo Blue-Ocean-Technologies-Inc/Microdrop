@@ -40,7 +40,13 @@ from microdrop_utils.tests.git_repo_fixtures import run_git
 
 # Local imports.
 from .. import model as model_module
-from ..consts import NO_CHANGELOG_TEXT, POLICY_LATEST, POLICY_STAY, PREFERENCES_PATH
+from ..consts import (
+    NO_CHANGELOG_TEXT,
+    POLICY_LATEST,
+    POLICY_STAY,
+    PREFERENCES_PATH,
+    UNKNOWN_VERSION_TEXT,
+)
 from ..model import UpdatesModel
 from ..preferences import AppUpdatesPreferences
 from .model_factory import make_model
@@ -55,13 +61,13 @@ def _row(model, name):
 
 
 def test_rows_mark_latest_current_and_missing_panel(model_at_v1_2):
-    markers = {row.name: row.marker for row in model_at_v1_2.versions}
+    markers = {row.name: (row.marker, row.panel_note) for row in model_at_v1_2.versions}
 
     assert markers == {
-        "v1.10.0": "latest",
-        "v1.2.0": "current",
-        "v1.1.0": "no update panel",
-        "v1.0.0": "no update panel",
+        "v1.10.0": ("latest", ""),
+        "v1.2.0": ("current", ""),
+        "v1.1.0": ("", "no update panel"),
+        "v1.0.0": ("", "no update panel"),
     }
     assert [row.name for row in model_at_v1_2.versions] == [
         "v1.10.0",
@@ -131,7 +137,8 @@ def test_latest_is_the_newest_tag_with_the_panel(clone, preferences):
     model = make_model(clone, preferences)
 
     assert model.versions[0].name == "v1.11.0"
-    assert model.versions[0].marker == "no update panel"
+    assert model.versions[0].marker == ""
+    assert model.versions[0].panel_note == "no update panel"
     assert _row(model, "v1.10.0").marker == "latest"
     assert model.target.name == "v1.10.0"
     assert model.action_label == "Switch to v1.10.0 and close"
@@ -279,6 +286,7 @@ def test_no_git_gives_empty_list(tmp_path, preferences):
     model = make_model(tmp_path / "no-git", preferences)
 
     assert model.state == NO_GIT
+    assert model.current_description == UNKNOWN_VERSION_TEXT
     assert model.versions == []
     assert model.selected is None
     assert model.target is None
@@ -300,6 +308,13 @@ def test_refresh_keeps_selection_by_name(model_at_v1_2):
 
 def test_initial_selection_is_the_current_row(model_at_v1_2):
     assert model_at_v1_2.selected.name == "v1.2.0"
+
+
+def test_initial_selection_between_releases_is_the_built_on_release(
+    model_on_main_tip,
+):
+    assert model_on_main_tip.selected.name == "v1.10.0"
+    assert model_on_main_tip.changelog_markdown.startswith("## [v1.10.0]")
 
 
 def test_switch_moves_checkout(model_at_v1_2):

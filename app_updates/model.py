@@ -57,7 +57,12 @@ from microdrop_utils.user_environment import (
 )
 
 # Local imports.
-from .consts import NO_CHANGELOG_TEXT, POLICY_LATEST, POLICY_STAY
+from .consts import (
+    NO_CHANGELOG_TEXT,
+    POLICY_LATEST,
+    POLICY_STAY,
+    UNKNOWN_VERSION_TEXT,
+)
 from .preferences import AppUpdatesPreferences
 
 # Logger import.
@@ -84,9 +89,11 @@ class VersionRow(HasTraits):
     #: The newest release with the Updates panel — what "latest" moves to.
     is_latest = Bool(False)
 
-    #: The list's note on the row: "latest", "current", "no update panel",
-    #: or several of them joined with ", ".
-    marker = Property(Str, observe="is_latest, is_current, kind")
+    #: The row's role: "latest", "current", both joined with ", ", or "".
+    marker = Property(Str, observe="is_latest, is_current")
+
+    #: "no update panel" for a release without the Updates panel, else "".
+    panel_note = Property(Str, observe="kind")
 
     def _get_marker(self):
         markers = []
@@ -97,10 +104,10 @@ class VersionRow(HasTraits):
         if self.is_current:
             markers.append("current")
 
-        if self.kind != HAS_PANEL:
-            markers.append("no update panel")
-
         return ", ".join(markers)
+
+    def _get_panel_note(self):
+        return "" if self.kind == HAS_PANEL else "no update panel"
 
 
 class UpdatesModel(HasTraits):
@@ -181,13 +188,14 @@ class UpdatesModel(HasTraits):
 
     def refresh(self):
         """Re-read the checkout and the preferences; keep the selected row by
-        name, else select the current one."""
+        name, else select the current one, else the release HEAD is built on,
+        else the newest."""
         self.state, self.state_reason = checkout_state(self.repo_root)
         self.skip_variable_set = skip_variable_is_set()
         self._read_policy()
 
         if self.state == NO_GIT:
-            self.current_description = ""
+            self.current_description = UNKNOWN_VERSION_TEXT
             self._built_on_release = ""
             self.versions = []
             self.selected = None
@@ -213,9 +221,11 @@ class UpdatesModel(HasTraits):
             for tag in tags
         ]
 
-        self.selected = next(
-            (row for row in self.versions if row.name == selected_name),
-            next((row for row in self.versions if row.is_current), None),
+        self.selected = (
+            self._row_named(selected_name)
+            or next((row for row in self.versions if row.is_current), None)
+            or self._row_named(self._built_on_release)
+            or next(iter(self.versions), None)
         )
 
     def fetch(self):
@@ -296,6 +306,9 @@ class UpdatesModel(HasTraits):
         )
 
     # --- helpers --------------------------------------------------------
+
+    def _row_named(self, name):
+        return next((row for row in self.versions if row.name == name), None)
 
     def _read_policy(self):
         if self.preferences is not None:

@@ -24,12 +24,12 @@ from ..messages import (
     newer_version_notice,
     no_panel_warning,
     plain_confirmation,
+    skip_variable_failed_message,
     skip_variable_line,
     state_line,
+    still_running_warning,
+    switch_failed_message,
 )
-
-COMMANDS = 'cd "C:\\MicroDrop <src>"\ngit checkout main\ngit pull'
-UNSET_COMMAND = "reg delete HKCU\\Environment /v MICRODROP_SKIP_GIT_UPDATE /f"
 
 
 @pytest.mark.parametrize("drops_unreleased", [True, False])
@@ -42,21 +42,20 @@ def test_plain_confirmation(drops_unreleased, frontend_only):
     assert ("restart the backend" in text.lower()) == frontend_only
 
 
-def test_no_panel_warning():
-    text = no_panel_warning("v1.40.0", COMMANDS)
+def test_no_panel_warning_points_to_the_commands_below():
+    text = no_panel_warning("v1.40.0")
 
     assert "v1.40.0" in text
     assert "no Updates panel" in text
     assert "Setup &amp; Launcher" in text
-    # Interpolated commands are escaped, never taken as markup.
-    assert "&lt;src&gt;" in text
-    assert "<src>" not in text
+    assert "commands below" in text
+    # The commands are shown once, in the dialog's copyable details.
+    assert "<pre>" not in text
+    assert "git checkout" not in text
 
 
 def test_forced_pull_warning():
-    text = forced_pull_warning(
-        "v1.30.0", COMMANDS, SKIP_GIT_UPDATE_ENV_VAR, UNSET_COMMAND
-    )
+    text = forced_pull_warning("v1.30.0", "SKIP_<VAR>")
 
     assert "v1.30.0" in text
     assert "no Updates panel" in text
@@ -64,16 +63,45 @@ def test_forced_pull_warning():
     assert "checks out main" in text
     assert "pulls" in text
     assert "next start" in text
-    assert SKIP_GIT_UPDATE_ENV_VAR in text
-    assert UNSET_COMMAND in text
     assert "reopen" in text.lower()
+    assert "below" in text
+    assert "<pre>" not in text
+    # The variable name is escaped, never taken as markup.
+    assert "SKIP_&lt;VAR&gt;" in text
 
 
-def test_close_message():
+def test_close_message_stays_true_if_the_exit_is_refused():
     text = close_message("v1.46.0")
 
     assert "v1.46.0" in text
+    assert "Close MicroDrop" in text
     assert "start MicroDrop again" in text
+    assert "will now close" not in text
+
+
+def test_still_running_warning():
+    text = still_running_warning("v1.46.0")
+
+    assert "v1.46.0" in text
+    assert "still running the previous version" in text
+    assert "start it again" in text
+
+
+def test_skip_variable_failed_message_says_nothing_was_switched():
+    text = skip_variable_failed_message(SKIP_GIT_UPDATE_ENV_VAR)
+
+    assert SKIP_GIT_UPDATE_ENV_VAR in text
+    assert "could not be set" in text
+    assert "nothing was switched" in text
+
+
+@pytest.mark.parametrize("variable", [None, SKIP_GIT_UPDATE_ENV_VAR])
+def test_switch_failed_message_names_a_set_variable(variable):
+    text = switch_failed_message("v1.30.0", variable)
+
+    assert "Could not switch to v1.30.0" in text
+    assert ("is now set" in text) == (variable is not None)
+    assert ("Remove" in text) == (variable is not None)
 
 
 def test_state_line_is_plain_text():

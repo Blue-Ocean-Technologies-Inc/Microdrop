@@ -27,3 +27,10 @@ POLICY_STAY = "stay"
 
 #: Shown in place of a changelog section the selected release does not have.
 NO_CHANGELOG_TEXT = "No changelog for this version."
+
+#: The running version when the source is not a git checkout.
+UNKNOWN_VERSION_TEXT = "unknown (not a git checkout)"
+
+#: The answers to the warning for a release that pulls at every start.
+SET_AND_SWITCH = "Set it and switch"
+SWITCH_WITHOUT_IT = "Switch without it"

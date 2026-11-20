@@ -11,9 +11,9 @@
 """The texts of the updates dialogs.
 
 The dialog bodies are HTML: version names are ``vX.Y.Z`` and go in as they
-are, and every other value is escaped, so a path or a command is never taken
-as markup. ``state_line`` and ``skip_variable_line`` are plain text for plain
-labels.
+are, and every other value is escaped, so it is never taken as markup. The
+commands the warnings refer to are not in the bodies; the dialogs show them
+once, as copyable details. Functions marked PLAIN return plain text.
 """
 
 # Standard library imports.
@@ -27,16 +27,12 @@ def _paragraphs(*paragraphs):
     return "<br><br>".join(paragraphs)
 
 
-def _command_block(commands):
-    return f"<pre>{html.escape(commands)}</pre>"
-
-
-def _no_panel_paragraphs(target, commands):
+def _no_panel_paragraphs(target):
     return (
         f"{target} has no Updates panel, so MicroDrop cannot bring you back "
         f"from inside the app.",
-        f"To return to the latest version, use the Setup &amp; Launcher, or "
-        f"run these commands:{_command_block(commands)}",
+        "To return to the latest version, use the Setup &amp; Launcher, or "
+        "run the commands below.",
     )
 
 
@@ -60,37 +56,67 @@ def plain_confirmation(target, drops_unreleased, frontend_only):
     return _paragraphs(*paragraphs)
 
 
-def no_panel_warning(target, commands):
+def no_panel_warning(target):
     """Return the warning for switching to a release without the Updates
-    panel; ``commands`` are the shell lines that return the checkout."""
+    panel; the dialog shows the return commands below it."""
     return _paragraphs(
-        *_no_panel_paragraphs(target, commands),
+        *_no_panel_paragraphs(target),
         f"Switch to {target} anyway?",
     )
 
 
-def forced_pull_warning(target, commands, variable, unset_command):
+def forced_pull_warning(target, variable):
     """Return the warning for switching to a release that pulls ``main`` at
-    every start unless ``variable`` is set; ``unset_command`` removes the
-    variable by hand."""
+    every start unless ``variable`` is set; the dialog shows the return
+    commands and the command removing the variable below it."""
     return _paragraphs(
-        *_no_panel_paragraphs(target, commands),
+        *_no_panel_paragraphs(target),
         f"{target} also updates itself: at its next start it checks out "
         f"{DEFAULT_BRANCH} and pulls, so it will not stay on {target} unless "
         f"the {html.escape(variable)} environment variable is set.",
         "Set it for your user account now? It takes effect for programs "
         "started after it is set; an already-open Setup &amp; Launcher must be "
-        "reopened to pass it on.",
-        f"To remove it by hand later, run:{_command_block(unset_command)}",
+        "reopened to pass it on. The last command below removes it by hand.",
     )
 
 
 def close_message(target):
-    """Return the message shown after a successful switch to ``target``."""
+    """Return the message shown after a successful switch to ``target``; it
+    holds even when closing MicroDrop is then refused."""
     return (
-        f"MicroDrop switched to {target} and will now close; start MicroDrop "
-        f"again to run it."
+        f"The MicroDrop source is now on {target}. Close MicroDrop and start "
+        f"MicroDrop again to run it."
     )
+
+
+def still_running_warning(target):
+    """Return the warning shown when MicroDrop did not close after switching
+    to ``target``."""
+    return (
+        f"The MicroDrop source is now on {target}, but MicroDrop did not close "
+        f"and is still running the previous version. Close MicroDrop and "
+        f"start it again now."
+    )
+
+
+def skip_variable_failed_message(variable):
+    """Return the PLAIN-text error for a ``variable`` that could not be
+    saved, which stopped the switch."""
+    return f"{variable} could not be set, so nothing was switched."
+
+
+def switch_failed_message(target, variable=None):
+    """Return the PLAIN-text error for a failed switch to ``target``;
+    ``variable`` names the skip variable set just before it, if any."""
+    text = f"Could not switch to {target}."
+
+    if variable is not None:
+        text += (
+            f" {variable} is now set for your user account; the Remove button "
+            f"in this dialog removes it."
+        )
+
+    return text
 
 
 def state_line(state, reason):
