@@ -8,12 +8,17 @@
 #
 # Thanks for using Microdrop open source!
 
+# Third-party imports.
+from dropbot_portable.self_test import HV_ENABLE_STATUS_TEXT
+
 # Enthought library imports.
 from traits.api import HasTraits, Str, provides
 
 # Local imports.
 from ..consts import (
     FLUORESCENCE_LED_RAW_MAX,
+    HV_ENABLE_STATUS_OFF,
+    HV_ENABLE_STATUS_ON,
     LIGHT_INTENSITY_RAW_MAX,
     RGB_LIGHT_STATES,
 )
@@ -33,31 +38,98 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
     name = Str("Portable Dropbot States Setting Mixin")
 
     def on_set_realtime_mode_request(self, message):
-        self.realtime_mode = str(message) == "True"
+        """The vendor UI's HV On/Off follows realtime mode here: HV only
+        energizes while realtime is on (pad-interlocked, no bypass — the
+        firmware still refuses without a device on the pads), and leaving
+        realtime kills it."""
+
+        if str(message) != "True":
+            self._leave_realtime_mode()
+            return
+
+        self.realtime_mode = True
         self._publish_realtime_mode()
 
-        # The vendor UI's HV On/Off follows realtime mode here: HV
-        # only energizes while realtime is on (pad-interlocked, no
-        # bypass — the firmware still refuses without a device on the
-        # pads), and leaving realtime kills it.
-        if self.realtime_mode:
-            ok, status = self._proxy_call(
-                "HV enable", lambda: self.proxy.sig.hv_enable(1, 0)
-            )
-        else:
-            # Leaving realtime mode releases every electrode, exactly
-            # as the other backends do — then de-energizes HV.
-            self._proxy_call("clear channels", lambda: self.proxy.clear_channels())
-            ok, status = self._proxy_call(
-                "HV disable", lambda: self.proxy.sig.hv_enable(0, 0)
-            )
-
-        logger.info(
-            f"Portable Dropbot realtime mode set to "
-            f"{self.realtime_mode}; HV "
-            f"{'enable' if self.realtime_mode else 'disable'} "
-            f"--> {'ok' if ok and status is not None else 'FAILED'}"
+        ok, reply = self._proxy_call(
+            "HV enable", lambda: self.proxy.sig.hv_enable(1, 0)
         )
+        accepted, outcome = self._hv_enable_outcome(
+            True, getattr(reply, "status", None)
+        )
+
+        if ok and accepted:
+            logger.info(f"Portable Dropbot realtime mode on; HV enable --> {outcome}")
+            return
+
+        # A refused or failed enable leaves HV off, and realtime mode with it:
+        # the pane must not show realtime on over a dead HV.
+        self.realtime_mode = False
+        self._publish_realtime_mode()
+
+        # A raised failure has already been reported by _proxy_call.
+        if ok:
+            self._publish_error("HV enable", outcome)
+
+    def _leave_realtime_mode(self):
+        """Leave realtime mode: de-energize HV, then release every electrode
+        (the vendor's halt order). Both skip the proxy lock, like a motor
+        stop: switching HV off must never queue behind a long call holding
+        it, and each is a single request the driver matches to its reply."""
+        self.realtime_mode = False
+        self._publish_realtime_mode()
+
+        ok, reply = self._proxy_call(
+            "HV disable", lambda: self.proxy.sig.hv_enable(0, 0), serialize=False
+        )
+        self._proxy_call(
+            "clear channels", lambda: self.proxy.clear_channels(), serialize=False
+        )
+
+        # A raised failure has already been reported by _proxy_call.
+        if not ok:
+            return
+
+        accepted, outcome = self._hv_enable_outcome(
+            False, getattr(reply, "status", None)
+        )
+
+        if accepted:
+            logger.info(f"Portable Dropbot realtime mode off; HV disable --> {outcome}")
+        else:
+            self._publish_error("HV disable", outcome)
+
+    @staticmethod
+    def _hv_enable_outcome(enable, status):
+        """Judge an HV_ENABLE reply status byte the way the vendor does:
+        (accepted, text). Only "HV on" answers an enable and only "HV off"
+        a disable; 2-5 are refusals (no device on the pads, busy, 24 V
+        domain off, halt latched) and None is no reply."""
+
+        if status is None:
+            return False, "no reply"
+
+        expected = HV_ENABLE_STATUS_ON if enable else HV_ENABLE_STATUS_OFF
+        text = HV_ENABLE_STATUS_TEXT.get(int(status), f"unknown status {status}")
+
+        return int(status) == expected, text
+
+    def on_clear_halt_request(self, message):
+        """Clear a latched firmware halt (HALT_CLEAR). It never re-enables
+        anything: HV stays off until realtime mode enables it again. A
+        refusal (the cause persists) is reported with its blocking types."""
+        ok, result = self._proxy_call("halt clear", lambda: self.proxy.clear_halt())
+
+        if not ok:
+            return
+
+        if result is None:
+            self._publish_error("halt clear", "no reply (firmware without the latch?)")
+        elif result.refused:
+            self._publish_error("halt clear", result.describe())
+        else:
+            logger.info(f"Portable Dropbot halt clear --> {result.describe()}")
+
+        self._publish_status_snapshot()
 
     def on_set_voltage_request(self, message):
         self.voltage = int(float(str(message)))

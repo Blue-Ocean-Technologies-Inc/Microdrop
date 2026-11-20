@@ -12,6 +12,9 @@
 reply waits up to 60 s) — never the vendor uart facade's 5 s setFilter,
 which logs a wheel still turning as a failure. Hardware-free, no Redis."""
 
+# Standard library imports.
+from types import SimpleNamespace
+
 # Enthought library imports.
 from traits.api import Any, HasTraits, List
 
@@ -27,7 +30,7 @@ class _Motor:
 
     def fluorescence_ctrl(self, position):
         self.log.append(f"filter {position}")
-        return object()
+        return SimpleNamespace(status_data=bytes([position]))
 
 
 class _Uart:
@@ -46,8 +49,11 @@ class _Base(HasTraits):
     log = List()
     snapshots = List()
 
-    def _proxy_call(self, context, call):
+    def _proxy_call(self, context, call, serialize=True):
         return True, call()
+
+    def _publish_error(self, context, error):
+        raise AssertionError(f"{context} failed: {error}")
 
     def _publish_status_snapshot(self):
         self.snapshots.append(True)

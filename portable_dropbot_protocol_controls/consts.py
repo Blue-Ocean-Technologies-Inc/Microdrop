@@ -10,8 +10,8 @@
 
 """Package-level constants for portable_dropbot_protocol_controls.
 
-Topic constants and hardware bounds live in portable_dropbot_controller/
-consts.py — this plugin imports them (the same layering as
+Topic constants and hardware bounds live in the portable_dropbot_controller
+consts package — this plugin imports them (the same layering as
 dropbot_protocol_controls over dropbot_controller).
 """
 

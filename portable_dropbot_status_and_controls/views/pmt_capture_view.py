@@ -93,9 +93,18 @@ _hint_label = HtmlLabelEditor(
 )
 
 
+#: The spot numbering changed with motor firmware DroDri_1.0.0.25.
+_SPOT_RENUMBERING_NOTE = (
+    "From motor firmware DroDri_1.0.0.25 spot n is motor location n; before "
+    "it location 1 was park and spot n was location n + 1. After a motor "
+    "firmware upgrade, re-check saved PMT protocol steps and re-teach the "
+    "positions."
+)
+
+
 def _spot_column():
     # "Spot n · xx.xx mm", sized so it is never elided.
-    return key_column("label", "Spot")
+    return key_column("label", "Spot", tooltip=_SPOT_RENUMBERING_NOTE)
 
 
 def _setting_columns():
@@ -154,7 +163,8 @@ capture = capture_group(
     extra_buttons=(
         UItem(
             "refresh_button",
-            tooltip="Re-read the PMT spot positions from the motor board",
+            tooltip="Re-read the PMT spot positions from the motor board. "
+            + _SPOT_RENUMBERING_NOTE,
             enabled_when="connected and not busy",
         ),
     ),

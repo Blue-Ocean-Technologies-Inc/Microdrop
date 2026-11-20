@@ -274,7 +274,7 @@ class PortableDropbotPmtCaptureModel(CapturePaneModel):
 
     def _get_live_spot_labels(self):
         # The "n:" prefix keeps EnumEditor in spot order, not alphabetical.
-        labels = {0: "0:Park (spot 0)"}
+        labels = {0: "0:Park"}
 
         for row in sorted(self.rows, key=lambda row: row.slot):
             labels[row.slot] = f"{row.slot}:{row.label}"

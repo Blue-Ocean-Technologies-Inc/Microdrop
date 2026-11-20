@@ -15,7 +15,9 @@ import json
 from traits.api import observe
 
 # Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
 from portable_dropbot_controller.consts import (
+    CLEAR_HALT,
     CONNECT_TO_PORT,
     DISCONNECT,
     LOCK_CHIP,
@@ -97,6 +99,24 @@ class PortableDropbotStatusAndControlsController(
         if color:
             publish_message(topic=SET_RGB_LIGHT, message=color)
             logger.debug(f"RGB LED synced to status --> {color}")
+
+    @observe("model:clear_halt_button")
+    def _on_clear_halt(self, event):
+        if (
+            confirm(
+                None,
+                "Clear the Portable DropBot's latched halt? Remove its cause "
+                "first (a short, an overloaded chip, HV off its setpoint) — "
+                "the board refuses while the cause persists. HV stays off "
+                "until you turn realtime mode on again.",
+                title="Clear Halt",
+            )
+            != YES
+        ):
+            return
+
+        publish_message(topic=CLEAR_HALT, message="")
+        logger.info("Requested Portable Dropbot halt clear")
 
     @observe("model:tray_toggle_clicked")
     def _on_tray_toggle_clicked(self, event):

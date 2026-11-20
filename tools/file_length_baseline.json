@@ -36,8 +36,7 @@
   "pluggable_protocol_tree/views/navigation_bar.py": 602,
   "pluggable_protocol_tree/views/protocol_tree_pane.py": 1291,
   "pluggable_protocol_tree/views/tree_widget.py": 665,
-  "portable_dropbot_controller/consts.py": 766,
   "portable_dropbot_controller/services/portable_dropbot_fluorescence_mixin_service.py": 505,
-  "portable_dropbot_controller/services/portable_dropbot_pmt_mixin_service.py": 1158,
+  "portable_dropbot_controller/services/portable_dropbot_pmt_mixin_service.py": 1148,
   "volume_threshold_protocol_controls/protocol_columns/volume_threshold_column.py": 554
 }
