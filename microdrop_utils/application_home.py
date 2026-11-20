@@ -57,15 +57,14 @@ def read_bool_preference(path, default):
         Dotted preference path, e.g. ``"microdrop.app_updates.auto_update"``.
     default : bool
         Returned when the file or key is missing, the value is not a boolean,
-        or the file cannot be read.
+        or the preferences file cannot be located or read.
     """
-    filename = preferences_file_path()
-
+    # Startup calls this before the app exists, so any failure falls back.
     try:
-        value = Preferences(filename=str(filename)).get(path)
+        value = Preferences(filename=str(preferences_file_path())).get(path)
 
     except Exception:
-        logger.warning(f"Could not read {path} from {filename}", exc_info=True)
+        logger.warning(f"Could not read preference {path}", exc_info=True)
 
         return default
 
