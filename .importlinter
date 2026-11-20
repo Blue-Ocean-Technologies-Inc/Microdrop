@@ -1,5 +1,6 @@
 [importlinter]
 root_packages =
+    app_updates
     device_viewer
     dropbot_controller
     dropbot_preferences_ui
@@ -43,6 +44,7 @@ root_packages =
 name = Plugins never import each other's internals (consts only)
 type = independence
 modules =
+    app_updates
     device_viewer
     dropbot_controller
     dropbot_preferences_ui
