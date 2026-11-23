@@ -96,6 +96,39 @@ def test_start_needs_the_tray_in_and_a_board_or_the_go_ahead(model):
     assert model.start_run()["chip_absent_acknowledged"]
 
 
+def test_a_run_may_choose_the_tray_out(model):
+    model.request_preflight([SHORTS_TEST])
+    preflight = model.preflight
+
+    preflight.wants_tray_in = False
+    preflight.apply_reply(SelfTestPreflight(tray_in=True, board_detected=True))
+    assert not preflight.can_start
+    assert "tray OUT" in preflight.start_hint
+
+    preflight.apply_reply(SelfTestPreflight(tray_in=False, board_detected=True))
+    assert preflight.can_start
+
+    request = model.start_run()
+    assert not request["tray_in"]
+    assert not request["run_all"]
+
+
+def test_run_all_keeps_the_tray_in_and_the_choice(model):
+    model.preflight.wants_tray_in = False
+    model.request_preflight(model.all_test_names(), run_all=True)
+    preflight = model.preflight
+
+    preflight.wants_tray_in = False
+    preflight.apply_reply(SelfTestPreflight(tray_in=False, board_detected=True))
+    assert preflight.wants_tray_in
+    assert not preflight.can_start
+
+    preflight.apply_reply(SelfTestPreflight(tray_in=True, board_detected=True))
+    request = SelfTestRunRequest(**model.start_run())
+    assert request.tray_in and request.run_all
+    assert not preflight.chosen_tray_in
+
+
 def test_a_run_needs_a_selected_test(model):
     model.request_preflight([])
 

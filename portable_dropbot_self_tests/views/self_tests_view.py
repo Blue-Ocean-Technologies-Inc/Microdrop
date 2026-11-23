@@ -231,10 +231,11 @@ calibration = HGroup(
 self_tests_view = View(
     VGroup(
         Label(
-            "Load the capacitor test board, tick the tests and run. A pre-flight\n"
-            "check comes first; the run presses / lifts the pogo pads per test\n"
-            "(HV off before every move), never moves the tray, and puts the pads\n"
-            "back afterwards with the HV off."
+            "Load the capacitor test board, tick the tests and run. Preparation\n"
+            "(the pre-flight check): the tray goes in or out as you choose there\n"
+            "(always IN for the motor test and Run all) and the pogo pads press.\n"
+            "Run: only the pads move, per test, with the HV off before every move.\n"
+            "Cleanup: the pads go back to where they were and the HV is left off."
         ),
         UItem("rows", editor=tests_table, enabled_when="idle"),
         parameters_group,

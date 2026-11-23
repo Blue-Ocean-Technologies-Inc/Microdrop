@@ -12,7 +12,16 @@
 buttons, and Start / Cancel. Instantiable alone against a PreflightModel."""
 
 # Enthought library imports.
-from traitsui.api import HGroup, Item, UItem, VGroup, View
+from traitsui.api import EnumEditor, HGroup, Item, UItem, VGroup, View
+
+tray_choice = Item(
+    "wants_tray_in",
+    label="Run with the tray",
+    editor=EnumEditor(values={True: "1:In", False: "2:Out"}),
+    enabled_when="not tray_required",
+    tooltip="These tests run with the tray in or out; the motor test and Run "
+    "all always run with it IN (PMT / magnet interlocks)",
+)
 
 checklist = VGroup(
     Item("tray_text", style="readonly", resizable=True, label="Tray"),
@@ -51,6 +60,7 @@ decision = VGroup(
 preflight_view = View(
     VGroup(
         UItem("tests_text", style="readonly", resizable=True),
+        tray_choice,
         checklist,
         mechanisms,
         decision,

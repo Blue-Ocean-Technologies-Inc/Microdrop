@@ -19,7 +19,7 @@ import uuid
 from traits.api import Bool, Button, HasTraits, Instance, Int, List, Property, Str
 
 # Local imports.
-from ..consts import UNSAVED_CALIBRATION, UNSAVED_TARE
+from ..consts import UNSAVED_CALIBRATION, UNSAVED_TARE, tray_in_required
 from .consts import (
     CALIBRATION_TEST,
     CHANNELS_TEST,
@@ -58,6 +58,9 @@ class SelfTestHubModel(HasTraits):
 
     #: Tests waiting on the pre-flight check; empty when none is pending.
     pending_tests = List(Str)
+
+    #: The pending tests came from Run all, which keeps the tray IN.
+    pending_run_all = Bool(False)
 
     #: The pre-run checklist of the pending tests.
     preflight = Instance(PreflightModel, ())
@@ -161,8 +164,9 @@ class SelfTestHubModel(HasTraits):
     def all_test_names(self):
         return [row.name for row in self.rows]
 
-    def request_preflight(self, tests):
-        """Hold ``tests`` behind the pre-flight check."""
+    def request_preflight(self, tests, run_all=False):
+        """Hold ``tests`` behind the pre-flight check; ``run_all`` marks a
+        Run all."""
 
         if not tests:
             self.summary = "Self-test: select at least one test"
@@ -170,7 +174,11 @@ class SelfTestHubModel(HasTraits):
             return
 
         self.pending_tests = tests
-        self.preflight.reset_for_run([self._row(name).title for name in tests])
+        self.pending_run_all = run_all
+        self.preflight.reset_for_run(
+            [self._row(name).title for name in tests],
+            tray_in_required(tests, run_all),
+        )
         self.summary = "Pre-flight: check the board, then Start."
 
     def cancel_preflight(self):
@@ -191,6 +199,8 @@ class SelfTestHubModel(HasTraits):
             "tests": tests,
             "test_kwargs": self.parameters.test_kwargs(tests),
             "chip_absent_acknowledged": self.preflight.chip_absent_acknowledged,
+            "run_all": self.pending_run_all,
+            "tray_in": self.preflight.wants_tray_in,
         }
 
         self.run_id = request["run_id"]

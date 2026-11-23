@@ -105,7 +105,7 @@ class SelfTestHubController(Controller):
 
     @observe("model:run_all_button")
     def _run_all(self, event):
-        self.model.request_preflight(self.model.all_test_names())
+        self.model.request_preflight(self.model.all_test_names(), run_all=True)
 
     @observe("model:abort_button")
     def _abort(self, event):

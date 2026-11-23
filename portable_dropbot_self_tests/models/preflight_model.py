@@ -24,12 +24,26 @@ CHIP_ON_PAD_CONTACT_BIT = 0x1
 
 
 class PreflightModel(HasTraits):
-    """Qt-free pre-flight state. A run starts only with the tray in and
-    either a detected test board or the operator's explicit go-ahead
-    without one."""
+    """Qt-free pre-flight state. A run starts only with the tray where the
+    run wants it and either a detected test board or the operator's
+    explicit go-ahead without one."""
 
     #: The tests the pending run will do, for the intro line.
     tests_text = Str()
+
+    #: The pending run needs the tray IN (Run all, or a tray-in test).
+    tray_required = Bool(False)
+
+    #: The operator's tray position for runs that allow either (True =
+    #: in); kept across runs, as the vendor keeps it for the session.
+    chosen_tray_in = Bool(True)
+
+    #: Where the pending run wants the tray: IN when required, else the
+    #: operator's choice (which the setter records).
+    wants_tray_in = Property(Bool, observe="tray_required, chosen_tray_in")
+
+    #: The tray reads where the pending run wants it.
+    tray_ok = Property(Bool, observe="tray_in, wants_tray_in")
 
     # The latest SelfTestPreflight reply; None = could not be read.
     tray_in = Union(None, Bool)
@@ -64,24 +78,30 @@ class PreflightModel(HasTraits):
     chip_text = Property(Str, observe="chip_on_pad_mask")
     board_text = Property(Str, observe="board_detected, chip_res")
 
-    #: Start is allowed: tray in, and a test board or the go-ahead.
+    #: Start is allowed: the tray where wanted, and a test board or the
+    #: go-ahead.
     can_start = Property(
-        Bool, observe="tray_in, board_detected, chip_absent_acknowledged"
+        Bool, observe="tray_ok, board_detected, chip_absent_acknowledged"
     )
 
     #: What Start is waiting for.
     start_hint = Property(
-        Str, observe="tray_in, board_detected, chip_absent_acknowledged, error"
+        Str,
+        observe="tray_ok, wants_tray_in, board_detected, chip_absent_acknowledged, "
+        "error",
     )
 
-    def reset_for_run(self, titles):
-        """Begin a pre-flight check for the tests titled ``titles``."""
+    def reset_for_run(self, titles, tray_required):
+        """Begin a pre-flight check for the tests titled ``titles``;
+        ``tray_required`` locks the run to the tray IN."""
         self.chip_absent_acknowledged = False
+        self.tray_required = tray_required
         self.tests_text = (
-            f"Run {len(titles)} test(s): {', '.join(titles)}. The run switches "
-            "HV and electrodes and moves the pogo pads itself (never the tray); "
-            "afterwards the pads go back to where they are now and the HV is "
-            "left off."
+            f"Run {len(titles)} test(s): {', '.join(titles)}. Preparation: the "
+            "tray goes to the chosen position and the pogo pads press (by hand, "
+            "with the buttons below). Run: the tests switch HV and electrodes "
+            "and only the pads move. Cleanup: the pads go back to where they "
+            "were and the HV is left off."
         )
 
     def apply_reply(self, reply):
@@ -129,8 +149,18 @@ class PreflightModel(HasTraits):
             "with the pads pressed"
         )
 
+    def _get_wants_tray_in(self):
+        return self.tray_required or self.chosen_tray_in
+
+    def _set_wants_tray_in(self, value):
+        if not self.tray_required:
+            self.chosen_tray_in = value
+
+    def _get_tray_ok(self):
+        return self.tray_in is not None and self.tray_in == self.wants_tray_in
+
     def _get_can_start(self):
-        return self.tray_in is True and (
+        return self.tray_ok and (
             self.board_detected is True or self.chip_absent_acknowledged
         )
 
@@ -138,8 +168,14 @@ class PreflightModel(HasTraits):
         if self.error:
             return f"Board state not read: {self.error}"
 
-        if self.tray_in is not True:
+        if not self.tray_ok and self.wants_tray_in:
             return "Start needs the tray IN (use Tray in, then Refresh)."
+
+        if not self.tray_ok:
+            return (
+                "Start needs the tray OUT (use Tray out, then Refresh), or "
+                "choose In above."
+            )
 
         if self.board_detected is not True and not self.chip_absent_acknowledged:
             return (
