@@ -1,3 +1,48 @@
+## [v1.47.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.47.0) (2026-11-23)
+
+### Feat
+
+- **app_updates**: add the Updates menu and launch check ([`f9e9955`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f9e9955e7e231d1a2262852ffa6d7ef4bd38bf44))
+- **app_updates**: add the updates dialog ([`05e4731`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/05e47319d51bc4561164e48ee102a8b863129b00))
+- **app_updates**: add updates model and messages ([`56a3c9b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/56a3c9b8298ae59bc15bcc066468164470a1fb7a))
+- **microdrop_utils**: add per-user environment variable helper ([`012f4a4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/012f4a4c7a3f793dfe660de8fef7769f48ab05ff))
+- **microdrop_utils**: update source only by policy at startup ([`208ce1e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/208ce1e9a7489ffed6d21237d8c6fd11371eeb97))
+- **microdrop_utils**: add source version helpers ([`265fd05`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/265fd05446fb9406e8ddaeef672861192c001265))
+
+### Fix
+
+- **app_updates**: say when a switch needs a new login or backend restart ([`29697cc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/29697cc0ecf98f639c11c205dddb980c48385c5f))
+- **app_updates**: always load the Updates panel with the frontend ([`91326c5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/91326c52f087a433c0bf0e51f34f517676fa3a2e))
+- **app_updates**: keep the update policy in its own file ([`712d8cf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/712d8cf971572a4eeabfec222288411d17899008))
+- **app_updates**: keep deciding when the fetch fails ([`569e439`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/569e439fc5b5fe698906e5950369fb2b8000457a))
+- **microdrop_utils**: retry the startup switch only on a lock ([`8074675`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8074675bd7ede1413bad87c00311563b22b51abb))
+- **microdrop_utils**: leave detached developer checkouts alone ([`e21af20`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e21af2038f83c39a19eab87001240a6942a8eae0))
+- **app_updates**: run the launch check on a thread ([`3c0e951`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3c0e951780ecacae30f4e6d4eac5db97e3b541d7))
+- **app_updates**: require an explicit pick before switching ([`3864134`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/38641342c9363d49c008d28d724bde326412dbc5))
+- **app_updates**: handle a refused exit and polish the dialog ([`cb47780`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cb477809a8259c1ed5850bacf00e4f63bc62d4aa))
+- **app_updates**: make the updates model self-guarding ([`ca829f1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ca829f11d5bea801a9d7c16be66972a6629a27a7))
+- **microdrop_utils**: honour the saved skip variable at startup ([`3c33c1c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3c33c1c053de0fe6040d42849e69d26832094ecc))
+- **microdrop_utils**: harden the user environment helper ([`7b15094`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7b150947b151392baff7bd9e56152c68ad6dc9df))
+- **microdrop_utils**: hand signals to the restarted app ([`432b35d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/432b35d959d7a94db229353ab93944f1cc16fb2a))
+- **microdrop_utils**: never raise when reading a preference ([`b888d12`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b888d129eb0e924a07f589d0188f452d6098f35c))
+- **microdrop_utils**: harden source version helpers ([`51851b1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/51851b1c425bb6dcfe65a3c73b71da149247c15b))
+
+### Refactor
+
+- **app_updates**: keep row picking in the controller ([`b57b9b3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b57b9b3665f5567e7dc966f975cdbe92cd5e7a7c))
+- **user_help_plugin**: drop the Changelog menu item ([`abb9eaf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/abb9eaf9c49f4a78f9690dedadfef961940b41d6))
+- **microdrop_utils**: share the application home setup ([`c54ec09`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c54ec09312f5c03f42a3bc9ed0b6f62622a86c28))
+
+### Docs
+
+- clarify which checkouts the update policy moves ([`c443302`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c443302f5a419cfea834eda361e886b716c6fff1))
+- describe the source update policy ([`1b34851`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1b348515e0904abf349ee579d7dae5604888b8b4))
+
+### Test
+
+- tidy the updates tests ([`666ff7b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/666ff7b818d00270c576aeac3144cc72b804b6f0))
+- **microdrop_utils**: share the git repo fixtures ([`ee348e0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ee348e0e03da9d7003bad5a2d07a6476adb0f707))
+
 ## [v1.46.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.46.0) (2026-11-18)
 
 ### Feat
