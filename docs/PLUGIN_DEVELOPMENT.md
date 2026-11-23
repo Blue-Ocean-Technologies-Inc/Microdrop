@@ -180,7 +180,10 @@ Runtime add/remove of a plugin works, but three layers snapshot at startup and n
    tree consuming `PROTOCOL_COLUMNS`) only sees contributions present at its `start()` —
    **unless** it opts into live notifications with `connect_extension_point_traits()` and
    reacts to the `<name>_items` event. The protocol tree does exactly this so the magnet
-   column appears/disappears when its plugin group loads/unloads (Part 3 §1).
+   column appears/disappears when its plugin group loads/unloads (Part 3 §1), and does the
+   same for `PROTOCOL_QUICK_ACTIONS`. The Preferences dialog, a service the registry
+   caches for the session, instead re-reads `PREFERENCES_PANES`/`PREFERENCES_CATEGORIES`
+   each time it opens and rebuilds its tabs when they changed.
 
 ### 1.9 Deferred plugins (staged launch)
 
@@ -210,8 +213,8 @@ them with the rest.
 Only defer a plugin nothing else needs at start-up: no protocol columns or quick actions,
 no service or mixin a base plugin looks up in its `start()`, and no topic it must hear
 before the window is up (a message published before its listener exists is lost). Its
-preferences pane is missing from the Preferences dialog if that dialog is first opened
-before the plugin has loaded (the dialog reads its panes once).
+preferences pane appears the first time Preferences is opened after the plugin has
+loaded; a dialog already open keeps the tabs it opened with.
 
 ---
 
@@ -534,10 +537,15 @@ Pyface internals** — re-verify on any Pyface upgrade.
 `TasksApplication` exposes (`envisage/ui/tasks/tasks_application.py`):
 `application_initialized` (Event, fired after the first windows + GUI loop exist), `active_window`
 (Instance), and `window_created/opened/closing/closed` (Events). We restore enabled groups with
-a single **`@observe("application:active_window")`** (null-guarded) — it fires once the GUI
-window is available and, because the restore is idempotent (only enables flagged groups not
-already loaded), re-firing on a later window switch is a harmless no-op. This replaced an
-earlier `application_initialized` + manual `on_trait_change("active_window")` rewire.
+a single **`@observe("application:application_initialized")`** (§1.7), guarded by
+`_groups_restored` so it runs exactly once. Use the colon form: the dot form also fires when
+the plugin's `application` trait is assigned, at app construction, before the startup
+plugins can be adopted.
+
+`application_initialized` fires once per run. A plugin that can start after it — deferred
+(§1.9) or enabled from Manage Plugins — never sees it, so window set-up done from that
+observer must also run from `start()` when a window is already open, behind a once-only
+guard (`PortableDropbotStatusAndControlsPlugin._set_up_window`).
 
 ### §7 Traits tricks worth knowing
 
@@ -564,7 +572,7 @@ earlier `application_initialized` + manual `on_trait_change("active_window")` re
 | Service offer + lookup | `@provides(IFoo)` interface for decoupling | **Applied** — offer/lookup by `IPluginGroupManager` |
 | Menu/action contributions | No — `TaskExtension`+`SchemaAddition`+`SGroup` | Keep; prefer `TaskAction.self.task` |
 | **Live menu/dock-pane mutation** | **None — Pyface builds once at window creation** | **Hand-rolled (necessary)** |
-| Lifecycle hooks | `@observe("application:active_window")` over the manual rewire | **Applied** |
+| Lifecycle hooks | `@observe("application:application_initialized")`, plus a guarded `start()` path for late plugins | **Applied** |
 | Traits tricks | n/a | Adopt `dispatch="ui"`, `Property`+`@cached_property`, `@provides` where useful |
 
 The architecture deliberately favors a **TOML manifest + lazy `module:Class` imports** over a
