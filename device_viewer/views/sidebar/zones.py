@@ -16,29 +16,24 @@ from traits.api import Instance
 from traitsui.api import UI
 
 # Local imports.
-from ...controllers.zones_controller import ZonesController
 from ..zone_view.zones_sidebar import zones_view
-from .section import SidebarSection
+from .section import SizedSidebarSection
 
 
-class ZonesSection(SidebarSection):
-    """The Zones section and the objects its widget depends on."""
+class ZonesSection(SizedSidebarSection):
+    """The Zones section; its ZonesController lives with the pane, since
+    zone edits reach the model before the section is built."""
 
-    #: Zones editor UI; the pane sizes its zone-type table from preferences.
+    #: Zones editor UI; its zone-type table is sized from preferences.
     zones_ui = Instance(UI)
 
-    #: Keeps zone edits in step with the main model.
-    zones_controller = Instance(ZonesController)
+    def apply_sizes(self, preferences):
+        zone_types_editor = self.zones_ui.get_editors("zone_types")[0]
+        zone_types_editor.control.setMinimumHeight(preferences.ZONES_VIEW_MIN_HEIGHT)
 
 
 def build_zones(model):
     """Build the Zones section for the main model."""
-    zones_controller = ZonesController(model=model)
     zones_ui = model.zones.edit_traits(view=zones_view)
 
-    return ZonesSection(
-        title="Zones",
-        widget=zones_ui.control,
-        zones_ui=zones_ui,
-        zones_controller=zones_controller,
-    )
+    return ZonesSection(title="Zones", widget=zones_ui.control, zones_ui=zones_ui)

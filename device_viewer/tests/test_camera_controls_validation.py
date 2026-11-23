@@ -22,7 +22,7 @@ import json
 import pytest
 
 # Microdrop package imports.
-from device_viewer.controllers.device_viewer_message_controller import (
+from device_viewer.controllers.camera_requests import (
     parse_camera_controls_request,
 )
 
