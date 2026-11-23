@@ -39,6 +39,9 @@ GIT_SELF_UPDATE_TIMEOUT_S = 30
 #: initialized submodule sits on a detached HEAD, where `git pull` refuses).
 SOURCE_DEFAULT_BRANCH = "main"
 
+#: Splash status line while the self-update runs.
+UPDATE_CHECK_SPLASH_TEXT = "Checking for updates..."
+
 
 def _git(repo_root, *args):
     """Run a git command in ``repo_root``, captured, with the update timeout."""
@@ -136,20 +139,46 @@ def self_update_source_repo(
         logger.warning(f"source self-update failed: {e}")
 
 
-def microdrop_runner_setup():
+def _open_startup_splash_screen():
+    """Open the MicroDrop splash, showing the update check as its status."""
+    # Imported here: it creates the QApplication, which must come after the
+    # QtWebEngine block.
+    from microdrop_utils.splash_screen import MicrodropSplashScreen
+
+    splash_screen = MicrodropSplashScreen()
+    splash_screen.open()
+    splash_screen.text = UPDATE_CHECK_SPLASH_TEXT
+
+    return splash_screen
+
+
+def microdrop_runner_setup(show_splash_screen=False):
     """
     Common setup for all MicroDrop runner scripts.
 
     Configures the Dramatiq broker from redis_settings.json, adds the project
     root to sys.path so submodules are importable, keeps QtWebEngine views
     out of the process on Linux (see :mod:`microdrop_utils.web_engine_guard`),
-    and runs the best-effort
+    optionally opens the splash screen, and runs the best-effort
     git self-update (see :func:`self_update_source_repo` — updates apply on
     the NEXT launch, this one is already imported).
 
     Must be called before importing any modules that use dramatiq.get_broker().
+
+    Parameters
+    ----------
+    show_splash_screen : bool
+        Open the splash before the self-update, for a process that goes on
+        to run the GUI application.
+
+    Returns
+    -------
+    MicrodropSplashScreen or None
+        The open splash, for the GUI application to take over as its
+        ``splash_screen``; None unless ``show_splash_screen`` is set.
     """
     configure_dramatiq_broker()
+
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -162,4 +191,9 @@ def microdrop_runner_setup():
     # Before any plugin or TraitsUI editor can import QtWebEngine.
     block_web_engine_views_on_linux()
 
+    # After init_logger(), which would drop the splash's log handler.
+    splash_screen = _open_startup_splash_screen() if show_splash_screen else None
+
     self_update_source_repo()
+
+    return splash_screen
