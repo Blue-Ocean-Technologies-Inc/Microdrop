@@ -59,11 +59,14 @@ PADS_RELEASED_BYTE = 0
 #: with the pads pressed; the vendor pre-flight's TEST_BOARD_CHIP_RES_RANGE.
 TEST_BOARD_CHIP_RES_RANGE = (1200, 2200)
 CALIBRATION_TEST = "test_on_board_feedback_calibration"
+HEATERS_TEST = "test_heaters"
+MOTORS_TEST = "test_motors"
 
 #: What a run request's test_kwargs may set: test -> parameter -> (type,
 #: low, high). Same bounds as the hub's parameter editor
 #: (portable_dropbot_self_tests/models/consts.py, the vendor tab's spin
-#: boxes); anything else is refused.
+#: boxes and check boxes); anything else is refused, so the health tests'
+#: heat-step and move sizes stay the vendor's.
 TEST_KWARG_BOUNDS = {
     "test_voltage": {"n": (int, 2, 20)},
     CALIBRATION_TEST: {
@@ -75,6 +78,8 @@ TEST_KWARG_BOUNDS = {
         "n_reps": (int, 1, 20),
         "threshold_pf": (float, 0.5, 100.0),
     },
+    HEATERS_TEST: {"heat_step": (bool, False, True)},
+    MOTORS_TEST: {"moves": (bool, False, True)},
 }
 
 #: Exception class names a vendor per-test error repr starts with when the
@@ -273,8 +278,12 @@ def board_present(reads):
 
 
 def value_fits(value, kind):
-    """An int parameter takes ints only, a float one ints or floats; bools
-    never pass (they are ints to Python)."""
+    """A bool parameter takes bools only, an int one ints only and a float
+    one ints or floats; a bool passes nowhere else (it is an int to
+    Python)."""
+
+    if kind is bool:
+        return isinstance(value, bool)
 
     if isinstance(value, bool):
         return False
@@ -286,7 +295,8 @@ def value_fits(value, kind):
 
 
 def validate_run_request(tests, test_kwargs):
-    """Check a run request against the vendor catalogue.
+    """Check a run request against the vendor catalogue: ``ALL_TESTS`` and
+    the health tests (``HEALTH_TESTS``).
 
     Returns
     -------
@@ -294,13 +304,14 @@ def validate_run_request(tests, test_kwargs):
         ``(tests, reason)``: the tests in request order with repeats dropped,
         and why the request is refused ("" when it is valid).
     """
-    unknown = [name for name in tests if name not in vendor_self_test.ALL_TESTS]
+    catalogue = vendor_self_test.ALL_TESTS + vendor_self_test.HEALTH_TESTS
+    unknown = [name for name in tests if name not in catalogue]
 
     if unknown:
         return [], f"unknown test(s): {', '.join(unknown)}"
 
     for name, overrides in test_kwargs.items():
-        if name not in vendor_self_test.ALL_TESTS:
+        if name not in catalogue:
             return [], f"test_kwargs for unknown test {name!r}"
 
         allowed = TEST_KWARG_BOUNDS.get(name, {})

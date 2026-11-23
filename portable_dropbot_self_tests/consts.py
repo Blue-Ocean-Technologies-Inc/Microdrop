@@ -43,8 +43,9 @@ Refusals
     already in progress; a PMT or fluorescence session holds the board;
     realtime mode is on or a protocol is running; Home All or a smart chip
     lock / unlock is running; a test name is not in
-    ``ALL_TESTS`` or a ``test_kwargs`` key is not a known parameter of its
-    test; the pads' state is unknown and a selected test needs them moved;
+    ``ALL_TESTS`` or ``HEALTH_TESTS`` or a ``test_kwargs`` key is not a
+    known parameter of its test; the pads' state is unknown and a selected
+    test needs them moved;
     the tray does not read where the run wants it (``tray_in``, forced IN
     by ``tray_in_required``); or the backend's own chip read at run start
     detects no board and ``chip_absent_acknowledged`` is False. Preflight
@@ -65,6 +66,15 @@ E-STOP
     stops at its next step, the restore switches HV off and no pad move is
     sent afterwards (the restore note says why). The finished message is
     ``cancelled`` with ``error`` naming the E-STOP.
+
+Health tests
+    The vendor's ``HEALTH_TESTS`` run like the others (after them in Run
+    all). ``test_motors`` needs the tray IN, and its ``moves`` (PMT-Y and
+    the filter go out and back) is confirmed by the operator first.
+    ``test_heaters``' heat step drives each OFF heater and switches it off
+    again on every path of its own, cancel and E-STOP included; while it
+    runs, a disconnect or the backend's teardown also switches both heaters
+    off (the vendor worker's ``shutdown_heaters``).
 
 Verdicts and titles
     Computed by the backend (``self_test.verdicts`` and the vendor titles),
@@ -161,10 +171,12 @@ class SelfTestRunRequest(BaseModel):
     """Run the listed tests in this order."""
 
     run_id: str = Field(min_length=1)
-    #: Names from the vendor's ``ALL_TESTS``; validated by the backend.
+    #: Names from the vendor's ``ALL_TESTS`` and ``HEALTH_TESTS``;
+    #: validated by the backend.
     tests: list[str] = Field(min_length=1)
     #: Per-test keyword overrides, e.g. ``{"test_voltage": {"n": 5},
-    #: "test_channels": {"n_reps": 3, "threshold_pf": 5.0}}``.
+    #: "test_channels": {"n_reps": 3, "threshold_pf": 5.0},
+    #: "test_motors": {"moves": False}}``.
     test_kwargs: dict[str, dict[str, float | int | bool]] = {}
     #: The operator confirmed starting without a detected test board.
     chip_absent_acknowledged: bool = False
