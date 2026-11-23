@@ -14,13 +14,28 @@ Every ``<figure data-demo>`` of a built tutorial page is one simulation.
 The Tutorial Simulations pane loads each page once and shows one figure at
 a time (``resources/show_simulation.js``), so every simulation gets its own
 tab without a second copy of any of them.
+
+The pages are several megabytes of HTML together, so they are read on a
+worker thread, each once.
 """
 
 # Standard library imports.
 from html.parser import HTMLParser
+from threading import Thread
 
 # Enthought library imports.
-from traits.api import Bool, HasTraits, Instance, List, Property, Str, observe
+from pyface.api import GUI
+from traits.api import (
+    Bool,
+    Dict,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Property,
+    Str,
+    observe,
+)
 
 # Local imports.
 from .consts import TutorialEntry
@@ -152,11 +167,49 @@ class TutorialSimulationCatalog(HasTraits):
     #: from then on, so a pane that stays hidden costs nothing at launch.
     active = Bool(False)
 
+    #: The simulations of every page read so far, by tutorial entry: a
+    #: catalog change reads only the pages new to it.
+    _found = Dict()
+
+    #: Number of the latest search; an earlier one only adds its pages.
+    _search = Int(0)
+
     @observe("tutorial_catalog.entries, active")
     def _find_simulations(self, event):
         if not self.active:
             return
 
-        found = [find_simulations(entry) for entry in self.tutorial_catalog.entries]
+        entries = list(self.tutorial_catalog.entries)
+        unread = [entry for entry in entries if entry not in self._found]
+        self._search += 1
 
-        self.tutorials = [record for record in found if record.simulations]
+        if not unread:
+            self._show(self._search, entries, {})
+
+            return
+
+        Thread(
+            target=self._read_pages,
+            args=(self._search, entries, unread),
+            name="tutorial simulations",
+            daemon=True,
+        ).start()
+
+    def _read_pages(self, search, entries, unread):
+        """Read the ``unread`` pages, on the worker thread, and show the
+        outcome on the GUI thread."""
+        found = {entry: find_simulations(entry) for entry in unread}
+
+        GUI.invoke_later(self._show, search, entries, found)
+
+    def _show(self, search, entries, found):
+        """Keep the pages ``found``; list ``entries``' simulations, unless a
+        later search will."""
+        self._found.update(found)
+
+        if search != self._search:
+            return
+
+        records = [self._found[entry] for entry in entries]
+
+        self.tutorials = [record for record in records if record.simulations]
