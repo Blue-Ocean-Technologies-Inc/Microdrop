@@ -17,7 +17,8 @@ CHANGELOG.md or the application-home cache:
    "previous run" changelog and the current one (printed to stdout and
    shown in the styled information dialog, like startup does).
 2. ``markdown_text_to_html`` + ``WebViewDialog`` — the full changelog
-   rendered as HTML (the Help -> Changelog... path).
+   rendered as HTML (Help -> Check for Updates... renders each release's
+   section with the same ``markdown_text_to_html``).
 
 The mock changelog deliberately includes the hostile cases:
 - tag-like tokens (``PID_<HEATER>``, ``Dict<str, int>``) that used to be
@@ -29,12 +30,16 @@ Run (no Redis needed):
     pixi run python examples/demos/mock_changelog_render_demo.py
 """
 
+# Standard library imports.
 import sys
 
-# QtWebEngine must be imported before the QApplication is created.
-from microdrop_application.dialogs.web_view_dialog import WebViewDialog
+# Third-party imports.
 from PySide6.QtWidgets import QApplication
 
+# Microdrop package imports.
+from microdrop_application.dialogs.web_view_dialog import WebViewDialog
+
+# Microdrop utils imports.
 from microdrop_utils.markdown_helpers import changelog_sections_added_since
 from microdrop_utils.pyside_helpers import markdown_text_to_html
 
@@ -59,7 +64,8 @@ MOCK_PREVIOUS_CHANGELOG = """\
 LAST LINE MARKER — if you can't scroll down to this line, rendering is cut off.
 """
 
-MOCK_CHANGELOG = """\
+MOCK_CHANGELOG = (
+    """\
 ## v1.2.0 (2026-07-21)
 
 ### Feat
@@ -72,24 +78,33 @@ MOCK_CHANGELOG = """\
 
 - **dialogs**: render markdown with tag-like tokens such as List<Path>
 
-""" + MOCK_PREVIOUS_CHANGELOG
+"""
+    + MOCK_PREVIOUS_CHANGELOG
+)
 
 
 def main():
+    # QtWebEngine must be imported before the QApplication is created; the
+    # web_view_dialog import above does that.
     app = QApplication(sys.argv)
 
     whats_new_delta = changelog_sections_added_since(
-        MOCK_PREVIOUS_CHANGELOG, MOCK_CHANGELOG)
+        MOCK_PREVIOUS_CHANGELOG, MOCK_CHANGELOG
+    )
     print("=== What's New delta (should be only the v1.2.0 section) ===")
     print(whats_new_delta)
 
     from microdrop_application.dialogs.pyface_wrapper import information
-    information(None, markdown_text_to_html(whats_new_delta),
-                title="What's New?", cancel=False)
 
-    dialog = WebViewDialog(html_content=markdown_text_to_html(MOCK_CHANGELOG),
-                           title="Mock Changelog — scroll to the LAST LINE MARKER",
-                           open_links_externally=True)
+    information(
+        None, markdown_text_to_html(whats_new_delta), title="What's New?", cancel=False
+    )
+
+    dialog = WebViewDialog(
+        html_content=markdown_text_to_html(MOCK_CHANGELOG),
+        title="Mock Changelog — scroll to the LAST LINE MARKER",
+        open_links_externally=True,
+    )
     dialog.show()
     sys.exit(app.exec())
 

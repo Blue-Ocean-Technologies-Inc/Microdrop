@@ -24,6 +24,7 @@ from microdrop_application.consts import PKG as microdrop_application_PKG
 from .consts import (
     GETTING_STARTED_TUTORIAL_HTML_PATH,
     GETTING_STARTED_TUTORIAL_TITLE,
+    HELP_ACTIONS_ADDITION_ID,
     HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
     HELP_LOGS_STORAGE_TUTORIAL_TITLE,
     PKG,
@@ -131,6 +132,7 @@ class UserHelpPlugin(Plugin):
                 dock_pane_factories=[self._simulations_dock_pane_factory],
                 actions=[
                     SchemaAddition(
+                        id=HELP_ACTIONS_ADDITION_ID,
                         factory=partial(
                             menu_factory, tutorial_catalog=self.tutorial_catalog
                         ),

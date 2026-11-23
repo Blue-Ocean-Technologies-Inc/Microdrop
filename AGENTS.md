@@ -112,7 +112,7 @@ Three plugin categories:
 - **Required:** `CorePlugin`, `MessageRouterPlugin`, `LoggerPlugin`
 - **Frontend (UI):** `MicrodropPlugin`, `DeviceViewerPlugin`,
   `ManualControlsPlugin`, `DropbotStatusPlugin`,
-  `ProtocolGridControllerUIPlugin`, etc.
+  `ProtocolGridControllerUIPlugin`, `AppUpdatesPlugin`, etc.
 - **Backend (hardware):** `DropbotControllerPlugin`,
   `ElectrodeControllerPlugin`, `PeripheralControllerPlugin`
 
@@ -171,6 +171,40 @@ Electrode zones (#596): `device_viewer/models/zones.py` holds
 of truth, outlines computed by shapely union + gap closing). Regions
 persist in the device SVG's `Zones` layer, zone types in preferences, and
 the whole snapshot in app_globals under `ZONES_KEY`.
+
+### Source Updates
+
+The app no longer pulls `main` at startup. Moving the source checkout is
+owned by the `app_updates` plugin (Help > "Check for Updates…") plus
+`microdrop_utils/source_version.py` (git) and `source_update_startup.py`
+(the startup step). The policy is "always the latest release" (default) or
+"stay on this release"; latest means the newest `vX.Y.Z` tag whose tree has
+the Updates panel, never the tip of `main`. Tags are fetched in the
+background after startup and applied locally at the next start, which then
+re-runs itself on the new code.
+
+Which checkouts move: a clean checkout on `main`, detached at a release
+tag, or detached at a commit of `origin/main` is "managed", and under the
+default policy it IS moved to the newest release at startup — a developer
+on `main` included. A checkout with modified tracked files, on any other
+branch, in the middle of a git operation (bisect, rebase, merge,
+cherry-pick, revert), or detached at a commit not on `origin/main` is a
+development checkout and is never moved, so a feature-branch worktree or a
+bisect is left alone. A developer machine that wants none of this chooses
+"stay" in the dialog or sets `MICRODROP_SKIP_GIT_UPDATE` (in the
+environment or saved for the user), which turns the automatic part off.
+
+The policy lives in its own `app_updates.ini` in the application home, not
+in `preferences.ini`: every frontend and backend process saves its
+start-time copy of `preferences.ini` when it stops, which would undo a
+policy changed meanwhile; only the `app_updates` plugin writes
+`app_updates.ini`, the moment the policy changes. The panel loads with
+every frontend: `examples/run_device_viewer_pluggable.py` adds
+`AppUpdatesPlugin` to any plugin list that has `MicrodropPlugin` without
+it, such as a launcher's saved selection. pixi-microdrop and the
+environment are still updated by the Setup & Launcher. Tests of this code
+build their own git repos (`microdrop_utils/tests/git_repo_fixtures.py`),
+never the real checkout.
 
 ### DropBot Python API
 

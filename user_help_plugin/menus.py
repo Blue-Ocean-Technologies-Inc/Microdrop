@@ -19,7 +19,6 @@ from pyface.tasks.action.api import SGroup, SMenu, TaskAction
 from traits.api import Any, Bool, HasTraits, Instance, Int, List, Str, observe
 
 # Microdrop package imports.
-from microdrop_application.consts import CHANGELOG_PATH
 from microdrop_application.dialogs.consts import (
     DEFAULT_WEB_VIEW_DIALOG_HEIGHT,
     DEFAULT_WEB_VIEW_DIALOG_WIDTH,
@@ -327,12 +326,6 @@ def menu_factory(tutorial_catalog=None):
         OpenGitHubIssuesAction(),
         OpenSciBotsAction(),
         contact_submenu,
-        OpenMarkdownDialogAction(
-            name="&Changelog...",
-            tooltip="View the full MicroDrop changelog",
-            source=CHANGELOG_PATH,
-            window_title="MicroDrop Changelog",
-        ),
         TutorialsMenuManager(catalog=tutorial_catalog or TutorialCatalog()),
         ShowTutorialSimulationsAction(),
         OpenWebViewDialogAction(

@@ -13,6 +13,7 @@ from envisage.api import CorePlugin
 from envisage.ui.tasks.api import TasksPlugin
 
 # Microdrop package imports.
+from app_updates.plugin import AppUpdatesPlugin
 from device_viewer.plugin import DeviceViewerPlugin
 from dropbot_controller.plugin import DropbotControllerPlugin
 from dropbot_preferences_ui.plugin import DropbotPreferencesPlugin
@@ -95,6 +96,7 @@ FRONTEND_PLUGINS = [
     StatusBarPlugin,
     LoggerUIPlugin,
     PluginManagementPlugin,
+    AppUpdatesPlugin,
     DeviceViewerPlugin,
     ImageViewerPlugin,
     UserHelpPlugin,
@@ -181,3 +183,27 @@ BACKEND_APPLICATION = MicrodropBackendApplication
 FRONTEND_APPLICATION = MicrodropApplication
 
 DEFAULT_APPLICATION = MicrodropApplication
+
+
+def with_updates_panel(plugins):
+    """Return a copy of ``plugins`` with ``AppUpdatesPlugin`` added when they
+    load the frontend shell (``MicrodropPlugin``) without it — right after
+    ``PluginManagementPlugin`` when that is loaded, else at the end.
+
+    A launcher's saved plugin selection can predate the Updates panel; such a
+    frontend would follow the default update policy with no way to see or
+    change it.
+    """
+    plugins = list(plugins)
+
+    if MicrodropPlugin not in plugins or AppUpdatesPlugin in plugins:
+        return plugins
+
+    if PluginManagementPlugin in plugins:
+        position = plugins.index(PluginManagementPlugin) + 1
+    else:
+        position = len(plugins)
+
+    plugins.insert(position, AppUpdatesPlugin)
+
+    return plugins
