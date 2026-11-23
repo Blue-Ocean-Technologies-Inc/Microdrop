@@ -114,10 +114,11 @@ FRONTEND_PLUGINS = [
     ZoneProtocolControlsPlugin,
 ]
 
-# Frontend plugins started only after the main window has painted, one per
-# event-loop turn, by plugin_management. Each is a "module:Class" spec, so its
-# module is not imported before then, plus the dock panes it contributes,
-# which show placeholders until it has loaded. Only plugins nothing else needs
+# Frontend plugins started only after the main window has painted, one at a
+# time, by plugin_management. Each is a "module:Class" spec, so its module is
+# not imported before then, plus the dock panes it contributes, which show
+# placeholders until it has loaded, and the modules it imports lazily, which
+# are imported off the GUI thread before it loads. Only plugins nothing else needs
 # at start-up belong here: no protocol columns, quick actions, services or
 # mixins a base plugin looks up in its start(), and no topic they must hear
 # before the window is up (a message published before a listener exists is
@@ -126,6 +127,14 @@ FRONTEND_PLUGINS = [
 DEFERRED_FRONTEND_PLUGINS = [
     DeferredPlugin(
         spec="image_viewer.plugin:ImageViewerPlugin",
+        # The ROI Intensities pane's module brings matplotlib with it.
+        preload_modules=[
+            "image_viewer.dock_pane",
+            "image_viewer.menus",
+            "image_viewer.analysis.plot_pane",
+            "image_viewer.message_handler",
+            "image_viewer.preferences",
+        ],
         dock_panes=[
             DeferredDockPane(
                 id=image_viewer_consts.DOCK_PANE_ID,
@@ -139,6 +148,10 @@ DEFERRED_FRONTEND_PLUGINS = [
     ),
     DeferredPlugin(
         spec="user_help_plugin.plugin:UserHelpPlugin",
+        preload_modules=[
+            "user_help_plugin.menus",
+            "user_help_plugin.simulations_dock_pane",
+        ],
         dock_panes=[
             DeferredDockPane(
                 id=user_help_consts.TUTORIAL_SIMULATIONS_DOCK_PANE_ID,
@@ -147,7 +160,10 @@ DEFERRED_FRONTEND_PLUGINS = [
             ),
         ],
     ),
-    DeferredPlugin(spec="ssh_controls_ui.plugin:SSHUIPlugin"),
+    DeferredPlugin(
+        spec="ssh_controls_ui.plugin:SSHUIPlugin",
+        preload_modules=["ssh_controls_ui.menus", "ssh_controls_ui.preferences"],
+    ),
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [

@@ -14,9 +14,10 @@ A run script names each deferred plugin by its ``"module:Class"`` spec, so the
 plugin's module (and whatever heavy packages it imports) is not imported
 before the window is up, and declares the dock panes the plugin will
 contribute, so placeholders with the final pane ids can be laid out with the
-window. The plugin-management loader imports, starts and mounts them one at a
-time. Qt-free; it lives in ``microdrop_utils`` because the run scripts, the
-application and ``plugin_management`` all read it.
+window, and may name the modules the plugin imports lazily, so they can be
+imported off the GUI thread. The plugin-management loader imports, starts and
+mounts them one at a time. Qt-free; it lives in ``microdrop_utils`` because
+the run scripts, the application and ``plugin_management`` all read it.
 """
 
 # Standard library imports.
@@ -51,11 +52,23 @@ class DeferredPlugin(HasTraits):
     #: The dock panes the plugin contributes, declared ahead of its import.
     dock_panes = List(Instance(DeferredDockPane))
 
+    #: Modules the plugin imports only once it is added, started or builds
+    #: its panes (lazy imports in its contribution defaults and pane
+    #: factories). The loader imports them with the plugin's own module on a
+    #: worker thread, so the GUI thread does not.
+    preload_modules = List(Str)
+
     #: The class part of ``spec``, the plugin's name until it is imported.
     class_name = Property(Str, observe="spec")
 
+    #: The plugin's own module, then ``preload_modules``.
+    module_names = Property(List(Str), observe="spec, preload_modules.items")
+
     def _get_class_name(self):
         return self.spec.partition(":")[2]
+
+    def _get_module_names(self):
+        return [self.spec.partition(":")[0], *self.preload_modules]
 
     @property
     def __name__(self):

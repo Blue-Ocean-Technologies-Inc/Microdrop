@@ -8,10 +8,16 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The deferred-plugin loader starts its plugins in order, one per turn,
-records each, skips failures without stopping, fires ``finished`` once, and
-warns when a plugin's panes differ from its declaration. Runs a real Envisage
-application with fake plugins named by spec; the event loop is a queue."""
+"""The deferred-plugin loader imports each plugin's modules off the GUI
+thread, starts its plugins in order, one at a time, records each, skips
+failures without stopping, waits for a plugin's panes before the next one,
+fires ``finished`` once, and warns when a plugin's panes differ from its
+declaration. Runs a real Envisage application with fake plugins named by
+spec; the event loop is a queue, and the import thread runs inline unless a
+test says otherwise."""
+
+# Standard library imports.
+import threading
 
 # Third-party imports.
 import pytest
@@ -22,7 +28,7 @@ from envisage.ui.tasks.api import TaskExtension
 from traits.api import List
 
 # Microdrop package imports.
-from plugin_management import deferred_loader
+from plugin_management import deferred_loader, live_task_extensions
 from plugin_management.deferred_loader import (
     DeferredPluginLoader,
     compare_declared_panes,
@@ -81,7 +87,8 @@ class LastPlugin(Plugin):
 
 
 class FakeEventLoop:
-    """``GUI.invoke_later`` as a queue the test drains."""
+    """``GUI.invoke_later`` and the paced queue as one queue the test
+    drains, one call per turn."""
 
     def __init__(self):
         self.calls = []
@@ -89,15 +96,26 @@ class FakeEventLoop:
     def invoke_later(self, callable, *args, **kwargs):
         self.calls.append((callable, args, kwargs))
 
-    def drain(self):
+    def drain(self, max_turns=1000):
         turns = 0
 
-        while self.calls:
+        while self.calls and turns < max_turns:
             callable, args, kwargs = self.calls.pop(0)
             callable(*args, **kwargs)
             turns += 1
 
         return turns
+
+
+class InlineThread:
+    """``threading.Thread`` that runs its target on this thread when started."""
+
+    def __init__(self, target, args=(), **kwargs):
+        self._target = target
+        self._args = args
+
+    def start(self):
+        self._target(*self._args)
 
 
 #: Pane id the fake controller "mounts" for each pane factory.
@@ -127,6 +145,9 @@ class FakeLiveTaskExtensions(LiveTaskExtensionsController):
 def event_loop(monkeypatch):
     loop = FakeEventLoop()
     monkeypatch.setattr(deferred_loader, "GUI", loop)
+    monkeypatch.setattr(deferred_loader, "invoke_paced", loop.invoke_later)
+    monkeypatch.setattr(live_task_extensions, "invoke_paced", loop.invoke_later)
+    monkeypatch.setattr(deferred_loader, "Thread", InlineThread)
     STARTED.clear()
 
     return loop
@@ -179,7 +200,7 @@ def test_plugins_load_in_order_and_a_failure_does_not_stop_the_rest(
 
     loader.start(FakeLiveTaskExtensions())
 
-    # One plugin per turn: nothing loads until the event loop runs.
+    # Nothing loads until the event loop runs.
     assert STARTED == []
 
     turns = event_loop.drain()
@@ -260,6 +281,56 @@ def test_panes_that_differ_from_the_declaration_are_warned_about(
 
     # The declared pane never arrived, so its placeholder is taken down.
     assert controller.unmounted == ["test.last.pane"]
+
+
+def test_modules_are_imported_on_a_worker_thread(tmp_path, event_loop, monkeypatch):
+    monkeypatch.setattr(deferred_loader, "Thread", threading.Thread)
+    imported_on = {}
+    import_module = deferred_loader.importlib.import_module
+
+    # The first import of each module is the one that loads it.
+    def record_import(name):
+        imported_on.setdefault(name, threading.current_thread())
+
+        return import_module(name)
+
+    monkeypatch.setattr(deferred_loader.importlib, "import_module", record_import)
+
+    deferred = _deferred("FirstPlugin")
+    deferred.preload_modules = ["json"]
+    loader = _make_loader(tmp_path, [deferred])
+
+    loader.start(FakeLiveTaskExtensions())
+    event_loop.drain()
+
+    # The worker hands the plugin back through the event loop.
+    for worker in [t for t in threading.enumerate() if t.name.startswith("import ")]:
+        worker.join(timeout=5)
+
+    event_loop.drain()
+
+    assert set(imported_on) == {_SPEC_PREFIX, "json"}
+    assert threading.main_thread() not in imported_on.values()
+    assert STARTED == ["test.first"]
+
+
+def test_the_next_plugin_waits_while_the_panes_are_being_mounted(tmp_path, event_loop):
+    loader = _make_loader(tmp_path, [_deferred("FirstPlugin"), _deferred("LastPlugin")])
+    controller = FakeLiveTaskExtensions()
+    controller._reconciling = True
+
+    loader.start(controller)
+    event_loop.drain(max_turns=50)
+
+    assert STARTED == ["test.first"]
+    assert loader.running
+
+    controller._reconciling = False
+    controller._settle()
+    event_loop.drain()
+
+    assert STARTED == ["test.first", "test.last"]
+    assert not loader.running
 
 
 def test_compare_declared_panes():
