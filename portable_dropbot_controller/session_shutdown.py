@@ -15,7 +15,9 @@ awaited at most SHUTDOWN_TIMEOUT_S so a dead board cannot stall the close.
 The electrodes are cleared as well, after the HV off (``DropBotUart.halt``'s
 order), so no pattern from this session is still latched when HV next
 comes on. A link that is already gone is closed without these commands,
-like the vendor's lost-link path."""
+like the vendor's lost-link path. Heaters a host workflow is driving (the
+self-test heat step) are switched off the same way (``switch_heaters_off``,
+the vendor worker's ``shutdown_heaters``)."""
 
 # Third-party imports.
 from dropbot_portable import SignalBoardProxy
@@ -55,20 +57,59 @@ def deenergize_session(session, timeout_s=SHUTDOWN_TIMEOUT_S):
     """Switch HV off, clear every electrode and power the PMT off, best
     effort, on a session about to close. Return one outcome line per
     command for the log; never raises."""
+    sig = _bounded_signal_proxy(session, timeout_s)
+
+    if sig is None:
+        return []
+
+    no_channels = bytes((int(session.uart.board_channels) + 7) // 8)
+
+    return _send_bounded(
+        (
+            ("hv_enable(0, 0)", lambda: sig.hv_enable(0, 0)),
+            ("clear channels", lambda: sig.electrode_state_ch(no_channels)),
+            ("pmt_power(0)", lambda: sig.pmt_power(0)),
+        )
+    )
+
+
+def switch_heaters_off(session, channels, timeout_s=SHUTDOWN_TIMEOUT_S):
+    """TEMP_START_STOP 0 on each heater loop of ``channels``, bounded and best
+    effort like ``deenergize_session``. Return one outcome line per channel
+    for the log; never raises."""
+    sig = _bounded_signal_proxy(session, timeout_s)
+
+    if sig is None:
+        return []
+
+    return _send_bounded(
+        (
+            (
+                f"temp_start_stop({channel}, 0)",
+                lambda channel=channel: sig.temp_start_stop(channel=channel, enable=0),
+            )
+            for channel in channels
+        )
+    )
+
+
+def _bounded_signal_proxy(session, timeout_s):
+    """A signal-board proxy over ``BoundedTransport``; None when the signal
+    board is not attached."""
     uart = getattr(session, "uart", None)
 
     if uart is None or not getattr(uart, "sig_board_connected", False):
-        return []
+        return None
 
-    sig = SignalBoardProxy(BoundedTransport(uart, timeout_s))
-    no_channels = bytes((int(uart.board_channels) + 7) // 8)
+    return SignalBoardProxy(BoundedTransport(uart, timeout_s))
+
+
+def _send_bounded(commands):
+    """Send each ``(label, command)`` in turn, whatever the others do; return
+    one outcome line per command."""
     steps = []
 
-    for label, command in (
-        ("hv_enable(0, 0)", lambda: sig.hv_enable(0, 0)),
-        ("clear channels", lambda: sig.electrode_state_ch(no_channels)),
-        ("pmt_power(0)", lambda: sig.pmt_power(0)),
-    ):
+    for label, command in commands:
         try:
             reply = command()
         except Exception as error:

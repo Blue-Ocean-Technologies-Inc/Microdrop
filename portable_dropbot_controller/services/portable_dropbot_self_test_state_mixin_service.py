@@ -8,18 +8,20 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The self-test hub's state between runs: pre-flight reads and the
-backend-owned unsaved-calibration state with its flash save, per the
-contract in ``portable_dropbot_self_tests.consts``. The run itself is
+"""The self-test hub's state around runs: pre-flight reads, the
+backend-owned unsaved-calibration state with its flash save, and the
+heaters a running test drives, per the contract in
+``portable_dropbot_self_tests.consts``. The run itself is
 ``portable_dropbot_self_test_mixin_service``; this mixin reads its
-``_self_test_run_id`` and the run writes ``_self_test_unsaved`` here.
+``_self_test_run_id`` and the run writes ``_self_test_unsaved`` and
+``_self_test_heaters`` here.
 """
 
 # Third-party imports.
 from pydantic import ValidationError
 
 # Enthought library imports.
-from traits.api import HasTraits, List, Str, observe, provides
+from traits.api import HasTraits, Int, List, Str, observe, provides
 
 # Microdrop package imports.
 from portable_dropbot_self_tests.consts import (
@@ -39,6 +41,7 @@ from ..interfaces.i_portable_dropbot_control_mixin_service import (
 )
 from ..self_test_choreography import preflight_fields, read_board_state
 from ..self_test_results import cap_calibration_save_outcome, elec_tare_save_outcome
+from ..session_shutdown import switch_heaters_off
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -55,12 +58,36 @@ class PortableDropbotSelfTestStateMixinService(HasTraits):
     #: contract's "Unsaved calibration").
     _self_test_unsaved = List(Str)
 
+    #: Heater loops the running test drives (the heat step), set by
+    #: SelfTestBoard for the test's duration: the vendor worker's
+    #: ``shutdown_heaters``.
+    _self_test_heaters = List(Int)
+
     @observe("portable_dropbot_connection_active")
     def _forget_unsaved_on_disconnect(self, event):
-        """The board's RAM calibration goes with the connection."""
+        """The board's RAM calibration goes with the connection. A heat step
+        in flight loses its host-side bounds with it, so its heaters are
+        switched off first; every disconnect path clears the flag before
+        closing the session, so the port is still open for a deliberate
+        close (a lost link just fails the commands, bounded)."""
 
         if not event.new:
             self._self_test_unsaved = []
+            self._switch_off_self_test_heaters("disconnect")
+
+    def _switch_off_self_test_heaters(self, reason):
+        """TEMP_START_STOP 0 on the heaters a running test drives, bounded and
+        past the proxy lock (the test holds it); never raises."""
+        channels = list(self._self_test_heaters)
+
+        if not channels or self.proxy is None:
+            return
+
+        steps = switch_heaters_off(self.proxy, channels)
+        logger.warning(
+            f"Self-test heaters switched off for {reason}: "
+            f"{'; '.join(steps) or 'signal board not attached'}"
+        )
 
     def _on_request_refused(self, topic, message, reason):
         """Answer a refused pre-flight read or save with its reply's error,
