@@ -23,16 +23,27 @@ from apscheduler.schedulers.base import (
 )
 from apscheduler.triggers.interval import IntervalTrigger
 from dropbot_portable import DropBotSession
+from dropbot_portable.port_utils import filter_serial_ports
 from serial.tools import list_ports
 
 # Enthought library imports.
-from traits.api import Bool, HasTraits, Instance, Str, provides
+from traits.api import Bool, HasTraits, Instance, List, Set, Str, provides
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
-from ..consts import MONITOR_INTERVAL_S, PORTS_UPDATED
+from ..connect_attempt import (
+    ConnectAttempt,
+    ConnectAttemptCancelled,
+    ConnectAttemptTimeout,
+)
+from ..consts import (
+    CONNECT_AUTODETECT_TIMEOUT_S,
+    CONNECT_TIMEOUT_S,
+    MONITOR_INTERVAL_S,
+    PORTS_UPDATED,
+)
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
@@ -65,8 +76,19 @@ class PortableDropbotMonitorMixinService(HasTraits):
     #: message), reported instead of the generic handshake text;
     #: cleared by a successful connect.
     _last_connect_error = Str()
+    #: Driver connects in flight (a scan round's and a user-chosen port's
+    #: can overlap); cleanup abandons them so shutdown never waits on a
+    #: port that swallowed the login write.
+    _connect_attempts = List(Instance(ConnectAttempt))
+    #: Plugin stop began: scan rounds end and no new connect is waited on.
+    _monitor_stopping = Bool(False)
+    #: Ports whose connect already timed out: the scan retries them every
+    #: tick, the warning is logged once.
+    _stalled_ports = Set(Str)
 
     def on_start_device_monitoring_request(self, *args, **kwargs):
+        self._monitor_stopping = False
+
         if self.portable_dropbot_connection_active and self.proxy is not None:
             self._publish_connected()
             return
@@ -91,20 +113,39 @@ class PortableDropbotMonitorMixinService(HasTraits):
         scheduler.add_listener(self._on_ports_discovered, EVENT_JOB_EXECUTED)
         self.monitor_scheduler = scheduler
         self.monitor_scheduler.start()
-        # Interpreter-exit backstop: atexit callbacks run before Python
-        # kills executor pools, so the scheduler dies quietly even on an
-        # exit path that never reaches plugin stop (a signal handler's
-        # sys.exit, a killed window).
+        # Interpreter-exit backstop for an exit path that never reaches
+        # plugin stop (a signal handler's sys.exit, a killed window).
+        # atexit runs only after concurrent.futures' own exit hook has
+        # joined the executor's pool thread (daemon or not), so it cannot
+        # rescue a stuck job: the connect deadline is what bounds that join.
         atexit.register(self._shutdown_monitor_scheduler)
         logger.info("Portable Dropbot monitor started.")
 
     def cleanup(self):
-        """Stop the port scanner before the connection teardown: a
-        BackgroundScheduler nothing shuts down outlives plugin stop,
-        and once interpreter shutdown kills its executor pool every
-        tick spams 'cannot schedule new futures after shutdown'."""
+        """Abandon in-flight connects and stop the port scanner before the
+        connection teardown. A BackgroundScheduler nothing shuts down
+        outlives plugin stop, and once interpreter shutdown kills its
+        executor pool every tick spams 'cannot schedule new futures after
+        shutdown'; a connect stuck in the pool thread would keep the
+        process alive (#1065)."""
+        self._monitor_stopping = True
+        self._abandon_connect_attempts()
         self._shutdown_monitor_scheduler()
         super().cleanup()
+
+    def _abandon_connect_attempts(self):
+        """Release every waiter on a driver connect; each attempt closes its
+        own half-open port in the background."""
+        attempts = list(self._connect_attempts)
+
+        if attempts:
+            logger.info(
+                f"Abandoning Portable Dropbot connect on "
+                f"{', '.join(attempt.port_name for attempt in attempts)}."
+            )
+
+        for attempt in attempts:
+            attempt.abandon(ConnectAttemptCancelled("the monitor is stopping"))
 
     def _shutdown_monitor_scheduler(self):
         """Idempotent scheduler shutdown, shared by cleanup and the
@@ -234,24 +275,18 @@ class PortableDropbotMonitorMixinService(HasTraits):
         return self._candidate_ports()
 
     def _candidate_ports(self):
-        """The preference hint first, then USB-style ports (the usual
-        transport), then the rest — the hardware has no VID:PID
-        identity, so the login handshake is the filter. Onboard UARTs
-        (a Pi's /dev/ttyAMA*) land last: they always exist and never
-        answer."""
-        present = [port.device for port in list_ports.comports()]
-        usb_like = [
-            port
-            for port in present
-            if "USB" in port.upper()
-            or "ACM" in port.upper()
-            or port.upper().startswith("COM")
-        ]
-        others = [port for port in present if port not in usb_like]
-        ports = usb_like + others
+        """The preference hint first, then the driver's own port choice:
+        endpoints that can never be the board are dropped (Bluetooth SPP
+        ports, whose login write with no peer never completes — #1065 —
+        and a Mac's debug console), USB-style ports sort before the rest
+        (onboard UARTs such as a Pi's /dev/ttyAMA*). The hardware has no
+        VID:PID identity, so the login handshake is the final filter."""
+        ports = filter_serial_ports(list_ports.comports())
         hint = str(self.preferences.port_hint or "").strip()
+
         if hint:
             ports = [hint] + [port for port in ports if port != hint]
+
         return ports
 
     def _on_ports_discovered(self, event):
@@ -261,8 +296,9 @@ class PortableDropbotMonitorMixinService(HasTraits):
         try:
             hint = str(self.preferences.port_hint or "").strip()
             for port_name in event.retval or []:
-                if self.portable_dropbot_connection_active:
+                if self.portable_dropbot_connection_active or self._monitor_stopping:
                     return
+
                 # The full 4-rate autodetect ladder costs seconds and
                 # a dozen warning lines per silent port; while
                 # scanning, one login at the configured baud is the
@@ -278,12 +314,43 @@ class PortableDropbotMonitorMixinService(HasTraits):
         session = None
         try:
             session = DropBotSession()
-            if not session.connect(
-                port=port_name,
-                baudrate=int(self.preferences.baud_rate),
-                autodetect=autodetect,
-            ):
+            attempt = ConnectAttempt(
+                session=session,
+                port_name=port_name,
+                connect_kwargs=dict(
+                    port=port_name,
+                    baudrate=int(self.preferences.baud_rate),
+                    autodetect=autodetect,
+                ),
+            )
+            self._connect_attempts.append(attempt)
+
+            # cleanup sets the flag before abandoning the registered
+            # attempts, so an attempt registered meanwhile is caught here.
+            if self._monitor_stopping:
+                attempt.abandon(ConnectAttemptCancelled("the monitor is stopping"))
+
+            try:
+                connected = attempt.run(
+                    CONNECT_AUTODETECT_TIMEOUT_S if autodetect else CONNECT_TIMEOUT_S
+                )
+            finally:
+                self._connect_attempts.remove(attempt)
+
+            if attempt.abandoned:
+                # The attempt's release thread closes this session.
+                session = None
+                raise attempt.error
+
+            if attempt.error is not None:
+                raise attempt.error
+
+            if not connected:
                 raise ConnectionError("login handshake failed")
+
+            if self._monitor_stopping:
+                raise ConnectAttemptCancelled("the monitor is stopping")
+
             if not session.connected:
                 # The driver's single-rate connect returns True as
                 # soon as the port OPENS (legacy behavior) — an
@@ -342,7 +409,16 @@ class PortableDropbotMonitorMixinService(HasTraits):
             self.portable_dropbot_connection_active = False
             self._last_connect_error = f"{type(exc).__name__}: {exc}"
 
-            if not self._error_shown:
+            if (
+                isinstance(exc, ConnectAttemptTimeout)
+                and port_name not in self._stalled_ports
+            ):
+                self._stalled_ports.add(port_name)
+                logger.warning(
+                    f"Portable Dropbot connect on {port_name} abandoned ({exc}); "
+                    f"the port is probably not the board."
+                )
+            elif not self._error_shown:
                 logger.debug(f"Connection attempt failed on {port_name}: {exc}")
                 self._error_shown = True
             return False
