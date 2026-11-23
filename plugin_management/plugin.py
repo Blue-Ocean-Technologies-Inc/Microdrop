@@ -36,6 +36,11 @@ from traits.api import Any, Bool, Instance, List, Str, observe
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
+from notifications.consts import (
+    NOTIFICATION_SECTIONS,
+    NOTIFICATIONS_PLUGIN_ID,
+    show_notifications_panel_publisher,
+)
 from user_help_plugin.consts import TUTORIAL_ORDER_MANAGEMENT, TUTORIALS, TutorialEntry
 
 # Microdrop utils imports.
@@ -44,7 +49,12 @@ from microdrop_utils.tasks_runtime_helpers import restore_saved_task_layout
 
 # Local imports.
 from . import package_installer
-from .consts import PKG, PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH, PKG_name
+from .consts import (
+    LOAD_STATUS_SECTION_ID,
+    PKG,
+    PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH,
+    PKG_name,
+)
 from .i_plugin_group_manager import IPluginGroupManager
 from .update_controller import show_update_dialog
 from .update_model import compute_update_report
@@ -79,6 +89,9 @@ class PluginManagementPlugin(Plugin):
 
     #: The plugin load-status indicator while the plugin runs.
     status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
+
+    #: The plugin load list as the notifications pane's top section.
+    notification_sections = List(contributes_to=NOTIFICATION_SECTIONS)
 
     #: Keeps the indicator in step with the application's load records.
     _load_status_indicator = Instance(
@@ -164,14 +177,26 @@ class PluginManagementPlugin(Plugin):
             model=PluginLoadStatusPanelModel(status=status)
         )
 
+        widget = self._load_status_indicator.widget
+        widget.clicked.connect(self._show_load_status)
+
+        self.status_bar_icons.append(widget)
+
+    def _show_load_status(self):
+        """Open the load list: the notifications pane's Plugins section when
+        that plugin runs, else the load-status panel."""
+
+        if self.application.get_plugin(NOTIFICATIONS_PLUGIN_ID) is not None:
+            show_notifications_panel_publisher.publish(
+                {"section_id": LOAD_STATUS_SECTION_ID}
+            )
+
+            return
+
         # The panel is parented to the icon's window, not the icon: the icon's
         # colour style sheet would cascade into every child widget.
         widget = self._load_status_indicator.widget
-        widget.clicked.connect(
-            lambda: self._load_status_controller.show_panel(widget.window())
-        )
-
-        self.status_bar_icons.append(widget)
+        self._load_status_controller.show_panel(widget.window())
 
     def _withdraw_load_status_indicator(self):
         """Close the panel and take the indicator out of the status bar."""
@@ -183,6 +208,11 @@ class PluginManagementPlugin(Plugin):
 
         self._load_status_indicator = None
         self._load_status_controller = None
+
+    def _notification_sections_default(self):
+        from .load_status_section import PluginLoadStatusSection
+
+        return [PluginLoadStatusSection(status=self.application.plugin_load_status)]
 
     # --- group-manager service -----------------------------------------
 
