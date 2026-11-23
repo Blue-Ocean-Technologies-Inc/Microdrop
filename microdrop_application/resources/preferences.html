@@ -899,7 +899,7 @@ Type to search, or pick a tab.</p>
 <tr data-tab="status" data-node="microdrop.dropbot_status_and_controls" data-key="default_dielectric_material" data-default='"Pick a dielectric..."'><td><a href="#st-dielectric">Default Dielectric Material</a></td><td class="where">DropBot Status &amp; Controls · <em>DropBot</em></td><td class="def">Pick a dielectric...</td><td class="eff">Next start</td></tr>
 <tr data-tab="status" data-node="microdrop.dropbot_status_and_controls" data-key="show_dielectric_info" data-default="true"><td><a href="#st-dielectric">Show Dielectric Info</a></td><td class="where">DropBot Status &amp; Controls · <em>DropBot</em></td><td class="def">On</td><td class="eff">Apply</td></tr>
 <tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="fan_board" data-default='"signal"'><td><a href="#pd-fan">Fan toggle controls</a></td><td class="where">Portable DropBot Settings · <em>Portable</em></td><td class="def">MCU board fan</td><td class="eff">Apply</td></tr>
-<tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="chip_detect_rule" data-default='"both_pogos"'><td><a href="#pd-chip">Chip detected when</a></td><td class="where">Portable DropBot Settings · <em>Portable</em></td><td class="def">Both pogo pads touching the chip</td><td class="eff">Apply</td></tr>
+<tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="chip_detect_rule" data-default='"presence"'><td><a href="#pd-chip">Chip detected when</a></td><td class="where">Portable DropBot Settings · <em>Portable</em></td><td class="def">The chip sensor detects it (vendor default)</td><td class="eff">Apply</td></tr>
 <tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="droplet_detection_threshold_pf" data-default="5.0"><td><a href="#pd-threshold">Droplet detection threshold (pF)</a></td><td class="where">Portable DropBot Settings · <em>Portable</em></td><td class="def">5.0 (0.1–1000)</td><td class="eff">Apply</td></tr>
 <tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="magnet_engage_mm" data-default="14.0"><td><a href="#pd-magnet">Engage position (mm)</a></td><td class="where">Portable DropBot Settings ▸ Magnet · <em>Portable</em></td><td class="def">14.000</td><td class="eff">Board only on Write / Preset to flash</td></tr>
 <tr data-tab="portable" data-node="microdrop.portable_dropbot_settings" data-key="gain_presets" data-default='"64, 128, 192, 255"'><td><a href="#pd-presets">Gain presets</a></td><td class="where">Portable DropBot Settings ▸ Presets · <em>Portable</em></td><td class="def">64, 128, 192, 255</td><td class="eff">Apply</td></tr>
@@ -1342,11 +1342,12 @@ position, which needs its own buttons.</p>
 
 <article class="term" id="pd-chip">
   <h3>Chip detected when <span class="where">Portable DropBot Settings</span></h3>
-  <p>How many pogo contacts must touch the chip before MicroDrop says a chip is in.</p>
-  <dl class="facts"><dt>What it is</dt><dd><p><span class="ui">Both pogo pads touching the chip</span> or <span class="ui">At least one pogo pad
-  touching the chip</span>.</p></dd>
-  <dt>When to use it</dt><dd><p>Use "at least one" if a seated chip keeps showing as absent.</p></dd>
-  <dt>Typical value</dt><dd><p>Both pogo pads.</p></dd>
+  <p>What MicroDrop counts as a chip on the pad: the board's debounced chip sensor, or the raw pogo contacts.</p>
+  <dl class="facts"><dt>What it is</dt><dd><p><span class="ui">The chip sensor detects it (vendor default)</span>,
+  <span class="ui">Both pogo pads touching the chip (raw)</span> or <span class="ui">At least one pogo pad
+  touching the chip (raw)</span>. Every rule also needs the chip sensor.</p></dd>
+  <dt>When to use it</dt><dd><p>Keep the vendor default; the raw pogo rules are stricter and only for diagnosing a flaky contact.</p></dd>
+  <dt>Typical value</dt><dd><p>The chip sensor (vendor default).</p></dd>
 </dl></article>
 
 <article class="term" id="pd-threshold">
