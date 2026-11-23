@@ -10,14 +10,14 @@
 
 """The More Controls pane: everything beyond the everyday status-pane
 controls, one chevron-collapsed group per subsystem — per-channel
-heater control (with nested PID tuning) and the PMT power/gain (the
+heater control (with nested PID tuning and auto-tune) and the PMT power/gain (the
 live stream and buffered acquire live in the PMT Capture pane). Laid
 out like the status pane: one labeled row per setter, action buttons
 on their own row below. The live PMT reading shows in the status
 pane's Board Status group."""
 
 # Enthought library imports.
-from traitsui.api import HGroup, Item, Label, UItem, VGroup, View
+from traitsui.api import HGroup, InstanceEditor, Item, Label, UItem, VGroup, View
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
@@ -36,6 +36,9 @@ from microdrop_utils.traitsui_qt_helpers import (
     InPlaceToggleEditor,
     PresetButtonsEditor,
 )
+
+# Local imports.
+from .heater_tune_view import HeaterTuneView
 
 _target_spin_box = DoubleSpinBoxEditor(
     low=TEMP_TARGET_C_BOUNDS[0],
@@ -131,6 +134,24 @@ temperature = VGroup(
                 ),
                 Item("pid_status", style="readonly", label="Status"),
                 visible_when="show_pid",
+            ),
+        ),
+        VGroup(
+            HGroup(
+                UItem(
+                    "show_auto_tune",
+                    editor=IconToggleEditor(),
+                    tooltip="Show or hide the heater auto-tune",
+                ),
+                Label("Auto-tune"),
+            ),
+            VGroup(
+                UItem(
+                    "heater_tune",
+                    style="custom",
+                    editor=InstanceEditor(view=HeaterTuneView),
+                ),
+                visible_when="show_auto_tune",
             ),
         ),
         visible_when="show_temperature",

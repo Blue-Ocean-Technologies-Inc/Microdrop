@@ -37,6 +37,9 @@ from .services.portable_dropbot_electrodes_mixin_service import (
 from .services.portable_dropbot_fluorescence_mixin_service import (
     FluorescenceCaptureMixinService,
 )
+from .services.portable_dropbot_heater_tune_mixin_service import (
+    PortableDropbotHeaterTuneMixinService,
+)
 from .services.portable_dropbot_monitor_mixin_service import (
     PortableDropbotMonitorMixinService,
 )
@@ -101,6 +104,13 @@ class PortableDropbotControllerPlugin(Plugin):
                 protocol=IPortableDropbotControlMixinService,
                 factory=self._create_droplet_detection_service,
             ),
+            # Before the temp and self-test mixins: its _exclusive_owner_reason,
+            # _on_request_refused and on_alarm_signal must run first and
+            # chain to theirs (the composed class's MRO follows this order).
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_heater_tune_service,
+            ),
             ServiceOffer(
                 protocol=IPortableDropbotControlMixinService,
                 factory=self._create_temp_service,
@@ -150,6 +160,10 @@ class PortableDropbotControllerPlugin(Plugin):
     @staticmethod
     def _create_droplet_detection_service(*args, **kwargs):
         return PortableDropbotDropletDetectionMixinService
+
+    @staticmethod
+    def _create_heater_tune_service(*args, **kwargs):
+        return PortableDropbotHeaterTuneMixinService
 
     @staticmethod
     def _create_temp_service(*args, **kwargs):

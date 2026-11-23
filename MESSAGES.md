@@ -538,6 +538,29 @@ Aligned with dropbot-portable 1.7.0 (#1050).
 **Calibration macro (calibration pane ↔ calibration mixin)**
 - `CALIBRATION_UPDATED {stage, ok, error}` per step, then `{stage: "done", ok, error, retry}`: HV_ENABLE must answer HV on / HV off, CAP_CALIBRATE_ML status 1; a BUSY fit sets `retry`. A failed setup step skips to the teardown (HV off, restore V/F, press pogos), which always runs.
 
+### Portable DropBot heater auto-tune (#1081)
+
+The vendor's `dropbot_portable.heater_tune` (1.8.0) behind the More Controls pane's Auto-tune group (`portable_dropbot_status_and_controls`) and the backend's heater-tune mixin (`portable_dropbot_controller/services/portable_dropbot_heater_tune_mixin_service.py`, loop in `heater_tune_capture.py`). Contracts in `portable_dropbot_controller/consts/heater_tune.py`.
+
+**Requests (pane controller → backend)**
+- `HEATER_TUNE_START = "portable_dropbot/requests/heater_tune_start"` — `HeaterTuneStartRequest {channel 0..1, duty_pct 1..100, max_temp_c 30..90, max_duration_s 30..3600}` via `heater_tune_start_publisher`. Refused (answered on `HEATER_TUNE_DONE {ok: false, reason}`) while a tune runs, a protocol step holds a heater target, either heater is on (STATUS `temp_onoff`), the cap is at or above the board's max_temp_c − 5 °C, or `heater_tune.capture_problem` objects (no reading, too close to the cap).
+- `HEATER_TUNE_CANCEL = "portable_dropbot/requests/heater_tune_cancel"` — raw `publish_message`, empty message; the run aborts and sends heater OFF.
+- `HEATER_TUNE_APPLY = "portable_dropbot/requests/heater_tune_apply"` — `HeaterTuneApplyRequest {channel, kp, ki, kd (TempSetPidRequest limits), period_ms 1000, smith_model (gain, tau, dead), persist}` via `heater_tune_apply_publisher`, sent only after the pane's confirm. Refused while a tune runs, a protocol step holds a target, a heater is on (a `temp_smith` write re-initialises both loops), or the model row is outside `param_layout.temp_smith_problem`'s ranges. Runs `heater_tune.apply_tuning` (TEMP_SET_PARAMS, then this channel's `temp_smith` row, PRESET both with `persist`).
+
+**Signals (backend → `MORE_CONTROLS_LISTENER`)**
+- `HEATER_TUNE_PROGRESS = "portable_dropbot/signals/heater_tune_progress"` — `HeaterTuneProgress {channel, phase (baseline | step | cooldown | fitting), elapsed_s, current_c, duty_pct}`, one per reading (1 Hz).
+- `HEATER_TUNE_DONE = "portable_dropbot/signals/heater_tune_done"` — `HeaterTuneDone {channel, ok, reason, off_confirmed, fit {gain, tau_s, dead_time_s, r2, rmse_c, reached}, proposals {smooth | default | fast: {kp, ki, kd, lambda_s, notes}}, smith_model, notes}`; closes every start request (refusal or outcome).
+- `HEATER_TUNE_APPLIED = "portable_dropbot/signals/heater_tune_applied"` — `HeaterTuneApplied {channel, gains, smith ("ok" | "not served" | a write failure), gains_persisted, error}`; the pane re-reads the PID (`TEMP_READ_PID`) after a gains write on the selected channel.
+
+**Heater ownership while a tune runs** (the mixin's `_exclusive_owner_reason`, chained before the self-test mixin's): the listener refuses `TEMP_SET_TARGET`, `TEMP_CONTROL`, `TEMP_SET_PID`, `HEATER_TUNE_APPLY`, `SELF_TEST_RUN` (answered by the hub's own refusal) and `PROTOCOL_SET_TEMPERATURE` (failed at once on `TEMPERATURE_REACHED {error}`); a refused `DISCONNECT` cancels the tune instead, so the port never closes under a driven heater. A running self-test refuses `HEATER_TUNE_START` the same way.
+
+**Traced flow: a tune**
+1. Pane Start → `HEATER_TUNE_START` → `on_heater_tune_start_request` checks the rules under `_heater_tune_claim` (STATUS, heat_fs max_temp_c, a TEMP_READ_INFO), then starts the `heater-tune` daemon thread.
+2. The thread reads `sig.temp_read_info(ch)` once a second, each call under `_proxy_lock` (never the whole run), feeds `StepCapture` and publishes `HEATER_TUNE_PROGRESS`: 10 s baseline at 0 %, then `sig.temp_heat_pwm` at the step duty until a plateau, the cap minus 1.5 °C (or its 10 s trend) or the time limit, then `sig.temp_start_stop(ch, 0)` (sent without the lock, resent up to 3 times until acknowledged) and a 30 s cool-down log.
+3. Phase `fitting`: `fit_fopdt` on the whole record, `tune_pid` per style, `smith_model`; the claim is released and `HEATER_TUNE_DONE` published.
+4. Pane Apply → confirm → `HEATER_TUNE_APPLY` → `apply_tuning` under `_proxy_lock` → `HEATER_TUNE_APPLIED` → pane `TEMP_READ_PID` → `TEMP_UPDATED {pid}`.
+- Cancel, an E-STOP (`_on_motor_estop`), a heater failsafe alarm (0900x) on the tuned channel (`on_alarm_signal`, which still chains to the temp mixin's), plugin stop (`cleanup` joins the thread before the port closes) and any exception end the run with heater OFF; `off_confirmed` false in `HEATER_TUNE_DONE` means OFF was never acknowledged. A lost link sends nothing: the firmware's host-silence failsafe (alarm 09004) cuts the heater.
+
 ### Portable DropBot protocol columns: magnet + heater step execution
 
 The portable's built-in magnet and heater join a protocol through `portable_dropbot_protocol_controls` (one plugin for every portable peripheral, since they all sit behind the one backend). Each column is a PPT-11 compound column: a "set" checkbox gates the step, and a checked step publishes one request and blocks on one ack, mirroring the standalone magnet/heater plugins.
