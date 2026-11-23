@@ -15,11 +15,13 @@ no Redis."""
 
 # Standard library imports.
 import json
+import struct
 import threading
 import time
 
 # Third-party imports.
 import pytest
+from dropbot_portable.proxy import SignalBoardProxy
 from pydantic import ValidationError
 
 # Enthought library imports.
@@ -49,17 +51,34 @@ def test_a_valid_pid_set_passes():
 
 @pytest.mark.parametrize(
     "change",
-    [{"kp": 100.5}, {"ki": -1.0}, {"kd": 101.0}, {"channel": 2}, {"period_ms": 0}],
+    [
+        {"kp": 100.5},
+        {"ki": -1.0},
+        {"kd": 101.0},
+        {"channel": 2},
+        {"period_ms": 0},
+        {"period_ms": 65_536},
+    ],
 )
 def test_out_of_range_pid_values_are_refused(change):
     with pytest.raises(ValidationError):
         TempSetPidRequest.model_validate({**VALID_PID, **change})
 
 
-@pytest.mark.parametrize("kp, ki", [(0.0, 0.0), (0.004, 0.009)])
+@pytest.mark.parametrize("kp, ki", [(0.0, 0.0), (0.004, 0.0049)])
 def test_kp_and_ki_both_zero_on_the_wire_is_refused(kp, ki):
     with pytest.raises(ValidationError, match="Kp and Ki cannot both be 0"):
         TempSetPidRequest.model_validate({**VALID_PID, "kp": kp, "ki": ki})
+
+
+def test_a_gain_that_rounds_up_to_001_drives_the_loop():
+    TempSetPidRequest.model_validate({**VALID_PID, "kp": 0.0, "ki": 0.006})
+
+
+def test_the_period_reaches_the_uint16_ceiling():
+    request = {**VALID_PID, "period_ms": 65_535}
+
+    assert TempSetPidRequest.model_validate(request).period_ms == 65_535
 
 
 def test_only_the_two_heater_loops_take_a_target():
@@ -294,3 +313,78 @@ def test_heater_off_for_the_other_loop_keeps_the_hold(holding_harness, published
     holding_harness.on_temp_control_request(json.dumps({"channel": 1, "on": False}))
 
     assert not holding_harness._temp_reached_cancel.is_set()
+
+
+# --------------------------------------------------------------------- #
+# PID set / read go through the generated proxy (uint16, rounded)        #
+# --------------------------------------------------------------------- #
+
+
+class _Transport:
+    """What the generated SignalBoardProxy needs from the uart: the sent
+    payloads, and a canned reply."""
+
+    def __init__(self, reply=b""):
+        self.reply = reply
+        self.sent = []
+
+    def _make_cmd_packet(self, cmd, payload):
+        return payload
+
+    def _wr(self, packet, cmd, timeout_s):
+        self.sent.append((cmd, packet))
+
+        return self.reply
+
+
+@pytest.fixture
+def pid_published(monkeypatch):
+    messages = []
+    monkeypatch.setattr(
+        temp_service,
+        "publish_message",
+        lambda topic, message: messages.append(json.loads(message)),
+    )
+
+    return messages
+
+
+def _pid_harness(transport):
+    harness = _Harness(errors=[])
+    harness.proxy = type("Session", (), {"sig": SignalBoardProxy(transport)})()
+
+    return harness
+
+
+def test_a_pid_set_packs_uint16_and_rounds_the_gains(pid_published):
+    transport = _Transport(reply=b"\x00")
+    harness = _pid_harness(transport)
+
+    harness.on_temp_set_pid_request(
+        json.dumps({**VALID_PID, "kp": 0.29, "period_ms": 40_000})
+    )
+
+    [(_cmd, payload)] = transport.sent
+
+    assert struct.unpack(">BHHHH", payload) == (1, 29, 50, 0, 40_000)
+    assert pid_published == [{"channel": 1, "pid_applied": True, "pid_error": ""}]
+
+
+def test_a_pid_read_decodes_a_period_above_32767(pid_published):
+    transport = _Transport(reply=struct.pack(">BHHHH", 0, 29, 50, 0, 40_000))
+    harness = _pid_harness(transport)
+
+    harness.on_temp_read_pid_request("0")
+
+    assert pid_published == [
+        {
+            "channel": 0,
+            "pid": {
+                "channel": 0,
+                "kp": 0.29,
+                "ki": 0.5,
+                "kd": 0.0,
+                "period_ms": 40_000,
+            },
+        }
+    ]

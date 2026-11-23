@@ -31,9 +31,11 @@ TEMP_TARGET_MAX_MARGIN_C = 5.0
 #: backend re-checks every target against the max_temp_c the board serves.
 TEMP_TARGET_C_BOUNDS = (-50.0, 114.9)
 #: MCU 1.0.1.31 refuses TEMP_SET_PARAMS with a gain above 100, and with
-#: Kp = Ki = 0 (the loop would never drive the heater).
+#: Kp = Ki = 0 (the loop would never drive the heater). The period is a
+#: uint16 on the wire (DroSIG 1.0.1.33, dropbot-portable 1.8.0), so the
+#: vendor UI's 65535 ms is the ceiling.
 TEMP_PID_GAIN_BOUNDS = (0.0, 100.0)
-TEMP_PID_PERIOD_MS_BOUNDS = (1, 60_000)
+TEMP_PID_PERIOD_MS_BOUNDS = (1, 65_535)
 #: The heater failsafe alarms (always on since MCU 1.0.1.30): 09001 a
 #: sensor above max_temp_c, 09002 no temperature rise at full power
 #: (heater disconnected?), 09004 no host bytes for host_silence_s, 09005 a
@@ -73,7 +75,8 @@ class ProtocolSetTemperatureRequest(TempSetTargetRequest):
 
 class TempSetPidRequest(BaseModel):
     """A heater loop's PID tuning, inside what MCU 1.0.1.31 accepts. The
-    gains travel in hundredths, so a gain below 0.01 is 0 on the wire."""
+    gains travel in hundredths, rounded as the driver's proxy does, so a
+    gain up to 0.005 is 0 on the wire."""
 
     channel: int = Field(ge=0, le=TEMP_CHANNEL_MAX)
     kp: float = Field(ge=TEMP_PID_GAIN_BOUNDS[0], le=TEMP_PID_GAIN_BOUNDS[1])
@@ -85,7 +88,7 @@ class TempSetPidRequest(BaseModel):
 
     @model_validator(mode="after")
     def _loop_drives_the_heater(self):
-        if int(self.kp * 100) == 0 and int(self.ki * 100) == 0:
+        if round(self.kp / 0.01) == 0 and round(self.ki / 0.01) == 0:
             raise ValueError(
                 "Kp and Ki cannot both be 0: the firmware refuses a loop "
                 "that would never drive the heater"
