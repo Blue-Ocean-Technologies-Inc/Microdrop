@@ -91,7 +91,10 @@ def mechanism_failure(reply, uart, cmd):
     state = mechanism_state(reply)
 
     if state == MECHANISM_STATE_FAULT:
-        return "the mechanism reports FAULT (not homed, or the move failed)"
+        return (
+            "the mechanism reports FAULT (not homed, or the move failed); "
+            "only a successful home of that axis clears it"
+        )
 
     if state is not None:
         return None

@@ -103,8 +103,9 @@ motor_params = VGroup(
     Item("params_status", style="readonly", label="Status"),
     Label(
         "Write is RAM-only and applies live; Preset persists to flash. "
-        "Home direction and polarity change together, and a new home "
-        "direction un-homes the axis — re-home it after the write."
+        "Home direction and polarity change together; a change of either "
+        "un-homes the axis (polarity: motor firmware 1.0.0.28+) and is "
+        "refused while it moves — re-home it after the write."
     ),
     label="Motor Params",
     show_border=True,

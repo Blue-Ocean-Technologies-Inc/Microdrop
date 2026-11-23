@@ -137,9 +137,13 @@ class PortableDropbotTempMixinService(HasTraits):
         self._publish_temp_info(channel, info)
 
     def on_temp_read_pid_request(self, message):
+        """Read a loop's PID tuning through the generated proxy, as the
+        vendor UI does: it decodes the uint16 fields the firmware stores
+        (the uart helper still reads them as int16, so a period above
+        32767 ms came back negative)."""
         channel = int(str(message))
         ok, pid = self._proxy_call(
-            f"temp PID ch{channel}", lambda: self.proxy.uart.get_temp_params(channel)
+            f"temp PID ch{channel}", lambda: self.proxy.sig.temp_read_params(channel)
         )
 
         if not ok or pid is None:
@@ -147,12 +151,16 @@ class PortableDropbotTempMixinService(HasTraits):
             return
 
         publish_message(
-            topic=TEMP_UPDATED, message=json.dumps({"channel": channel, "pid": pid})
+            topic=TEMP_UPDATED,
+            message=json.dumps({"channel": channel, "pid": pid._asdict()}),
         )
 
     def on_temp_set_pid_request(self, message):
         """Write a loop's PID tuning; a set the firmware would refuse (gain
-        above 100, Kp = Ki = 0) is answered with its reason instead."""
+        above 100, Kp = Ki = 0) is answered with its reason instead. It goes
+        through the generated proxy, as the vendor UI's does: uint16 fields
+        and rounded gains (the uart helper packs int16, which cannot carry a
+        period above 32767 ms, and truncates 0.29 to 0.28)."""
         data = json.loads(str(message))
 
         try:
@@ -165,8 +173,12 @@ class PortableDropbotTempMixinService(HasTraits):
 
         ok, result = self._proxy_call(
             f"temp PID ch{request.channel}",
-            lambda: self.proxy.uart.set_temp_params(
-                request.kp, request.ki, request.kd, request.period_ms, request.channel
+            lambda: self.proxy.sig.temp_set_params(
+                channel=request.channel,
+                kp=request.kp,
+                ki=request.ki,
+                kd=request.kd,
+                period_ms=request.period_ms,
             ),
         )
         applied = bool(ok and result)

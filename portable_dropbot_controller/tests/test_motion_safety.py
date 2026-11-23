@@ -19,6 +19,7 @@ from types import SimpleNamespace
 # Third-party imports.
 import pytest
 from dropbot_portable import param_layout
+from dropbot_portable.portable_dropbot_service import _is_urgent_thread
 from dropbot_portable.proxy import (
     MotorBoardMOTOR_CONTROLResponse,
     MotorBoardMOTOR_ESTOPResponse,
@@ -174,6 +175,22 @@ def test_an_unsafe_table_is_blocked():
     assert home_all_block_reason(param_layout.HOME_SEQ_DEFAULT) == ""
 
 
+def test_an_empty_stored_table_runs_the_compiled_default():
+    empty = param_layout.unpack_home_seq(bytes(param_layout.HOME_SEQ_SIZE))
+
+    assert param_layout.home_seq_problems(empty) == [
+        param_layout.HOME_SEQ_EMPTY_PROBLEM
+    ]
+    assert home_all_block_reason(empty) == ""
+
+    harness = _harness(home_seq=empty)
+
+    harness.on_home_all_request("")
+
+    assert harness.log == ["realtime off", "get_params", *DEFAULT_PLAN]
+    assert harness.errors == []
+
+
 def test_home_all_turns_realtime_off_then_runs_the_plan_outside_the_lock():
     harness = _harness()
 
@@ -290,6 +307,17 @@ def test_the_estop_skips_the_proxy_lock_and_marks_every_motor():
     assert harness._stopped_motor_ids == {0, 1, 2, 3, 4, 5}
     assert harness._home_all_estopped is True
     assert harness.errors == []
+
+
+def test_the_estop_runs_as_an_urgent_lane_and_clears_it():
+    harness = _harness()
+    urgent = []
+    harness.proxy.motor.motor_estop = lambda: urgent.append(_is_urgent_thread())
+
+    harness.on_motor_estop_request("")
+
+    assert urgent == [True]
+    assert _is_urgent_thread() is False
 
 
 def test_an_unanswered_estop_is_published():

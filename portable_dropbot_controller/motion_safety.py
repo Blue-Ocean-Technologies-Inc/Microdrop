@@ -33,10 +33,12 @@ firmware; this host plan stops sending them).
 
 # Standard library imports.
 import threading
+from contextlib import contextmanager
 
 # Third-party imports.
 from dropbot_portable import MotorBoard, param_layout
 from dropbot_portable.commands import Frame
+from dropbot_portable.portable_dropbot_service import mark_urgent_thread
 from dropbot_portable.ui.device_status import device_status_error
 
 # Enthought library imports.
@@ -133,8 +135,14 @@ def home_all_plan(rows):
 def home_all_block_reason(rows):
     """Why Home All must not run this table, or "": the firmware's own
     table rules, then the safe order (the tray home after the PMT and
-    magnet homes), which the vendor UI enforces by default."""
-    problems = param_layout.home_seq_problems(rows)
+    magnet homes), which the vendor UI enforces by default. An empty table
+    is refused only as a write: Home All runs the compiled default for it,
+    as the board does at boot (the vendor's own Home All drops that rule)."""
+    problems = [
+        problem
+        for problem in param_layout.home_seq_problems(rows)
+        if problem != param_layout.HOME_SEQ_EMPTY_PROBLEM
+    ]
 
     if problems:
         return f"home sequence invalid: {'; '.join(problems)}"
@@ -145,6 +153,22 @@ def home_all_block_reason(rows):
         return f"home sequence order unsafe: {'; '.join(unsafe)}"
 
     return ""
+
+
+@contextmanager
+def urgent_lane():
+    """Mark the calling thread an urgent (STOP / E-STOP) lane for the
+    block, as the vendor worker marks its lanes: a link supervisor falling
+    due on one of its requests (up to ~10 s of CAN diagnostics, recovery
+    and motor re-login) then runs on a background thread, never inline.
+    The flag is thread-local and Dramatiq reuses its threads, so it is
+    always cleared again."""
+    mark_urgent_thread(True)
+
+    try:
+        yield
+    finally:
+        mark_urgent_thread(False)
 
 
 def reset_tray(motor, uart):
@@ -279,12 +303,14 @@ class MotionSafetyMixin(HasTraits):
 
         self._stopped_motor_ids.add(motor_id)
 
-        self._motion_call(
-            f"motor {message} stop",
-            lambda: self.proxy.uart.motorStop(motor_id),
-            MotorBoard.MOTOR_CONTROL,
-            failure=motor_command_failure,
-        )
+        with urgent_lane():
+            self._motion_call(
+                f"motor {message} stop",
+                lambda: self.proxy.uart.motorStop(motor_id),
+                MotorBoard.MOTOR_CONTROL,
+                failure=motor_command_failure,
+            )
+
         self._publish_motors()
 
     def on_motor_estop_request(self, message):
@@ -299,9 +325,12 @@ class MotionSafetyMixin(HasTraits):
         self._stopped_motor_ids.update(MOTOR_IDS.values())
         logger.warning("Portable Dropbot E-STOP: stopping ALL motor axes")
 
-        ok, reply = self._proxy_call(
-            "motor E-STOP", lambda: self.proxy.motor.motor_estop(), serialize=False
-        )
+        with urgent_lane():
+            ok, reply = self._proxy_call(
+                "motor E-STOP",
+                lambda: self.proxy.motor.motor_estop(),
+                serialize=False,
+            )
 
         if ok and reply is None:
             uart = getattr(self.proxy, "uart", None)
