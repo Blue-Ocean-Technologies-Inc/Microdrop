@@ -41,6 +41,8 @@ LAUNCH_MODULES = (
     "pluggable_protocol_tree.services.logging.controller",
     "ssh_controls.service",
     "user_help_plugin.plugin",
+    "notifications.plugin",
+    "notifications.dock_pane",
 )
 
 #: Packages none of them may import. Bare ``scipy`` is not listed: pint, which
