@@ -36,6 +36,7 @@ from microdrop_application.dialogs.pyface_wrapper import information
 
 # Microdrop utils imports.
 from microdrop_utils.file_handler import open_file
+from microdrop_utils.lazy_dock_pane import LazyContentDockPane
 
 # Local imports.
 from .consts import COLORS, LEVEL_COLORS, LOGGER_COLORS, PKG
@@ -94,9 +95,12 @@ class LogAdapter(TabularAdapter):
         return log.message
 
 
-class LogPane(TraitsDockPane):
+class LogPane(LazyContentDockPane, TraitsDockPane):
     """
     A Dock Pane that displays the logs in a table.
+
+    The table is built the first time the pane is shown; until then the
+    plugin's log model collects the records on its own.
     """
 
     id = f"{PKG}.dock_pane"
