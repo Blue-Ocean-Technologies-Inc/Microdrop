@@ -238,9 +238,17 @@ def _hot_load_installed(application, manager, dist_name, diff):
     manager.apply(application, {n: True for n in names})
 
     not_loaded = [n for n in names if not manager.is_loaded(n)]
+
     if not_loaded:
+        failures = [
+            f"{name} ({manager.groups[name].load_error})"
+            if manager.groups[name].load_error
+            else name
+            for name in not_loaded
+        ]
+
         return _refuse(
-            dist_name, f"plugin groups failed to load: {', '.join(not_loaded)}"
+            dist_name, f"plugin groups failed to load: {', '.join(failures)}"
         )
 
     logger.info(f"hot-loaded '{dist_name}': enabled groups {names}")

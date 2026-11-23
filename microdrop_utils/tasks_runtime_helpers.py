@@ -24,7 +24,7 @@ use).
 """
 
 # Enthought library imports.
-from pyface.qt import QtWidgets
+from pyface.qt import QtCore, QtWidgets
 from pyface.ui.qt.tasks.dock_pane import AREA_MAP
 
 # Logger import.
@@ -46,6 +46,11 @@ def add_dock_pane_live(window, task, factory, area=None):
 
     ``area`` overrides the pane's own ``dock_area`` ('left'/'right'/'top'/
     'bottom'); pass None to honour the pane default. Returns the pane.
+
+    A pane already mounted under the same id (a placeholder standing in
+    while its plugin loads) is replaced in place: the new pane takes its
+    position, size, tab, floating state and visibility, and ``area`` is
+    ignored.
     """
     state = window._active_state
     if state is None:
@@ -59,10 +64,25 @@ def add_dock_pane_live(window, task, factory, area=None):
     pane.task = task
     pane.create(main_window)
 
-    main_window.addDockWidget(AREA_MAP[area or pane.dock_area], pane.control)
+    placeholder = state.get_dock_pane(pane.id)
 
-    state.dock_panes = state.dock_panes + [pane]
+    if placeholder is None:
+        main_window.addDockWidget(AREA_MAP[area or pane.dock_area], pane.control)
+        state.dock_panes = state.dock_panes + [pane]
+
+    else:
+        _take_dock_place(main_window, placeholder, pane)
+        state.dock_panes = [
+            pane if dock_pane is placeholder else dock_pane
+            for dock_pane in state.dock_panes
+        ]
+
     window.dock_panes = state.dock_panes
+
+    # Only once no pane list holds it: pyface's focus tracking walks
+    # window.dock_panes and fails on a pane without its control.
+    if placeholder is not None:
+        placeholder.destroy()
 
     # Let the pane finish any wiring that needs the live window (e.g. the
     # peripheral pane installs its status-bar icon here — its
@@ -79,6 +99,33 @@ def add_dock_pane_live(window, task, factory, area=None):
 
     logger.info(f"add_dock_pane_live: mounted dock pane '{pane.id}'")
     return pane
+
+
+def _take_dock_place(main_window, old_pane, new_pane):
+    """Put ``new_pane``'s dock widget exactly where ``old_pane``'s was.
+
+    Takes the old dock widget off the window; the caller destroys the pane.
+
+    Both dock widgets carry the same object name (pyface names them
+    ``task_id:pane_id``), which is what ``QMainWindow.saveState`` records
+    each dock widget's area, size, tab group, floating geometry and
+    visibility under. Saving the state, swapping the widgets and restoring
+    it therefore gives the new widget the old one's whole placement, and
+    leaves every other dock widget where it was.
+    """
+    window_state = main_window.saveState()
+    area = main_window.dockWidgetArea(old_pane.control)
+
+    # Only one widget may answer to the name while the state is restored.
+    old_pane.control.setObjectName("")
+    old_pane.control.hide()
+    main_window.removeDockWidget(old_pane.control)
+
+    if area == QtCore.Qt.DockWidgetArea.NoDockWidgetArea:
+        area = AREA_MAP[new_pane.dock_area]
+
+    main_window.addDockWidget(area, new_pane.control)
+    main_window.restoreState(window_state)
 
 
 def remove_dock_pane_live(window, pane_id):
@@ -185,7 +232,7 @@ def rebuild_menu_bar_live(window, task, application):
     # Pyface's _menu_bar_manager_updated, which calls setMenuBar on the live
     # control (QMainWindow replaces and owns the old menu bar).
     if window._active_state is state:
-        window.menu_bar_manager = new_manager
+        _swap_menu_bar(window, new_manager)
 
     if old_manager is not None and old_manager is not new_manager:
         try:
@@ -195,6 +242,25 @@ def rebuild_menu_bar_live(window, task, application):
                 "rebuild_menu_bar_live: failed to destroy old menu bar manager"
             )
     logger.debug("rebuild_menu_bar_live: menu bar rebuilt")
+
+
+def _swap_menu_bar(window, menu_bar_manager):
+    """Put a new menu bar on the live window without a frame lacking one.
+
+    Qt shows a menu bar set on a visible window only on the next event-loop
+    turn; a paint before then lays the window out without it, and every
+    dock jumps up by the bar's height and back. Showing the new bar at once,
+    with painting held for the swap, keeps the bar on screen throughout.
+    """
+    main_window = window.control
+    main_window.setUpdatesEnabled(False)
+
+    try:
+        window.menu_bar_manager = menu_bar_manager
+        main_window.menuBar().show()
+
+    finally:
+        main_window.setUpdatesEnabled(True)
 
 
 def describe_dock_widgets(main_window):

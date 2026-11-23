@@ -100,7 +100,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     toggle_editor_default_style_sheet_factory,
 )
 
-from ..consts import PKG
+from ..consts import ROI_PLOT_DOCK_PANE_ID, ROI_PLOT_DOCK_PANE_NAME
 from ..scale_bar import area_unit
 from .consts import (
     ANNOTATION_FONT_SCALE,
@@ -3730,8 +3730,8 @@ def _save_figure(canvas):
 class RoiPlotDockPane(DockPane):
     """ROI intensity vs time for the filtered image series."""
 
-    id = PKG + ".roi_plot_dock_pane"
-    name = "ROI Intensities"
+    id = ROI_PLOT_DOCK_PANE_ID
+    name = ROI_PLOT_DOCK_PANE_NAME
 
     canvas = Instance(RoiPlotCanvas)
     table = Instance(RoiStatsTable)

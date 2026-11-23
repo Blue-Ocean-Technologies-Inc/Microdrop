@@ -25,7 +25,16 @@ from pyface.image_resource import ImageResource
 from pyface.qt import QtWidgets
 from pyface.splash_screen import SplashScreen
 from pyface.tasks.api import TaskWindowLayout
-from traits.api import Bool, Directory, Event, Instance, List, Property, observe
+from traits.api import (
+    Bool,
+    DelegatesTo,
+    Directory,
+    Event,
+    Instance,
+    List,
+    Property,
+    observe,
+)
 from traits.etsconfig.api import ETSConfig
 
 # Microdrop package imports.
@@ -39,12 +48,14 @@ from microdrop_style.helpers import (
 )
 
 # Microdrop utils imports.
+from microdrop_utils.deferred_plugins import DeferredPlugin
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.isolating_plugin_manager import IsolatingPluginManager
 from microdrop_utils.system_config import is_rpi
 from microdrop_utils.tasks_runtime_helpers import describe_dock_widgets
 
 # Local imports.
-from .consts import CHANGELOG_PATH, EXPERIMENT_DIR
+from .consts import CHANGELOG_PATH, ESSENTIAL_PLUGIN_IDS, EXPERIMENT_DIR
 from .helpers import (
     get_microdrop_redis_globals_manager,
     resolve_dock_separator_style,
@@ -160,10 +171,27 @@ class MicrodropApplication(TasksApplication):
 
     preferences_helper = Instance(MicrodropPreferences)
 
+    #: Per-plugin load records (a ``PluginLoadStatus``). The launch-time
+    #: plugin start and runtime plugin-group enables write here;
+    #: plugin_management shows them in the status bar.
+    plugin_load_status = DelegatesTo("plugin_manager", prefix="load_status")
+
+    #: Ids of the plugins MicroDrop cannot run without (default:
+    #: ``consts.ESSENTIAL_PLUGIN_IDS``). A failure to start one of these fails
+    #: the launch; any other failing plugin is skipped and rolled back. A run
+    #: script may pass its own list to the constructor.
+    essential_plugin_ids = DelegatesTo("plugin_manager")
+
+    #: Plugins the run script defers until the main window has painted, with
+    #: the dock panes each declares. plugin_management shows placeholders for
+    #: those panes and starts the plugins one at a time after launch.
+    deferred_plugins = List(Instance(DeferredPlugin))
+
     ######### Extra 'Application' Events #############################################
 
     extra_plugins_loaded = Event(
-        desc="Trigger if extra plugins are loaded post app initialization"
+        desc="Fired once the plugin groups and deferred plugins loaded after "
+        "app initialization have all been started"
     )
 
     #: Whether the dock separators already re-style on colour-scheme changes.
@@ -191,6 +219,12 @@ class MicrodropApplication(TasksApplication):
         active_task = self.preferences_helper.default_task
         tasks = [factory.id for factory in self.task_factories]
         return [TaskWindowLayout(*tasks, active_task=active_task, size=(800, 600))]
+
+    def _plugin_manager_default(self):
+        """Start plugins one at a time, skipping non-essential failures."""
+        return IsolatingPluginManager(
+            application=self, essential_plugin_ids=ESSENTIAL_PLUGIN_IDS
+        )
 
     def _preferences_helper_default(self):
         """
@@ -339,21 +373,6 @@ class MicrodropApplication(TasksApplication):
             "Initialized microdrop application. Current experiment "
             f"directory: {self.current_experiment_directory}"
         )
-
-    #### Handler for Layout Restore Errors if any ##########################
-    def start(self):
-        try:
-            logger.debug("Starting new Microdrop application instance.")
-            return super().start()
-        except Exception:
-            import traceback
-
-            logger.debug("Error restoring layout, falling back to default layout.")
-            traceback.print_exc()
-
-            self.preferences_helper.always_use_default_layout = True
-
-            return super().start()
 
     #### State persistence: survive layout-extraction failures ##############
     def _save_state(self):
