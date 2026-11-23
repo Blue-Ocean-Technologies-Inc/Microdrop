@@ -27,14 +27,30 @@ import re
 
 # Third-party imports.
 import numpy as np
-from scipy.optimize import brentq
-from scipy.special import erf, expit
 
 #: Names that stand for the independent variable rather than a
 #: parameter. The equations have always printed in t; the field asks
 #: for F(x); a copied temperature trend reads in expected. All are
 #: accepted so no reading is wrong.
 VARIABLE_NAMES = ("x", "t", "expected")
+
+
+# scipy is imported where an equation first calls it, not with this
+# module: the ROI analysis model and the heater compensation import
+# this one at start-up, to validate typed equations.
+def _expit(x):
+    """scipy's logistic sigmoid, 1 / (1 + e^-x)."""
+    from scipy.special import expit
+
+    return expit(x)
+
+
+def _erf(x):
+    """scipy's error function."""
+    from scipy.special import erf
+
+    return erf(x)
+
 
 #: Vectorized functions an equation may call.
 FUNCTIONS = {
@@ -52,8 +68,8 @@ FUNCTIONS = {
     "sinh": np.sinh,
     "cosh": np.cosh,
     "tanh": np.tanh,
-    "expit": expit,
-    "erf": erf,
+    "expit": _expit,
+    "erf": _erf,
 }
 
 #: Constants an equation may name.
@@ -350,6 +366,8 @@ def _bracketed_root(function, actual, left, right, bound):
     a pole across it looks like a sign change; it converges onto the
     pole, whose residual is far above ``bound``, the larger end
     residual."""
+    from scipy.optimize import brentq
+
     try:
         root = brentq(lambda x: function(x) - actual, left, right)
     except (ValueError, RuntimeError):

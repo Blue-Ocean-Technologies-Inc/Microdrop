@@ -12,15 +12,6 @@
 import sys
 from pathlib import Path
 
-# Third-party imports.
-from dropbot.self_test import (
-    plot_test_channels_results,
-    plot_test_on_board_feedback_calibration_results,
-    plot_test_voltage_results,
-)
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
-from matplotlib.figure import Figure
-
 # Enthought library imports.
 from pyface.action.api import Action
 from pyface.qt.QtCore import QSize, Qt, QTimer, Signal, Slot
@@ -48,16 +39,6 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-# Plot function for each self test's raw results (#611), keyed by test_name
-# as published on SELF_TESTS_RESULTS.
-PLOT_FUNCTIONS_BY_TEST_NAME = {
-    "test_voltage": plot_test_voltage_results,
-    "test_on_board_feedback_calibration": (
-        plot_test_on_board_feedback_calibration_results
-    ),
-    "test_channels": plot_test_channels_results,
-}
 
 
 class SelfTestIntroDialog(QDialog):
@@ -386,16 +367,39 @@ def _build_results_figure(test_name, results):
     """Render `results` with the `dropbot.self_test.plot_*` helper for
     `test_name`, returning an empty figure (after logging) when the test is
     unrecognised or its results could not be loaded, rather than crashing.
+
+    dropbot.self_test and matplotlib load here, with the first results shown,
+    not with the Tools menu at launch.
     """
-    plot_func = PLOT_FUNCTIONS_BY_TEST_NAME.get(test_name)
+    from dropbot.self_test import (
+        plot_test_channels_results,
+        plot_test_on_board_feedback_calibration_results,
+        plot_test_voltage_results,
+    )
+    from matplotlib.figure import Figure
+
+    # Plot function for each self test's raw results (#611), keyed by
+    # test_name as published on SELF_TESTS_RESULTS.
+    plot_functions_by_test_name = {
+        "test_voltage": plot_test_voltage_results,
+        "test_on_board_feedback_calibration": (
+            plot_test_on_board_feedback_calibration_results
+        ),
+        "test_channels": plot_test_channels_results,
+    }
+    plot_func = plot_functions_by_test_name.get(test_name)
+
     if plot_func is None:
         logger.warning(f"No plot function registered for self-test '{test_name}'")
+
         return Figure()
+
     if results is None:
         return Figure()
 
     _, fig = plot_func(results, return_fig=True)
     fig.tight_layout()
+
     return fig
 
 
@@ -409,6 +413,11 @@ class ResultsDialog(QDialog):
         results_path=None,
         failed_channels=None,
     ):
+        from matplotlib.backends.backend_qtagg import (
+            FigureCanvasQTAgg,
+            NavigationToolbar2QT,
+        )
+
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(700, 500)

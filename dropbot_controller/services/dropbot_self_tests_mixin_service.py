@@ -15,8 +15,6 @@ from pathlib import Path
 
 # Third-party imports.
 import numpy as np
-
-# ********************* DO NOT remove unused imports here **********************
 from dropbot.hardware_test import (  # noqa: F401
     ALL_TESTS,
     system_info,
@@ -27,9 +25,6 @@ from dropbot.hardware_test import (  # noqa: F401
     test_system_metrics,
     test_voltage,
 )
-
-# ******************************************************************************
-from dropbot.self_test import generate_report
 from tqdm import tqdm
 
 # Enthought library imports.
@@ -185,6 +180,10 @@ class DropbotSelfTestsMixinService(HasTraits):
                 )
 
             if report_path is not None:
+                # dropbot.self_test imports matplotlib.pyplot, so it loads with
+                # the first report rather than at launch.
+                from dropbot.self_test import generate_report
+
                 logger.info(f"Report generating in the file {report_path}")
                 generate_report(result, report_path, force=True)
 
