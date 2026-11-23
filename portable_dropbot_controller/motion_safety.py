@@ -129,8 +129,14 @@ def home_all_plan(rows):
 def home_all_block_reason(rows):
     """Why Home All must not run this table, or "": the firmware's own
     table rules, then the safe order (the tray home after the PMT and
-    magnet homes), which the vendor UI enforces by default."""
-    problems = param_layout.home_seq_problems(rows)
+    magnet homes), which the vendor UI enforces by default. An empty table
+    is refused only as a write: Home All runs the compiled default for it,
+    as the board does at boot (the vendor's own Home All drops that rule)."""
+    problems = [
+        problem
+        for problem in param_layout.home_seq_problems(rows)
+        if problem != param_layout.HOME_SEQ_EMPTY_PROBLEM
+    ]
 
     if problems:
         return f"home sequence invalid: {'; '.join(problems)}"

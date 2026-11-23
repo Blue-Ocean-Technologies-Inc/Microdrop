@@ -169,6 +169,22 @@ def test_an_unsafe_table_is_blocked():
     assert home_all_block_reason(param_layout.HOME_SEQ_DEFAULT) == ""
 
 
+def test_an_empty_stored_table_runs_the_compiled_default():
+    empty = param_layout.unpack_home_seq(bytes(param_layout.HOME_SEQ_SIZE))
+
+    assert param_layout.home_seq_problems(empty) == [
+        param_layout.HOME_SEQ_EMPTY_PROBLEM
+    ]
+    assert home_all_block_reason(empty) == ""
+
+    harness = _harness(home_seq=empty)
+
+    harness.on_home_all_request("")
+
+    assert harness.log == ["realtime off", "get_params", *DEFAULT_PLAN]
+    assert harness.errors == []
+
+
 def test_home_all_turns_realtime_off_then_runs_the_plan_outside_the_lock():
     harness = _harness()
 
