@@ -70,6 +70,15 @@ class DeferredPlugin(HasTraits):
     def _get_module_names(self):
         return [self.spec.partition(":")[0], *self.preload_modules]
 
+    @property
+    def __name__(self):
+        """The plugin class's name, as the class itself would give it.
+
+        Launchers list and select plugins by ``plugin.__name__``; a deferred
+        plugin stands in for its class there without being imported.
+        """
+        return self.class_name
+
     def import_class(self):
         """Import and return the plugin class ``spec`` names."""
         module_path, _, class_name = self.spec.partition(":")
