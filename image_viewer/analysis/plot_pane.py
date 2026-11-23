@@ -59,9 +59,9 @@ from PySide6.QtWidgets import (
 from pyface.api import OK, DirectoryDialog, FileDialog
 from pyface.qt.QtCore import QPoint, QRect
 from pyface.qt.QtGui import QAction, QFont, QIcon, QImage, QPainter, QPixmap
-from pyface.qt.QtWidgets import QApplication
+from pyface.qt.QtWidgets import QApplication, QLabel
 from pyface.tasks.api import DockPane
-from traits.api import Any, Instance, List, observe
+from traits.api import Any, Bool, Instance, List, observe
 from traitsui.api import (
     EnumEditor,
     HGroup,
@@ -87,6 +87,7 @@ from microdrop_style.icons.icons import (
     ICON_SAVE,
 )
 
+from microdrop_utils.gui_pacing import invoke_paced
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor,
     HoverScrollEnumEditor,
@@ -1445,15 +1446,12 @@ _PLOT_STATE = (
 #: Everything the other plotted experiments' curves (on the
 #: plotted-experiments model) are drawn from, beside _PLOT_STATE, whose
 #: figure settings they share. Their sessions are read from disk; only
-#: their ROIs' styles change while they are not live.
+#: their ROIs' styles change while they are not live. One branching
+#: expression, not one per trait: each separate one walked every
+#: experiment again as the canvas hooked it (#1086).
 _IMPORTS_STATE = (
-    "experiments.items, experiments:items:label, "
-    "experiments:items:align_to_run_start, "
-    "experiments:items:session:rois.items, "
-    + ", ".join(
-        f"experiments:items:session:rois:items:style:{name}"
-        for name in ROI_STYLE_FIELDS
-    )
+    "loading, experiments.items.[label, align_to_run_start, session:rois.items, "
+    f"session:rois:items:style:[{', '.join(ROI_STYLE_FIELDS)}]]"
 )
 
 #: What decides whether the plot pane shows the ROI table or the
@@ -1542,7 +1540,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         model.observe(self._on_displayed_image_changed, "current_image_path")
 
         if imports is not None:
-            imports.observe(self._on_plot_state_changed, _IMPORTS_STATE)
+            imports.observe(self._on_imports_changed, _IMPORTS_STATE)
 
         for event_name, handler in (
             ("scroll_event", self._on_scroll),
@@ -1700,9 +1698,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         )
 
         if self._imports is not None:
-            self._imports.observe(
-                self._on_plot_state_changed, _IMPORTS_STATE, remove=True
-            )
+            self._imports.observe(self._on_imports_changed, _IMPORTS_STATE, remove=True)
 
     def showEvent(self, event):
         self._schedule_redraw()  # catch up on anything missed hidden
@@ -1723,6 +1719,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             return
 
         self._schedule_redraw()
+
+    def _on_imports_changed(self, event):
+        # Each experiment read from disk would redraw every curve as it
+        # is swapped in; the plot waits for the last of them instead.
+        if not self._imports.loading:
+            self._schedule_redraw()
 
     def _on_displayed_image_changed(self, event):
         # Only the per-image and histogram views read the displayed
@@ -3727,13 +3729,30 @@ def _save_figure(canvas):
     canvas.figure.savefig(dialog.path, dpi=session.figure.export_dpi, format=extension)
 
 
+def _loading_line(parent):
+    """A muted line standing in for a section of the pane until it is
+    built."""
+    line = QLabel("Loading…", parent)
+    line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    line.setEnabled(False)
+
+    return line
+
+
 class RoiPlotDockPane(DockPane):
-    """ROI intensity vs time for the filtered image series."""
+    """ROI intensity vs time for the filtered image series.
+
+    The chart comes with the pane; its other sections — the controls,
+    the ROI table, the temperature style panel — are built one per paced
+    GUI turn after it (#1086), each a loading line until then: built at
+    once they froze the window for about a second."""
 
     id = ROI_PLOT_DOCK_PANE_ID
     name = ROI_PLOT_DOCK_PANE_NAME
 
     canvas = Instance(RoiPlotCanvas)
+
+    #: None until built, as are the two panels below.
     table = Instance(RoiStatsTable)
     _controls_ui = Any()
     _controls_scroll = Any()
@@ -3748,24 +3767,35 @@ class RoiPlotDockPane(DockPane):
     #: The import buttons above the ROI table.
     _imports_toolbar_ui = Any()
 
+    #: The temperature view's style panel, sharing a stack with the table.
+    _style_ui = Any()
+    _table_stack = Any()
+
+    #: Set by destroy: the sections still waiting are never built.
+    _destroyed = Bool(False)
+
     def create_contents(self, parent):
         widget = QWidget(parent)
         layout = QVBoxLayout(widget)
         self._imports_controller = ImportedExperimentsController(
             model=imported_experiments_model
         )
+
+        # The chart and its toolbar at once: built later, they would
+        # move the heights the splitter opens with.
         self.canvas = RoiPlotCanvas(roi_analysis_model, imported_experiments_model)
         self.canvas.setMinimumSize(
             ROI_PLOT_CANVAS_MIN_WIDTH, ROI_PLOT_CANVAS_MIN_HEIGHT
         )
         layout.addWidget(_PlotToolbar(self.canvas, widget))
-        self._controls_ui = self._build_controls(widget)
+
         # The controls get their own scroll area so a narrow pane
         # scrolls them instead of forcing the whole pane wide, and a
         # short pane scrolls them instead of squeezing the plot away.
         self._controls_scroll = QScrollArea(widget)
         self._controls_scroll.setWidgetResizable(True)
-        self._controls_scroll.setWidget(self._controls_ui.control)
+        self._controls_scroll.setWidget(_loading_line(widget))
+
         # All three sections share one splitter, so the controls are as
         # draggable as the chart and the table: a fixed cap on them
         # decided for the user how much of the pane the buttons were
@@ -3773,12 +3803,11 @@ class RoiPlotDockPane(DockPane):
         splitter = QSplitter(Qt.Orientation.Vertical, widget)
         splitter.addWidget(self._controls_scroll)
         splitter.addWidget(self.canvas)
+
         # The ROI table, or — while the Temperature over time view is
         # up, where it has nothing to say — that view's style panel.
         self._table_stack = QStackedWidget(splitter)
-        self._table_stack.addWidget(self._build_table_page(self._table_stack))
-        self._style_ui = self._build_style_panel(self._table_stack)
-        self._table_stack.addWidget(self._style_ui.control)
+        self._table_stack.addWidget(_loading_line(self._table_stack))
         splitter.addWidget(self._table_stack)
         # Nothing collapses to nothing by dragging: a section dragged
         # shut is hard to find again.
@@ -3796,21 +3825,54 @@ class RoiPlotDockPane(DockPane):
             ]
         )
         layout.addWidget(splitter, 1)
+
         # No progress label here: the image viewer pane already shows
         # roi_analysis.progress_text, and one status belongs in one
         # place.
         roi_analysis_model.observe(self._on_session_swapped, "session")
         roi_analysis_model.observe(self._show_table_or_style, _TABLE_OR_STYLE_STATE)
-        self._show_table_or_style()
         roi_analysis_model.observe(self._on_save_plot, "save_plot_button")
         roi_analysis_model.observe(self._on_fit_equations, "fit_equations_button")
         roi_analysis_model.observe(self._on_heater_dir, "heater_dir_button")
+
+        # The style panel before the table: the stack keeps its loading
+        # line until the page the view shows is in.
+        for build in (
+            self._build_controls_section,
+            self._build_style_section,
+            self._build_table_section,
+        ):
+            invoke_paced(self._build_section, build)
+
         # The pane may be resized below the content's minimum; past that
         # point scrollbars take over instead of the dock pane locking.
         scroll = QScrollArea(parent)
         scroll.setWidgetResizable(True)
         scroll.setWidget(widget)
+
         return scroll
+
+    def _build_section(self, build):
+        """Run ``build`` on its paced turn, unless the pane is gone."""
+        if not self._destroyed:
+            build()
+
+    def _build_controls_section(self):
+        self._controls_ui = self._build_controls(self._controls_scroll)
+        self._controls_scroll.takeWidget().deleteLater()
+        self._controls_scroll.setWidget(self._controls_ui.control)
+
+    def _build_style_section(self):
+        self._style_ui = self._build_style_panel(self._table_stack)
+        self._table_stack.addWidget(self._style_ui.control)
+        self._show_table_or_style()
+
+    def _build_table_section(self):
+        loading = self._table_stack.widget(0)
+        self._table_stack.addWidget(self._build_table_page(self._table_stack))
+        self._show_table_or_style()
+        self._table_stack.removeWidget(loading)
+        loading.deleteLater()
 
     def _build_table_page(self, parent):
         """The ROI table's page of the stack: the import buttons over
@@ -3858,17 +3920,41 @@ class RoiPlotDockPane(DockPane):
         roi_analysis_model.plot_visible = event.new
 
     def _on_session_swapped(self, event):
+        """Rebuild the controls and the style panel on the new session,
+        each on a paced turn of its own; until then theirs edit the old
+        one, so they are disabled. A panel not built yet is built on the
+        new session anyway."""
+        for ui in (self._controls_ui, self._style_ui):
+            if ui is not None:
+                ui.control.setEnabled(False)
+
+        invoke_paced(self._build_section, self._rebuild_controls)
+        invoke_paced(self._build_section, self._rebuild_style_panel)
+
+    def _rebuild_controls(self):
         old_ui = self._controls_ui
+
+        # Built since the swap, or rebuilt by an earlier turn.
+        if old_ui is None or old_ui.context["session"] is roi_analysis_model.session:
+            return
+
         self._controls_ui = self._build_controls(self._controls_scroll)
+
         # takeWidget before setWidget: setWidget destroys the control it
         # replaces, and TraitsUI still has to dispose of that one.
         self._controls_scroll.takeWidget()
         self._controls_scroll.setWidget(self._controls_ui.control)
         old_ui.dispose()
 
-        # The style panel edits the old session's style: rebuild it on
-        # the new one's, in the same stack slot.
+    def _rebuild_style_panel(self):
+        """The style panel edits the old session's style: rebuild it on
+        the new one's, in the same stack slot."""
         old_style_ui = self._style_ui
+        style = roi_analysis_model.session.temperature_style
+
+        if old_style_ui is None or old_style_ui.context["object"] is style:
+            return
+
         self._style_ui = self._build_style_panel(self._table_stack)
         self._table_stack.removeWidget(old_style_ui.control)
         self._table_stack.addWidget(self._style_ui.control)
@@ -3886,11 +3972,14 @@ class RoiPlotDockPane(DockPane):
 
     def _show_table_or_style(self, event=None):
         """The style panel while the Temperature over time view is up,
-        the ROI table under every other view."""
+        the ROI table under every other view — or, not built yet, the
+        loading line still."""
         temperature = roi_analysis_model.session.figure.view_mode == "temperature"
-        page = self._style_ui.control if temperature else self.table.parent()
+        page = self._style_ui if temperature else self.table
 
-        self._table_stack.setCurrentWidget(page)
+        if page is not None:
+            control = page.control if temperature else page.parent()
+            self._table_stack.setCurrentWidget(control)
 
     def _on_save_plot(self, event):
         _save_figure(self.canvas)
@@ -3925,12 +4014,18 @@ class RoiPlotDockPane(DockPane):
         # constructed-but-never-shown pane never ran (pyface's own
         # destroy() guards its teardown the same way).
         if self.control is not None:
+            self._destroyed = True
             roi_analysis_model.plot_visible = False
             self.canvas.detach()
-            self.table.detach()
-            self._imports_toolbar_ui.dispose()
-            self._controls_ui.dispose()
-            self._style_ui.dispose()
+
+            # Each section is None while still waiting to be built.
+            if self.table is not None:
+                self.table.detach()
+
+            for ui in (self._imports_toolbar_ui, self._controls_ui, self._style_ui):
+                if ui is not None:
+                    ui.dispose()
+
             roi_analysis_model.observe(
                 self._show_table_or_style, _TABLE_OR_STYLE_STATE, remove=True
             )
