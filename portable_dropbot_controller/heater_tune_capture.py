@@ -49,8 +49,6 @@ CONNECTION_LOST_REASON = (
     "connection lost: the heater could not be switched off from here; the "
     "firmware host-silence failsafe (alarm 09004) cuts it"
 )
-#: The run's phase while the fit runs (after the capture, heater off).
-FITTING_PHASE = "fitting"
 
 
 class HeaterTuneCancel(threading.Event):

@@ -46,6 +46,7 @@ from ..consts import (
     DEFAULT_TEMP_CHANNEL,
     DISCONNECT,
     HEATER_TUNE_APPLY,
+    HEATER_TUNE_FITTING_PHASE,
     HEATER_TUNE_JOIN_TIMEOUT_S,
     HEATER_TUNE_START,
     PROTOCOL_SET_TEMPERATURE,
@@ -64,7 +65,6 @@ from ..consts import (
 from ..heater_limits import heater_failsafe_alarms, heater_target_refusal
 from ..heater_tune_capture import (
     CONNECTION_LOST_REASON,
-    FITTING_PHASE,
     HeaterTuneCancel,
     capture_config,
     run_step_capture,
@@ -442,7 +442,11 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
 
             if capture.phase == "done":
                 heater_tune_progress_publisher.publish(
-                    {"channel": channel, "phase": FITTING_PHASE, "elapsed_s": 0.0}
+                    {
+                        "channel": channel,
+                        "phase": HEATER_TUNE_FITTING_PHASE,
+                        "elapsed_s": 0.0,
+                    }
                 )
 
             outcome = summarize_capture(capture)

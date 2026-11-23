@@ -49,6 +49,10 @@ HEATER_TUNE_DEFAULT_STYLE = "default"
 #: The loop period the proposed gains are designed for and written with
 #: (heater_tune.tune_pid's 1 s control period, apply_tuning's 1000 ms).
 HEATER_TUNE_PERIOD_MS = 1000
+#: HeaterTuneProgress.phase once the capture is over (heater off) and its
+#: response is being fitted; the capture's own phases are the vendor
+#: StepCapture's (baseline, step, cooldown).
+HEATER_TUNE_FITTING_PHASE = "fitting"
 #: The vendor panel reads the heater once a second (TEMP_READ_INFO).
 HEATER_TUNE_SAMPLE_INTERVAL_S = 1.0
 #: Heater OFF is sent this many times before the run reports it as not
