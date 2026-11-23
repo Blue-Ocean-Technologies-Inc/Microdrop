@@ -29,6 +29,9 @@ from portable_dropbot_controller.consts import (
     CHIP_ENGAGE_MODE_SMART,
     FLUORESCENCE_CAPTURE_DONE,
     FLUORESCENCE_CAPTURE_PROGRESS,
+    HEATER_TUNE_APPLIED,
+    HEATER_TUNE_DONE,
+    HEATER_TUNE_PROGRESS,
     MAGNET_ENGAGE_UPDATED,
     MOTOR_PARAMS_UPDATED,
     PMT_ACQUIRE_DONE,
@@ -125,6 +128,10 @@ ACTOR_TOPIC_DICT = {
         PORTABLE_DROPBOT_DISCONNECTED,
         TEMP_UPDATED,
         PMT_UPDATED,
+        #: The heater auto-tune group's progress, result and apply outcome.
+        HEATER_TUNE_PROGRESS,
+        HEATER_TUNE_DONE,
+        HEATER_TUNE_APPLIED,
     ],
     PMT_CAPTURE_LISTENER: [
         PORTABLE_DROPBOT_CONNECTED,

@@ -15,11 +15,14 @@ import json
 from pydantic import ValidationError
 
 # Enthought library imports.
+from pyface.api import YES
 from traits.api import observe
 from traitsui.api import Controller
 
 # Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import confirm
 from portable_dropbot_controller.consts import (
+    HEATER_TUNE_CANCEL,
     PMT_POWER,
     PMT_SET_GAIN,
     TEMP_CONTROL,
@@ -27,6 +30,8 @@ from portable_dropbot_controller.consts import (
     TEMP_READ_PID,
     TEMP_SET_TARGET,
     TempSetPidRequest,
+    heater_tune_apply_publisher,
+    heater_tune_start_publisher,
     temp_set_pid_publisher,
 )
 
@@ -41,7 +46,8 @@ logger = get_logger(__name__)
 
 class MoreControlsController(Controller):
     """Toggles and buttons -> request topics. The PMT's actual power
-    state comes back through the message handler on PMT_UPDATED."""
+    state comes back through the message handler on PMT_UPDATED. Heater
+    auto-tune proposals are written only after a confirm."""
 
     # ------------------------------------------------------------------ #
     # Temperature control                                                  #
@@ -106,6 +112,64 @@ class MoreControlsController(Controller):
 
         self.model.pid_status = "Applying..."
         temp_set_pid_publisher.publish(request.model_dump())
+
+    # ------------------------------------------------------------------ #
+    # Heater auto-tune                                                     #
+    # ------------------------------------------------------------------ #
+    @observe("model:heater_tune:start_button")
+    def _start_heater_tune(self, event):
+        tune = self.model.heater_tune
+        tune.status = "Starting..."
+
+        heater_tune_start_publisher.publish(
+            {
+                "channel": int(self.model.temp_channel),
+                "duty_pct": tune.duty_pct,
+                "max_temp_c": tune.max_temp_c,
+                "max_duration_s": tune.max_duration_s,
+            }
+        )
+
+    @observe("model:heater_tune:cancel_button")
+    def _cancel_heater_tune(self, event):
+        publish_message(topic=HEATER_TUNE_CANCEL, message="")
+
+    @observe("model:heater_tune:apply_button")
+    def _apply_heater_tune(self, event):
+        """Write the selected style's proposal to the fitted channel once the
+        operator confirms; the backend re-checks it against the firmware."""
+        tune = self.model.heater_tune
+        proposal = tune.proposals.get(tune.style)
+
+        if proposal is None or not tune.smith_model:
+            return
+
+        lasting = (
+            "They are saved to flash and survive a reboot."
+            if tune.persist
+            else "They last until the next reboot."
+        )
+        answer = confirm(
+            None,
+            f"Write to heater ch{tune.result_channel}: {tune.proposal_display}?"
+            f"\n\nWriting the model re-initialises both heater loops. {lasting}",
+            title="Apply Heater Tuning",
+        )
+
+        if answer != YES:
+            return
+
+        tune.status = "Applying..."
+        heater_tune_apply_publisher.publish(
+            {
+                "channel": tune.result_channel,
+                "kp": proposal["kp"],
+                "ki": proposal["ki"],
+                "kd": proposal["kd"],
+                "smith_model": tuple(tune.smith_model),
+                "persist": tune.persist,
+            }
+        )
 
     # ------------------------------------------------------------------ #
     # PMT                                                                  #

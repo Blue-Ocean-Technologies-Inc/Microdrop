@@ -15,7 +15,13 @@ import json
 from traits.api import Instance
 
 # Microdrop package imports.
-from portable_dropbot_controller.consts import TEMP_PID_GAIN_BOUNDS, TEMP_READ_PID
+from portable_dropbot_controller.consts import (
+    TEMP_PID_GAIN_BOUNDS,
+    TEMP_READ_PID,
+    HeaterTuneApplied,
+    HeaterTuneDone,
+    HeaterTuneProgress,
+)
 from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
@@ -30,8 +36,8 @@ from ..models.more_controls_model import PortableDropbotMoreControlsModel
 
 class PortableDropbotMoreControlsMessageHandler(BaseMessageHandler):
     """Connection greying (inherited), the TEMP_UPDATED stream
-    (per-channel readings and PID readbacks), and the PMT_UPDATED
-    stream (actual power state)."""
+    (per-channel readings and PID readbacks), the heater auto-tune
+    feedback, and the PMT_UPDATED stream (actual power state)."""
 
     model = Instance(PortableDropbotMoreControlsModel)
 
@@ -86,6 +92,22 @@ class PortableDropbotMoreControlsMessageHandler(BaseMessageHandler):
         self.model.pid_kd = gains["kd"]
         self.model.pid_period_ms = int(pid["period_ms"])
         self.model.pid_status = "Read from the board"
+
+    def _on_heater_tune_progress_triggered(self, body):
+        self.model.heater_tune.adopt_progress(
+            HeaterTuneProgress.model_validate_json(str(body))
+        )
+
+    def _on_heater_tune_done_triggered(self, body):
+        self.model.heater_tune.adopt_done(HeaterTuneDone.model_validate_json(str(body)))
+
+    def _on_heater_tune_applied_triggered(self, body):
+        applied = HeaterTuneApplied.model_validate_json(str(body))
+        self.model.heater_tune.adopt_applied(applied)
+
+        # The PID fields show the board's gains: refresh them.
+        if applied.gains and applied.channel == self.model.temp_channel:
+            publish_message(topic=TEMP_READ_PID, message=str(applied.channel))
 
     def _on_pmt_updated_triggered(self, body):
         data = json.loads(str(body))
