@@ -60,6 +60,7 @@ from .interfaces.i_portable_dropbot_controller_base import (
 )
 from .motion_replies import motor_snapshot_picture
 from .preferences import PortableDropbotPreferences
+from .status_events import status_sample
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -354,8 +355,24 @@ class PortableDropbotControllerBase(HasTraits):
                 self.on_disconnected_signal("")
             return
         self._status_failures = 0
-        self._publish_capacitance(status.get("signal", {}))
-        signal = dict(status.get("signal", {}))
+
+        tail = getattr(getattr(self.proxy, "uart", None), "last_status_tail", None)
+        sample = status_sample(status.get("signal", {}), tail)
+
+        self._note_status_sample(sample)
+        self._publish_board_signal(sample)
+        self._publish_motors(mechanisms=status.get("motor", {}), poll=False)
+
+    def _note_status_sample(self, sample):
+        """Called with every full STATUS sample read; the status-event
+        mixin takes it as the base its events merge into."""
+
+    def _publish_board_signal(self, sample):
+        """Publish one signal-board STATUS sample (``status_sample`` shape,
+        from a read or merged from status events) on STATUS_UPDATED, and
+        its capacitance."""
+        self._publish_capacitance(sample)
+        signal = dict(sample)
 
         if "chip_on_pad" in signal:
             # A contact mask, not a flag: the chip-detect preference decides
@@ -370,25 +387,7 @@ class PortableDropbotControllerBase(HasTraits):
             # hv_state bit3: the firmware latched a halt (HALT_STATUS).
             signal["halted"] = bool(int(signal["hv_state"]) & HV_STATE_HALTED_BIT)
 
-        signal.update(self._status_tail_readouts())
         publish_message(topic=STATUS_UPDATED, message=json.dumps(signal))
-        self._publish_motors(mechanisms=status.get("motor", {}), poll=False)
-
-    def _status_tail_readouts(self):
-        """The STATUS tail the driver captured from the last status reply:
-        the board's HV setpoint, fault_flags and their names. MCU firmware
-        before 1.0.1.30 sends no tail, so the driver's last_status_tail is
-        None there and this answers {}."""
-        tail = getattr(getattr(self.proxy, "uart", None), "last_status_tail", None)
-
-        if not isinstance(tail, dict):
-            return {}
-
-        return {
-            name: tail[name]
-            for name in ("hv_setpoint", "fault_flags", "faults")
-            if name in tail
-        }
 
     @staticmethod
     def _publish_capacitance(board_signal):

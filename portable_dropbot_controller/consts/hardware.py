@@ -61,6 +61,30 @@ MONITOR_INTERVAL_S = 2
 #: "Active".
 STATUS_FAILURE_DISCONNECT_LIMIT = 3
 
+#: MCU firmware that pushes change-only status events (EVT_FIELDS,
+#: dropbot-portable 1.8.0). From here the panes follow the events and the
+#: STATUS poll only resyncs; older firmware accepts the event bit and sends
+#: nothing, so it stays on the poll.
+STATUS_EVENTS_MIN_MCU_FIRMWARE = (1, 0, 1, 33)
+
+#: The board's event-stream interval (SET_REPORT_CYCLE2, ms): how often a
+#: status pass checks the fields between electrode updates. The vendor's
+#: ``enable_events`` default.
+STATUS_EVENTS_REPORT_INTERVAL_MS = 1000
+
+#: At most one event-merged status publish per this many seconds; the
+#: latest merged sample always goes out once the interval has passed.
+STATUS_EVENTS_PUBLISH_INTERVAL_S = 0.5
+
+#: While events flow, a full STATUS read (resync and link check) at least
+#: this often. A seq gap or a missing base asks for one at the next tick.
+STATUS_EVENTS_RESYNC_INTERVAL_S = 30
+
+#: No event frame for this long means the stream has stopped: the firmware
+#: resends every subscribed field every 5 s. The monitor goes back to the
+#: full poll and re-sends the subscription once per resync interval.
+STATUS_EVENTS_STALE_S = 12
+
 #: Once a firmware update (the vendor flash tool) releases its priority lease
 #: on our port, wait this long before scanning again — the vendor UI's
 #: YIELD_RECONNECT_DELAY_S.
