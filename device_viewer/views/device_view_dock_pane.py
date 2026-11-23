@@ -58,6 +58,7 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import safe_copy_file
+from microdrop_utils.first_paint import call_after_first_paint
 from microdrop_utils.keyboard_shortcuts_view import show_keyboard_shortcuts
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
@@ -91,10 +92,13 @@ from ..controllers.device_viewer_publish_controller import (
     DeviceViewerPublishController,
 )
 from ..controllers.layer_host import LayerHost
+from ..controllers.sidebar_section_builder import SidebarSectionBuilder
+from ..controllers.zones_controller import ZonesController
 from ..default_settings import ELECTRODE_OFF, video_key
 from ..interfaces.layer_context import LayerContext
 from ..models.alpha import AlphaValue
 from ..models.connections_editor import ConnectionsEditorModel
+from ..models.deferred_sidebar_section import DeferredSidebarSection
 from ..models.electrodes import Electrodes
 from ..models.main_model import DeviceViewMainModel
 from ..models.messages import DeviceViewerMessageModel
@@ -123,7 +127,7 @@ from .sidebar.calibration import build_calibration
 from .sidebar.camera_controls import build_camera_controls
 from .sidebar.host import build_reveal_button, build_sidebar
 from .sidebar.paths import build_paths
-from .sidebar.section import SidebarSection
+from .sidebar.section import SidebarSection, SizedSidebarSection
 from .sidebar.viewport_controls import build_viewport_controls
 from .sidebar.zones import build_zones
 
@@ -159,10 +163,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     device_viewer_preferences = Instance(DeviceViewerPreferences)
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
 
-    layer_ui = None
-    zones_ui = None
-
-    #: Camera controls widget; None until ``create_contents`` builds it.
+    #: Camera controls widget; None until the Camera Controls section is
+    #: built, after the first paint (see ``when_camera_controls_built``).
     camera_control_widget = None
 
     #: The open Edit Connections dialog; None while closed.
@@ -171,6 +173,17 @@ class DeviceViewerDockPane(TraitsDockPane):
     #: The sidebar's sections, top to bottom; holding them keeps each
     #: section's controllers and TraitsUI UIs alive with the pane.
     sidebar_sections = List(Instance(SidebarSection))
+
+    #: Builds the deferred sidebar sections after the first paint (#1064).
+    sidebar_builder = Instance(SidebarSectionBuilder)
+
+    #: The deferred Camera Controls section; pub/sub camera requests wait
+    #: on it.
+    _camera_controls_section = Instance(DeferredSidebarSection)
+
+    #: Keeps zone edits in step with the main model, with or without the
+    #: Zones section built.
+    zones_controller = Instance(ZonesController)
 
     #: The open sidebar layout preferences editor; None until opened.
     edit_sidebar_layout_ui = Instance(UI)
@@ -282,15 +295,19 @@ class DeviceViewerDockPane(TraitsDockPane):
         # alignment dialog.
         self.camera_alignment_controller = CameraAlignmentWorkflowController(
             model=self.model,
-            get_video_item=lambda: self.camera_control_widget.video_item,
+            get_video_item=lambda: self.video_item,
             get_electrode_layer=lambda: self.current_electrode_layer,
             render_device_image=self._render_device_image,
             get_dialog_parent=lambda: self.device_view.window(),
             statusbar_message=self._statusbar_message,
             get_camera_label=lambda: (
                 self.camera_control_widget.camera_model.selected_camera
+                if self.camera_control_widget is not None
+                else ""
             ),
         )
+
+        self._create_sidebar_builder()
 
         # Last: its handlers dereference the model, view, and preferences.
         self.message_controller = DeviceViewerMessageController(pane=self)
@@ -828,18 +845,15 @@ class DeviceViewerDockPane(TraitsDockPane):
             self.scroll_content.setMaximumWidth(
                 self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH - 5
             )  # offset to fit within the area
-            self.alpha_view_ui.control.setMinimumHeight(
-                self.device_viewer_preferences.ALPHA_VIEW_MIN_HEIGHT
-            )
-            self.alpha_view_ui.control.setMaximumWidth(
-                self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH
-            )
-            self.layer_ui.control.setMinimumHeight(
-                self.device_viewer_preferences.LAYERS_VIEW_MIN_HEIGHT
-            )
-            self.zones_ui.get_editors("zone_types")[0].control.setMinimumHeight(
-                self.device_viewer_preferences.ZONES_VIEW_MIN_HEIGHT
-            )
+
+            # A section still loading is sized as it is built.
+            for deferred in self.sidebar_builder.sections:
+                if deferred.section is not None:
+                    self._size_sidebar_section(deferred.section)
+
+    def _size_sidebar_section(self, section):
+        if isinstance(section, SizedSidebarSection):
+            section.apply_sizes(self.device_viewer_preferences)
 
     def create_contents(self, parent):
         """Called when the task is activated."""
@@ -862,16 +876,19 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         self.device_view.display_state_signal.connect(self.apply_message_model)
 
-        self.sidebar_sections = self._build_sidebar_sections()
+        # Zone edits reach the model before the Zones section is built.
+        self.zones_controller = ZonesController(model=self.model)
 
-        # The camera panel now exists: the alignment controller takes charge
-        # of the live alignment per camera, and follows the feed's size.
+        # The alignment presets follow the feed's size.
         self.video_item.nativeSizeChanged.connect(self._on_camera_frame_size_changed)
         self._on_camera_frame_size_changed(self.video_item.nativeSize())
-        self.camera_alignment_controller.camera_model = (
-            self.camera_control_widget.camera_model
-        )
 
+        # Only the viewport controls now; the other sections show their
+        # loading line until they are built, after the first paint.
+        self.sidebar_sections = [
+            build_viewport_controls(self.model),
+            *self.sidebar_builder.sections,
+        ]
         self.scroll_area = build_sidebar(self.sidebar_sections)
         self.scroll_content = self.scroll_area.widget()
         self._set_device_view_layout_width()
@@ -901,17 +918,44 @@ class DeviceViewerDockPane(TraitsDockPane):
         # style device view: remove frame in device view
         self.device_view.setFrameStyle(QFrame.NoFrame)
 
+        call_after_first_paint(self.task.window.control, self.sidebar_builder.start)
+
         return main_container
 
-    def _build_sidebar_sections(self):
-        """Build the sidebar sections, top to bottom."""
-        viewport_section = build_viewport_controls(self.model)
+    def _create_sidebar_builder(self):
+        """Set up the sidebar sections built after the first paint, top to
+        bottom, so content already in never moves (#1064)."""
+        self._camera_controls_section = DeferredSidebarSection(
+            title="Camera Controls", build=self._build_camera_controls
+        )
+        self.sidebar_builder = SidebarSectionBuilder(
+            sections=[
+                self._camera_controls_section,
+                DeferredSidebarSection(
+                    title="Paths",
+                    build=partial(build_paths, self.model, self.undo, self.redo),
+                ),
+                DeferredSidebarSection(
+                    title="Zones", build=partial(build_zones, self.model)
+                ),
+                DeferredSidebarSection(
+                    title="Calibration",
+                    build=partial(build_calibration, self.model.calibration),
+                ),
+            ]
+        )
 
-        # status_bar_manager is typically None at create_contents time (the
-        # MicrodropTask creates it in activated(), which runs after dock pane
-        # creation). _setup_app_statusbar below re-pushes the manager once
-        # the trait fires.
-        camera_section = build_camera_controls(
+        # Registered first, so each section is wired into the pane before
+        # any request waiting on it runs.
+        for deferred in self.sidebar_builder.sections:
+            self.sidebar_builder.when_built(deferred, self._size_sidebar_section)
+
+        self.sidebar_builder.when_built(
+            self._camera_controls_section, self._attach_camera_controls
+        )
+
+    def _build_camera_controls(self):
+        return build_camera_controls(
             self.model,
             self.video_item,
             self.scene,
@@ -921,22 +965,31 @@ class DeviceViewerDockPane(TraitsDockPane):
             on_align_camera=self.camera_alignment_controller.open_camera_alignment,
             on_go_to_endpoint=self.camera_alignment_controller.go_to_endpoint,
         )
-        paths_section = build_paths(self.model, undo=self.undo, redo=self.redo)
-        zones_section = build_zones(self.model)
-        calibration_section = build_calibration(self.model.calibration)
 
-        self.camera_control_widget = camera_section.camera_control_widget
-        self.alpha_view_ui = camera_section.alpha_view_ui
-        self.layer_ui = paths_section.layer_ui
-        self.zones_ui = zones_section.zones_ui
+    def _attach_camera_controls(self, section):
+        """The camera panel exists: requests reach it, and the alignment
+        controller takes charge of the live alignment per camera."""
+        self.camera_control_widget = section.camera_control_widget
+        self.camera_alignment_controller.camera_model = (
+            self.camera_control_widget.camera_model
+        )
+        self._connect_recording_icon()
 
-        return [
-            viewport_section,
-            camera_section,
-            paths_section,
-            zones_section,
-            calibration_section,
-        ]
+    def when_camera_controls_built(self, on_built, on_failed=None):
+        """Call ``on_built(camera_control_widget)`` now, or once the Camera
+        Controls section is built; ``on_failed(error)`` instead if it fails
+        to build. GUI thread only."""
+        self.sidebar_builder.when_built(
+            self._camera_controls_section,
+            lambda section: on_built(section.camera_control_widget),
+            on_failed,
+        )
+
+    @observe("task:window:application:application_initialized")
+    def _build_sidebar_sections_unpainted(self, event):
+        """Build the sections even if the window has not painted (started
+        minimized, or offscreen); a no-op once they are under way."""
+        self.sidebar_builder.start()
 
     def _build_layer_host(self):
         """Mount the contributed layers on this pane, below the sidebar."""
@@ -1424,10 +1477,6 @@ class DeviceViewerDockPane(TraitsDockPane):
             return  # already built; a re-fired manager
             # assignment must not duplicate icons
 
-        # Push the manager to the camera widget now that it exists, so
-        # media-capture notifications can use it directly.
-        self.camera_control_widget.status_bar_manager = event.new
-
         _font = QFont(ICON_FONT_FAMILY)
         _font.setPointSize(STATUSBAR_ICON_POINT_SIZE)
 
@@ -1440,9 +1489,7 @@ class DeviceViewerDockPane(TraitsDockPane):
         self.recording_icon.setFont(_font)
         self.recording_icon.hide()
         self.recording_icon.status_bar_icon_priority = ICON_PRIORITY_LEFT
-        self.camera_control_widget.record_toggle_button.toggled.connect(
-            self.recording_icon.set_enabled
-        )
+        self._connect_recording_icon()
 
         # Contribute the icon; the microdrop_status_bar plugin owns its
         # placement, spacing, and removal.
@@ -1453,3 +1500,17 @@ class DeviceViewerDockPane(TraitsDockPane):
             return
 
         plugin.status_bar_icons.append(self.recording_icon)
+
+    def _connect_recording_icon(self):
+        """Once both the recording icon and the camera panel exist, the
+        record button drives the icon and the panel's media-capture
+        notifications go to the status bar."""
+        recording_icon = getattr(self, "recording_icon", None)
+
+        if recording_icon is None or self.camera_control_widget is None:
+            return
+
+        widget = self.camera_control_widget
+
+        widget.status_bar_manager = self.task.window.status_bar_manager
+        widget.record_toggle_button.toggled.connect(recording_icon.set_enabled)
