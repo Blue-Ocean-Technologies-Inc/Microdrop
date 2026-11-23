@@ -8,28 +8,29 @@
 #
 # Thanks for using Microdrop open source!
 
-"""NotificationsPlugin — recent events in a hideable pane, like a phone's
-notification shade, with a bell in the status bar.
+"""NotificationsPlugin — recent events in a drawer on the right of the main
+window, like a desktop notification centre, opened by a bell in the status
+bar.
 
 Everything that collects notifications starts with the plugin, so nothing
-is missed while the pane is hidden or not created yet: the model, the
+is missed while the drawer is closed or not built yet: the model, the
 NOTIFICATION_POST listener, the log handler forwarding warnings and errors,
-and the watcher of the plugin load records. Other plugins post through
-``notifications.consts`` and add sections above the list through the
-NOTIFICATION_SECTIONS extension point.
+and the watcher of the plugin load records. The drawer goes on each main
+window as it opens, and its contents are built the first time it opens.
+Other plugins post through ``notifications.consts`` and add sections above
+the list through the NOTIFICATION_SECTIONS extension point.
 """
 
 # Standard library imports.
 import logging
 
 # Enthought library imports.
-from envisage.api import TASK_EXTENSIONS, ExtensionPoint, Plugin
-from envisage.ui.tasks.api import TaskExtension
-from traits.api import Any, Instance, List, Str, observe, on_trait_change
+from envisage.api import ExtensionPoint, Plugin
+from traits.api import Any, Instance, List, observe, on_trait_change
+from traits.observation.api import trait
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
-from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
 
 # Local imports.
@@ -49,13 +50,10 @@ logger = get_logger(__name__)
 
 
 class NotificationsPlugin(Plugin):
-    """The notifications model, its collectors, pane and status-bar bell."""
+    """The notifications model, its collectors, drawer and status-bar bell."""
 
     id = NOTIFICATIONS_PLUGIN_ID
     name = f"{PKG_name} Plugin"
-
-    #: The task whose window gets the pane.
-    task_id_to_contribute_view = Str(f"{microdrop_application_PKG}.task")
 
     #: Sections shown above the notifications, e.g. the plugin loading list.
     sections = ExtensionPoint(
@@ -64,13 +62,12 @@ class NotificationsPlugin(Plugin):
         desc="NotificationSection descriptors shown above the notifications",
     )
 
-    contributed_task_extensions = List(contributes_to=TASK_EXTENSIONS)
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
     #: The bell while the plugin runs.
     status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
 
-    #: The model, the pane's requests and show/hide; live from start().
+    #: The model, the drawer's requests and open/close; live from start().
     controller = Instance(NotificationsController)
 
     #: Receives NOTIFICATION_POST and NOTIFICATIONS_SHOW_PANEL.
@@ -85,12 +82,20 @@ class NotificationsPlugin(Plugin):
     #: Keeps the bell in step with the unread count.
     _bell = Any()
 
+    #: Puts the drawer on the main window.
+    _drawer_host = Any()
+
+    #: The pyface window the drawer is on.
+    _drawer_window = Any()
+
     def start(self):
-        """Start collecting notifications and put the bell in the status bar."""
+        """Start collecting notifications, put the bell in the status bar and
+        the drawer on the main window, if it is open already."""
         from .controllers.load_failure_notifier import PluginLoadFailureNotifier
         from .controllers.message_handler import NotificationsMessageHandler
         from .services.log_forwarder import NotificationLogHandler
         from .views.bell_indicator import NotificationBellIndicator
+        from .views.drawer_host import NotificationsDrawerHost
 
         # Wires the ``sections_items`` handler below to contribution changes.
         self.connect_extension_point_traits()
@@ -113,8 +118,25 @@ class NotificationsPlugin(Plugin):
         self._bell.widget.clicked.connect(self.controller.toggle_pane)
         self.status_bar_icons.append(self._bell.widget)
 
+        self._drawer_host = NotificationsDrawerHost(
+            model=self.controller.pane_model,
+            click_outside_exempt=[self._bell.widget],
+        )
+
+        # Started after the window opened: a plugin loaded at runtime.
+        window = getattr(self.application, "active_window", None)
+
+        if window is not None and window.control is not None:
+            self._attach_drawer(window)
+
     def stop(self):
-        """Stop collecting and withdraw the bell (hot unload)."""
+        """Stop collecting, take the drawer off and withdraw the bell (hot
+        unload)."""
+
+        if self._drawer_host is not None:
+            self._drawer_host.detach()
+            self._drawer_host = None
+            self._drawer_window = None
 
         if self._log_handler is not None:
             logging.getLogger().removeHandler(self._log_handler)
@@ -131,24 +153,31 @@ class NotificationsPlugin(Plugin):
         self._load_failure_notifier = None
 
     # ------------------------------------------------------------------ #
-    # Contributions                                                       #
+    # The main window                                                     #
     # ------------------------------------------------------------------ #
 
-    def _contributed_task_extensions_default(self):
-        return [
-            TaskExtension(
-                task_id=self.task_id_to_contribute_view,
-                dock_pane_factories=[self._create_dock_pane],
-            )
-        ]
+    @observe(trait("application", notify=False).trait("window_opened", optional=True))
+    def _put_drawer_on_opened_window(self, event):
 
-    def _create_dock_pane(self, *args, **kwargs):
-        from .dock_pane import NotificationsDockPane
+        if self._drawer_host is not None and event.new is not None:
+            self._attach_drawer(event.new.window)
 
-        pane = NotificationsDockPane(*args, model=self.controller.pane_model, **kwargs)
-        self.controller.pane = pane
+    @observe(trait("application", notify=False).trait("window_closed", optional=True))
+    def _take_drawer_off_closed_window(self, event):
+        """Detach while the window's widgets still exist: pyface deletes
+        them later, and has already let go of ``window.control``."""
 
-        return pane
+        if event.new is None or event.new.window is not self._drawer_window:
+            return
+
+        self._drawer_window = None
+
+        if self._drawer_host is not None:
+            self._drawer_host.detach()
+
+    def _attach_drawer(self, window):
+        self._drawer_window = window
+        self._drawer_host.attach(window.control)
 
     # ------------------------------------------------------------------ #
     # Section contributions                                               #

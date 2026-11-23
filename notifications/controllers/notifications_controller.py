@@ -8,13 +8,12 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The pane's requests turned into changes: read, clear, dismiss, run an
-entry's action, and show or hide the pane. Qt-free: the pane is reached
-through its ``reveal()``, ``conceal()`` and ``showing_contents``."""
+"""The drawer's requests turned into changes: read, clear, dismiss, run an
+entry's action, and open or close the drawer. Qt-free: the drawer follows
+the model's ``is_open``."""
 
 # Enthought library imports.
 from traits.api import Callable, HasTraits, Instance, observe
-from traits.observation.api import trait
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -30,14 +29,10 @@ logger = get_logger(__name__)
 
 
 class NotificationsController(HasTraits):
-    """Acts on the pane model's requests and on show/hide requests."""
+    """Acts on the pane model's requests and on open/close requests."""
 
-    #: The pane's state.
+    #: The drawer's state.
     pane_model = Instance(NotificationsPaneModel, ())
-
-    #: The dock pane once created: has ``reveal()``, ``conceal()`` and a
-    #: ``showing_contents`` Bool. None in a standalone view.
-    pane = Instance(HasTraits)
 
     #: ``publish(topic=..., message=...)`` for a PublishAction.
     publish = Callable(publish_message)
@@ -56,25 +51,16 @@ class NotificationsController(HasTraits):
     # ------------------------------------------------------------------ #
 
     def toggle_pane(self):
-        """Hide the pane if it is on screen, else show and raise it."""
-
-        if self.pane is None:
-            return
-
-        if self.pane.showing_contents:
-            self.pane.conceal()
-
-        else:
-            self.pane.reveal()
+        """Close the drawer if it is open, else open it."""
+        self.pane_model.is_open = not self.pane_model.is_open
 
     def show_pane(self, section_id=""):
-        """Show and raise the pane, expanding ``section_id`` if given."""
+        """Open the drawer, expanding ``section_id`` if given."""
 
         if section_id:
             self.pane_model.expand_section(section_id)
 
-        if self.pane is not None:
-            self.pane.reveal()
+        self.pane_model.is_open = True
 
     # ------------------------------------------------------------------ #
     # Reactions                                                           #
@@ -115,10 +101,14 @@ class NotificationsController(HasTraits):
                     source=PKG,
                 )
 
-    @observe(trait("pane", notify=False).trait("showing_contents", optional=True))
-    @observe("pane_model:center:unread_count")
-    def _read_while_showing(self, event):
-        """What arrives while the list is on screen counts as seen."""
+    @observe("pane_model:close_button")
+    def _close(self, event):
+        self.pane_model.is_open = False
 
-        if self.pane is not None and self.pane.showing_contents:
+    @observe("pane_model:is_open")
+    @observe("pane_model:center:unread_count")
+    def _read_while_open(self, event):
+        """What arrives while the drawer is open counts as seen."""
+
+        if self.pane_model.is_open:
             self.pane_model.center.mark_all_read()

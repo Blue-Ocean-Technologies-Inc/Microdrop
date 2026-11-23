@@ -8,8 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The notifications pane: a header with Mark all read and Clear all, the
-contributed sections, then the notifications, newest first.
+"""The notifications drawer's contents: a header with Mark all read, Clear
+all and Close, the contributed sections, then the notifications, newest
+first.
 
 Runs standalone against just its model::
 
@@ -22,7 +23,7 @@ Runs standalone against just its model::
 from traitsui.api import HGroup, UItem, VGroup, View, spring
 
 # Microdrop style imports.
-from microdrop_style.icons.icons import ICON_DELETE_SWEEP, ICON_DONE_ALL
+from microdrop_style.icons.icons import ICON_CLOSE, ICON_DELETE_SWEEP, ICON_DONE_ALL
 
 # Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
@@ -45,6 +46,10 @@ NotificationsView = View(
                 editor=IconButtonEditor(
                     glyph=ICON_DELETE_SWEEP, tooltip="Clear all notifications"
                 ),
+            ),
+            UItem(
+                "close_button",
+                editor=IconButtonEditor(glyph=ICON_CLOSE, tooltip="Close (Esc)"),
             ),
         ),
         UItem("ordered_sections", editor=SectionsEditor()),

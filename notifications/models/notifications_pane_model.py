@@ -12,7 +12,16 @@
 contributed sections above them, and the user's requests on them."""
 
 # Enthought library imports.
-from traits.api import Button, Event, HasTraits, Instance, List, Property, Str
+from traits.api import (
+    Bool,
+    Button,
+    Event,
+    HasTraits,
+    Instance,
+    List,
+    Property,
+    Str,
+)
 
 # Local imports.
 from ..consts import NotificationSection
@@ -37,8 +46,12 @@ class NotificationsPaneModel(HasTraits):
     #: One line above the list, e.g. "2 new of 14".
     header_text = Property(Str, observe="center.[unread_count, entries.items]")
 
+    #: Whether the notifications drawer is open.
+    is_open = Bool(False)
+
     mark_all_read_button = Button()
     clear_all_button = Button()
+    close_button = Button()
 
     #: Fired with the entry the user dismissed.
     dismiss = Event(Instance(Notification))

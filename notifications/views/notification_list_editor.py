@@ -53,7 +53,9 @@ class NotificationListView(QtWidgets.QListView):
         self.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
         self.setMouseTracking(True)
         self.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
-        self.viewport().setBackgroundRole(QtGui.QPalette.ColorRole.Window)
+        # Unfilled: the cards lie on whatever is behind the list, which the
+        # notifications drawer paints translucent.
+        self.viewport().setAutoFillBackground(False)
 
         #: Repaints the relative times; runs only while the list is shown.
         self._time_refresh = QtCore.QTimer(self)

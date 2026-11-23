@@ -8,12 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The controller's reactions to the pane, its show/hide, entry actions,
+"""The controller's reactions to the drawer, its open/close, entry actions,
 and the plugin load failures posted as notifications. Qt-free; nothing is
 published: the controller's publisher is a stub."""
-
-# Enthought library imports.
-from traits.api import Bool, HasTraits
 
 # Microdrop package imports.
 from notifications.consts import (
@@ -28,18 +25,6 @@ from notifications.models.notification_center import NotificationCenter
 
 # Microdrop utils imports.
 from microdrop_utils.plugin_load_status import PluginLoadStatus
-
-
-class FakePane(HasTraits):
-    """Stands in for the dock pane."""
-
-    showing_contents = Bool(False)
-
-    def reveal(self):
-        self.showing_contents = True
-
-    def conceal(self):
-        self.showing_contents = False
 
 
 def _controller(**traits):
@@ -102,15 +87,15 @@ def test_a_path_that_will_not_open_is_posted_as_an_error():
     assert center.entries[0].severity == SEVERITY_ERROR
 
 
-def test_toggle_shows_then_hides_and_showing_marks_read():
-    pane = FakePane()
-    controller, _published, _opened = _controller(pane=pane)
-    center = controller.pane_model.center
+def test_toggle_opens_then_closes_and_open_marks_read():
+    controller, _published, _opened = _controller()
+    model = controller.pane_model
+    center = model.center
     center.post("unseen")
 
     controller.toggle_pane()
 
-    assert pane.showing_contents
+    assert model.is_open
     assert center.unread_count == 0
 
     center.post("arrives while open")
@@ -118,29 +103,31 @@ def test_toggle_shows_then_hides_and_showing_marks_read():
     assert center.unread_count == 0
 
     controller.toggle_pane()
-    center.post("arrives while hidden")
+    center.post("arrives while closed")
 
-    assert not pane.showing_contents
+    assert not model.is_open
     assert center.unread_count == 1
 
 
-def test_show_pane_expands_the_requested_section():
+def test_show_pane_opens_and_expands_the_requested_section():
     section = NotificationSection(id="plugins", title="Plugins")
-    pane = FakePane()
-    controller, _published, _opened = _controller(pane=pane)
+    controller, _published, _opened = _controller()
     controller.pane_model.sections = [section]
 
     controller.show_pane("plugins")
+    controller.show_pane()
 
     assert section.expanded
-    assert pane.showing_contents
+    assert controller.pane_model.is_open
 
 
-def test_without_a_pane_show_and_toggle_do_nothing():
+def test_the_close_button_closes():
     controller, _published, _opened = _controller()
-
-    controller.toggle_pane()
     controller.show_pane()
+
+    controller.pane_model.close_button = True
+
+    assert not controller.pane_model.is_open
 
 
 def test_load_failures_before_and_after_start_are_posted_once_each():

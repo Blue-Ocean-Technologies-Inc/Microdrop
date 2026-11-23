@@ -214,10 +214,34 @@ class NotificationSection(HasTraits):
 
 
 # ---------------------------------------------------------------------------
-# Pane, entries and status-bar bell
+# Drawer, entries and status-bar bell
 # ---------------------------------------------------------------------------
-DOCK_PANE_ID = f"{PKG}.dock_pane"
-DOCK_PANE_NAME = "Notifications"
+#: Object name of the drawer widget, for style sheets and tests.
+DRAWER_OBJECT_NAME = f"{PKG}.drawer"
+
+#: Width (px) of the open drawer; a narrower window gets a drawer as wide as
+#: itself.
+DRAWER_WIDTH = 400
+
+#: Space (px) between the drawer's edges and its contents.
+DRAWER_PADDING_PX = 6
+
+#: Opacity (0-1) of the drawer's background behind the cards, which lets
+#: what lies beneath show faintly; 1.0 makes it opaque. The header, the
+#: sections and the cards are always opaque.
+DRAWER_OPACITY = 0.92
+
+#: Repaints per second of what lies beneath the drawer (a camera feed, a
+#: live plot) past which the open drawer turns opaque until closed: a
+#: translucent drawer is repainted with whatever is beneath it.
+DRAWER_BACKDROP_PAINTS_PER_S = 4
+
+#: Whether a click in the main window outside the drawer closes it. The
+#: click is then used up, so it never also actuates what lies beneath.
+DRAWER_CLOSES_ON_CLICK_OUTSIDE = True
+
+#: Duration (ms) of the drawer's slide in from the right; 0 opens it at once.
+DRAWER_SLIDE_MS = 160
 
 #: Entries kept for the session; the oldest go first.
 MAX_ENTRIES = 300
