@@ -36,7 +36,10 @@ from portable_dropbot_controller.services.portable_dropbot_motors_mixin_service 
 
 #: What the driver's last_result says about a refused or unanswered request.
 REFUSAL = "cmd 0x1120: FAIL RESP_FAIL (0.05 s)"
-FAULT = "the mechanism reports FAULT (not homed, or the move failed)"
+FAULT = (
+    "the mechanism reports FAULT (not homed, or the move failed); "
+    "only a successful home of that axis clears it"
+)
 
 
 class _Reply:

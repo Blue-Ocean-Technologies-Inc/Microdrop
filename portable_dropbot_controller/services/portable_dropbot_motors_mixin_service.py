@@ -166,7 +166,8 @@ class PortableDropbotMotorsMixinService(MotionSafetyMixin):
 
         logger.warning(
             f"Tray toggle ignored: the tray reports state 0x{state:02X} (moving, "
-            f"FAULT or the magnet view position); home or move it explicitly."
+            f"FAULT or the magnet view position); move it explicitly, or home "
+            f"it: only a successful home clears a FAULT."
         )
 
         return None
