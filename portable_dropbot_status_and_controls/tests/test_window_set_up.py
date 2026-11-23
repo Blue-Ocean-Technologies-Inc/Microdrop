@@ -19,6 +19,7 @@ import pytest
 from apptools.preferences import package_globals
 from envisage.ui.tasks.api import TasksApplication, TaskWindow
 from pyface.tasks.api import DockPane
+from traits.api import Event
 
 # Microdrop package imports.
 from portable_dropbot_status_and_controls.plugin import (
@@ -115,6 +116,27 @@ def test_panes_mounted_after_the_set_up_get_flick_scrolling(application, set_ups
         ("flick scrolling", window),
         ("flick scrolling", window),
     ]
+
+    plugin.stop()
+
+
+class LazyPane(DockPane):
+    #: As ``LazyContentDockPane`` fires it once the contents are built.
+    contents_built = Event()
+
+
+def test_panes_built_on_first_show_get_flick_scrolling(application, set_ups):
+    window = TaskWindow()
+    application.windows.append(window)
+    application.active_window = window
+    plugin = _started_plugin(application)
+    pane = LazyPane(id="test.lazy_pane")
+    window.dock_panes.append(pane)
+    set_ups.clear()
+
+    pane.contents_built = True
+
+    assert set_ups == [("flick scrolling", window)]
 
     plugin.stop()
 

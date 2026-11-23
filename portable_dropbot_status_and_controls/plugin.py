@@ -14,6 +14,7 @@ from functools import partial
 # Enthought library imports.
 from envisage.ids import PREFERENCES_CATEGORIES, PREFERENCES_PANES
 from traits.api import Bool, Instance, List, observe
+from traits.observation.api import trait
 
 # Microdrop package imports.
 from template_status_and_controls.base_plugin import BaseStatusPlugin
@@ -181,6 +182,19 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
         """Panes mounted after the set-up — deferred plugins, or groups
         enabled from Manage Plugins — flick-scroll too. Grabbing a viewport
         again replaces its gesture, so re-grabbing every pane is safe."""
+        if self._window_set_up:
+            self._enable_touch_flick_scrolling_on_rpi(self.application.active_window)
+
+    @observe(
+        trait("application", notify=False)
+        .trait("active_window", notify=False)
+        .trait("dock_panes", notify=False)
+        .list_items(notify=False)
+        .trait("contents_built", optional=True)
+    )
+    def _flick_scroll_contents_built_later(self, event):
+        """A pane built on its first show (``LazyContentDockPane``) has its
+        scroll areas only from then on."""
         if self._window_set_up:
             self._enable_touch_flick_scrolling_on_rpi(self.application.active_window)
 
