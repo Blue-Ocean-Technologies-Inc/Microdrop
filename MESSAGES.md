@@ -130,7 +130,7 @@ Receiving: (Via handlers, image_viewer/message_handler.py)
 
 Receiving: (Via handlers, notifications/controllers/message_handler.py)
 - NOTIFICATION_POST "ui/notifications/post" — any plugin posts a notification (`NotificationMessage`, via `notification_publisher`); see the notifications flow below
-- NOTIFICATIONS_SHOW_PANEL "ui/notifications/show_panel" — show and raise the Notifications pane, expanding a section if `section_id` names one (`ShowNotificationsPanelRequest`, via `show_notifications_panel_publisher`)
+- NOTIFICATIONS_SHOW_PANEL "ui/notifications/show_panel" — open the notifications drawer (right-hand, over the panes), expanding a section if `section_id` names one (`ShowNotificationsPanelRequest`, via `show_notifications_panel_publisher`)
 
 Sending: (Via an entry's action button)
 - the topic and message of a notification's `PublishAction`, as the poster defined them
@@ -768,7 +768,7 @@ Each capturing step stores the resolution and camera properties it captures with
 - `_update_prefs()` does not touch app_globals. It writes the last-applied voltage/frequency straight into the ETS preferences node by path — `get_default_preferences().set(f"{VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH}.ui_default_{voltage|frequency}", value)` — using `VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH = "microdrop.ui.voltage_frequency_range"` (a new constant in `dropbot_preferences_ui/consts.py`; `VoltageFrequencyRangePreferences.preferences_path` now reuses the same constant instead of a duplicate literal).
 - This works because `envisage.application.Application.__init__` installs the running app's own `ScopedPreferences` node as apptools' package-global default (`set_default_preferences(self.preferences)`) before any plugin constructs a `PreferencesHelper`, and `PreferencesHelper._preferences_default()` returns that same default — so `get_default_preferences()` here and any `VoltageFrequencyRangePreferences()` instance's `self.preferences` are the identical node. Verified interactively: writing by path updates a live `VoltageFrequencyRangePreferences` instance's trait (via its `preferences.add_preferences_listener` callback), which fires `_publish_to_app_globals` and keeps app_globals in sync — `dropbot_status_and_controls` remains the only writer of `ui_default_voltage`/`ui_default_frequency` in app_globals, it just triggers that write indirectly through the ETS node rather than writing app_globals itself. A fresh `VoltageFrequencyRangePreferences()` instance (e.g. after a full app + Redis restart) reads the same persisted value straight from the ETS-backed `preferences.ini`, so the last-applied value survives restarts exactly as it did before #610.
 
-### Any plugin → Notifications pane: posting a notification (#1077)
+### Any plugin → notifications drawer: posting a notification (#1077)
 
 **Posting** — import only `notifications.consts` (allowed by `.importlinter`) and publish a `NotificationMessage`:
 
@@ -791,4 +791,4 @@ notification_publisher.publish({
 
 **In-process sources** (not topics) — the plugin also lists, without any message: warning-and-above log records from the root logger (`services/log_forwarder.py`: batched every 250 ms, collapsed by logger + level + message template + exception line, minus `LOG_IGNORE_RULES` in `notifications/consts.py`), and a "failed to load" error for every failed plugin load record (`application.plugin_load_status`).
 
-**Sections** — `plugin_management` contributes the plugin loading list to the `NOTIFICATION_SECTIONS` extension point (a `NotificationSection`: id, title, summary, order, `factory(parent)`); the indicator click publishes `NOTIFICATIONS_SHOW_PANEL` with that section's id, which shows the pane and expands it.
+**Sections** — `plugin_management` contributes the plugin loading list to the `NOTIFICATION_SECTIONS` extension point (a `NotificationSection`: id, title, summary, order, `factory(parent)`); the indicator click publishes `NOTIFICATIONS_SHOW_PANEL` with that section's id, which opens the drawer and expands it. The drawer opens only from the status-bar bell or this request; it is no dock pane, so task layouts and the View menu never list it.
