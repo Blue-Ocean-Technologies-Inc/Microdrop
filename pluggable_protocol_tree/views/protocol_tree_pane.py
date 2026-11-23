@@ -260,14 +260,9 @@ class ProtocolTreePane(QWidget):
         # Quick-actions toolbar. The BAR is a layout element built here (so
         # _build_layout can insert it under the tree); its CONTROLLER is
         # created by the dock pane — the composition root — once it exists,
-        # so the action ctx can carry the dock pane (ctx.dock_pane.*). None
-        # when no contributions exist (demo / headless test environments).
-        if quick_actions:
-            self.quick_action_bar = QuickActionBar(
-                actions=list(quick_actions), parent=self
-            )
-        else:
-            self.quick_action_bar = None
+        # so the action ctx can carry the dock pane (ctx.dock_pane.*). Hidden
+        # while empty, so a plugin loaded later can still fill it.
+        self.quick_action_bar = QuickActionBar(list(quick_actions or []), self)
         self.quick_actions_controller = None
 
         # Touch Select / More for the tree: empty unless Touch mode is on.
@@ -490,9 +485,7 @@ class ProtocolTreePane(QWidget):
         actions_row.setContentsMargins(0, 0, 0, 0)
         actions_row.setSpacing(0)
 
-        if self.quick_action_bar is not None:
-            actions_row.addWidget(self.quick_action_bar, 1)
-
+        actions_row.addWidget(self.quick_action_bar, 1)
         actions_row.addWidget(self.touch_tree_tools)
         layout.addLayout(actions_row)
 
