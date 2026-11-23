@@ -28,21 +28,6 @@ from pluggable_protocol_tree.services.logging.persistence import LoggingPersiste
 # Logger import.
 from logger.logger_service import get_logger
 
-# Optional visualisation deps, hoisted to module top: a missing lib degrades
-# the corresponding report section to a placeholder instead of failing import.
-try:
-    import plotly.express as px
-    import plotly.graph_objects as go
-except Exception:  # pragma: no cover
-    px = None
-    go = None
-try:
-    from microdrop_utils.plotly_helpers import (
-        create_plotly_svg_dropbot_device_heatmap,
-    )
-except Exception:  # pragma: no cover
-    create_plotly_svg_dropbot_device_heatmap = None
-
 logger = get_logger(__name__)
 
 _NUMERIC_EXCLUDE = {
@@ -266,8 +251,14 @@ class LoggingReport:
         column_notes: Optional[Dict[str, str]] = None,
         filtered: Optional[pd.DataFrame] = None,
     ) -> str:
-        if px is None:  # pragma: no cover
+        # plotly loads with the first report, not with the protocol tree. A
+        # missing plotly degrades this section to a placeholder.
+        try:
+            import plotly.express as px
+            import plotly.graph_objects as go
+        except Exception:  # pragma: no cover
             return LoggingReport._section("Data Trends", "<p>plotly unavailable.</p>")
+
         if not entries:
             return LoggingReport._section("Data Trends", "<p>No data.</p>")
         df = pd.DataFrame(entries)
@@ -456,11 +447,24 @@ class LoggingReport:
         df: pd.DataFrame, device_context, *, include_plotlyjs: bool = False
     ) -> str:
         svg = getattr(device_context, "device_svg_path", None)
+
         if not svg or "actuated_channels" not in df:
             return ""
+
         durations = LoggingReport._channel_durations_seconds(df)
-        if not durations or create_plotly_svg_dropbot_device_heatmap is None:
+
+        if not durations:
             return ""
+
+        # Loaded with the first report; a missing plotly or matplotlib leaves
+        # the heatmap out.
+        try:
+            from microdrop_utils.plotly_helpers import (
+                create_plotly_svg_dropbot_device_heatmap,
+            )
+        except Exception:  # pragma: no cover
+            return ""
+
         try:
             # Defaults ("Actuation Times" / "seconds") trigger the helper's
             # format_time_tooltip auto-scaling (sec --> min --> hours). Passing
