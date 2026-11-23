@@ -20,7 +20,7 @@ from dropbot_protocol_controls.plugin import DropbotProtocolControlsPlugin
 from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
-from image_viewer.plugin import ImageViewerPlugin
+from image_viewer import consts as image_viewer_consts
 from layout_presets.plugin import LayoutPresetsPlugin
 from logger_ui.plugin import LoggerUIPlugin
 from message_router.plugin import MessageRouterPlugin
@@ -41,9 +41,7 @@ from portable_dropbot_status_and_controls.plugin import (
     PortableDropbotStatusAndControlsPlugin,
 )
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
-from ssh_controls.plugin import SSHControlsPlugin
-from ssh_controls_ui.plugin import SSHUIPlugin
-from user_help_plugin.plugin import UserHelpPlugin
+from user_help_plugin import consts as user_help_consts
 from video_protocol_controls.plugin import VideoProtocolControlsPlugin
 from volume_threshold_protocol_controls.plugin import (
     VolumeThresholdProtocolControlsPlugin,
@@ -56,6 +54,7 @@ from microdrop_utils.broker_server_helpers import (
     load_dramatiq_worker_settings,
     redis_server_context,
 )
+from microdrop_utils.deferred_plugins import DeferredDockPane, DeferredPlugin
 
 # Logger import.
 from logger.plugin import LoggerPlugin
@@ -96,10 +95,7 @@ FRONTEND_PLUGINS = [
     LoggerUIPlugin,
     PluginManagementPlugin,
     DeviceViewerPlugin,
-    ImageViewerPlugin,
-    UserHelpPlugin,
     LayoutPresetsPlugin,
-    SSHUIPlugin,
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
     # The Z-Stage/magnet and heater stacks are standalone installable plugin
@@ -113,6 +109,42 @@ FRONTEND_PLUGINS = [
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
     ZoneProtocolControlsPlugin,
+]
+
+# Frontend plugins started only after the main window has painted, one per
+# event-loop turn, by plugin_management. Each is a "module:Class" spec, so its
+# module is not imported before then, plus the dock panes it contributes,
+# which show placeholders until it has loaded. Only plugins nothing else needs
+# at start-up belong here: no protocol columns, quick actions, services or
+# mixins a base plugin looks up in its start(), and no topic they must hear
+# before the window is up (a message published before a listener exists is
+# lost). Run scripts list them after SERVICE_PLUGINS, which load the same
+# way, so the SSH UI never runs without the SSH service.
+DEFERRED_FRONTEND_PLUGINS = [
+    DeferredPlugin(
+        spec="image_viewer.plugin:ImageViewerPlugin",
+        dock_panes=[
+            DeferredDockPane(
+                id=image_viewer_consts.DOCK_PANE_ID,
+                name=image_viewer_consts.DOCK_PANE_NAME,
+            ),
+            DeferredDockPane(
+                id=image_viewer_consts.ROI_PLOT_DOCK_PANE_ID,
+                name=image_viewer_consts.ROI_PLOT_DOCK_PANE_NAME,
+            ),
+        ],
+    ),
+    DeferredPlugin(
+        spec="user_help_plugin.plugin:UserHelpPlugin",
+        dock_panes=[
+            DeferredDockPane(
+                id=user_help_consts.TUTORIAL_SIMULATIONS_DOCK_PANE_ID,
+                name=user_help_consts.TUTORIAL_SIMULATIONS_DOCK_PANE_NAME,
+                dock_area="right",
+            ),
+        ],
+    ),
+    DeferredPlugin(spec="ssh_controls_ui.plugin:SSHUIPlugin"),
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [
@@ -163,9 +195,11 @@ MOCK_DROPBOT_FRONTEND_PLUGINS = [
     MockDropbotStatusPlugin,
 ]
 
-# Host-bound-by-trust plugins. See the category comment above.
+# Host-bound-by-trust plugins. See the category comment above. Declared like
+# the deferred frontend plugins: a GUI process starts them after its window
+# has painted, a services-only process imports and starts them at once.
 SERVICE_PLUGINS = [
-    SSHControlsPlugin,
+    DeferredPlugin(spec="ssh_controls.plugin:SSHControlsPlugin"),
 ]
 
 # A failure to start one of these, or of the application shell, fails the
