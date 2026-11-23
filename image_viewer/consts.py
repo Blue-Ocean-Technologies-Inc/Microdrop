@@ -23,6 +23,13 @@ PKG_name = PKG.title().replace("_", " ")
 LISTENER_NAME = f"{PKG}_listener"
 ACTOR_TOPIC_DICT = {LISTENER_NAME: [PROTOCOL_RUNNING]}
 
+#: The Image Viewer and ROI Intensities dock panes. The run configuration
+#: declares them too, so their placeholders exist before this plugin loads.
+DOCK_PANE_ID = f"{PKG}.dock_pane"
+DOCK_PANE_NAME = "Image Viewer"
+ROI_PLOT_DOCK_PANE_ID = f"{PKG}.roi_plot_dock_pane"
+ROI_PLOT_DOCK_PANE_NAME = "ROI Intensities"
+
 # ---------------------------------------------------------------------------
 # Extension point: filename-derived filters for the image list (e.g. the
 # fluorescence plugin's LED-wavelength filter). Contributions are objects

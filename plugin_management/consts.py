@@ -11,7 +11,17 @@
 # Standard library imports.
 from pathlib import Path
 
+# Microdrop style imports.
+from microdrop_style.colors import ERROR_COLOR, GREY, INFO_COLOR, SUCCESS_COLOR
+from microdrop_style.icons.icons import ICON_CHECK, ICON_CLOSE, ICON_EXTENSION
+
 # Microdrop utils imports.
+from microdrop_utils.plugin_load_status import (
+    LOAD_FAILED,
+    LOAD_LOADED,
+    LOAD_LOADING,
+    LOAD_PENDING,
+)
 from microdrop_utils.system_config import is_rpi
 
 # This module's package.
@@ -58,3 +68,29 @@ GROUP_ENABLED_PREFERENCES_PATH = "microdrop.plugin_groups"
 PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH = (
     Path(__file__).parent / "resources" / "plugin_management.html"
 )
+
+#: Glyph (icon font) and colour of each plugin load state, shared by the
+#: status-bar indicator (aggregate state) and the load-status panel (per row).
+PLUGIN_LOAD_STATE_GLYPHS = {
+    LOAD_PENDING: ICON_EXTENSION,
+    LOAD_LOADING: ICON_EXTENSION,
+    LOAD_LOADED: ICON_CHECK,
+    LOAD_FAILED: ICON_CLOSE,
+}
+
+PLUGIN_LOAD_STATE_COLORS = {
+    LOAD_PENDING: GREY["dark"],
+    LOAD_LOADING: INFO_COLOR,
+    LOAD_LOADED: SUCCESS_COLOR,
+    LOAD_FAILED: ERROR_COLOR,
+}
+
+#: Monospace text for the load-status panel's traceback area.
+TRACEBACK_STYLE_SHEET = 'font-family: Consolas, "Courier New", monospace;'
+
+#: Muted text colour of a deferred pane's placeholder while its plugin loads,
+#: by whether the colour scheme is dark.
+PLACEHOLDER_LOADING_COLORS = {False: GREY["dark"], True: GREY["lighter"]}
+
+#: Text style of a deferred pane's placeholder, before the colour.
+PLACEHOLDER_TEXT_STYLE = "font-size: 13pt; padding: 12px;"

@@ -38,7 +38,8 @@ broken or never-enabled plugin can never break startup or discovery.
 | `manage_dialog.py` / `uninstall_dialog.py` | TraitsUI dialog models (checkbox list / dropdown). |
 | `menus.py` | The three `TaskAction`s: Install, Uninstall, Manage. |
 | `plugin.py` | `PluginManagementPlugin` — offers the manager service, contributes the Tools actions, restores enabled groups on launch. |
-| `live_task_extensions.py` | `LiveTaskExtensionsController` — listens to the `TASK_EXTENSIONS` extension point and **reactively, debounced** mounts/unmounts dock panes + rebuilds the menu (via the helpers below) when plugins are loaded/unloaded at runtime. |
+| `live_task_extensions.py` | `LiveTaskExtensionsController` — listens to the `TASK_EXTENSIONS` extension point and **reactively, debounced** mounts/unmounts dock panes + rebuilds the menu (via the helpers below) when plugins are loaded/unloaded at runtime. Changes that arrive before a window shows its task are kept until one does. |
+| `deferred_loader.py` / `placeholder_pane_*.py` | `DeferredPluginLoader` and the placeholder panes of the staged launch (§1.9). |
 | `microdrop_utils/tasks_runtime_helpers.py` | The hand-rolled Qt helpers to mount/unmount a dock pane and rebuild the menu bar on a **live** window (Pyface has no public API for this — see Part 3 §5). |
 
 ### 1.3 Discovery (every launch)
@@ -124,6 +125,21 @@ appear; `LiveTaskExtensionsController` (a listener on that extension point) **de
 on the next GUI-loop turn, mounts the new panes via `add_dock_pane_live` and rebuilds the menu
 **once** (see §1.8 and Part 3 §5). So `enable()` owns only plugin + service lifecycle.
 
+An enable is **all or nothing**. When a plugin fails to construct or start, every plugin the
+enable added is stopped and removed again (`withdraw_plugin` in
+`microdrop_utils/isolating_plugin_manager.py`), the services registered since it began are
+unregistered, the group is neither marked loaded nor persisted, and the reason is kept in
+`group.load_error` (the hot-load relaunch prompt shows it).
+
+Each plugin's start (pending → loading → loaded/failed, with its duration and, for a failure,
+the traceback) is recorded in the application's `plugin_load_status`
+(`microdrop_utils/plugin_load_status.py`). Launch-time starts are recorded there too:
+`MicrodropApplication`'s plugin manager (`IsolatingPluginManager`) starts plugins one at a
+time and skips and rolls back a failing one, unless its id is in
+`application.essential_plugin_ids`, which still fails the launch. The status-bar indicator
+contributed by `PluginManagementPlugin` summarises the records (pulsing while loading, a check,
+or a red X) and opens a panel listing them.
+
 **Disable** reverses the lifecycle: `stop_plugin` + `remove_plugin` in reverse → **unregister
 the captured services** → clear the flag. Withdrawing each plugin's `TASK_EXTENSIONS` triggers
 the same reactive controller to unmount its panes and rebuild the menu.
@@ -144,7 +160,9 @@ A relaunch dialog is offered; the package is no longer importable after the rela
 `application.application_initialized`) runs once the app is up: it ADOPTS the
 startup-composed group plugins, then reconciles every group to its persisted
 enabled flag, or to the group's `default_enabled` when the user never toggled it — so
-the Manage Plugins checkboxes match what's actually loaded after a relaunch.
+the Manage Plugins checkboxes match what's actually loaded after a relaunch. Then it starts
+the deferred plugins (§1.9); `application.extra_plugins_loaded` fires once the last of
+those is in.
 
 ### 1.8 The three things Envisage/Pyface don't self-heal
 
@@ -163,6 +181,37 @@ Runtime add/remove of a plugin works, but three layers snapshot at startup and n
    **unless** it opts into live notifications with `connect_extension_point_traits()` and
    reacts to the `<name>_items` event. The protocol tree does exactly this so the magnet
    column appears/disappears when its plugin group loads/unloads (Part 3 §1).
+
+### 1.9 Deferred plugins (staged launch)
+
+A run configuration can defer frontend plugins until the main window has painted. In
+`examples/plugin_consts.py`, `DEFERRED_FRONTEND_PLUGINS` (and `SERVICE_PLUGINS`) are
+`DeferredPlugin` declarations (`microdrop_utils/deferred_plugins.py`): the plugin as a
+lazily imported `"module:Class"` spec, plus the dock panes it contributes
+(`DeferredDockPane`: id, name, default dock area and visibility). The run script hands
+them to the application as `deferred_plugins`; a window-less process imports and starts
+them with the rest.
+
+- **Placeholders.** `PluginManagementPlugin` contributes a placeholder dock pane for every
+  declared pane, with the real pane's id, so the saved layout is applied once, with every
+  pane present. A placeholder says "Loading <name>…", or that its plugin failed.
+- **Loading.** `DeferredPluginLoader` (`deferred_loader.py`) starts after the launch
+  restore, one plugin per event-loop turn: import, construct, `add_plugin`, and start
+  through the isolating plugin manager, so each start is recorded in
+  `plugin_load_status` (every deferred plugin is pending from launch, so the status-bar
+  indicator pulses until the last one is in). A failure, an import failure included, is
+  recorded and skipped.
+- **Swap.** The live controller mounts the plugin's panes; `add_dock_pane_live` replaces a
+  pane already mounted under the same id in place (Qt's `saveState`/`restoreState` keyed
+  by the shared dock-widget object name), so the real pane keeps the placeholder's
+  position, size, tab, floating state and visibility. A declared pane the plugin does not
+  contribute is logged and its placeholder removed.
+
+Only defer a plugin nothing else needs at start-up: no protocol columns or quick actions,
+no service or mixin a base plugin looks up in its `start()`, and no topic it must hear
+before the window is up (a message published before its listener exists is lost). Its
+preferences pane is missing from the Preferences dialog if that dialog is first opened
+before the plugin has loaded (the dialog reads its panes once).
 
 ---
 

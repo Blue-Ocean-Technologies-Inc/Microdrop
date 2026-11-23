@@ -32,12 +32,19 @@ the handler inline when the change is already on the main thread, so it would
 neither defer nor coalesce. ``GUI.invoke_later`` is the deferral primitive.)
 """
 
+# Enthought library imports.
 from pyface.api import GUI
-from traits.api import Any, Bool, Dict, HasTraits, List, Property
+from traits.api import Any, Bool, Dict, HasTraits, List, Property, observe
+from traits.observation.api import trait
 
+# Microdrop utils imports.
 from microdrop_utils.tasks_runtime_helpers import (
-    add_dock_pane_live, rebuild_menu_bar_live, remove_dock_pane_live,
+    add_dock_pane_live,
+    rebuild_menu_bar_live,
+    remove_dock_pane_live,
 )
+
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -70,28 +77,81 @@ class LiveTaskExtensionsController(HasTraits):
         still mounted (entries are dropped again on unmount)."""
         return bool(self._pane_id_by_factory)
 
+    #: True while TASK_EXTENSIONS changes wait for their reconcile, e.g.
+    #: because no window shows its task yet.
+    has_pending_changes = Property(Bool)
+
+    def _get_has_pending_changes(self):
+        return bool(self._pending_added or self._pending_removed)
+
     def on_changed(self, added, removed):
-        """Record a TASK_EXTENSIONS delta and schedule one deferred reconcile."""
+        """Record a TASK_EXTENSIONS delta and schedule one deferred reconcile.
+
+        An extension withdrawn before the reconcile that would mount it (a
+        plugin rolled back right after being added) cancels out instead of
+        being mounted for a plugin that is gone."""
+        for extension in removed:
+            if extension in self._pending_added:
+                self._pending_added.remove(extension)
+            else:
+                self._pending_removed.append(extension)
+
         self._pending_added.extend(added)
-        self._pending_removed.extend(removed)
+        self._schedule_reconcile()
+
+    def mounted_pane_ids(self, extensions):
+        """Return the ids of the dock panes mounted for ``extensions``."""
+        return [
+            self._pane_id_by_factory[factory]
+            for extension in extensions
+            for factory in getattr(extension, "dock_pane_factories", []) or []
+            if factory in self._pane_id_by_factory
+        ]
+
+    def unmount_pane(self, pane_id):
+        """Take the dock pane ``pane_id`` off the active window, if shown."""
+        window = getattr(self.application, "active_window", None)
+
+        if window is None:
+            return
+
+        try:
+            remove_dock_pane_live(window, pane_id)
+
+        except Exception:
+            logger.exception(f"unmount of '{pane_id}' failed")
+
+    # --- internals ---------------------------------------------------
+
+    def _schedule_reconcile(self):
         if not self._scheduled:
             self._scheduled = True
             GUI.invoke_later(self._reconcile)
 
-    # --- internals ---------------------------------------------------
+    @observe(
+        trait("application", notify=False)
+        .trait("active_window", optional=True)
+        .trait("active_task", optional=True)
+    )
+    def _reconcile_once_a_task_shows(self, event):
+        """Apply the changes kept while no window showed its task."""
+        if self.has_pending_changes:
+            self._schedule_reconcile()
 
     def _reconcile(self):
         self._scheduled = False
-        added, removed = self._pending_added, self._pending_removed
-        self._pending_added, self._pending_removed = [], []
 
         application = self.application
         window = getattr(application, "active_window", None)
-        if window is None:
-            return
         task = getattr(window, "active_task", None)
+
+        # Keep the changes until a window shows its task: dropping them here
+        # would lose the panes and menus of every plugin loaded before then.
         if task is None:
             return
+
+        added, removed = self._pending_added, self._pending_removed
+        self._pending_added, self._pending_removed = [], []
 
         # Removed first: drop panes whose plugin is going away before mounting
         # new ones.

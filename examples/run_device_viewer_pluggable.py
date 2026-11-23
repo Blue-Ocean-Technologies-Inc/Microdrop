@@ -28,6 +28,7 @@ microdrop_runner_setup()
 from examples.plugin_consts import (  # noqa: E402
     BACKEND_APPLICATION,
     BACKEND_PLUGINS,
+    DEFERRED_FRONTEND_PLUGINS,
     DROPBOT_BACKEND_PLUGINS,
     DROPBOT_FRONTEND_PLUGINS,
     FRONTEND_APPLICATION,
@@ -74,6 +75,30 @@ def stop_app(app, signum, frame):
     sys.exit(0)
 
 
+def _split_deferred_plugins(plugins, application):
+    """Separate the plugins to start after the main window has painted.
+
+    ``plugins`` mixes plugin classes and ``DeferredPlugin`` declarations.
+    A window-less application has no window to wait for, so it imports and
+    starts its deferred plugins with the rest.
+
+    Returns
+    -------
+    tuple of list
+        The plugin classes to start now, and the deferred declarations.
+    """
+    from microdrop_utils.deferred_plugins import DeferredPlugin
+
+    deferred_plugins = [p for p in plugins if isinstance(p, DeferredPlugin)]
+
+    if issubclass(application, TasksApplication):
+        return [p for p in plugins if p not in deferred_plugins], deferred_plugins
+
+    return [
+        p.import_class() if isinstance(p, DeferredPlugin) else p for p in plugins
+    ], []
+
+
 def main(plugins, contexts, application, persist):
     """
     Run the application.
@@ -93,6 +118,8 @@ def main(plugins, contexts, application, persist):
 
     # Launchers pass saved plugin lists, which may predate the Updates panel.
     plugins = with_updates_panel(plugins)
+
+    plugins, deferred_plugins = _split_deferred_plugins(plugins, application)
 
     print(f"Instantiating application {application} with plugins {plugins}")
 
@@ -114,6 +141,9 @@ def main(plugins, contexts, application, persist):
         stop_app_func = partial(stop_app, app)
         signal.signal(signal.SIGINT, stop_app_func)
         signal.signal(signal.SIGTERM, stop_app_func)
+
+        if deferred_plugins:
+            app.deferred_plugins = deferred_plugins
 
         app.run()
 
@@ -176,6 +206,11 @@ def cli():
     # so they load alongside the frontend as well as on explicit request.
     if "frontend" in selected or "services" in selected:
         plugins += SERVICE_PLUGINS
+
+    # After the service plugins, which a GUI process defers too: deferred
+    # plugins load in list order, so a UI never runs before its service.
+    if "frontend" in selected:
+        plugins += DEFERRED_FRONTEND_PLUGINS
 
     if "backend" in selected:
         plugins += BACKEND_PLUGINS
