@@ -44,9 +44,11 @@ Refusals
     realtime mode is on or a protocol is running; a test name is not in
     ``ALL_TESTS`` or a ``test_kwargs`` key is not a known parameter of its
     test; the pads' state is unknown and a selected test needs them moved;
-    or the backend's own chip read at run start detects no board and
-    ``chip_absent_acknowledged`` is False. Preflight reads and calibration
-    saves report a refusal or failure in their reply's ``error``.
+    the tray does not read where the run wants it (``tray_in``, forced IN
+    by ``tray_in_required``); or the backend's own chip read at run start
+    detects no board and ``chip_absent_acknowledged`` is False. Preflight
+    reads and calibration saves report a refusal or failure in their
+    reply's ``error``.
 
 Exclusive board ownership
     While a run is in progress the backend refuses every other
@@ -97,6 +99,18 @@ UNSAVED_PARTS = (UNSAVED_CALIBRATION, UNSAVED_TARE)
 #: frontend keeps its last checklist and polls again.
 PREFLIGHT_BOARD_BUSY_ERROR = "board busy"
 
+#: Tests that need the tray IN (the vendor pre-flight's TRAY_IN_TESTS: the
+#: motor test moves PMT-Y, and the PMT / magnet interlocks want the tray
+#: inside). Every other test runs with the tray in or out.
+TRAY_IN_TESTS = ("test_motors",)
+
+
+def tray_in_required(tests, run_all=False):
+    """Whether a run of ``tests`` must have the tray IN: Run all always
+    does, as does any run of a TRAY_IN_TESTS test (vendor rule)."""
+    return bool(run_all) or any(name in TRAY_IN_TESTS for name in tests)
+
+
 # --------------------------------------------------------------------- #
 # Topics                                                                 #
 # --------------------------------------------------------------------- #
@@ -146,6 +160,12 @@ class SelfTestRunRequest(BaseModel):
     test_kwargs: dict[str, dict[str, float | int | bool]] = {}
     #: The operator confirmed starting without a detected test board.
     chip_absent_acknowledged: bool = False
+    #: Started by Run all, which always runs with the tray IN.
+    run_all: bool = False
+    #: The tray position the operator chose (True = in); overridden to IN
+    #: when ``tray_in_required`` says so. The run refuses when the tray
+    #: reads elsewhere.
+    tray_in: bool = True
 
 
 class SelfTestAbortRequest(BaseModel):

@@ -53,6 +53,7 @@ PADS_RELEASED_BYTE = 0
 HV_OFF_CONFIRMED = 1
 CHIP_ON_PAD_PRESENT_BIT = 0x1
 TRAY_IN_BYTE = 0
+TRAY_OUT_BYTE = 1
 #: STATUS chip_res window of the capacitor test board (raw counts), read
 #: with the pads pressed; the vendor pre-flight's TEST_BOARD_CHIP_RES_RANGE.
 TEST_BOARD_CHIP_RES_RANGE = (1200, 2200)
@@ -200,6 +201,15 @@ def pads_text(pads_byte):
     )
 
 
+def tray_text(tray_byte):
+    if tray_byte is None:
+        return "no reply"
+
+    return {TRAY_IN_BYTE: "in", TRAY_OUT_BYTE: "out"}.get(
+        tray_byte, f"state 0x{int(tray_byte):02X}"
+    )
+
+
 def is_link_error(error):
     """Whether a vendor per-test error repr names a serial-link failure."""
     return str(error or "").split("(", 1)[0].strip() in LINK_ERROR_NAMES
@@ -309,9 +319,12 @@ def validate_run_request(tests, test_kwargs):
     return list(dict.fromkeys(tests)), ""
 
 
-def start_refusal_reason(tests, reads, chip_absent_acknowledged):
-    """Why the run start read refuses the run; "" lets it start."""
+def start_refusal_reason(tests, reads, chip_absent_acknowledged, tray_in=True):
+    """Why the run start read refuses the run; "" lets it start. ``tray_in``
+    is where the run wants the tray (True in, False out), as the vendor
+    pre-flight's Start requires the tray at the chosen position."""
     pads_byte = reads.get("pads")
+    tray_byte = reads.get("tray")
 
     initial = pads_state(pads_byte)
 
@@ -321,12 +334,11 @@ def start_refusal_reason(tests, reads, chip_absent_acknowledged):
             f"the pads, so nothing was started"
         )
 
-    presses = any(
-        step.kind == STEP_PADS and step.target for step in plan_run(tests, initial)
-    )
-
-    if presses and reads.get("tray") != TRAY_IN_BYTE:
-        return "the tray is not in, and the run presses the pads"
+    if tray_byte != (TRAY_IN_BYTE if tray_in else TRAY_OUT_BYTE):
+        return (
+            f"the tray is not {'in' if tray_in else 'out'} "
+            f"({tray_text(tray_byte)}), where the run wants it"
+        )
 
     if not chip_absent_acknowledged and not board_present(reads):
         return (

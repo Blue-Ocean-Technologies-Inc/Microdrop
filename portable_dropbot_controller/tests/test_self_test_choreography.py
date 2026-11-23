@@ -30,6 +30,7 @@ from portable_dropbot_controller.self_test_choreography import (
     validate_run_request,
 )
 from portable_dropbot_controller.self_test_results import unsaved_parts
+from portable_dropbot_self_tests.consts import tray_in_required
 
 CALIBRATION = "test_on_board_feedback_calibration"
 #: A STATUS reply with a chip on the pads and the test board's chip_res.
@@ -264,13 +265,26 @@ def test_unknown_pad_state_refuses_a_run_that_must_move_them():
     assert start_refusal_reason(["system_info"], reads, False) == ""
 
 
-def test_tray_out_refuses_a_run_that_presses_the_pads():
+def test_the_tray_must_read_where_the_run_wants_it():
+    tray_in = {"tray": 0, "pads": 0, "status": BOARD_STATUS}
     tray_out = {"tray": 1, "pads": 0, "status": BOARD_STATUS}
-    pressed_already = {"tray": 1, "pads": 1, "status": BOARD_STATUS}
+    not_read = {"tray": None, "pads": 0, "status": BOARD_STATUS}
 
-    assert "tray is not in" in start_refusal_reason(["test_voltage"], tray_out, False)
-    assert start_refusal_reason([CALIBRATION], tray_out, False) == ""
-    assert start_refusal_reason(["test_voltage"], pressed_already, False) == ""
+    assert start_refusal_reason(["test_voltage"], tray_in, False) == ""
+    assert start_refusal_reason(["test_voltage"], tray_out, False, False) == ""
+    assert "tray is not in (out)" in start_refusal_reason(
+        ["test_voltage"], tray_out, False
+    )
+    assert "tray is not out (in)" in start_refusal_reason(
+        [CALIBRATION], tray_in, False, False
+    )
+    assert "no reply" in start_refusal_reason(["system_info"], not_read, False, False)
+
+
+def test_run_all_and_the_motor_test_need_the_tray_in():
+    assert not tray_in_required(["test_voltage", CALIBRATION])
+    assert tray_in_required(["test_voltage"], run_all=True)
+    assert tray_in_required(["system_info", "test_motors"])
 
 
 def test_absent_board_needs_the_acknowledgement():

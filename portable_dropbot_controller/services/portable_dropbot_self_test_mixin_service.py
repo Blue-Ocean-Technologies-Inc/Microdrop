@@ -49,6 +49,7 @@ from portable_dropbot_self_tests.consts import (
     SelfTestAbortRequest,
     SelfTestRunRequest,
     self_test_finished_publisher,
+    tray_in_required,
 )
 
 # Local imports.
@@ -357,7 +358,10 @@ class PortableDropbotSelfTestMixinService(HasTraits):
             reason = self._board_session_reason()
 
         reason = reason or start_refusal_reason(
-            tests, reads, request.chip_absent_acknowledged
+            tests,
+            reads,
+            request.chip_absent_acknowledged,
+            tray_in=request.tray_in or tray_in_required(tests, request.run_all),
         )
 
         if reason:
