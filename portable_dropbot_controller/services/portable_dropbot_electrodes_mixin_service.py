@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Third-party imports.
+from dropbot_portable.portable_dropbot_service import CMD_ELECTRODE_STATE_CH
+
 # Enthought library imports.
 from traits.api import Dict, HasTraits, Str, provides
 
@@ -21,6 +24,7 @@ from ..consts import DEFAULT_NUM_CHANNELS, LAST_CHANNEL_STATES_REQUESTED_KEY
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
+from ..motion_replies import describe_last_result
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -71,16 +75,40 @@ class PortableDropbotElectrodesMixinService(HasTraits):
             f"Electrode state change requested: "
             f"{len(channels)} active channel(s) {channels}"
         )
-        ok, _ = self._proxy_call(
-            "electrode actuation", lambda: self.proxy.actuate_channels(channels)
+        ok, applied = self._proxy_call(
+            "electrode actuation", lambda: self._set_electrode_states(channels)
         )
-        if ok:
+
+        if ok and applied:
             app_globals[LAST_CHANNEL_STATES_REQUESTED_KEY] = str(message)
             logger.info(
                 f"Portable Dropbot electrode update applied: {len(channels)} active"
+            )
+        elif ok:
+            reason = describe_last_result(self.proxy.uart, CMD_ELECTRODE_STATE_CH)
+            self._publish_error(
+                "electrode actuation",
+                f"not applied, {len(channels)} active requested: {reason} "
+                f"(the board refuses electrodes while the 24 V rails are off)",
             )
         else:
             logger.warning(
                 f"Portable Dropbot electrode update FAILED "
                 f"({len(channels)} active requested)"
             )
+
+    def _set_electrode_states(self, channels):
+        """Turn on exactly these channels, as the vendor UI's Electrodes tab
+        writes them; True only when the board applied the write. The
+        session's ``actuate_channels`` drops ``setElectrodeStates``'s False,
+        which since dropbot-portable 1.8.0 is a final refusal (0x1242 FAILs
+        while the 24 V rails are off), no longer retried on the legacy
+        protocol."""
+        uart = self.proxy.uart
+        states = [False] * uart.board_channels
+
+        for channel in channels:
+            if 0 <= channel < len(states):
+                states[channel] = True
+
+        return uart.setElectrodeStates(states)

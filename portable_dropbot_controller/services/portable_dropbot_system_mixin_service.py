@@ -9,8 +9,9 @@
 # Thanks for using Microdrop open source!
 
 """Advanced-mode system requests: fan and buzzer control, the
-per-motor mechanical param workflow (read -> RAM write -> flash
-preset -> motor-board reboot to take effect), and the magnet engage
+per-motor mechanical param workflow (read -> RAM write, live on the
+motor's next idle moment -> flash preset; a motor-board reboot only for
+boot-only settings, and it re-runs boot homing), and the magnet engage
 height in the motor board's device defaults (read -> RAM write, live
 at once -> flash preset)."""
 
@@ -20,6 +21,7 @@ import struct
 
 # Third-party imports.
 from dropbot_portable import MotorBoard
+from dropbot_portable.param_layout import MOTOR_BLOB_SIZES
 from pydantic import ValidationError
 
 # Enthought library imports.
@@ -34,14 +36,19 @@ from ..consts import (
     MAGNET_DEFAULTS_FIELDS,
     MAGNET_DEFAULTS_FORMAT,
     MAGNET_DEFAULTS_PARAM,
-    MOTOR_PARAM_FIELDS,
     MOTOR_PARAM_NAMES,
     MOTOR_PARAMS_UPDATED,
     MagnetEngageWriteRequest,
+    MotorParamsWriteRequest,
     magnet_engage_updated_publisher,
 )
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
+)
+from ..motor_params import (
+    decode_motor_params,
+    encode_motor_params,
+    served_motor_fields,
 )
 
 # Logger import.
@@ -104,29 +111,40 @@ class PortableDropbotSystemMixinService(HasTraits):
         # The reply echoes the flash key, NUL, then the raw struct.
         return resp.split(b"\x00", 1)[1]
 
-    def _read_motor_param_fields(self, motor):
-        """Read one motor's mechanical params. Returns (fields, error):
-        fields maps name -> value for the wire-order prefix the firmware
-        sent, or is None with error set when the read failed."""
+    def _read_motor_blob(self, motor):
+        """Read one motor's served mechanical param blob and the board's speed
+        units. Returns (blob, units, error); blob is None with error set when
+        the read failed."""
         blob = self._read_motor_board_param(
             f"read {motor} params", MOTOR_PARAM_NAMES[motor]
         )
 
         if blob is None:
-            return None, "read failed"
+            return None, None, "read failed"
 
-        # Old firmware stops at rspd (14 fields, 56 B); newer adds the
-        # accel factors (16 fields, 64 B). Parse whichever prefix fits.
-        n_fields = 16 if len(blob) >= 64 else 14 if len(blob) >= 56 else 0
+        if len(blob) not in MOTOR_BLOB_SIZES:
+            return None, None, f"unknown blob size ({len(blob)} bytes)"
 
-        if not n_fields:
-            return None, f"short read ({len(blob)} bytes)"
+        ok, units = self._proxy_call(
+            f"{motor} speed units", lambda: self.proxy.uart.motor_speed_units()
+        )
 
-        fields = MOTOR_PARAM_FIELDS[:n_fields]
-        fmt = ">" + "".join(f for _, f in fields)
-        values = struct.unpack(fmt, blob[: struct.calcsize(fmt)])
+        if not ok or units is None:
+            return None, None, "speed units read failed"
 
-        return {name: value for (name, _), value in zip(fields, values)}, ""
+        return blob, units, ""
+
+    def _read_motor_param_fields(self, motor):
+        """Read one motor's mechanical params. Returns (fields, error):
+        fields maps every MOTOR_PARAM_FIELDS name -> value, speeds in real
+        µm/s and the fields older firmware does not serve at its defaults,
+        or is None with error set when the read failed."""
+        blob, units, error = self._read_motor_blob(motor)
+
+        if error:
+            return None, error
+
+        return decode_motor_params(blob, units.factor), ""
 
     def on_motor_params_read_request(self, message):
         motor = str(message).strip()
@@ -135,62 +153,79 @@ class PortableDropbotSystemMixinService(HasTraits):
             logger.warning(f"Unknown motor for params read: {motor!r}")
             return
 
-        fields, error = self._read_motor_param_fields(motor)
+        blob, units, error = self._read_motor_blob(motor)
 
         if error:
             self._publish_motor_params(motor=motor, error=error)
             return
 
-        self._publish_motor_params(motor=motor, fields=fields)
+        fields = decode_motor_params(blob, units.factor)
+        served = served_motor_fields(blob)
+
+        self._publish_motor_params(
+            motor=motor,
+            fields={name: fields[name] for name in served},
+            blob_size=len(blob),
+            speed_units=units.describe(),
+        )
 
     def on_motor_params_write_request(self, message):
-        """RAM-only write; presetting to flash and rebooting the motor
-        board are separate explicit requests."""
-        data = json.loads(str(message))
-        motor = str(data["motor"])
-        friendly = MOTOR_PARAM_NAMES.get(motor)
-        if friendly is None:
-            logger.warning(f"Unknown motor for params write: {motor!r}")
+        """RAM-only write, live on the motor's next idle moment; presetting to
+        flash is a separate explicit request. The board's blob is read back
+        and written whole at its served length with the edits in place."""
+        try:
+            request = MotorParamsWriteRequest.model_validate_json(str(message))
+        except ValidationError as error:
+            logger.warning(f"Invalid motor params write: {error}")
             return
-        supplied = data["fields"]
-        # The struct is positional: only a prefix of the wire order can
-        # be written (exactly what a read of that firmware returned).
-        fields = [(name, fmt) for name, fmt in MOTOR_PARAM_FIELDS if name in supplied]
-        if [name for name, _ in fields] != [
-            name for name, _ in MOTOR_PARAM_FIELDS[: len(fields)]
-        ]:
+
+        motor = request.motor
+        blob, units, error = self._read_motor_blob(motor)
+
+        if error:
+            self._publish_motor_params(motor=motor, error=error)
+            return
+
+        if not units.confirmed:
             self._publish_motor_params(
-                motor=motor, error="fields must be a wire-order prefix"
+                motor=motor,
+                error=f"not written: speed units unknown ({units.describe()}), "
+                "read again",
             )
             return
-        packed = b"".join(
-            struct.pack(
-                f">{fmt}", float(supplied[name]) if fmt == "f" else int(supplied[name])
-            )
-            for name, fmt in fields
-        )
-        key = MotorBoard.PARAMS[friendly]
+
+        try:
+            packed = encode_motor_params(blob, request.fields, units.factor)
+        except ValueError as refusal:
+            self._publish_motor_params(motor=motor, error=f"not written: {refusal}")
+            return
+
+        key = MotorBoard.PARAMS[MOTOR_PARAM_NAMES[motor]]
         ok, result = self._proxy_call(
             f"write {motor} params",
             lambda: self.proxy.uart.setParams("motor", key, packed),
         )
-        self._publish_motor_params(motor=motor, written=bool(ok and result))
+        written = bool(ok and result)
+
+        self._publish_motor_params(motor=motor, written=written)
         logger.info(
-            f"Portable Dropbot {motor} params write "
-            f"({len(fields)} fields) --> "
-            f"{'ok' if ok and result else 'FAILED'}"
+            f"Portable Dropbot {motor} params write ({len(packed)} B) "
+            f"--> {'ok' if written else 'FAILED'}"
         )
 
     def on_motor_params_preset_request(self, message):
         motor = str(message).strip()
         friendly = MOTOR_PARAM_NAMES.get(motor)
+
         if friendly is None:
             logger.warning(f"Unknown motor for params preset: {motor!r}")
             return
+
         key = MotorBoard.PARAMS[friendly]
         ok, result = self._proxy_call(
             f"preset {motor} params", lambda: self.proxy.uart.presetParams("motor", key)
         )
+
         self._publish_motor_params(motor=motor, preset=bool(ok and result))
         logger.info(
             f"Portable Dropbot {motor} params preset to flash "
@@ -198,16 +233,19 @@ class PortableDropbotSystemMixinService(HasTraits):
         )
 
     def on_reboot_motor_board_request(self, message):
-        """Reboot the motor board so flashed params take effect (the
-        driver waits ~3 s and logs back in). The pads lose their homing
-        across the reboot — Home All afterwards."""
+        """Soft-reset the motor board (the driver waits and logs back in).
+        Params already apply live on a RAM write; a reboot is for boot-only
+        settings or a clean re-home. The MCU re-runs the motor boot homing
+        after it (all axes move, ~30 s), and motor commands answer BUSY until
+        that finishes."""
         ok, logged_in = self._proxy_call(
             "reboot motor board", lambda: self.proxy.uart.RebootBoard("motor")
         )
+
         self._publish_motor_params(motor_board_rebooted=bool(ok and logged_in))
         logger.info(
             f"Portable Dropbot motor board reboot --> "
-            f"{'ok' if ok and logged_in else 'FAILED'}"
+            f"{'ok, boot homing runs' if ok and logged_in else 'FAILED'}"
         )
 
     # ------------------------------------------------------------------ #

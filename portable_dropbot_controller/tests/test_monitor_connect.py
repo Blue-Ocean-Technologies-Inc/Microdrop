@@ -17,7 +17,7 @@ mixins call. Hardware-free, no Redis."""
 from dropbot_portable import DropBotSession, MotorBoardProxy, SignalBoardProxy
 
 # Enthought library imports.
-from traits.api import Any, HasTraits, List
+from traits.api import Any, Bool, HasTraits, List
 
 # Microdrop package imports.
 from portable_dropbot_controller.services import (
@@ -28,9 +28,13 @@ from portable_dropbot_controller.services import (
 class _Base(HasTraits):
     proxy = Any()
     errors = List()
+    realtime_mode = Bool(False)
 
     def _publish_error(self, context, error):
         self.errors.append(f"{context}: {error}")
+
+    def _publish_realtime_mode(self):
+        pass
 
 
 class _Harness(mod.PortableDropbotMonitorMixinService, _Base):

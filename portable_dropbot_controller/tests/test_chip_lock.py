@@ -85,7 +85,7 @@ class _Base(HasTraits):
     log = List()
     snapshots = List()
 
-    def _proxy_call(self, context, call):
+    def _proxy_call(self, context, call, serialize=True):
         """The real _proxy_call's contract: the raised exception on failure."""
         try:
             return True, call()
@@ -250,3 +250,26 @@ def test_a_failed_retract_warns_and_keeps_the_pads_locked(status, failures):
     assert failures[0].action == "unlock"
     assert failures[0].pads_may_be_pressed is True
     assert SMART_ENGAGE_NEEDS not in failures[0].error
+
+
+def test_a_second_smart_lock_is_refused_while_one_is_in_flight(failures):
+    harness = _harness(CHIP_ENGAGE_MODE_SMART)
+    harness._pad_engage_lock.acquire()
+
+    harness.on_lock_chip_request("True")
+
+    assert harness.log == []
+    assert failures[0].error == "a pad engage is already in flight"
+
+
+def test_pad_engage_skips_the_proxy_lock(failures):
+    harness = _harness(CHIP_ENGAGE_MODE_SMART)
+    serialized = []
+    harness._proxy_call = lambda context, call, serialize=True: (
+        serialized.append(serialize) or (True, call())
+    )
+
+    harness.on_lock_chip_request("True")
+
+    assert serialized == [False]
+    assert harness._pad_engage_lock.acquire(blocking=False)

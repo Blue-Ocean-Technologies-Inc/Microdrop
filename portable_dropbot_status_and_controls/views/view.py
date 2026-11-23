@@ -167,6 +167,17 @@ left = VGroup(
             "and de-energizes HV",
         ),
     ),
+    # The firmware halt latch (STATUS hv_state bit3): HV refuses to come
+    # on until the halt is cleared. visible_when per item, as below.
+    HGroup(
+        Label("HV halt latched", visible_when="halted"),
+        UItem(
+            "clear_halt_button",
+            enabled_when="connected",
+            visible_when="halted",
+            tooltip="Clear the board's halt latch once its cause is removed",
+        ),
+    ),
     # visible_when per item, not on the group — same 9px-margin
     # wrapper-widget indent as the mechanism toolbar (see above).
     HGroup(
@@ -244,7 +255,7 @@ environment = VGroup(
         Item("device_humidity_display", style="readonly", label="Device Humidity"),
         Item("out_power_display", style="readonly", label="Heater Power"),
         Item("heater_on_display", style="readonly", label="Heater"),
-        Item("fan_duty_display", style="readonly", label="Fan Duty"),
+        Item("fan_duty_display", style="readonly", label="Fans"),
         visible_when="show_environment",
     ),
 )
@@ -264,10 +275,24 @@ board_status = VGroup(
         Item("chip_pad_status_text", style="readonly", label="Chip Status"),
         Item("mechanisms_display", style="readonly", label="Mechanisms"),
         Item("illumination_display", style="readonly", label="Illumination"),
-        Item("pmt_display", style="readonly", label="PMT"),
         Item("chip_short_display", style="readonly", label="Chip Short"),
         Item("chip_res_display", style="readonly", label="Chip Res."),
         Item("cap_match_display", style="readonly", label="Cap Match"),
+        Item(
+            "hv_setpoint_display",
+            style="readonly",
+            label="HV Setpoint",
+            tooltip="HV setpoint the board reports (any path: host, "
+            "calibration, power stages); n/a before MCU firmware 1.0.1.30",
+        ),
+        Item(
+            "faults_display",
+            style="readonly",
+            label="Faults",
+            tooltip="STATUS fault flags; they clear with their alarms. "
+            "n/a before MCU firmware 1.0.1.30",
+        ),
+        Item("firmware_display", style="readonly", label="Firmware"),
         visible_when="show_board_status",
     ),
 )
@@ -285,6 +310,12 @@ alarms = VGroup(
         Label("Alarms"),
     ),
     VGroup(
+        Item(
+            "active_alarms_display",
+            style="readonly",
+            label="Active",
+            tooltip="Board alarms raised and not yet cleared",
+        ),
         UItem(
             "alarm_log",
             # Only the custom style is a QTextEdit; the simple one is a

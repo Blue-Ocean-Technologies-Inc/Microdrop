@@ -8,10 +8,12 @@
 #
 # Thanks for using Microdrop open source!
 
-"""MOVE_TRAY: the payload parse (validated model or legacy bare string) and
-the two backend paths — the pogo pushpad macro through move_tray, and the
-tray-only move through the motor proxy's chip_cabin_ctrl. Hardware-free, no
-Redis."""
+"""MOVE_TRAY: the payload parse (validated model or legacy bare string), the
+one CHIP_CABIN_CTRL both paths send (the pogo pushpad macro, or tray-only),
+the toggle's cabin-state decode, and the reply judged like the driver's
+setTray — the 1-byte state of current firmware and the legacy 12-byte
+shape; FAULT, a refusal and a timeout all fail and are published.
+Hardware-free, no Redis."""
 
 # Third-party imports.
 import pytest
@@ -22,7 +24,9 @@ from traits.api import Any, HasTraits, List
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
-    CHIP_CABIN_STATUS_ERROR,
+    CHIP_CABIN_TRAY_ONLY_FLAG,
+    CHIP_CABIN_WITH_POGOS_FLAG,
+    MECHANISM_STATE_FAULT,
     MoveTrayRequest,
 )
 from portable_dropbot_controller.services.portable_dropbot_motors_mixin_service import (
@@ -30,10 +34,24 @@ from portable_dropbot_controller.services.portable_dropbot_motors_mixin_service 
     parse_move_tray_request,
 )
 
+#: What the driver's last_result says about a refused or unanswered request.
+REFUSAL = "cmd 0x1120: FAIL RESP_FAIL (0.05 s)"
+FAULT = (
+    "the mechanism reports FAULT (not homed, or the move failed); "
+    "only a successful home of that axis clears it"
+)
+
 
 class _Reply:
-    def __init__(self, status_byte):
-        self.status_data = bytes(11) + bytes([status_byte])
+    """The generated proxy's MotorBoardCHIP_CABIN_CTRLResponse."""
+
+    def __init__(self, status_data):
+        self.status_data = status_data
+
+
+class _Result:
+    def describe(self):
+        return REFUSAL
 
 
 class _Motor:
@@ -53,25 +71,27 @@ class _Uart:
     def GetBoardStatus(self, board):
         return bytes([0, self.cabin_state])
 
+    def last_result(self, cmd):
+        return _Result()
+
 
 class _Session:
     def __init__(self, log, reply=None, cabin_state=0):
-        self.log = log
         self.motor = _Motor(log, reply)
         self.uart = _Uart(cabin_state)
-
-    def move_tray(self, direction):
-        self.log.append(("move_tray", direction))
-        return False
 
 
 class _Base(HasTraits):
     proxy = Any()
     log = List()
     snapshots = List()
+    errors = List()
 
-    def _proxy_call(self, context, call):
+    def _proxy_call(self, context, call, serialize=True):
         return True, call()
+
+    def _publish_error(self, context, error):
+        self.errors.append((context, error))
 
     def _publish_status_snapshot(self):
         self.snapshots.append(True)
@@ -119,37 +139,67 @@ def test_an_unknown_direction_moves_nothing():
     assert harness.snapshots == []
 
 
-def test_the_pogo_macro_still_moves_through_move_tray():
-    harness = _harness()
+@pytest.mark.parametrize(
+    ("actuate_pogos", "flags"),
+    [(True, CHIP_CABIN_WITH_POGOS_FLAG), (False, CHIP_CABIN_TRAY_ONLY_FLAG)],
+)
+def test_both_paths_send_one_chip_cabin_ctrl(actuate_pogos, flags):
+    harness = _harness(reply=_Reply(b"\x01"))
+    request = MoveTrayRequest(direction="out", actuate_pogos=actuate_pogos)
 
-    harness.on_move_tray_request('{"direction": "out", "actuate_pogos": true}')
+    harness.on_move_tray_request(request.model_dump_json())
 
-    assert harness.log == [("move_tray", "out")]
+    assert harness.log == [("chip_cabin_ctrl", 1, flags)]
+    assert harness.errors == []
     assert harness.snapshots == [True]
 
 
-def test_tray_only_moves_through_chip_cabin_ctrl_with_the_tray_only_flag():
-    harness = _harness(reply=_Reply(0x00))
-
-    harness.on_move_tray_request('{"direction": "out", "actuate_pogos": false}')
-
-    assert harness.log == [("chip_cabin_ctrl", 1, 1)]
-    assert harness.snapshots == [True]
-
-
-def test_tray_only_toggle_moves_opposite_to_the_reported_cabin_state():
-    harness = _harness(reply=_Reply(0x00), cabin_state=1)
+@pytest.mark.parametrize(("cabin_state", "action"), [(0, 1), (1, 0)])
+def test_toggle_moves_opposite_to_the_reported_cabin_state(cabin_state, action):
+    harness = _harness(reply=_Reply(bytes([action])), cabin_state=cabin_state)
 
     harness.on_move_tray_request('{"direction": "toggle", "actuate_pogos": false}')
 
-    assert harness.log == [("chip_cabin_ctrl", 0, 1)]
+    assert harness.log == [("chip_cabin_ctrl", action, CHIP_CABIN_TRAY_ONLY_FLAG)]
+
+
+@pytest.mark.parametrize("cabin_state", [2, 0xF2, MECHANISM_STATE_FAULT])
+def test_toggle_ignores_a_state_without_a_single_opposite(cabin_state):
+    harness = _harness(reply=_Reply(b"\x00"), cabin_state=cabin_state)
+
+    harness.on_move_tray_request("toggle")
+
+    assert harness.log == []
+    assert harness.snapshots == []
 
 
 @pytest.mark.parametrize(
-    ("reply", "ok"),
-    [(_Reply(0x00), True), (_Reply(CHIP_CABIN_STATUS_ERROR), False), (None, False)],
+    "status_data",
+    [b"\x00", b"\x01", bytes(11) + b"\x01"],
+    ids=["in", "out", "legacy-12-byte"],
 )
-def test_tray_only_reads_success_from_the_status_byte(reply, ok):
+def test_a_reported_position_is_success(status_data):
+    harness = _harness(reply=_Reply(status_data))
+
+    harness.on_move_tray_request("in")
+
+    assert harness.errors == []
+
+
+@pytest.mark.parametrize(
+    ("reply", "error"),
+    [
+        (_Reply(bytes([MECHANISM_STATE_FAULT])), FAULT),
+        (_Reply(bytes(11) + bytes([MECHANISM_STATE_FAULT])), FAULT),
+        (_Reply(b""), REFUSAL),
+        (None, REFUSAL),
+    ],
+    ids=["fault", "legacy-fault", "refused", "timeout"],
+)
+def test_a_fault_a_refusal_or_a_timeout_fails_and_is_published(reply, error):
     harness = _harness(reply=reply)
 
-    assert harness._move_tray_only("out") is ok
+    harness.on_move_tray_request('{"direction": "in", "actuate_pogos": false}')
+
+    assert harness.errors == [("tray in (tray only)", error)]
+    assert harness.snapshots == [True]

@@ -11,6 +11,9 @@
 # Standard library imports.
 import json
 
+# Third-party imports.
+from pydantic import ValidationError
+
 # Enthought library imports.
 from traits.api import observe
 from traitsui.api import Controller
@@ -22,8 +25,9 @@ from portable_dropbot_controller.consts import (
     TEMP_CONTROL,
     TEMP_READ_INFO,
     TEMP_READ_PID,
-    TEMP_SET_PID,
     TEMP_SET_TARGET,
+    TempSetPidRequest,
+    temp_set_pid_publisher,
 )
 
 # Microdrop utils imports.
@@ -74,24 +78,34 @@ class MoreControlsController(Controller):
     def _read_info(self, event):
         publish_message(topic=TEMP_READ_INFO, message=str(int(self.model.temp_channel)))
 
+    @observe("model:temp_channel")
+    def _on_temp_channel_changed(self, event):
+        # The PID fields on screen belong to the previous channel now.
+        self.model.pid_status = "-"
+
+        if self.model.connected:
+            self._read_pid(event)
+
     @observe("model:read_pid_button")
     def _read_pid(self, event):
         publish_message(topic=TEMP_READ_PID, message=str(int(self.model.temp_channel)))
 
     @observe("model:apply_pid_button")
     def _apply_pid(self, event):
-        publish_message(
-            topic=TEMP_SET_PID,
-            message=json.dumps(
-                {
-                    "channel": int(self.model.temp_channel),
-                    "kp": float(self.model.pid_kp),
-                    "ki": float(self.model.pid_ki),
-                    "kd": float(self.model.pid_kd),
-                    "period_ms": int(self.model.pid_period_ms),
-                }
-            ),
-        )
+        try:
+            request = TempSetPidRequest(
+                channel=self.model.temp_channel,
+                kp=self.model.pid_kp,
+                ki=self.model.pid_ki,
+                kd=self.model.pid_kd,
+                period_ms=self.model.pid_period_ms,
+            )
+        except ValidationError as error:
+            self.model.pid_status = f"Not applied: {error.errors()[0]['msg']}"
+            return
+
+        self.model.pid_status = "Applying..."
+        temp_set_pid_publisher.publish(request.model_dump())
 
     # ------------------------------------------------------------------ #
     # PMT                                                                  #

@@ -19,6 +19,7 @@ publisher's own model, so a renamed or missing field fails here too."""
 # Standard library imports.
 import json
 import threading
+from types import SimpleNamespace
 
 # Third-party imports.
 import pytest
@@ -30,11 +31,31 @@ from traits.api import Any, Bool, HasTraits, List, Str
 from portable_dropbot_controller.consts import (
     FLUORESCENCE_LED_RAW_MAX,
     FLUORESCENCE_PARK_FILTER,
+    MECHANISM_STATE_FAULT,
 )
 from portable_dropbot_controller.fluorescence_capture import led_raw
 from portable_dropbot_controller.services import (
     portable_dropbot_fluorescence_mixin_service as mod,
 )
+
+#: What the driver's last_result says about a refused request.
+REFUSAL = "cmd 0x1126: FAIL RESP_FAIL (0.05 s)"
+
+
+class _Result:
+    def describe(self):
+        return REFUSAL
+
+
+class _Uart:
+    """The driver's per-thread record of each request; None (no record)
+    unless ``refusing`` is set."""
+
+    def __init__(self):
+        self.refusing = False
+
+    def last_result(self, cmd):
+        return _Result() if self.refusing else None
 
 
 class _Motor:
@@ -42,27 +63,39 @@ class _Motor:
         self.log = log
         #: Filter positions whose move answers no reply (an alarm).
         self.failing = set()
+        #: Filter position -> the raw state payload its move answers
+        #: instead of the landed position.
+        self.replies = {}
 
     def fluorescence_ctrl(self, position):
         self.log.append(f"filter {position}")
 
-        return None if position in self.failing else object()
+        if position in self.failing:
+            return None
+
+        # The generated proxy's MotorBoardFLUORESCENCE_CTRLResponse.
+        return SimpleNamespace(
+            status_data=self.replies.get(position, bytes([position]))
+        )
 
 
 class _Sig:
     def __init__(self, log):
         self.log = log
+        #: What the driver answers: True on OK, False on FAIL / timeout.
+        self.acknowledges = True
 
     def fluorescence_ctrl(self, raw):
         self.log.append(f"led {raw}")
 
-        return raw
+        return self.acknowledges
 
 
 class _Session:
     def __init__(self, log):
         self.motor = _Motor(log)
         self.sig = _Sig(log)
+        self.uart = _Uart()
 
 
 class _Base(HasTraits):
@@ -300,12 +333,12 @@ def test_filter_move_failure_is_logged_at_info(rig, caplog):
         _run(h, _request([_entry(1)]))
 
     messages = [r.message for r in caplog.records]
-    assert "Portable Dropbot filter --> 1 (HEX): FAILED" in messages
+    assert "Portable Dropbot filter --> 1 (HEX): FAILED: no reply" in messages
 
 
 def test_led_zero_percent_is_a_valid_dark_frame(rig):
-    """led_raw(0) == 0, and an echoing driver returns that same 0 - falsy,
-    but not the None that signals no reply."""
+    """led_raw(0) == 0 is a valid command: the driver's True ack, not the
+    raw value, is what says it landed."""
     h = rig["h"]
 
     _run(h, _request([_entry(1, led=0)]))
@@ -369,6 +402,57 @@ def test_filter_failure_skips_the_rest_and_still_restores(rig):
     assert done["ok"] is False
     assert done["error"].startswith("filter 1: no reply")
     assert done["frames"] == []
+
+
+@pytest.mark.parametrize(
+    ("reply", "error"),
+    [
+        (bytes([MECHANISM_STATE_FAULT]), "FAULT"),
+        (bytes([0xF2]), "still moving"),
+        (b"", REFUSAL),
+    ],
+    ids=["fault", "moving", "refused"],
+)
+def test_a_judged_filter_failure_fails_the_stage_with_its_reason(rig, reply, error):
+    h = rig["h"]
+    h.proxy.uart.refusing = True
+    h.proxy.motor.replies = {1: reply}
+
+    _run(h, _request([_entry(1), _entry(2)]))
+
+    done = rig["done"][-1]
+    assert done["ok"] is False
+    assert done["error"].startswith("filter 1: ")
+    assert error in done["error"]
+    assert done["frames"] == []
+    assert done["final_filter_position"] is None
+    assert "filter 2" not in h.log
+
+
+def test_a_refused_led_fails_the_stage_with_the_drivers_reason(rig):
+    h = rig["h"]
+    h.proxy.uart.refusing = True
+    h.proxy.sig.acknowledges = False
+
+    _run(h, _request([_entry(1)]))
+
+    done = rig["done"][-1]
+    assert done["ok"] is False
+    assert done["error"] == f"LED 40 %: {REFUSAL}"
+    assert done["frames"] == []
+
+
+def test_a_faulted_park_is_logged_and_keeps_the_last_position(rig, caplog):
+    h = rig["h"]
+    h.proxy.motor.replies = {FLUORESCENCE_PARK_FILTER: bytes([MECHANISM_STATE_FAULT])}
+
+    with caplog.at_level("ERROR"):
+        _run(h, _request([_entry(1)], park_motor=True))
+
+    done = rig["done"][-1]
+    assert done["ok"] is True
+    assert done["final_filter_position"] == 1
+    assert any("filter park FAILED: the mechanism" in r.message for r in caplog.records)
 
 
 def test_camera_refusal_fails_the_entry_without_a_frame(rig):

@@ -35,10 +35,11 @@ import uuid
 from pathlib import Path
 
 # Third-party imports.
+from dropbot_portable import MotorBoard, SignalBoard
 from pydantic import ValidationError
 
 # Enthought library imports.
-from traits.api import Any, Bool, HasTraits, Instance, Str, observe, provides
+from traits.api import Any, Bool, Instance, Str, observe, provides
 
 # Microdrop package imports.
 from device_viewer.consts import (
@@ -69,9 +70,11 @@ from ..fluorescence_capture import (
     led_raw,
     wait_with_abort,
 )
+from ..fluorescence_hardware import CaptureAborted, FluorescenceHardwareMixin
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
+from ..motion_replies import acknowledged_failure, filter_move_failure
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -79,12 +82,8 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class _CaptureAborted(Exception):
-    """The capture's abort event was set (abort request or disconnect)."""
-
-
 @provides(IPortableDropbotControlMixinService)
-class FluorescenceCaptureMixinService(HasTraits):
+class FluorescenceCaptureMixinService(FluorescenceHardwareMixin):
     id = Str("portable_dropbot_fluorescence_mixin_service")
     name = Str("Portable Dropbot Fluorescence Mixin")
 
@@ -305,7 +304,7 @@ class FluorescenceCaptureMixinService(HasTraits):
                     progress,
                 )
                 frames.append({"filter_position": entry.filter_position, "path": path})
-        except _CaptureAborted:
+        except CaptureAborted:
             error = "aborted"
             logger.info("Portable Dropbot fluorescence capture aborted")
         except Exception as exc:
@@ -335,43 +334,35 @@ class FluorescenceCaptureMixinService(HasTraits):
         position = entry.filter_position
 
         self._enter_fluorescence_stage(abort, progress, "filter")
-        ok, moved = self._proxy_call(
+        error = self._fluorescence_hardware_failure(
             f"fluorescence capture: filter {position}",
             lambda: self.proxy.motor.fluorescence_ctrl(position),
+            MotorBoard.FLUORESCENCE_CTRL,
+            filter_move_failure,
+            abort,
         )
         logger.info(
             f"Portable Dropbot filter --> {position} ({filter_label(position)}): "
-            f"{'ok' if ok and moved is not None else 'FAILED'}"
+            f"{f'FAILED: {error}' if error else 'ok'}"
         )
 
-        if not ok and abort.is_set():
-            # _proxy_call's own OSError handling already declared us
-            # disconnected, which the connection observer turned into an
-            # abort; that is the run's real outcome, not a stage failure.
-            raise _CaptureAborted()
-
-        if not ok or moved is None:
-            # The vendor's alarm text (stall, move timeout, position unknown)
-            # is already on ALARM_RAISED through the driver's on_alarm hook.
-            raise RuntimeError(
-                f"filter {position}: no reply (see the alarm; home the wheel "
-                f"if its position is unknown)"
-            )
+        if error:
+            raise RuntimeError(f"filter {position}: {error}")
 
         self._fluorescence_last_filter_position = position
 
         self._enter_fluorescence_stage(abort, progress, "led")
         raw = led_raw(entry.led_percent)
-        ok, lit = self._proxy_call(
+        error = self._fluorescence_hardware_failure(
             f"fluorescence capture: LED {entry.led_percent} %",
             lambda: self.proxy.sig.fluorescence_ctrl(raw),
+            SignalBoard.FLUORESCENCE_CTRL,
+            acknowledged_failure,
+            abort,
         )
 
-        if not ok and abort.is_set():
-            raise _CaptureAborted()
-
-        if not ok or lit is None:
-            raise RuntimeError(f"LED {entry.led_percent} %: no reply")
+        if error:
+            raise RuntimeError(f"LED {entry.led_percent} %: {error}")
 
         self._enter_fluorescence_stage(abort, progress, "camera")
         applied = self._await_fluorescence_reply(
@@ -402,7 +393,7 @@ class FluorescenceCaptureMixinService(HasTraits):
         )
 
         if abort.wait(settle_s):
-            raise _CaptureAborted()
+            raise CaptureAborted()
 
         self._enter_fluorescence_stage(abort, progress, "frame")
         frame_request = {
@@ -426,7 +417,7 @@ class FluorescenceCaptureMixinService(HasTraits):
 
     def _enter_fluorescence_stage(self, abort, progress, stage):
         if abort.is_set():
-            raise _CaptureAborted()
+            raise CaptureAborted()
 
         progress(stage)
 
@@ -434,7 +425,7 @@ class FluorescenceCaptureMixinService(HasTraits):
         self, replies, reply_id, send, timeout_s, abort, stage
     ):
         """Register reply_id, send the request, and wait for its reply.
-        Raises _CaptureAborted on abort, and TimeoutError naming the stage
+        Raises CaptureAborted on abort, and TimeoutError naming the stage
         and the reply id when nothing matching arrives in time."""
         event = replies.expect(reply_id)
 
@@ -448,7 +439,7 @@ class FluorescenceCaptureMixinService(HasTraits):
             return reply
 
         if abort.is_set():
-            raise _CaptureAborted()
+            raise CaptureAborted()
 
         raise TimeoutError(f"{stage}: no reply for {reply_id} within {timeout_s:g} s")
 
@@ -490,16 +481,19 @@ class FluorescenceCaptureMixinService(HasTraits):
             logger.error(f"Fluorescence capture: camera auto restore FAILED: {error}")
 
         if park_motor:
-            ok, moved = self._proxy_call(
+            error = self._fluorescence_hardware_failure(
                 f"fluorescence capture: park filter {FLUORESCENCE_PARK_FILTER}",
                 lambda: self.proxy.motor.fluorescence_ctrl(FLUORESCENCE_PARK_FILTER),
+                MotorBoard.FLUORESCENCE_CTRL,
+                filter_move_failure,
+                None,
             )
 
-            if ok and moved is not None:
+            if error:
+                logger.error(f"Fluorescence capture: filter park FAILED: {error}")
+            else:
                 self._fluorescence_last_filter_position = FLUORESCENCE_PARK_FILTER
                 logger.info(
                     f"Portable Dropbot filter --> {FLUORESCENCE_PARK_FILTER} "
                     f"({filter_label(FLUORESCENCE_PARK_FILTER)}): ok (park)"
                 )
-            else:
-                logger.error("Fluorescence capture: filter park FAILED")
