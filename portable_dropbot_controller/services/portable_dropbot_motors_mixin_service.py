@@ -55,7 +55,6 @@ from ..interfaces.i_portable_dropbot_control_mixin_service import (
 from ..motion_replies import (
     acknowledged_failure,
     filter_move_failure,
-    mechanism_failure,
     motor_command_failure,
 )
 from ..motion_safety import MotionSafetyMixin
@@ -87,9 +86,10 @@ def parse_move_tray_request(message):
 
 @provides(IPortableDropbotControlMixinService)
 class PortableDropbotMotorsMixinService(MotionSafetyMixin):
-    """Mechanism macros and per-motor moves (Home All and the stops: see
-    MotionSafetyMixin). Every handler republishes the motor picture, so
-    the panel repaints from what the hardware reports."""
+    """Mechanism macros and per-motor moves (Home All, the stops and the
+    judged ``_motion_call``: see MotionSafetyMixin). Every handler
+    republishes the motor picture, so the panel repaints from what the
+    hardware reports."""
 
     id = Str("portable_dropbot_motors_mixin_service")
     name = Str("Portable Dropbot Motors Mixin")
@@ -171,41 +171,6 @@ class PortableDropbotMotorsMixinService(MotionSafetyMixin):
         )
 
         return None
-
-    def _motion_call(
-        self, context, call, cmd, failure=mechanism_failure, motor_id=None
-    ):
-        """Run one motion command and judge its reply; True when it moved.
-
-        ``failure`` reads the reply the driver's way: ``mechanism_failure``
-        judges the coordinated tray / magnet / pogo / filter commands,
-        ``motor_command_failure`` a raw per-motor command. A refusal, a
-        timeout or a FAULT is published as an error, like a driver call
-        that raised, unless a stop was sent to ``motor_id`` meanwhile.
-
-        Every motion skips the proxy lock (see ``_proxy_call``): the
-        firmware refuses conflicting motion with BUSY on its own.
-        """
-        ok, reply = self._proxy_call(context, call, serialize=False)
-
-        # A raised failure has already been reported by _proxy_call.
-        if not ok:
-            logger.info(f"Portable Dropbot {context} --> FAILED")
-            return False
-
-        error = failure(reply, getattr(self.proxy, "uart", None), cmd)
-
-        if error is not None and motor_id in self._stopped_motor_ids:
-            logger.info(f"Portable Dropbot {context} --> stopped ({error})")
-            return False
-
-        if error is not None:
-            self._publish_error(context, error)
-            return False
-
-        logger.info(f"Portable Dropbot {context} --> ok")
-
-        return True
 
     def on_move_magnet_request(self, message):
         action = str(message).strip().lower()
@@ -292,19 +257,24 @@ class PortableDropbotMotorsMixinService(MotionSafetyMixin):
         self._publish_status_snapshot()
 
     def on_set_pogo_request(self, message):
+        self._set_pogo(str(message) == "True")
+        self._publish_status_snapshot()
+
+    def _set_pogo(self, engaged):
+        """The classic motor-board pad press (True) or release; True when
+        the board accepted the move."""
         # Hardware truth (vendor test UI, HW-confirmed): 1 = press
         # (engage), 0 = release. Acts on BOTH pads as a coordinated
         # pair — no per-side mechanism command exists; a single pad
         # moves only via the raw per-motor moves/home.
-        engaged = str(message) == "True"
         action = "press" if engaged else "release"
         logger.info(f"Portable Dropbot pogo {action} requested")
-        self._motion_call(
+
+        return self._motion_call(
             f"pogo {action}",
             lambda: self.proxy.uart.setPogo(1 if engaged else 0),
             MotorBoard.PUSHPAD_CTRL,
         )
-        self._publish_status_snapshot()
 
     def on_lock_chip_request(self, message):
         """Chip lock IS the pogo pads pressing the chip; a topic of

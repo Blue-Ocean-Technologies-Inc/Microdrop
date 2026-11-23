@@ -127,6 +127,11 @@ class _Listener(HasTraits):
     def on_set_voltage_request(self, message):
         self.handled.append(("set_voltage", str(message)))
 
+    # The listener consults these hooks for every request; nothing owns the
+    # board exclusively here, so the base's no-op defaults stand.
+    _exclusive_owner_reason = PortableDropbotControllerBase._exclusive_owner_reason
+    _on_request_refused = PortableDropbotControllerBase._on_request_refused
+
 
 def _dispatch(listener, topic, content, timestamp_ms):
     message = TimestampedMessage(content, timestamp_ms)

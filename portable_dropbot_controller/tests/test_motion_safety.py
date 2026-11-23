@@ -114,6 +114,8 @@ class _Base(HasTraits):
     #: Context -> the serialize flag each driver call ran with.
     serialized = Dict()
     snapshots = Int()
+    #: Calls of the base's E-STOP hook (the self-test run's halt).
+    estop_hooks = Int()
     realtime_mode = Bool(True)
     pads_smart_engaged = Bool(True)
 
@@ -121,6 +123,9 @@ class _Base(HasTraits):
         self.serialized[context] = serialize
 
         return True, call()
+
+    def _on_motor_estop(self):
+        self.estop_hooks += 1
 
     def _leave_realtime_mode(self):
         self.log.append("realtime off")
@@ -297,6 +302,7 @@ def test_the_estop_skips_the_proxy_lock_and_marks_every_motor():
     harness.on_motor_estop_request("")
 
     assert harness.log == ["motor_estop"]
+    assert harness.estop_hooks == 1
     assert harness.serialized == {"motor E-STOP": False}
     assert harness._stopped_motor_ids == {0, 1, 2, 3, 4, 5}
     assert harness._home_all_estopped is True
