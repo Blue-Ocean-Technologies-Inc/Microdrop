@@ -29,12 +29,14 @@ from ..consts import (
     PORTABLE_DROPBOT_IMAGE,
 )
 from ..preferences import PortableDropbotSettingsPreferences
+from .heater_tune_model import HeaterTuneModel
 from .presets import parse_presets
 
 
 class PortableDropbotMoreControlsModel(BaseStatusModel):
     """Qt-free state for the More Controls pane, one chevron-collapsed
-    group per subsystem: per-channel heater control with PID tuning, and
+    group per subsystem: per-channel heater control with PID tuning and
+    auto-tune, and
     the PMT power/gain (the live stream and buffered acquire live in the
     PMT Capture pane). The everyday lighting controls live in the status
     pane. Mutated only on the GUI thread."""
@@ -88,6 +90,11 @@ class PortableDropbotMoreControlsModel(BaseStatusModel):
     read_pid_button = Button("Read PID")
     apply_pid_button = Button("Apply PID")
 
+    # ---- Heater auto-tune (chevron-collapsed) ------------------------
+    show_auto_tune = Bool(False)
+    #: Tunes the selected channel; Apply writes the channel it fitted.
+    heater_tune = Instance(HeaterTuneModel, ())
+
     # ---- PMT ---------------------------------------------------------
     #: Mirrors the actual PMT power state the backend reports; a click
     #: that contradicts it is the user's request.
@@ -123,6 +130,12 @@ class PortableDropbotMoreControlsModel(BaseStatusModel):
         self.temperature_presets = parse_presets(
             self.preferences.temperature_presets, *TEMP_TARGET_C_BOUNDS, decimals=1
         )
+
+    @observe("connected")
+    def _end_heater_tune_on_disconnect(self, event):
+        # The backend ends a tune on a lost link; its done may never arrive.
+        if not event.new:
+            self.heater_tune.running = False
 
     @observe("preferences, preferences:gain_presets")
     def _parse_gain_presets(self, event):

@@ -209,7 +209,7 @@ covered area (`VolumeEstimateModel`); the DropBot and Portable DropBot status
 panes show them.
 
 **Capacitance source**
-- `CAPACITANCE_UPDATED = "dropbot/signals/capacitance_updated"` feeds `VolumeEstimateModel` (via `DeviceViewerMessageController._on_capacitance_updated_triggered` → `calibration.last_capacitance`). The DropBot publishes it per proxy reading; the Portable DropBot publishes it from every status poll (`PortableDropbotControllerBase._publish_capacitance`, every `MONITOR_INTERVAL_S`), with the signal board's `chip_cap` — the actuated electrodes' summed capacitance — and `hv_vol`, and a host monotonic µs counter (mod 2³²) as `instrument_time_us`.
+- `CAPACITANCE_UPDATED = "dropbot/signals/capacitance_updated"` feeds `VolumeEstimateModel` (via `DeviceViewerMessageController._on_capacitance_updated_triggered` → `calibration.last_capacitance`). The DropBot publishes it per proxy reading; the Portable DropBot publishes it with every status sample (`PortableDropbotControllerBase._publish_capacitance`: each status poll, every `MONITOR_INTERVAL_S`, or each event-merged status on MCU 1.0.1.33+), with the signal board's `chip_cap` — the actuated electrodes' summed capacitance — and `hv_vol`, and a host monotonic µs counter (mod 2³²) as `instrument_time_us`.
 
 **Topic**
 - `DEVICE_VIEWER_VOLUME_ESTIMATE = "ui/device_viewer/volume_estimate"` — defined in `device_viewer/consts.py`; publish through `volume_estimate_publisher`.
@@ -450,6 +450,31 @@ Aligned with dropbot-portable 1.7.0 (#1050). MicroDrop reads and reports the fir
 **Traced flow (halt)**
 board latches a halt → STATUS `hv_state` bit3 → `STATUS_UPDATED {halted: true}` → `model.halted` → icon red + `realtime_mode = False` → `SET_REALTIME_MODE False` (HV off, always honoured) → user removes the cause, Clear Halt → confirm → `CLEAR_HALT` → `clear_halt()` → snapshot `{halted: false}` → icon back to the chip colour; realtime on re-enables HV.
 
+### Portable DropBot status: change-only events, poll fallback (#1051, #1082)
+
+MCU firmware 1.0.1.33 (dropbot-portable 1.8.0) pushes change-only status events: `DATA_REPORT 0x1205` EVT_FIELDS frames (event mask bit `0x40`), `[0x40][seq][n][n × {field id, u16}]`. Each frame carries every subscribed STATUS field that moved past its deadband (`evt_db`). All fields are resent when the subscription changes and every 5 s, and a gap in `seq` means a lost frame. The topic and payload are unchanged: `STATUS_UPDATED` keeps its keys whether a STATUS read or a merged event produced it.
+
+**Topics (`portable_dropbot_controller/consts/`)**
+- `STATUS_UPDATED` gains heater channel 1 from the STATUS tail (MCU 1.0.1.33+, absent before): `cur_temp1`, `target_temp1` (°C) and `out_power1` (%), next to the head's channel-0 `cur_temp` / `target_temp` / `out_power`. `faults` always follows the sample's `fault_flags` (`data_report.fault_names`).
+- Tuning lives in `consts/hardware.py`: `STATUS_EVENTS_MIN_MCU_FIRMWARE` (1, 0, 1, 33), `STATUS_EVENTS_REPORT_INTERVAL_MS` 1000, `STATUS_EVENTS_PUBLISH_INTERVAL_S` 0.5, `STATUS_EVENTS_RESYNC_INTERVAL_S` 30 and `STATUS_EVENTS_STALE_S` 12.
+
+**Backend (`portable_dropbot_controller`)**
+- `status_events.status_sample(signal, tail)`: one full STATUS sample is the head (`session.status["signal"]`) plus the driver's `uart.last_status_tail` (`evt_fields.tail_from_sample`). Base `_publish_status_snapshot` builds it, hands it to `_note_status_sample` (the events' merge base) and publishes it through `_publish_board_signal`, which applies the chip-detect rule and `halted` and also publishes `CAPACITANCE_UPDATED`.
+- Monitor `_attempt_connect` → `_start_status_events(session)` just before the first snapshot. It is gated on `_mcu_firmware_at_least(STATUS_EVENTS_MIN_MCU_FIRMWARE)`, because older firmware accepts bit `0x40` and sends nothing. `StatusEventStream.start` subscribes to `0x1205` (`uart.subscribe`), then sends `set_report_interval(1000)` and `set_event_mask(EVT_FIELDS)` in the vendor hub's order. If the board does not echo the bit, it unsubscribes and the poll stays.
+- Frames arrive on the driver's reader thread (`on_data_report`). That thread only decodes (`data_report.decode_fields_event`) and merges into the vendor `FieldsStatusModel` under the stream's own lock: no driver call, no `_proxy_lock`, no publish. A daemon publisher thread (`portable-status-events`) publishes the latest merged sample through `_publish_board_signal`, at most once per `STATUS_EVENTS_PUBLISH_INTERVAL_S`. Frames before a base publish nothing.
+- `_monitor_tick` → `_refresh_status` (proxy lock held):
+  - Without events (older firmware, refused), it runs the full STATUS poll every `MONITOR_INTERVAL_S` as before.
+  - With events, it runs the full read only when `status_read_due()`: a seq gap or a frame without a base asked for a resync, the last read is older than `STATUS_EVENTS_RESYNC_INTERVAL_S`, or no frame arrived for `STATUS_EVENTS_STALE_S`. A stale stream is also re-subscribed (`rearm_if_stale`), at most once per resync interval, because a board reset drops its RAM mask.
+  - Otherwise it reads only `motor.status()`, since the events cover the signal board alone, and publishes `MOTORS_UPDATED` as the poll did.
+  - The full read stays the link check. An unanswered motor read (`request_status_read`) makes the next tick a full read, so a dead link reaches `STATUS_FAILURE_DISCONNECT_LIMIT` one tick later than the plain poll would.
+- Deliberate closes (user Disconnect, firmware-update yield, app exit) turn the board's stream off (`set_event_mask(0)`) after de-energizing. Every disconnect path unsubscribes and resets the model (`_forget_connection`), and the next connect subscribes again.
+
+**Frontend (`portable_dropbot_status_and_controls`)**
+- `_on_status_updated_triggered`: the Environment group shows Heater 1 Temp / Power (channel 0, the head fields) and Heater 2 Temp / Power (channel 1, the tail; "n/a" before MCU 1.0.1.33). "Heaters" decodes `temp_onoff` as the per-loop bitmask (`HEATER_ONOFF_BITS`: bit0 Heater 1, bit1 Heater 2).
+
+**Traced flow (event)**
+heater 2 warms past its deadband → board EVT_FIELDS `{cur_temp1}` → reader thread `on_data_report` → `FieldsStatusModel.apply` → publisher thread (≤ 2/s) → `_publish_board_signal` → `STATUS_UPDATED {…, cur_temp1}` → Heater 2 Temp. A lost frame (seq gap) → next tick's full STATUS read → `adopt_status` → resync done.
+
 ### Portable DropBot magnet engage height: read / RAM write / flash preset
 
 The magnet's engage height is `z_up` (µm), the first int32 of the motor board's `magnet_defaults` device-defaults struct (flash key `_dp_magnet`: `z_up, z_down, y_0, y_space`, big-endian, `MAGNET_DEFAULTS_FIELDS`/`MAGNET_DEFAULTS_FORMAT`). The workflow mirrors the vendor debug UI: Write = RAM only (used from the next engage, lost on reboot); Preset = persists what is in RAM to flash. No motor-board reboot is needed.
@@ -512,6 +537,29 @@ Aligned with dropbot-portable 1.7.0 (#1050).
 
 **Calibration macro (calibration pane ↔ calibration mixin)**
 - `CALIBRATION_UPDATED {stage, ok, error}` per step, then `{stage: "done", ok, error, retry}`: HV_ENABLE must answer HV on / HV off, CAP_CALIBRATE_ML status 1; a BUSY fit sets `retry`. A failed setup step skips to the teardown (HV off, restore V/F, press pogos), which always runs.
+
+### Portable DropBot heater auto-tune (#1081)
+
+The vendor's `dropbot_portable.heater_tune` (1.8.0) behind the More Controls pane's Auto-tune group (`portable_dropbot_status_and_controls`) and the backend's heater-tune mixin (`portable_dropbot_controller/services/portable_dropbot_heater_tune_mixin_service.py`, loop in `heater_tune_capture.py`). Contracts in `portable_dropbot_controller/consts/heater_tune.py`.
+
+**Requests (pane controller → backend)**
+- `HEATER_TUNE_START = "portable_dropbot/requests/heater_tune_start"` — `HeaterTuneStartRequest {channel 0..1, duty_pct 1..100, max_temp_c 30..90, max_duration_s 30..3600}` via `heater_tune_start_publisher`. Refused (answered on `HEATER_TUNE_DONE {ok: false, reason}`) while a tune runs, a protocol step holds a heater target, either heater is on (STATUS `temp_onoff`), the cap is at or above the board's max_temp_c − 5 °C, or `heater_tune.capture_problem` objects (no reading, too close to the cap).
+- `HEATER_TUNE_CANCEL = "portable_dropbot/requests/heater_tune_cancel"` — raw `publish_message`, empty message; the run aborts and sends heater OFF.
+- `HEATER_TUNE_APPLY = "portable_dropbot/requests/heater_tune_apply"` — `HeaterTuneApplyRequest {channel, kp, ki, kd (TempSetPidRequest limits), period_ms 1000, smith_model (gain, tau, dead), persist}` via `heater_tune_apply_publisher`, sent only after the pane's confirm. Refused while a tune runs, a protocol step holds a target, a heater is on (a `temp_smith` write re-initialises both loops), or the model row is outside `param_layout.temp_smith_problem`'s ranges. Runs `heater_tune.apply_tuning` (TEMP_SET_PARAMS, then this channel's `temp_smith` row, PRESET both with `persist`).
+
+**Signals (backend → `MORE_CONTROLS_LISTENER`)**
+- `HEATER_TUNE_PROGRESS = "portable_dropbot/signals/heater_tune_progress"` — `HeaterTuneProgress {channel, phase (baseline | step | cooldown | fitting), elapsed_s, current_c, duty_pct}`, one per reading (1 Hz).
+- `HEATER_TUNE_DONE = "portable_dropbot/signals/heater_tune_done"` — `HeaterTuneDone {channel, ok, reason, off_confirmed, fit {gain, tau_s, dead_time_s, r2, rmse_c, reached}, proposals {smooth | default | fast: {kp, ki, kd, lambda_s, notes}}, smith_model, notes}`; closes every start request (refusal or outcome).
+- `HEATER_TUNE_APPLIED = "portable_dropbot/signals/heater_tune_applied"` — `HeaterTuneApplied {channel, gains, smith ("ok" | "not served" | a write failure), gains_persisted, error}`; the pane re-reads the PID (`TEMP_READ_PID`) after a gains write on the selected channel.
+
+**Heater ownership while a tune runs** (the mixin's `_exclusive_owner_reason`, chained before the self-test mixin's): the listener refuses `TEMP_SET_TARGET`, `TEMP_CONTROL`, `TEMP_SET_PID`, `HEATER_TUNE_APPLY`, `SELF_TEST_RUN` (answered by the hub's own refusal) and `PROTOCOL_SET_TEMPERATURE` (failed at once on `TEMPERATURE_REACHED {error}`); a refused `DISCONNECT` cancels the tune instead, so the port never closes under a driven heater. A running self-test refuses `HEATER_TUNE_START` the same way.
+
+**Traced flow: a tune**
+1. Pane Start → `HEATER_TUNE_START` → `on_heater_tune_start_request` checks the rules under `_heater_tune_claim` (STATUS, heat_fs max_temp_c, a TEMP_READ_INFO), then starts the `heater-tune` daemon thread.
+2. The thread reads `sig.temp_read_info(ch)` once a second, each call under `_proxy_lock` (never the whole run), feeds `StepCapture` and publishes `HEATER_TUNE_PROGRESS`: 10 s baseline at 0 %, then `sig.temp_heat_pwm` at the step duty until a plateau, the cap minus 1.5 °C (or its 10 s trend) or the time limit, then `sig.temp_start_stop(ch, 0)` (sent without the lock, resent up to 3 times until acknowledged) and a 30 s cool-down log.
+3. Phase `fitting`: `fit_fopdt` on the whole record, `tune_pid` per style, `smith_model`; the claim is released and `HEATER_TUNE_DONE` published.
+4. Pane Apply → confirm → `HEATER_TUNE_APPLY` → `apply_tuning` under `_proxy_lock` → `HEATER_TUNE_APPLIED` → pane `TEMP_READ_PID` → `TEMP_UPDATED {pid}`.
+- Cancel, an E-STOP (`_on_motor_estop`), a heater failsafe alarm (0900x) on the tuned channel (`on_alarm_signal`, which still chains to the temp mixin's), plugin stop (`cleanup` joins the thread before the port closes) and any exception end the run with heater OFF; `off_confirmed` false in `HEATER_TUNE_DONE` means OFF was never acknowledged. A lost link sends nothing: the firmware's host-silence failsafe (alarm 09004) cuts the heater.
 
 ### Portable DropBot protocol columns: magnet + heater step execution
 
@@ -615,6 +663,7 @@ The self-test hub (`portable_dropbot_self_tests`, Tools > Self Tests...) runs th
 - `SELF_TEST_ABORT = "portable_dropbot/requests/self_test_abort"` — `SelfTestAbortRequest {run_id}` (empty aborts any run) via `self_test_abort_publisher`; stops at the next step, the restore still runs.
 - `SELF_TEST_PREFLIGHT_READ = "portable_dropbot/requests/self_test_preflight_read"` — empty message; answered on `SELF_TEST_PREFLIGHT_UPDATED`.
 - `SELF_TEST_SAVE_CALIBRATION = "portable_dropbot/requests/self_test_save_calibration"` — `SelfTestSaveCalibrationRequest {calibration, tare}` via `self_test_save_calibration_publisher`; answered on `SELF_TEST_CALIBRATION_SAVED`.
+- `SELF_TEST_DIAG_INFO_READ = "portable_dropbot/requests/self_test_diag_info_read"` — empty message (the panel's Board diagnostics button); answered on `SELF_TEST_DIAG_INFO_UPDATED`; handler `on_self_test_diag_info_read_request` (state mixin).
 
 **Signals (backend -> hub's plugin-lifetime listener `SELF_TEST_LISTENER`, so the model survives the panel closing)**
 - `SELF_TEST_PREFLIGHT_UPDATED = "portable_dropbot/signals/self_test_preflight_updated"` — `SelfTestPreflight {tray_in, pads_pressed, chip_on_pad_mask, chip_res, board_detected, running, run_id, unsaved, error}` via `self_test_preflight_publisher` (also lets a reopened panel resync).
@@ -622,17 +671,26 @@ The self-test hub (`portable_dropbot_self_tests`, Tools > Self Tests...) runs th
 - `SELF_TEST_RESULT = "portable_dropbot/signals/self_test_result"` — `SelfTestResult {run_id, name, title, verdict, duration, utc_timestamp, error, cancelled, restore_errors, result, results_path}`.
 - `SELF_TEST_FINISHED = "portable_dropbot/signals/self_test_finished"` — `SelfTestFinished {run_id, refused_reason, cancelled, error, restore_note, verdicts, unsaved, directory}`.
 - `SELF_TEST_CALIBRATION_SAVED = "portable_dropbot/signals/self_test_calibration_saved"` — `SelfTestCalibrationSaved {calibration_status, calibration_text, tare_ok, unsaved, error}`.
+- `SELF_TEST_DIAG_INFO_UPDATED = "portable_dropbot/signals/self_test_diag_info_updated"` — `SelfTestDiagInfo {text, stalled_sources, diagnostics, error}` via `self_test_diag_info_publisher`: the vendor's `diag_info.format_diag_info` text, `DiagInfo.stalled_sources()`, the parsed `DiagInfo` as a dict.
 
 Each signal has a matching `self_test_*_publisher` (`ValidatedTopicPublisher`) in the same consts module.
 
 **Behaviour rules**
 - The frontend mints a `run_id` per run; every progress/result/finished message carries it and the frontend ignores any other id (a second frontend or stale message cannot corrupt its model).
 - Per run request the backend publishes EXACTLY ONE `SELF_TEST_FINISHED`, always last. A refused run publishes only that message with `refused_reason` set; an accepted run publishes per test progress (start, steps, done) then one result, interleaved with `choreography` progress.
-- Refusals (before any HV change or pad move): a run already in progress; a PMT or fluorescence session holds the board; realtime mode on or a protocol running; Home All or a smart chip lock / unlock running (neither holds the proxy lock); unknown test name or `test_kwargs` key; pad state unknown while a selected test needs pads moved; no board detected by the backend's own chip read and `chip_absent_acknowledged` False. Preflight reads and calibration saves report refusals/failures in the reply's `error`.
+- Refusals (before any HV change or pad move): a run already in progress; a PMT or fluorescence session holds the board; realtime mode on or a protocol running; Home All or a smart chip lock / unlock running (neither holds the proxy lock); a test name outside `ALL_TESTS` + `HEALTH_TESTS` or a `test_kwargs` key the hub does not set (`TEST_KWARG_BOUNDS`: the repeat counts, the channels / calibration limits, and the health tests' bool `heat_step` / `moves`); pad state unknown while a selected test needs pads moved; the tray not where the run wants it (IN for Run all and `test_motors`); no board detected by the backend's own chip read and `chip_absent_acknowledged` False. Preflight reads, board diagnostics reads and calibration saves report refusals/failures in the reply's `error`.
+- Health tests (`HEALTH_TESTS`: `test_heaters`, `test_motors`, rows after the DropBot tests, Run all included): the frontend confirms a run whose `test_motors` has `moves` on (`pyface_wrapper.confirm`, before the pre-flight). `test_heaters`' heat step switches each heater off on its own paths (cancel, E-STOP, errors); while it runs `SelfTestBoard.run_test` registers both loops in `_self_test_heaters` (the vendor's `worker.shutdown_heaters`), and a disconnect meanwhile (the state mixin's `portable_dropbot_connection_active` observer, which fires before the session closes) or the self-test teardown after a timed-out join sends `TEMP_START_STOP 0` for them through `session_shutdown.switch_heaters_off` (bounded, past the proxy lock). Their results skip the frontend's NaN restore: a None there is a missing reading.
+- Board diagnostics: read between runs only — a run refuses `SELF_TEST_DIAG_INFO_READ` like any request outside its allowed list, and a held proxy lock answers `error="board busy"` (`PREFLIGHT_BOARD_BUSY_ERROR`) instead of waiting. Replies are broadcast (no request id), so the model shows them without touching the tracked run.
 - Exclusive ownership: while a run is in progress the backend refuses every other `portable_dropbot/requests/*` topic except abort, preflight read and `MOTOR_ESTOP` (connection requests that are no-ops while connected also pass), with a logged warning. A disconnect request during a run becomes an abort, so the port is never closed under a running test.
 - E-STOP during a run: `MOTOR_ESTOP` passes the gate and halts the run, as the vendor runner does — the test stops at its next step, the restore switches HV off and sends no pad move (`SelfTestBoard.move_pads` refuses after the halt); `SELF_TEST_FINISHED` has `cancelled` and an `error` naming the E-STOP.
 - Unsaved calibration: the feedback-cap calibration and electrode tare live in board RAM until saved. `unsaved` (`calibration` / `tare`) is backend-owned: set when a run leaves either captured-but-unsaved, cleared by a successful save and on disconnect, reported on finished, preflight and save replies.
 - Verdicts and titles are computed by the backend so every frontend shows the same judgement. `SelfTestResult.result` is the vendor result made JSON-safe (arrays to lists, NaN to None); the backend also writes each test's JSON under the experiment directory (`results_path` / `directory`, reference only) and the frontend regenerates any Markdown/HTML report locally from the inline results, so a remote frontend works.
+
+**Traced flow (board diagnostics)**
+1. Hub panel: Board diagnostics → `SelfTestHubController._read_diagnostics` → `SelfTestHubModel.request_diagnostics()` (Report view, "Reading..." section) → `publish_message(SELF_TEST_DIAG_INFO_READ, "")`.
+2. Backend listener: a run in progress → `_exclusive_owner_reason` refuses; disconnected → refused too; either way `PortableDropbotSelfTestStateMixinService._on_request_refused` publishes `SelfTestDiagInfo {error: <reason>}`.
+3. Otherwise `on_self_test_diag_info_read_request` → `_read_diag_info`: non-blocking proxy-lock acquire (busy → `error="board busy"`), `_proxy_call` → `proxy.sig.diag_info()` (DIAG_INFO 0x12B0; None on firmware without it) → `self_test_results.diag_info_fields` (vendor `parse_diag_info` / `format_diag_info` / `stalled_sources`) → `self_test_diag_info_publisher`.
+4. Hub listener `SelfTestsMessageHandler._on_self_test_diag_info_updated_triggered` validates `SelfTestDiagInfo` → GUI thread → `SelfTestHubModel.apply_diag_info` → `SelfTestRunOutputs.show_diagnostics`; the report view renders `display_markdown` (the run report, then the "Board diagnostics" section). A new run clears it.
 
 ### Protocol columns → Device Viewer: camera source selection around a run
 

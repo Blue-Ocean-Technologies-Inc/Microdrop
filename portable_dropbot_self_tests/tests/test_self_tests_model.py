@@ -20,6 +20,7 @@ from ..consts import (
     UNSAVED_CALIBRATION,
     UNSAVED_TARE,
     SelfTestCalibrationSaved,
+    SelfTestDiagInfo,
     SelfTestFinished,
     SelfTestPreflight,
     SelfTestProgress,
@@ -28,6 +29,8 @@ from ..consts import (
 )
 from ..models.consts import (
     CHANNELS_TEST,
+    HEATERS_TEST,
+    MOTORS_TEST,
     OUTCOME_FAIL,
     OUTCOME_NOT_RUN,
     OUTCOME_PASS,
@@ -324,3 +327,108 @@ def test_disconnected_reply_pauses_until_a_connected_reply(model):
 
     model.apply_preflight(SelfTestPreflight(tray_in=True))
     assert model.preflight.board_connected
+
+
+# --------------------------------------------------------------------- #
+# Health tests                                                          #
+# --------------------------------------------------------------------- #
+
+
+def test_the_health_tests_follow_the_dropbot_tests(model):
+    titles = {row.name: row.title for row in model.rows}
+
+    assert model.all_test_names()[-2:] == [HEATERS_TEST, MOTORS_TEST]
+    assert titles[HEATERS_TEST] == "Heaters" and titles[MOTORS_TEST] == "Motors"
+
+
+def test_the_health_switches_go_out_as_bools_with_the_vendor_defaults(model):
+    request = _start(model, [HEATERS_TEST, MOTORS_TEST])
+
+    assert request["test_kwargs"] == {
+        HEATERS_TEST: {"heat_step": True},
+        MOTORS_TEST: {"moves": False},
+    }
+    assert request["tray_in"] is True
+    SelfTestRunRequest(**request)
+
+
+def test_motor_moves_only_with_the_motor_test_and_its_switch(model):
+    parameters = model.parameters
+
+    assert not parameters.motor_moves([MOTORS_TEST])
+
+    parameters.motors_moves = True
+
+    assert parameters.motor_moves([MOTORS_TEST])
+    assert not parameters.motor_moves([HEATERS_TEST])
+
+
+def test_a_missing_heater_reading_stays_none_in_the_report(model):
+    from dropbot_portable import self_test
+
+    run_id = _start(model, [HEATERS_TEST])["run_id"]
+    raw = {
+        "sensors": [22.5, None, 23.0, 22.8, 22.9],
+        "plausible_c": [5.0, 80.0],
+        "temp_onoff": 0,
+        "alarms_before": [],
+        "alarms_after": [],
+        "heat_step": False,
+        "settings": {"duty_pct": 30, "rise_c": 1.0, "max_s": 60.0, "max_c": 50.0},
+        "channels": {
+            0: {"sensors": [1, 2, 3], "reading_c": 22.5, "sensors_ok": False},
+            1: {"sensors": [4, 5], "reading_c": float("nan"), "sensors_ok": True},
+        },
+    }
+    wire = SelfTestResult(
+        run_id=run_id,
+        name=HEATERS_TEST,
+        title="Heaters",
+        result=self_test._to_jsonable(raw),
+    ).model_dump_json()
+
+    model.apply_result(SelfTestResult.model_validate_json(wire))
+
+    assert model.outputs.results[HEATERS_TEST]["sensors"][1] is None
+    assert "no reading" in model.outputs.report_markdown
+    assert "Temperature alarms before" in model.outputs.report_markdown
+
+
+# --------------------------------------------------------------------- #
+# Board diagnostics                                                     #
+# --------------------------------------------------------------------- #
+
+
+def test_a_diagnostics_read_shows_after_the_report(model):
+    model.output_view = OUTPUT_VIEW_PLOTS
+    model.outputs.report_markdown = "# Report"
+
+    model.request_diagnostics()
+
+    assert model.output_view == OUTPUT_VIEW_REPORT
+    assert "Reading" in model.outputs.display_markdown
+
+    model.apply_diag_info(
+        SelfTestDiagInfo(text="uptime 90.5 s", stalled_sources=["main loop"])
+    )
+    shown = model.outputs.display_markdown
+
+    assert shown.index("# Report") < shown.index("# Board diagnostics #")
+    assert "STALLED" in shown and "uptime 90.5 s" in shown
+
+
+def test_a_refused_diagnostics_read_leaves_the_run_alone(model):
+    request = _start(model, [SHORTS_TEST])
+
+    model.apply_diag_info(SelfTestDiagInfo(error="self-test run owns the board"))
+
+    assert model.running and model.run_id == request["run_id"]
+    assert "Not read" in model.outputs.display_markdown
+
+
+def test_a_new_run_clears_the_diagnostics(model):
+    model.apply_diag_info(SelfTestDiagInfo(text="uptime 1.0 s"))
+
+    _start(model, [SHORTS_TEST])
+
+    assert model.outputs.display_markdown == ""

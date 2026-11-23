@@ -29,6 +29,9 @@ from portable_dropbot_controller.consts import (
     CHIP_ENGAGE_MODE_SMART,
     FLUORESCENCE_CAPTURE_DONE,
     FLUORESCENCE_CAPTURE_PROGRESS,
+    HEATER_TUNE_APPLIED,
+    HEATER_TUNE_DONE,
+    HEATER_TUNE_PROGRESS,
     MAGNET_ENGAGE_UPDATED,
     MOTOR_PARAMS_UPDATED,
     PMT_ACQUIRE_DONE,
@@ -125,6 +128,10 @@ ACTOR_TOPIC_DICT = {
         PORTABLE_DROPBOT_DISCONNECTED,
         TEMP_UPDATED,
         PMT_UPDATED,
+        #: The heater auto-tune group's progress, result and apply outcome.
+        HEATER_TUNE_PROGRESS,
+        HEATER_TUNE_DONE,
+        HEATER_TUNE_APPLIED,
     ],
     PMT_CAPTURE_LISTENER: [
         PORTABLE_DROPBOT_CONNECTED,
@@ -173,6 +180,9 @@ HUMIDITY_SENSOR_DEAD_RAW = 0xFFFF
 #: STATUS fan_duty is a bitmask of the fans commanded on, not a duty cycle:
 #: bit0 fan 1 (every board), bit1 fan 2 (MCU05 boards only).
 FAN_DUTY_BITS = {"Fan 1": 0x01, "Fan 2": 0x02}
+#: STATUS temp_onoff is a bitmask of the heater loops running: bit0 channel 0
+#: (Heater 1), bit1 channel 1 (Heater 2), the More Controls naming.
+HEATER_ONOFF_BITS = {"Heater 1": 0x01, "Heater 2": 0x02}
 
 #: Rolling window of live PMT stream values kept for the plot and stats.
 PMT_LIVE_WINDOW_SAMPLES = 3000

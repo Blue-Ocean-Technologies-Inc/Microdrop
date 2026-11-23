@@ -9,8 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """The self-test hub's state: the test table and its parameters, the run
-being tracked and its outputs, and the backend-owned unsaved calibration.
-Plugin-lifetime, so a reopened panel shows it all."""
+being tracked and its outputs, the backend-owned unsaved calibration and the
+board diagnostics. Plugin-lifetime, so a reopened panel shows it all."""
 
 # Standard library imports.
 import uuid
@@ -56,7 +56,8 @@ class SelfTestHubModel(HasTraits):
     """Qt-free hub state, mutated on the GUI thread only. Messages of any
     run but the tracked ``run_id`` are ignored."""
 
-    #: One row per vendor test, in the vendor's run order.
+    #: One row per vendor test, in the vendor tab's order: ``ALL_TESTS``,
+    #: then the health tests.
     rows = List(Instance(SelfTestRow))
 
     #: The test parameters of the next run.
@@ -67,6 +68,7 @@ class SelfTestHubModel(HasTraits):
     abort_button = Button("Abort self-test")
     save_report_button = Button("Save report")
     save_calibration_button = Button("Save calibration to flash")
+    diagnostics_button = Button("Board diagnostics")
 
     #: Tests waiting on the pre-flight check; empty when none is pending.
     pending_tests = List(Str)
@@ -146,7 +148,7 @@ class SelfTestHubModel(HasTraits):
                 title=self_test.test_title(name),
                 pads=PADS_LABELS[self_test.TEST_PADS.get(name, self_test.PADS_ANY)],
             )
-            for name in self_test.ALL_TESTS
+            for name in self_test.ALL_TESTS + self_test.HEALTH_TESTS
         ]
 
     def _get_idle(self):
@@ -258,6 +260,11 @@ class SelfTestHubModel(HasTraits):
 
         return False
 
+    def request_diagnostics(self):
+        """Show the Report with a diagnostics read in flight."""
+        self.output_view = OUTPUT_VIEW_REPORT
+        self.outputs.show_diagnostics(None)
+
     def save_calibration_request(self):
         """Request the save of the unsaved parts; return its fields."""
         self.saving_calibration = True
@@ -361,6 +368,11 @@ class SelfTestHubModel(HasTraits):
             self.aborting = False
             self.summary = "Self-test ended without its final report (see the log)"
             self._mark_unfinished_rows()
+
+    def apply_diag_info(self, diag_info):
+        """Show a SelfTestDiagInfo after the report. Any frontend's read
+        answers every frontend, so the run state is left alone."""
+        self.outputs.show_diagnostics(diag_info)
 
     def apply_calibration_saved(self, saved):
         """Show a SelfTestCalibrationSaved and mirror a successful save into

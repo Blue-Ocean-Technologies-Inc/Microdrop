@@ -38,6 +38,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
 from ..consts import (
+    SELF_TEST_DIAG_INFO_READ,
     SELF_TEST_PREFLIGHT_READ,
     self_test_abort_publisher,
     self_test_run_publisher,
@@ -58,6 +59,12 @@ PREFLIGHT_REPLY_TIMEOUT_S = 5.0
 
 #: Delay (s) of the state read after abandoning an unacknowledged run.
 ABANDON_RESYNC_DELAY_S = 1.5
+
+#: The vendor tab's extra confirm before the motor test moves axes.
+MOTOR_MOVES_CONFIRM = (
+    "The motor test will MOVE PMT-Y and the filter 1 mm out and back. "
+    "Keep hands clear of the instrument. Continue?"
+)
 
 REPORT_WILDCARD = FileDialog.create_wildcard(
     "HTML report + raw data", "*.html"
@@ -101,11 +108,11 @@ class SelfTestHubController(Controller):
 
     @observe("model:run_selected_button")
     def _run_selected(self, event):
-        self.model.request_preflight(self.model.selected_test_names())
+        self._request_run(self.model.selected_test_names())
 
     @observe("model:run_all_button")
     def _run_all(self, event):
-        self.model.request_preflight(self.model.all_test_names(), run_all=True)
+        self._request_run(self.model.all_test_names(), run_all=True)
 
     @observe("model:abort_button")
     def _abort(self, event):
@@ -117,6 +124,11 @@ class SelfTestHubController(Controller):
             CallbackTimer.single_shot(
                 interval=ABANDON_RESYNC_DELAY_S, callback=self._read_preflight
             )
+
+    @observe("model:diagnostics_button")
+    def _read_diagnostics(self, event):
+        self.model.request_diagnostics()
+        publish_message(topic=SELF_TEST_DIAG_INFO_READ, message="")
 
     # ------------------------------------------------------------------ #
     # Pre-flight                                                           #
@@ -202,6 +214,24 @@ class SelfTestHubController(Controller):
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
     # ------------------------------------------------------------------ #
+
+    def _request_run(self, tests, run_all=False):
+        """The pre-flight of ``tests``, behind the vendor's extra confirm
+        when the motor test will move axes."""
+
+        if self.model.parameters.motor_moves(tests):
+            answer = confirm(
+                self._parent_control(),
+                MOTOR_MOVES_CONFIRM,
+                title="Self-test: motor moves",
+            )
+
+            if answer != YES:
+                self.model.summary = "Self-test not started (motor moves not confirmed)"
+
+                return
+
+        self.model.request_preflight(tests, run_all=run_all)
 
     def _read_preflight(self):
         self.preflight_read_sent_at = time.monotonic()

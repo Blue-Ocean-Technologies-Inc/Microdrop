@@ -244,7 +244,8 @@ class PortableDropbotSelfTestMixinService(HasTraits):
 
     def cleanup(self):
         """Cancel a running self-test and wait for its restore, then switch
-        the HV off (best effort) before the connection teardown."""
+        the HV and the test's heaters off (best effort) before the
+        connection teardown."""
         cancel = self._self_test_cancel
         thread = self._self_test_thread
 
@@ -257,6 +258,7 @@ class PortableDropbotSelfTestMixinService(HasTraits):
             # Bounded and past the proxy lock, which a run still stuck in a
             # driver call holds; never raises.
             self._deenergize("self-test teardown")
+            self._switch_off_self_test_heaters("self-test teardown")
 
         super().cleanup()
 

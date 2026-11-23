@@ -30,7 +30,12 @@ from template_status_and_controls.base_message_handler import (
 )
 
 # Local imports.
-from ..consts import ALARM_LOG_LENGTH, FAN_DUTY_BITS, HUMIDITY_SENSOR_DEAD_RAW
+from ..consts import (
+    ALARM_LOG_LENGTH,
+    FAN_DUTY_BITS,
+    HEATER_ONOFF_BITS,
+    HUMIDITY_SENSOR_DEAD_RAW,
+)
 from ..models.model import PortableDropbotStatusAndControlsModel
 
 # Logger import.
@@ -81,11 +86,17 @@ def format_environment_reading(value, unit):
     return f"{value:.2f} {unit}"
 
 
-def summarize_fan_duty(fan_duty):
-    """Say which fans the STATUS fan_duty bitmask has commanded on."""
-    fans_on = [name for name, bit in FAN_DUTY_BITS.items() if int(fan_duty) & bit]
+def summarize_switched_on(mask, bits):
+    """Say which of ``bits`` (name -> bit) a STATUS bitmask has on: the
+    fans fan_duty commands, the heater loops temp_onoff runs."""
+    names_on = [name for name, bit in bits.items() if int(mask) & bit]
 
-    return f"{', '.join(fans_on)} on" if fans_on else "Off"
+    return f"{', '.join(names_on)} on" if names_on else "Off"
+
+
+def summarize_heater_loop(current, target):
+    """One heater loop's reading and setpoint (°C)."""
+    return f"{current:.2f} °C (target {target:.2f})"
 
 
 def summarize_status_tail(data):
@@ -172,7 +183,20 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         # loop that regulates them.
         current, target = data.get("cur_temp"), data.get("target_temp")
         if current is not None and target is not None:
-            self.model.chip_temp_display = f"{current:.2f} °C (target {target:.2f})"
+            self.model.chip_temp_display = summarize_heater_loop(current, target)
+
+        # Heater channel 1 rides in the STATUS tail (MCU 1.0.1.33+).
+        current1, target1 = data.get("cur_temp1"), data.get("target_temp1")
+        self.model.heater2_temp_display = (
+            "n/a"
+            if current1 is None or target1 is None
+            else summarize_heater_loop(current1, target1)
+        )
+
+        out_power1 = data.get("out_power1")
+        self.model.heater2_power_display = (
+            "n/a" if out_power1 is None else f"{out_power1:g} %"
+        )
 
         dev_temp = data.get("dev_temp")
         if dev_temp is not None:
@@ -190,11 +214,13 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
         heater_on = data.get("temp_onoff")
         if heater_on is not None:
-            self.model.heater_on_display = "On" if heater_on else "Off"
+            self.model.heater_on_display = summarize_switched_on(
+                heater_on, HEATER_ONOFF_BITS
+            )
 
         fan_duty = data.get("fan_duty")
         if fan_duty is not None:
-            self.model.fan_duty_display = summarize_fan_duty(fan_duty)
+            self.model.fan_duty_display = summarize_switched_on(fan_duty, FAN_DUTY_BITS)
 
         # Board health: the firmware halt latch and the STATUS tail.
         halted = data.get("halted")

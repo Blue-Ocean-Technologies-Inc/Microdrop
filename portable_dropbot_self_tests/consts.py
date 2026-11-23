@@ -43,13 +43,14 @@ Refusals
     already in progress; a PMT or fluorescence session holds the board;
     realtime mode is on or a protocol is running; Home All or a smart chip
     lock / unlock is running; a test name is not in
-    ``ALL_TESTS`` or a ``test_kwargs`` key is not a known parameter of its
-    test; the pads' state is unknown and a selected test needs them moved;
+    ``ALL_TESTS`` or ``HEALTH_TESTS`` or a ``test_kwargs`` key is not a
+    known parameter of its test; the pads' state is unknown and a selected
+    test needs them moved;
     the tray does not read where the run wants it (``tray_in``, forced IN
     by ``tray_in_required``); or the backend's own chip read at run start
     detects no board and ``chip_absent_acknowledged`` is False. Preflight
-    reads and calibration saves report a refusal or failure in their
-    reply's ``error``.
+    reads, board diagnostics reads and calibration saves report a refusal
+    or failure in their reply's ``error``.
 
 Exclusive board ownership
     While a run is in progress the backend refuses every other
@@ -65,6 +66,23 @@ E-STOP
     stops at its next step, the restore switches HV off and no pad move is
     sent afterwards (the restore note says why). The finished message is
     ``cancelled`` with ``error`` naming the E-STOP.
+
+Health tests
+    The vendor's ``HEALTH_TESTS`` run like the others (after them in Run
+    all). ``test_motors`` needs the tray IN, and its ``moves`` (PMT-Y and
+    the filter go out and back) is confirmed by the operator first.
+    ``test_heaters``' heat step drives each OFF heater and switches it off
+    again on every path of its own, cancel and E-STOP included; while it
+    runs, a disconnect or the backend's teardown also switches both heaters
+    off (the vendor worker's ``shutdown_heaters``).
+
+Board diagnostics
+    ``self_test_diag_info_read`` reads the signal board's DIAG_INFO (IWDG
+    liveness, kernel asserts, thread stacks), read-only, between runs: a
+    run refuses it like any other request (its test holds the board for
+    minutes), and a held proxy lock answers ``PREFLIGHT_BOARD_BUSY_ERROR``
+    instead of waiting. Every read request gets one
+    ``self_test_diag_info_updated`` reply, broadcast like the preflight.
 
 Verdicts and titles
     Computed by the backend (``self_test.verdicts`` and the vendor titles),
@@ -103,8 +121,8 @@ UNSAVED_CALIBRATION = "calibration"
 UNSAVED_TARE = "tare"
 UNSAVED_PARTS = (UNSAVED_CALIBRATION, UNSAVED_TARE)
 
-#: Preflight reply ``error`` while another step holds the board; the
-#: frontend keeps its last checklist and polls again.
+#: Preflight / board diagnostics reply ``error`` while another step holds
+#: the board; the frontend keeps its last checklist and polls again.
 PREFLIGHT_BOARD_BUSY_ERROR = "board busy"
 
 #: Tests that need the tray IN (the vendor pre-flight's TRAY_IN_TESTS: the
@@ -130,6 +148,8 @@ SELF_TEST_ABORT = "portable_dropbot/requests/self_test_abort"
 #: Empty message; answered on SELF_TEST_PREFLIGHT_UPDATED.
 SELF_TEST_PREFLIGHT_READ = "portable_dropbot/requests/self_test_preflight_read"
 SELF_TEST_SAVE_CALIBRATION = "portable_dropbot/requests/self_test_save_calibration"
+#: Empty message; answered on SELF_TEST_DIAG_INFO_UPDATED.
+SELF_TEST_DIAG_INFO_READ = "portable_dropbot/requests/self_test_diag_info_read"
 
 # Signals (portable backend -> frontend).
 SELF_TEST_PREFLIGHT_UPDATED = "portable_dropbot/signals/self_test_preflight_updated"
@@ -137,6 +157,7 @@ SELF_TEST_PROGRESS = "portable_dropbot/signals/self_test_progress"
 SELF_TEST_RESULT = "portable_dropbot/signals/self_test_result"
 SELF_TEST_FINISHED = "portable_dropbot/signals/self_test_finished"
 SELF_TEST_CALIBRATION_SAVED = "portable_dropbot/signals/self_test_calibration_saved"
+SELF_TEST_DIAG_INFO_UPDATED = "portable_dropbot/signals/self_test_diag_info_updated"
 
 #: The hub's plugin-lifetime listener (the model outlives the panel, so
 #: reopening it mid-run or after a run still shows the state).
@@ -149,6 +170,7 @@ ACTOR_TOPIC_DICT = {
         SELF_TEST_RESULT,
         SELF_TEST_FINISHED,
         SELF_TEST_CALIBRATION_SAVED,
+        SELF_TEST_DIAG_INFO_UPDATED,
     ]
 }
 
@@ -161,10 +183,12 @@ class SelfTestRunRequest(BaseModel):
     """Run the listed tests in this order."""
 
     run_id: str = Field(min_length=1)
-    #: Names from the vendor's ``ALL_TESTS``; validated by the backend.
+    #: Names from the vendor's ``ALL_TESTS`` and ``HEALTH_TESTS``;
+    #: validated by the backend.
     tests: list[str] = Field(min_length=1)
     #: Per-test keyword overrides, e.g. ``{"test_voltage": {"n": 5},
-    #: "test_channels": {"n_reps": 3, "threshold_pf": 5.0}}``.
+    #: "test_channels": {"n_reps": 3, "threshold_pf": 5.0},
+    #: "test_motors": {"moves": False}}``.
     test_kwargs: dict[str, dict[str, float | int | bool]] = {}
     #: The operator confirmed starting without a detected test board.
     chip_absent_acknowledged: bool = False
@@ -275,6 +299,21 @@ class SelfTestCalibrationSaved(BaseModel):
     error: str = ""
 
 
+class SelfTestDiagInfo(BaseModel):
+    """The signal board's diagnostics (DIAG_INFO), parsed by the vendor's
+    ``dropbot_portable.diag_info``. Empty fields = not read."""
+
+    #: ``format_diag_info``'s plain-text report.
+    text: str = ""
+    #: Liveness sources past the IWDG limit: the board resets once the
+    #: kicker stops (``DiagInfo.stalled_sources``).
+    stalled_sources: list[str] = []
+    #: The parsed ``DiagInfo`` as a dict (assert_count, assert_line,
+    #: assert_func, iwdg_running, uptime_ms, alive_age_ms, threads).
+    diagnostics: dict = {}
+    error: str = ""
+
+
 self_test_run_publisher = ValidatedTopicPublisher(
     topic=SELF_TEST_RUN, validator_class=SelfTestRunRequest
 )
@@ -298,4 +337,7 @@ self_test_finished_publisher = ValidatedTopicPublisher(
 )
 self_test_calibration_saved_publisher = ValidatedTopicPublisher(
     topic=SELF_TEST_CALIBRATION_SAVED, validator_class=SelfTestCalibrationSaved
+)
+self_test_diag_info_publisher = ValidatedTopicPublisher(
+    topic=SELF_TEST_DIAG_INFO_UPDATED, validator_class=SelfTestDiagInfo
 )
