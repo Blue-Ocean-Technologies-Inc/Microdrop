@@ -9,7 +9,6 @@
 # Thanks for using Microdrop open source!
 
 # Standard library imports.
-import traceback
 from functools import partial
 from pathlib import Path
 
@@ -22,11 +21,13 @@ from pyface.qt.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QMenu,
+    QPushButton,
+    QScrollArea,
     QWidget,
 )
 from pyface.tasks.api import TraitsDockPane
 from pyface.undo.api import CommandStack, UndoManager
-from traits.api import Instance, List, observe
+from traits.api import Bool, Instance, List, observe
 from traitsui.api import UI
 from traitsui.view import View
 
@@ -58,8 +59,8 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import safe_copy_file
-from microdrop_utils.first_paint import call_after_first_paint
 from microdrop_utils.keyboard_shortcuts_view import show_keyboard_shortcuts
+from microdrop_utils.lazy_dock_pane import LazyContentDockPane
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
 from microdrop_utils.pyside_helpers import (
     PulsingLabel,
@@ -85,6 +86,7 @@ from ..consts import (
 from ..controllers.camera_alignment_controller import (
     CameraAlignmentWorkflowController,
 )
+from ..controllers.device_load_controller import DeviceLoadController
 from ..controllers.device_viewer_message_controller import (
     DeviceViewerMessageController,
 )
@@ -143,9 +145,13 @@ _dock_pane_name = f"{PKG_name} Dock Pane"
 # ELECTRODE_PUBLISH_DEBOUNCE_MS = 0
 
 
-class DeviceViewerDockPane(TraitsDockPane):
+class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
     """
     A widget for viewing the device. This puts the electrode layer into a graphics view.
+
+    The device is loaded into the model, and announced, when the pane is
+    created; the view is built the first time the pane is shown, or when a
+    camera request or a menu action needs it (#1087).
     """
 
     # ----------- Device View Pane traits ---------------------
@@ -164,7 +170,8 @@ class DeviceViewerDockPane(TraitsDockPane):
     current_electrode_layer = Instance(ElectrodeLayer, allow_none=True)
 
     #: Camera controls widget; None until the Camera Controls section is
-    #: built, after the first paint (see ``when_camera_controls_built``).
+    #: built, which follows the pane's build (see
+    #: ``when_camera_controls_built``).
     camera_control_widget = None
 
     #: The open Edit Connections dialog; None while closed.
@@ -174,7 +181,7 @@ class DeviceViewerDockPane(TraitsDockPane):
     #: section's controllers and TraitsUI UIs alive with the pane.
     sidebar_sections = List(Instance(SidebarSection))
 
-    #: Builds the deferred sidebar sections after the first paint (#1064).
+    #: Builds the deferred sidebar sections after the pane's build (#1064).
     sidebar_builder = Instance(SidebarSectionBuilder)
 
     #: The deferred Camera Controls section; pub/sub camera requests wait
@@ -187,6 +194,19 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     #: The open sidebar layout preferences editor; None until opened.
     edit_sidebar_layout_ui = Instance(UI)
+
+    #: The sidebar's scroll area, the widget it scrolls, and the button
+    #: that reveals it; None until ``create_contents`` builds them.
+    scroll_area = Instance(QScrollArea)
+    scroll_content = Instance(QWidget)
+    reveal_button = Instance(QPushButton)
+
+    #: Loads devices into the model, whether or not the view is built.
+    device_loader = Instance(DeviceLoadController)
+
+    #: True once ``create_contents`` has built the view; a device load
+    #: rebuilds the view only then.
+    device_view_built = Bool(False)
 
     # Variables
     _last_applied_step_id = Instance(
@@ -287,9 +307,19 @@ class DeviceViewerDockPane(TraitsDockPane):
         )
         self.device_view.setObjectName("device_view")
 
+        # Display states reach the model from launch, built view or not; a
+        # view built later shows the model as it is then.
+        self.device_view.display_state_signal.connect(self.apply_message_model)
+
         # Owns the outbound publishing; created before the message
         # controller so its inbound handlers can already reach it.
         self.publish_controller = DeviceViewerPublishController(model=self.model)
+
+        self.device_loader = DeviceLoadController(
+            svg_persistence=self.svg_persistence,
+            publish_controller=self.publish_controller,
+            preferences=self.device_viewer_preferences,
+        )
 
         # Per-device saved endpoints and the combined endpoint/outline
         # alignment dialog.
@@ -766,9 +796,6 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.video_item:
             self.configure_camera_to_scene_size()
 
-        # new device: reset undo manager.
-        self.undo_manager.active_stack.clear()
-
     def _initialize_svg_view(self):
         # A different device has a different saved endpoint — close the
         # old device's alignment dialog before rebuilding the view.
@@ -785,48 +812,16 @@ class DeviceViewerDockPane(TraitsDockPane):
         if self.layer_host is not None:
             self.layer_host.device_loaded(self.scene.interaction_service.stepping)
 
-        # Publish geometry after SVG is fully loaded and channel mapping is established.
-        self.publish_controller._publish_geometry_if_changed()
-
         # The video item now spans the new device's scene: restore the
         # camera alignment saved for this camera on this device.
         self.camera_alignment_controller.device_loaded()
 
     def _set_device_view_from_svg(self, svg_file=None):
-        if svg_file is None:
-            svg_file = self.device_viewer_preferences.DEFAULT_SVG_FILE
+        """Load a device into the model now; rebuild the view from it only
+        once the view is built (its build shows the loaded device)."""
 
-        try:
-            unloaded = self.svg_persistence.load(svg_file)
-
-            if unloaded > 0:
-                warning(
-                    None,
-                    f"{unloaded} zone region(s) in this device file reference "
-                    "electrodes that do not exist in it and were dropped or "
-                    "trimmed. Saving the file will write it without those "
-                    "electrodes.",
-                    title="Zones Not Loaded",
-                )
-
+        if self.device_loader.load(svg_file) and self.device_view_built:
             self._initialize_svg_view()
-
-            # if model and view can be set, change default svg file
-            self.device_viewer_preferences.DEFAULT_SVG_FILE = svg_file
-
-        except Exception as e:
-            logger.error(
-                f"Could not create electrodes from SVG file: {svg_file}. Error: {e}",
-                exc_info=True,
-            )
-            error(
-                self.control,
-                f"Could not create electrodes from SVG file: {svg_file} "
-                f"<br><br> Reason: {e}",
-                detail="".join(traceback.format_exception(type(e), e, e.__traceback__)),
-                title="Error: Cannot Load Device SVG",
-            )
-            return
 
     # --------------------- UI initialization -----------------------
 
@@ -855,10 +850,33 @@ class DeviceViewerDockPane(TraitsDockPane):
         if isinstance(section, SizedSidebarSection):
             section.apply_sizes(self.device_viewer_preferences)
 
+    def create(self, parent):
+        """Load the preferred device into the model, then create the pane.
+
+        The model side comes first and at once: other plugins depend on
+        the loaded device and the messages announcing it, whether or not
+        the view is built yet.
+        """
+        self._set_up_device_model()
+
+        super().create(parent)
+
+    def _set_up_device_model(self):
+        """Load the preferred device, publish the first state message, and
+        follow zone edits — everything but the view."""
+        self.device_loader.load()
+
+        self.publish_controller.publish_model_message(event=None)
+
+        # Zone edits reach the model before the Zones section is built.
+        self.zones_controller = ZonesController(model=self.model)
+
     def create_contents(self, parent):
-        """Called when the task is activated."""
+        """Build the view from the loaded model."""
         logger.debug("creating device viewer dock pane contents")
-        self._set_device_view_from_svg()
+
+        if self.device_loader.device_loaded:
+            self._initialize_svg_view()
 
         ###################################################################
         # Initialize camera primitives
@@ -871,13 +889,6 @@ class DeviceViewerDockPane(TraitsDockPane):
 
         ################### Determine Size for video #####################
         self.configure_camera_to_scene_size()
-
-        self.publish_controller.publish_model_message(event=None)
-
-        self.device_view.display_state_signal.connect(self.apply_message_model)
-
-        # Zone edits reach the model before the Zones section is built.
-        self.zones_controller = ZonesController(model=self.model)
 
         # The alignment presets follow the feed's size.
         self.video_item.nativeSizeChanged.connect(self._on_camera_frame_size_changed)
@@ -918,13 +929,18 @@ class DeviceViewerDockPane(TraitsDockPane):
         # style device view: remove frame in device view
         self.device_view.setFrameStyle(QFrame.NoFrame)
 
-        call_after_first_paint(self.task.window.control, self.sidebar_builder.start)
+        self.device_view_built = True
+
+        # The sections follow on paced turns, the pane's contents first on
+        # screen; built behind a tab (for a camera request), they follow
+        # all the same.
+        self.sidebar_builder.start()
 
         return main_container
 
     def _create_sidebar_builder(self):
-        """Set up the sidebar sections built after the first paint, top to
-        bottom, so content already in never moves (#1064)."""
+        """Set up the sidebar sections built after the pane's own build, top
+        to bottom, so content already in never moves (#1064)."""
         self._camera_controls_section = DeferredSidebarSection(
             title="Camera Controls", build=self._build_camera_controls
         )
@@ -977,19 +993,23 @@ class DeviceViewerDockPane(TraitsDockPane):
 
     def when_camera_controls_built(self, on_built, on_failed=None):
         """Call ``on_built(camera_control_widget)`` now, or once the Camera
-        Controls section is built; ``on_failed(error)`` instead if it fails
-        to build. GUI thread only."""
-        self.sidebar_builder.when_built(
-            self._camera_controls_section,
-            lambda section: on_built(section.camera_control_widget),
-            on_failed,
-        )
+        Controls section is built; ``on_failed(error)`` instead if it, or
+        the pane, fails to build. GUI thread only.
 
-    @observe("task:window:application:application_initialized")
-    def _build_sidebar_sections_unpainted(self, event):
-        """Build the sections even if the window has not painted (started
-        minimized, or offscreen); a no-op once they are under way."""
-        self.sidebar_builder.start()
+        Builds the pane if it is not yet: a protocol's camera step must not
+        wait for the pane to be shown.
+        """
+
+        def wait_on_camera_section(contents):
+            self.sidebar_builder.when_built(
+                self._camera_controls_section,
+                lambda section: on_built(section.camera_control_widget),
+                on_failed,
+            )
+
+        self.when_content_built(wait_on_camera_section, on_failed)
+
+        self.ensure_built()
 
     def _build_layer_host(self):
         """Mount the contributed layers on this pane, below the sidebar."""
@@ -1283,6 +1303,9 @@ class DeviceViewerDockPane(TraitsDockPane):
         connections between and delete existing ones. Edits land on the
         SVG model directly — ``_on_connections_changed`` redraws the
         main view, and Save writes them to the file."""
+        # The dialog takes the device's path scale from the built view.
+        self.ensure_built()
+
         if self.current_electrode_layer is None:
             warning(
                 None,
