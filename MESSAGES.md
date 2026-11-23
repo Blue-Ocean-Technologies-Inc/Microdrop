@@ -209,7 +209,7 @@ covered area (`VolumeEstimateModel`); the DropBot and Portable DropBot status
 panes show them.
 
 **Capacitance source**
-- `CAPACITANCE_UPDATED = "dropbot/signals/capacitance_updated"` feeds `VolumeEstimateModel` (via `DeviceViewerMessageController._on_capacitance_updated_triggered` → `calibration.last_capacitance`). The DropBot publishes it per proxy reading; the Portable DropBot publishes it from every status poll (`PortableDropbotControllerBase._publish_capacitance`, every `MONITOR_INTERVAL_S`), with the signal board's `chip_cap` — the actuated electrodes' summed capacitance — and `hv_vol`, and a host monotonic µs counter (mod 2³²) as `instrument_time_us`.
+- `CAPACITANCE_UPDATED = "dropbot/signals/capacitance_updated"` feeds `VolumeEstimateModel` (via `DeviceViewerMessageController._on_capacitance_updated_triggered` → `calibration.last_capacitance`). The DropBot publishes it per proxy reading; the Portable DropBot publishes it with every status sample (`PortableDropbotControllerBase._publish_capacitance`: each status poll, every `MONITOR_INTERVAL_S`, or each event-merged status on MCU 1.0.1.33+), with the signal board's `chip_cap` — the actuated electrodes' summed capacitance — and `hv_vol`, and a host monotonic µs counter (mod 2³²) as `instrument_time_us`.
 
 **Topic**
 - `DEVICE_VIEWER_VOLUME_ESTIMATE = "ui/device_viewer/volume_estimate"` — defined in `device_viewer/consts.py`; publish through `volume_estimate_publisher`.
@@ -449,6 +449,31 @@ Aligned with dropbot-portable 1.7.0 (#1050). MicroDrop reads and reports the fir
 
 **Traced flow (halt)**
 board latches a halt → STATUS `hv_state` bit3 → `STATUS_UPDATED {halted: true}` → `model.halted` → icon red + `realtime_mode = False` → `SET_REALTIME_MODE False` (HV off, always honoured) → user removes the cause, Clear Halt → confirm → `CLEAR_HALT` → `clear_halt()` → snapshot `{halted: false}` → icon back to the chip colour; realtime on re-enables HV.
+
+### Portable DropBot status: change-only events, poll fallback (#1051, #1082)
+
+MCU firmware 1.0.1.33 (dropbot-portable 1.8.0) pushes change-only status events: `DATA_REPORT 0x1205` EVT_FIELDS frames (event mask bit `0x40`), `[0x40][seq][n][n × {field id, u16}]`. Each frame carries every subscribed STATUS field that moved past its deadband (`evt_db`). All fields are resent when the subscription changes and every 5 s, and a gap in `seq` means a lost frame. The topic and payload are unchanged: `STATUS_UPDATED` keeps its keys whether a STATUS read or a merged event produced it.
+
+**Topics (`portable_dropbot_controller/consts/`)**
+- `STATUS_UPDATED` gains heater channel 1 from the STATUS tail (MCU 1.0.1.33+, absent before): `cur_temp1`, `target_temp1` (°C) and `out_power1` (%), next to the head's channel-0 `cur_temp` / `target_temp` / `out_power`. `faults` always follows the sample's `fault_flags` (`data_report.fault_names`).
+- Tuning lives in `consts/hardware.py`: `STATUS_EVENTS_MIN_MCU_FIRMWARE` (1, 0, 1, 33), `STATUS_EVENTS_REPORT_INTERVAL_MS` 1000, `STATUS_EVENTS_PUBLISH_INTERVAL_S` 0.5, `STATUS_EVENTS_RESYNC_INTERVAL_S` 30 and `STATUS_EVENTS_STALE_S` 12.
+
+**Backend (`portable_dropbot_controller`)**
+- `status_events.status_sample(signal, tail)`: one full STATUS sample is the head (`session.status["signal"]`) plus the driver's `uart.last_status_tail` (`evt_fields.tail_from_sample`). Base `_publish_status_snapshot` builds it, hands it to `_note_status_sample` (the events' merge base) and publishes it through `_publish_board_signal`, which applies the chip-detect rule and `halted` and also publishes `CAPACITANCE_UPDATED`.
+- Monitor `_attempt_connect` → `_start_status_events(session)` just before the first snapshot. It is gated on `_mcu_firmware_at_least(STATUS_EVENTS_MIN_MCU_FIRMWARE)`, because older firmware accepts bit `0x40` and sends nothing. `StatusEventStream.start` subscribes to `0x1205` (`uart.subscribe`), then sends `set_report_interval(1000)` and `set_event_mask(EVT_FIELDS)` in the vendor hub's order. If the board does not echo the bit, it unsubscribes and the poll stays.
+- Frames arrive on the driver's reader thread (`on_data_report`). That thread only decodes (`data_report.decode_fields_event`) and merges into the vendor `FieldsStatusModel` under the stream's own lock: no driver call, no `_proxy_lock`, no publish. A daemon publisher thread (`portable-status-events`) publishes the latest merged sample through `_publish_board_signal`, at most once per `STATUS_EVENTS_PUBLISH_INTERVAL_S`. Frames before a base publish nothing.
+- `_monitor_tick` → `_refresh_status` (proxy lock held):
+  - Without events (older firmware, refused), it runs the full STATUS poll every `MONITOR_INTERVAL_S` as before.
+  - With events, it runs the full read only when `status_read_due()`: a seq gap or a frame without a base asked for a resync, the last read is older than `STATUS_EVENTS_RESYNC_INTERVAL_S`, or no frame arrived for `STATUS_EVENTS_STALE_S`. A stale stream is also re-subscribed (`rearm_if_stale`), at most once per resync interval, because a board reset drops its RAM mask.
+  - Otherwise it reads only `motor.status()`, since the events cover the signal board alone, and publishes `MOTORS_UPDATED` as the poll did.
+  - The full read stays the link check: a dead link stops the frames and falls back to it.
+- Deliberate closes (user Disconnect, firmware-update yield, app exit) turn the board's stream off (`set_event_mask(0)`) after de-energizing. Every disconnect path unsubscribes and resets the model (`_forget_connection`), and the next connect subscribes again.
+
+**Frontend (`portable_dropbot_status_and_controls`)**
+- `_on_status_updated_triggered`: the Environment group shows Heater 1 Temp / Power (channel 0, the head fields) and Heater 2 Temp / Power (channel 1, the tail; "n/a" before MCU 1.0.1.33). "Heaters" decodes `temp_onoff` as the per-loop bitmask (`HEATER_ONOFF_BITS`: bit0 Heater 1, bit1 Heater 2).
+
+**Traced flow (event)**
+heater 2 warms past its deadband → board EVT_FIELDS `{cur_temp1}` → reader thread `on_data_report` → `FieldsStatusModel.apply` → publisher thread (≤ 2/s) → `_publish_board_signal` → `STATUS_UPDATED {…, cur_temp1}` → Heater 2 Temp. A lost frame (seq gap) → next tick's full STATUS read → `adopt_status` → resync done.
 
 ### Portable DropBot magnet engage height: read / RAM write / flash preset
 
