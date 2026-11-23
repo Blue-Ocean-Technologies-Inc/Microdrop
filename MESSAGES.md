@@ -466,7 +466,7 @@ MCU firmware 1.0.1.33 (dropbot-portable 1.8.0) pushes change-only status events:
   - Without events (older firmware, refused), it runs the full STATUS poll every `MONITOR_INTERVAL_S` as before.
   - With events, it runs the full read only when `status_read_due()`: a seq gap or a frame without a base asked for a resync, the last read is older than `STATUS_EVENTS_RESYNC_INTERVAL_S`, or no frame arrived for `STATUS_EVENTS_STALE_S`. A stale stream is also re-subscribed (`rearm_if_stale`), at most once per resync interval, because a board reset drops its RAM mask.
   - Otherwise it reads only `motor.status()`, since the events cover the signal board alone, and publishes `MOTORS_UPDATED` as the poll did.
-  - The full read stays the link check: a dead link stops the frames and falls back to it.
+  - The full read stays the link check. An unanswered motor read (`request_status_read`) makes the next tick a full read, so a dead link reaches `STATUS_FAILURE_DISCONNECT_LIMIT` one tick later than the plain poll would.
 - Deliberate closes (user Disconnect, firmware-update yield, app exit) turn the board's stream off (`set_event_mask(0)`) after de-energizing. Every disconnect path unsubscribes and resets the model (`_forget_connection`), and the next connect subscribes again.
 
 **Frontend (`portable_dropbot_status_and_controls`)**

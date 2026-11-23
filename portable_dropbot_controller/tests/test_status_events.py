@@ -19,6 +19,7 @@ Hardware-free, no Redis."""
 import struct
 import threading
 from collections import namedtuple
+from types import SimpleNamespace
 
 # Third-party imports.
 import pytest
@@ -33,6 +34,10 @@ from portable_dropbot_controller.consts import (
     STATUS_EVENTS_PUBLISH_INTERVAL_S,
     STATUS_EVENTS_RESYNC_INTERVAL_S,
     STATUS_EVENTS_STALE_S,
+    STATUS_FAILURE_DISCONNECT_LIMIT,
+)
+from portable_dropbot_controller.portable_dropbot_controller_base import (
+    PortableDropbotControllerBase,
 )
 from portable_dropbot_controller.status_events import (
     StatusEventsMixin,
@@ -403,4 +408,61 @@ def test_the_stream_publishes_through_the_board_signal_path(clock):
 
     assert monitor.status_event_stream.publish == monitor._publish_board_signal
     monitor._stop_status_events()
+    assert monitor.status_event_stream.running is False
+
+
+class _DeadSession:
+    """A link that stopped answering: no STATUS, no motor status."""
+
+    def __init__(self):
+        self.uart = _Uart()
+        self.motor = SimpleNamespace(status=lambda: None)
+        self.status = {}
+
+    def disconnect(self):
+        pass
+
+
+class _LinkMonitor(
+    StatusEventsMixin, BoardFirmwareMixin, PortableDropbotControllerBase
+):
+    """The real STATUS read and failure count, with the transport faked."""
+
+    disconnects = List()
+    motors = List()
+
+    def traits_init(self):
+        pass
+
+    def _proxy_call(self, context, call, serialize=True):
+        return True, call()
+
+    def _publish_disconnected(self):
+        self.disconnects.append(True)
+
+    def on_disconnected_signal(self, message):
+        self._stop_status_events()
+
+    def _publish_motors(self, mechanisms=None, poll=True):
+        self.motors.append(mechanisms)
+
+
+def test_a_dead_link_is_declared_lost_one_tick_later_than_the_poll(clock):
+    session = _DeadSession()
+    monitor = _LinkMonitor(
+        status_event_stream=_Stream(clock=clock),
+        board_firmware_versions={"mcu": (1, 0, 1, 33)},
+    )
+    monitor.proxy = session
+    monitor._start_status_events(session)
+    monitor.status_event_stream.note_status_sample(dict(BASE))
+
+    # The unanswered motor read makes the next tick the full STATUS read.
+    monitor._refresh_status()
+    assert monitor.status_event_stream.status_read_due() is True
+
+    for _ in range(STATUS_FAILURE_DISCONNECT_LIMIT):
+        monitor._refresh_status()
+
+    assert monitor.disconnects == [True]
     assert monitor.status_event_stream.running is False

@@ -243,6 +243,13 @@ class StatusEventStream(HasTraits):
             self._last_base_t = self.clock()
             self._resync_requested = False
 
+    def request_status_read(self):
+        """Make the next ``status_read_due`` answer True: the monitor's
+        motor-only read went unanswered, so the full read checks the link."""
+
+        with self._lock:
+            self._resync_requested = True
+
     def status_read_due(self):
         """Whether the monitor should read the full STATUS now: a resync
         was asked for, the last one is older than the resync interval, or
@@ -346,7 +353,9 @@ class StatusEventsMixin(HasTraits):
         """The monitor tick's refresh, proxy lock held. Without events, the
         full STATUS poll as before. With them, the full read only when a
         resync is due (a stale stream is also re-subscribed), else just the
-        motor board's status: the events cover the signal board only."""
+        motor board's status: the events cover the signal board only. An
+        unanswered motor read makes the next tick a full read, so a dead
+        link still reaches the STATUS failure limit as fast as the poll."""
         stream = self.status_event_stream
 
         if not stream.running or stream.status_read_due():
@@ -360,5 +369,10 @@ class StatusEventsMixin(HasTraits):
         ok, reply = self._proxy_call(
             "motor status read", lambda: self.proxy.motor.status()
         )
-        mechanisms = reply._asdict() if ok and reply is not None else {}
+        answered = ok and reply is not None
+
+        if not answered:
+            stream.request_status_read()
+
+        mechanisms = reply._asdict() if answered else {}
         self._publish_motors(mechanisms=mechanisms, poll=False)
