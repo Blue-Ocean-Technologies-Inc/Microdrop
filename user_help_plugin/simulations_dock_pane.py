@@ -207,6 +207,11 @@ class TutorialSimulationsDockPane(DockPane):
 
     @observe("visible")
     def _visibility_changed(self, event):
+        # The first show has the catalog read the tutorial pages, which fills
+        # the contents before the current simulation is shown.
+        if event.new:
+            self.model.active = True
+
         self._show_current()
 
     def _fill_contents(self):

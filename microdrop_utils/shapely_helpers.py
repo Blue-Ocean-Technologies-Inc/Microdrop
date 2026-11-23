@@ -9,14 +9,10 @@
 # Thanks for using Microdrop open source!
 
 # Third-party imports.
-import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
 from shapely.geometry import LineString, Polygon
 
 # Logger import.
 from logger.logger_service import get_logger
-
-CSS_COLORS = list(mcolors.CSS4_COLORS.keys())
 
 logger = get_logger(__name__)
 
@@ -88,6 +84,12 @@ def sort_polygon_indices_along_line(
 
 
 def draw_polygons_and_line(polygons, line, sorted_result=None, index_labels=None):
+    # A debugging aid: matplotlib loads here, not with the device viewer.
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    css_colors = list(mcolors.CSS4_COLORS.keys())
+
     # 3. Visualize with Matplotlib
     fig, ax = plt.subplots(figsize=(8, 8))
 
@@ -104,7 +106,7 @@ def draw_polygons_and_line(polygons, line, sorted_result=None, index_labels=None
             x,
             y,
             alpha=0.5,
-            fc=CSS_COLORS[i],
+            fc=css_colors[i],
             ec="black",
             label=f"Poly Index: {poly_id}",
         )
