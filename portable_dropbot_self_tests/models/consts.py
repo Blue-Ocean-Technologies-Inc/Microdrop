@@ -70,6 +70,10 @@ PLOT_VIEW_LABELS = {
 #: The figure view of a test with a single figure.
 DEFAULT_PLOT_VIEW = "calibrated"
 
+#: The hub's output views; a run opens the Report (vendor rule).
+OUTPUT_VIEW_REPORT = "Report"
+OUTPUT_VIEW_PLOTS = "Plots"
+
 #: The backend's refusal reason for a request while disconnected; a preflight
 #: reply carrying it pauses the polling.
 PREFLIGHT_DISCONNECTED_ERROR = "Portable Dropbot is disconnected"

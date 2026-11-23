@@ -33,6 +33,8 @@ from ..models.consts import (
     OUTCOME_PASS,
     OUTCOME_QUEUED,
     OUTCOME_RUNNING,
+    OUTPUT_VIEW_PLOTS,
+    OUTPUT_VIEW_REPORT,
     PREFLIGHT_DISCONNECTED_ERROR,
     VOLTAGE_TEST,
 )
@@ -94,6 +96,14 @@ def test_start_needs_the_tray_in_and_a_board_or_the_go_ahead(model):
     preflight.chip_absent_acknowledged = True
     assert preflight.can_start
     assert model.start_run()["chip_absent_acknowledged"]
+
+
+def test_a_run_opens_the_report_view(model):
+    model.output_view = OUTPUT_VIEW_PLOTS
+
+    _start(model, [SHORTS_TEST])
+
+    assert model.output_view == OUTPUT_VIEW_REPORT
 
 
 def test_a_run_may_choose_the_tray_out(model):

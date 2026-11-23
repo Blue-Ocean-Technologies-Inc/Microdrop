@@ -16,7 +16,17 @@ Plugin-lifetime, so a reopened panel shows it all."""
 import uuid
 
 # Enthought library imports.
-from traits.api import Bool, Button, HasTraits, Instance, Int, List, Property, Str
+from traits.api import (
+    Bool,
+    Button,
+    Enum,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Property,
+    Str,
+)
 
 # Local imports.
 from ..consts import UNSAVED_CALIBRATION, UNSAVED_TARE, tray_in_required
@@ -26,6 +36,8 @@ from .consts import (
     OUTCOME_NOT_RUN,
     OUTCOME_QUEUED,
     OUTCOME_RUNNING,
+    OUTPUT_VIEW_PLOTS,
+    OUTPUT_VIEW_REPORT,
     PADS_LABELS,
     UNSAVED_PART_LABELS,
 )
@@ -91,6 +103,9 @@ class SelfTestHubModel(HasTraits):
 
     #: The results, report and figures of the tracked run.
     outputs = Instance(SelfTestRunOutputs, ())
+
+    #: The output view shown; a run switches it to the Report.
+    output_view = Enum(OUTPUT_VIEW_REPORT, OUTPUT_VIEW_PLOTS)
 
     #: Backend-owned: the RAM-only calibration parts a save would keep.
     unsaved = List(Str)
@@ -210,6 +225,7 @@ class SelfTestHubModel(HasTraits):
         self.pending_tests = []
 
         self.outputs.clear()
+        self.output_view = OUTPUT_VIEW_REPORT
         self.calibration_status = ""
         self.progress = 0
         self.step_text = ""

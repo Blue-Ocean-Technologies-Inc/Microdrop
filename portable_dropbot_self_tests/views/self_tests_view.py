@@ -15,6 +15,7 @@ against a SelfTestHubModel (``model.edit_traits(view=self_tests_view)``)."""
 
 # Enthought library imports.
 from traitsui.api import (
+    EnumEditor,
     HGroup,
     InstanceEditor,
     Item,
@@ -22,7 +23,6 @@ from traitsui.api import (
     ListEditor,
     ProgressEditor,
     RangeEditor,
-    Tabbed,
     TableEditor,
     UItem,
     VGroup,
@@ -47,6 +47,8 @@ from ..models.consts import (
     CALIBRATION_REPLICATES_BOUNDS,
     CHANNELS_REPLICATES_BOUNDS,
     CHANNELS_THRESHOLD_PF_BOUNDS,
+    OUTPUT_VIEW_PLOTS,
+    OUTPUT_VIEW_REPORT,
     VOLTAGE_POINTS_BOUNDS,
 )
 from .plot_view import plot_view
@@ -179,7 +181,14 @@ run_state = VGroup(
     UItem("step_text", style="readonly", resizable=True),
 )
 
-outputs_tabs = Tabbed(
+# The Report / Plots switch, as the vendor tab's view selector; the model
+# picks the Report when a run starts.
+outputs_views = VGroup(
+    UItem(
+        "output_view",
+        style="custom",
+        editor=EnumEditor(values=[OUTPUT_VIEW_REPORT, OUTPUT_VIEW_PLOTS], cols=2),
+    ),
     VGroup(
         UItem(
             "object.outputs.report_markdown",
@@ -195,7 +204,7 @@ outputs_tabs = Tabbed(
             ),
             UItem("object.outputs.report_status", style="readonly", resizable=True),
         ),
-        label="Report",
+        visible_when=f"output_view == {OUTPUT_VIEW_REPORT!r}",
     ),
     VGroup(
         UItem(
@@ -210,7 +219,7 @@ outputs_tabs = Tabbed(
                 deletable=False,
             ),
         ),
-        label="Plots",
+        visible_when=f"output_view == {OUTPUT_VIEW_PLOTS!r}",
     ),
 )
 
@@ -247,7 +256,7 @@ self_tests_view = View(
             visible_when="preflight_pending",
         ),
         run_state,
-        outputs_tabs,
+        outputs_views,
         calibration,
     ),
     title="Portable DropBot Self Tests",
