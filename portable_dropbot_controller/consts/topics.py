@@ -29,6 +29,12 @@ MOTORS_UPDATED = "portable_dropbot/signals/motors_updated"
 CALIBRATION_UPDATED = "portable_dropbot/signals/calibration_updated"
 #: Temp pane feedback: per-channel readings and PID readbacks.
 TEMP_UPDATED = "portable_dropbot/signals/temp_updated"
+#: Heater auto-tune feedback: each reading of a running step capture
+#: (HeaterTuneProgress), the fit and proposed gains or the refusal
+#: (HeaterTuneDone), and an apply's outcome (HeaterTuneApplied).
+HEATER_TUNE_PROGRESS = "portable_dropbot/signals/heater_tune_progress"
+HEATER_TUNE_DONE = "portable_dropbot/signals/heater_tune_done"
+HEATER_TUNE_APPLIED = "portable_dropbot/signals/heater_tune_applied"
 #: PMT pane feedback: power state, gain, acquire results.
 PMT_UPDATED = "portable_dropbot/signals/pmt_updated"
 #: PMT Capture pane: the board's configured spots (PmtSpotsUpdated), per-spot
@@ -120,6 +126,12 @@ TEMP_SET_PID = "portable_dropbot/requests/temp_set_pid"
 #: "tolerance_c": float}; sets the target, turns control on and acks
 #: on TEMPERATURE_REACHED once the reading is within tolerance.
 PROTOCOL_SET_TEMPERATURE = "portable_dropbot/requests/protocol_set_temperature"
+#: Heater auto-tune: start a step capture (HeaterTuneStartRequest), cancel
+#: it (raw publish_message, empty message, like PMT_CAPTURE_ABORT; the
+#: heater is switched off), and write a proposal (HeaterTuneApplyRequest).
+HEATER_TUNE_START = "portable_dropbot/requests/heater_tune_start"
+HEATER_TUNE_CANCEL = "portable_dropbot/requests/heater_tune_cancel"
+HEATER_TUNE_APPLY = "portable_dropbot/requests/heater_tune_apply"
 # PMT.
 PMT_POWER = "portable_dropbot/requests/pmt_power"
 PMT_SET_GAIN = "portable_dropbot/requests/pmt_set_gain"
