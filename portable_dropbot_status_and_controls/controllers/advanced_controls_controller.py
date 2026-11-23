@@ -35,9 +35,13 @@ logger = get_logger(__name__)
 #: for a frontend running without the driver package.
 HOME_PAIR_FIELDS_FALLBACK = ("motor_polarity", "home_dir")
 HOME_PAIR_WARNING_FALLBACK = (
-    "Home direction and polarity must change together, or homing runs the "
-    "wrong way; a home direction change un-homes the axis, so re-home it "
-    "after the write."
+    "Home direction and polarity change together or homing runs away; "
+    "changing home direction un-homes the axis (re-home it after the write)."
+)
+#: Motor firmware 1.0.0.28, which the vendor's 1.8.0 pairing text predates.
+HOME_PAIR_MOTOR_28_NOTE = (
+    "On motor firmware 1.0.0.28 and later a polarity change un-homes the axis "
+    "too, and the board refuses either change while the axis moves."
 )
 
 
@@ -119,7 +123,8 @@ class AdvancedControlsController(Controller):
         answer = confirm(
             None,
             f"{self.model.selected_motor} {event.name}: {baseline} → {event.new}."
-            f"\n\n{MOTOR_HOME_PAIR_WARNING}\n\nCheck {other} before Write. "
+            f"\n\n{MOTOR_HOME_PAIR_WARNING}\n\n{HOME_PAIR_MOTOR_28_NOTE}"
+            f"\n\nCheck {other} before Write. "
             f"Keep this edit?",
             title="Home direction and polarity",
         )

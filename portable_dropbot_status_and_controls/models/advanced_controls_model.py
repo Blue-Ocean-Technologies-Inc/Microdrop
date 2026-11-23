@@ -60,14 +60,15 @@ class PortableDropbotAdvancedControlsModel(BaseStatusModel):
     motor_polarity = Int(
         desc=(
             "direction polarity, 1 = as wired, 0 = mirrored; one setting with "
-            "home direction: change both together or homing runs away"
+            "home direction: change both together or homing runs away, and a "
+            "change un-homes the axis (motor firmware 1.0.0.28+)"
         )
     )
     I_hold = Int(desc="hold current, 0–31")
     I_run = Int(desc="run current, 0–31")
     subdiv = Int(desc="microsteps per full step, a power of two up to 256")
-    run_sgt = Int(desc="StallGuard threshold while running")
-    rst_sgt = Int(desc="StallGuard threshold while homing")
+    run_sgt = Int(desc="StallGuard threshold while running, -64 to 63")
+    rst_sgt = Int(desc="StallGuard threshold while homing, -64 to 63")
     bspd = Int(
         desc=(
             "homing speed in real µm/s on every motor firmware (the board "
@@ -80,8 +81,8 @@ class PortableDropbotAdvancedControlsModel(BaseStatusModel):
             "board converts for firmware before layout 2.0)"
         )
     )
-    acc_run = Int(desc="acceleration ramp factor while running (0 or less means 6)")
-    acc_rst = Int(desc="acceleration ramp factor while homing (0 or less means 6)")
+    acc_run = Int(desc="acceleration ramp factor while running, 0–64 (0 = legacy 6)")
+    acc_rst = Int(desc="acceleration ramp factor while homing, 0–64 (0 = legacy 6)")
     stealthchop = Int(
         desc="StealthChop enable, 0 or 1 (homing always runs SpreadCycle)"
     )
