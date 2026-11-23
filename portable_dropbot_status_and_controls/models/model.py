@@ -153,7 +153,7 @@ class PortableDropbotStatusAndControlsModel(DropletReadoutsModelMixin, BaseStatu
         "16-bit range)",
     )
     capacitance_display = Str("-", desc="Chip capacitance reading")
-    chip_temp_display = Str("-", desc="Heater current/target (°C)")
+    chip_temp_display = Str("-", desc="Heater 1 (channel 0) current/target (°C)")
     device_temp_display = Str("-", desc="Instrument internal temperature")
     device_humidity_display = Str("-", desc="Instrument internal relative humidity")
     mechanisms_display = Str("-", desc="Tray/magnet/filter/pogo states")
@@ -205,8 +205,11 @@ class PortableDropbotStatusAndControlsModel(DropletReadoutsModelMixin, BaseStatu
     #: Decoded from the raw chip_on_pad contact mask, unlike the base
     #: model's chip_status_text which only says detected or not.
     chip_pad_status_text = Str("-", desc="Which pogo pads are on the chip")
-    out_power_display = Str("-", desc="Heater output power (%)")
-    heater_on_display = Str("-", desc="Heater enable flag (temp_onoff)")
+    out_power_display = Str("-", desc="Heater 1 (channel 0) output power (%)")
+    #: Heater channel 1, from the STATUS tail; n/a before MCU 1.0.1.33.
+    heater2_temp_display = Str("-", desc="Heater 2 (channel 1) current/target (°C)")
+    heater2_power_display = Str("-", desc="Heater 2 (channel 1) output power (%)")
+    heater_on_display = Str("-", desc="Heater loops running (temp_onoff)")
     fan_duty_display = Str("-", desc="Which cooling fans are commanded on")
     illumination_display = Str(
         "-", desc="Illumination LED brightness the board reports"
