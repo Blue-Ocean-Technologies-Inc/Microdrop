@@ -20,7 +20,7 @@ tab without a second copy of any of them.
 from html.parser import HTMLParser
 
 # Enthought library imports.
-from traits.api import HasTraits, Instance, List, Property, Str, observe
+from traits.api import Bool, HasTraits, Instance, List, Property, Str, observe
 
 # Local imports.
 from .consts import TutorialEntry
@@ -148,8 +148,15 @@ class TutorialSimulationCatalog(HasTraits):
     #: One record per tutorial that has simulations, in catalog order.
     tutorials = List(Instance(TutorialSimulations))
 
-    @observe("tutorial_catalog.entries")
+    #: Whether anything shows the simulations yet. The pages are read only
+    #: from then on, so a pane that stays hidden costs nothing at launch.
+    active = Bool(False)
+
+    @observe("tutorial_catalog.entries, active")
     def _find_simulations(self, event):
+        if not self.active:
+            return
+
         found = [find_simulations(entry) for entry in self.tutorial_catalog.entries]
 
         self.tutorials = [record for record in found if record.simulations]
