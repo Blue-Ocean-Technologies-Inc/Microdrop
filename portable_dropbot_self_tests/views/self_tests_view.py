@@ -186,6 +186,12 @@ run_buttons = HGroup(
         enabled_when="running and not aborting",
         tooltip="Abort between steps: HV off, pads back to where they were",
     ),
+    UItem(
+        "diagnostics_button",
+        enabled_when="idle",
+        tooltip="Read the signal board's diagnostics (read-only): watchdog "
+        "liveness, kernel asserts and thread stacks, shown after the report",
+    ),
 )
 
 run_state = VGroup(
@@ -208,7 +214,7 @@ outputs_views = VGroup(
     ),
     VGroup(
         UItem(
-            "object.outputs.report_markdown",
+            "object.outputs.display_markdown",
             editor=MarkdownBrowserEditor(min_height=REPORT_HEIGHT_PX),
             resizable=True,
         ),

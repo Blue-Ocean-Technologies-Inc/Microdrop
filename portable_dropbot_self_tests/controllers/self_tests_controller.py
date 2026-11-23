@@ -38,6 +38,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
 from ..consts import (
+    SELF_TEST_DIAG_INFO_READ,
     SELF_TEST_PREFLIGHT_READ,
     self_test_abort_publisher,
     self_test_run_publisher,
@@ -123,6 +124,11 @@ class SelfTestHubController(Controller):
             CallbackTimer.single_shot(
                 interval=ABANDON_RESYNC_DELAY_S, callback=self._read_preflight
             )
+
+    @observe("model:diagnostics_button")
+    def _read_diagnostics(self, event):
+        self.model.request_diagnostics()
+        publish_message(topic=SELF_TEST_DIAG_INFO_READ, message="")
 
     # ------------------------------------------------------------------ #
     # Pre-flight                                                           #

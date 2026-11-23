@@ -20,6 +20,7 @@ from ..consts import (
     UNSAVED_CALIBRATION,
     UNSAVED_TARE,
     SelfTestCalibrationSaved,
+    SelfTestDiagInfo,
     SelfTestFinished,
     SelfTestPreflight,
     SelfTestProgress,
@@ -391,3 +392,43 @@ def test_a_missing_heater_reading_stays_none_in_the_report(model):
     assert model.outputs.results[HEATERS_TEST]["sensors"][1] is None
     assert "no reading" in model.outputs.report_markdown
     assert "Temperature alarms before" in model.outputs.report_markdown
+
+
+# --------------------------------------------------------------------- #
+# Board diagnostics                                                     #
+# --------------------------------------------------------------------- #
+
+
+def test_a_diagnostics_read_shows_after_the_report(model):
+    model.output_view = OUTPUT_VIEW_PLOTS
+    model.outputs.report_markdown = "# Report"
+
+    model.request_diagnostics()
+
+    assert model.output_view == OUTPUT_VIEW_REPORT
+    assert "Reading" in model.outputs.display_markdown
+
+    model.apply_diag_info(
+        SelfTestDiagInfo(text="uptime 90.5 s", stalled_sources=["main loop"])
+    )
+    shown = model.outputs.display_markdown
+
+    assert shown.index("# Report") < shown.index("# Board diagnostics #")
+    assert "STALLED" in shown and "uptime 90.5 s" in shown
+
+
+def test_a_refused_diagnostics_read_leaves_the_run_alone(model):
+    request = _start(model, [SHORTS_TEST])
+
+    model.apply_diag_info(SelfTestDiagInfo(error="self-test run owns the board"))
+
+    assert model.running and model.run_id == request["run_id"]
+    assert "Not read" in model.outputs.display_markdown
+
+
+def test_a_new_run_clears_the_diagnostics(model):
+    model.apply_diag_info(SelfTestDiagInfo(text="uptime 1.0 s"))
+
+    _start(model, [SHORTS_TEST])
+
+    assert model.outputs.display_markdown == ""

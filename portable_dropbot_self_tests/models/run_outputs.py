@@ -9,13 +9,14 @@
 # Thanks for using Microdrop open source!
 
 """What a run produced on the frontend: the received results, the report
-regenerated from them, its saved copy, and the figures."""
+regenerated from them, its saved copy, and the figures; plus the last board
+diagnostics read, shown after the report."""
 
 # Standard library imports.
 from pathlib import Path
 
 # Enthought library imports.
-from traits.api import Dict, HasTraits, Instance, List, Str
+from traits.api import Dict, HasTraits, Instance, List, Property, Str
 
 # Microdrop utils imports.
 from microdrop_utils.json_helpers import restore_nan_from_json_nulls
@@ -43,6 +44,12 @@ class SelfTestRunOutputs(HasTraits):
     #: The Markdown report of ``results``, prepared for a Markdown viewer.
     report_markdown = Str()
 
+    #: The last board diagnostics read, as a Markdown report section.
+    diagnostics_markdown = Str()
+
+    #: What the report view shows: the report, then the diagnostics.
+    display_markdown = Property(Str, observe="report_markdown, diagnostics_markdown")
+
     #: Where the last report was saved, or why that failed.
     report_status = Str()
 
@@ -52,11 +59,37 @@ class SelfTestRunOutputs(HasTraits):
     #: The figure tab shown; follows the newest result.
     selected_plot = Instance(SelfTestPlot)
 
+    def _get_display_markdown(self):
+        parts = (self.report_markdown, self.diagnostics_markdown)
+
+        return "\n\n".join(part for part in parts if part)
+
     def clear(self):
         self.results = {}
         self.plots = []
         self.report_markdown = ""
+        self.diagnostics_markdown = ""
         self.report_status = ""
+
+    def show_diagnostics(self, diag_info):
+        """Render a SelfTestDiagInfo as the diagnostics section; None marks
+        a read in flight."""
+        lines = ["# Board diagnostics #", ""]
+
+        if diag_info is None:
+            lines.append("Reading the signal board's DIAG_INFO...")
+
+        elif diag_info.error:
+            lines.append(f" - **Not read**: {diag_info.error}")
+
+        else:
+            if diag_info.stalled_sources:
+                stalled = ", ".join(diag_info.stalled_sources)
+                lines += [f" - **STALLED** (IWDG reset pending): {stalled}", ""]
+
+            lines += ["```", diag_info.text, "```"]
+
+        self.diagnostics_markdown = "\n".join(lines)
 
     def add_result(self, result):
         """Keep a SelfTestResult and update the report and its figure."""
