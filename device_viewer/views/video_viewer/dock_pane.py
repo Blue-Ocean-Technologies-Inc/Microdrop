@@ -61,6 +61,7 @@ from microdrop_style.icons.icons import (
 )
 
 # Microdrop utils imports.
+from microdrop_utils.lazy_dock_pane import LazyContentDockPane
 from microdrop_utils.traitsui_qt_helpers import (
     IconButtonEditor,
     IconToggleEditor,
@@ -92,8 +93,12 @@ RECORDING_GLOBS = ("*.mp4", "*.mkv")
 ROI_SIDECAR_SUFFIX = ".roi.json"
 
 
-class VideoViewerDockPane(TraitsDockPane):
-    """Viewer for recorded videos (raw or device-aligned playback)."""
+class VideoViewerDockPane(LazyContentDockPane, TraitsDockPane):
+    """Viewer for recorded videos (raw or device-aligned playback).
+
+    The model follows the recordings from launch; the view, and with it the
+    media player, is built the first time the pane is shown.
+    """
 
     id = PKG + ".video_viewer.dock_pane"
     name = "Recording Viewer"
