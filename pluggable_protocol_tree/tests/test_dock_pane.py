@@ -722,3 +722,24 @@ def test_dock_pane_mounts_quick_action_bar_when_actions_passed(build_dock_pane):
     assert pane.quick_action_bar is not None
     assert set(pane.quick_action_bar.buttons.keys()) == {"add_step", "save_protocol"}
     assert pane.quick_actions_controller is not None
+
+
+def test_quick_actions_contributed_after_the_pane_was_built_fill_its_bar(
+    build_dock_pane,
+):
+    from pluggable_protocol_tree.models.quick_action import BaseQuickAction
+
+    dock_pane = build_dock_pane()
+    bar = dock_pane._pane.quick_action_bar
+
+    assert bar.isHidden()
+
+    dock_pane.rebuild_quick_actions([BaseQuickAction(action_id="add_step")])
+
+    assert set(bar.buttons) == {"add_step"}
+    assert not bar.isHidden()
+
+    dock_pane.rebuild_quick_actions([])
+
+    assert bar.buttons == {}
+    assert bar.isHidden()
