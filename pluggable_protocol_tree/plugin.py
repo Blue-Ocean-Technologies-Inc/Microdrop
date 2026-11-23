@@ -128,7 +128,8 @@ class PluggableProtocolTreePlugin(Plugin):
 
     contributed_quick_actions = List(
         desc="Quick actions contributed by other plugins (populated "
-        "from the extension point at plugin start)."
+        "from the extension point at plugin start, and again whenever a "
+        "contributing plugin is added or removed)."
     )
 
     # Standard plumbing
@@ -310,8 +311,9 @@ class PluggableProtocolTreePlugin(Plugin):
         extension points have resolved."""
         super().start()
         # Wire the registry's extension-point listeners to this plugin's
-        # traits so the _items handler below fires when a column-contributing
-        # plugin is added/removed at runtime (magnet hot load/unload). Opt-in
+        # traits so the _items handlers below fire when a column or
+        # quick-action contributing plugin is added/removed at runtime
+        # (magnet hot load/unload, deferred plugins). Opt-in
         # — Envisage never calls it for you — and only possible once the
         # plugin is attached to the application.
         self.connect_extension_point_traits()
@@ -378,6 +380,29 @@ class PluggableProtocolTreePlugin(Plugin):
         self._resync_executor_topics()
         self._refresh_live_dock_pane()
 
+    @on_trait_change("_quick_action_extension_point_items")
+    def _on_quick_action_extension_point_changed(self, event):
+        """A plugin contributing PROTOCOL_QUICK_ACTIONS was added or removed
+        while the app is running. Re-snapshot the contributed actions and swap
+        the live dock pane's buttons in place; a pane built later reads the
+        snapshot when it is made. ``on_trait_change`` for the same reason as
+        the column handler above."""
+        logger.info(
+            f"PROTOCOL_QUICK_ACTIONS changed: +{len(event.added)} -{len(event.removed)}"
+        )
+
+        try:
+            self.contributed_quick_actions = list(self._quick_action_extension_point)
+
+        except Exception as e:
+            logger.warning(f"failed to re-read PROTOCOL_QUICK_ACTIONS: {e}")
+            return
+
+        pane = self._live_dock_pane()
+
+        if pane is not None:
+            pane.rebuild_quick_actions(self._assemble_quick_actions())
+
     def _resync_executor_topics(self):
         """Republish the full actor-topic routing contribution for the current
         column set. The executor listener's wait topics depend on the assembled
@@ -396,11 +421,9 @@ class PluggableProtocolTreePlugin(Plugin):
             routing.append({EXECUTOR_LISTENER_NAME: executor_topics})
         self.actor_topic_routing = routing
 
-    def _refresh_live_dock_pane(self):
-        """Rebuild this plugin's live dock-pane columns in place. With no GUI
-        window yet (headless/tests) or no pane mounted, only the plugin-owned
-        row manager is brought up to date, so a pane mounted later gets the
-        current column set."""
+    def _live_dock_pane(self):
+        """This plugin's dock pane on the app window, or None with no GUI
+        window yet (headless/tests) or no pane mounted."""
         application = self.application
         window = getattr(application, "active_window", None)
 
@@ -408,10 +431,17 @@ class PluggableProtocolTreePlugin(Plugin):
             windows = getattr(application, "windows", None) or []
             window = windows[0] if windows else None
 
-        pane = None
+        if window is None:
+            return None
 
-        if window is not None:
-            pane = window.get_dock_pane("pluggable_protocol_tree.dock_pane")
+        return window.get_dock_pane("pluggable_protocol_tree.dock_pane")
+
+    def _refresh_live_dock_pane(self):
+        """Rebuild this plugin's live dock-pane columns in place. With no GUI
+        window yet (headless/tests) or no pane mounted, only the plugin-owned
+        row manager is brought up to date, so a pane mounted later gets the
+        current column set."""
+        pane = self._live_dock_pane()
 
         if pane is not None:
             pane.rebuild_columns(self._assemble_columns())

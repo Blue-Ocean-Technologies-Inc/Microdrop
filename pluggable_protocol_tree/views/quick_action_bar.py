@@ -56,6 +56,25 @@ class QuickActionBar(QScrollArea):
     def __init__(self, actions: List[IQuickAction], parent: QWidget = None):
         super().__init__(parent)
         self.buttons: Dict[str, QToolButton] = {}
+
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        # An ignored width lets the pane shrink below the buttons' total
+        # width; the fixed height leaves the tree all the remaining space.
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+
+        self.set_actions(actions)
+
+    def set_actions(self, actions):
+        """Replace the buttons with one per action, in priority order.
+
+        The previous row and its buttons are deleted with their click
+        connections; the controller rewires the new ones.
+        """
+        self.buttons = {}
         sorted_actions = sorted(actions, key=lambda a: (a.priority, a.action_id))
 
         row = QWidget()
@@ -82,16 +101,17 @@ class QuickActionBar(QScrollArea):
 
         layout.addStretch()
 
+        # A scroll area deletes the widget it held when given a new one.
         self.setWidget(row)
-        self.setWidgetResizable(True)
-        self.setFrameShape(QFrame.NoFrame)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        # An ignored width lets the pane shrink below the buttons' total
-        # width; the fixed height leaves the tree all the remaining space.
-        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.setFixedHeight(row.sizeHint().height())
+
+        # Hidden while empty. Shown only inside a pane: a parentless bar
+        # would open as a window of its own.
+        if not self.buttons:
+            self.hide()
+
+        elif self.parentWidget() is not None:
+            self.show()
 
     def resizeEvent(self, event):
         """Make room for the scrollbar only while the row overflows."""
@@ -135,8 +155,32 @@ class QuickActionsController:
         self._bar = bar
         self._dock_pane = dock_pane
         self._pane = dock_pane._pane
-        self._actions = list(actions)
         self._is_running = False
+        self.shortcuts = []
+
+        # Wire tree-pane signals (drives re-enable + running state).
+        self._pane.selection_changed.connect(self.refresh_enabled)
+        self._pane.protocol_running_changed.connect(self._on_running_changed)
+
+        self.set_actions(actions)
+
+    def set_actions(self, actions):
+        """Wire the bar's buttons, and fresh shortcuts, to ``actions``.
+
+        Called once the bar holds a button per action — at construction, and
+        after ``QuickActionBar.set_actions`` when a contributing plugin is
+        loaded or unloaded at runtime.
+        """
+        self._actions = list(actions)
+
+        # Disabled first: deleteLater waits for the event loop, and a live
+        # old shortcut would make its key ambiguous with the new one.
+        for shortcut in self.shortcuts:
+            shortcut.setEnabled(False)
+            shortcut.deleteLater()
+
+        self.shortcuts = []
+
         # Wire button clicks. Only wire the first action per action_id —
         # duplicate contributions were already dropped by QuickActionBar,
         # so iterating self._actions here (the full caller-supplied list)
@@ -144,17 +188,14 @@ class QuickActionsController:
         # that share an id.
         _wired_ids: set = set()
         for action in self._actions:
-            if action.action_id not in bar.buttons:
+            if action.action_id not in self._bar.buttons:
                 continue
             if action.action_id in _wired_ids:
                 continue
             _wired_ids.add(action.action_id)
-            btn = bar.buttons[action.action_id]
+            btn = self._bar.buttons[action.action_id]
             btn.clicked.connect(lambda _checked=False, a=action: self._execute(a))
-        # Wire tree-pane signals (drives re-enable + running state).
-        self._pane.selection_changed.connect(self.refresh_enabled)
-        self._pane.protocol_running_changed.connect(self._on_running_changed)
-        self.shortcuts = []
+
         self._wire_shortcuts()
         self.refresh_enabled()
 

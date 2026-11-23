@@ -736,15 +736,17 @@ def test_pane_emits_selection_changed_on_tree_selection(qapp):
     assert fired == [True]
 
 
-def test_pane_skips_quick_action_bar_when_no_actions(qapp):
-    """No actions contributed (e.g. demo, headless test) -> no bar
-    widget mounted; controller is None. This is the architectural
-    commitment: the tree plugin ships zero builtins."""
+def test_pane_hides_the_empty_quick_action_bar_when_no_actions(qapp):
+    """No actions contributed (e.g. demo, headless test) -> the bar is
+    mounted but empty and hidden, so a plugin loaded later can fill it;
+    the controller is the dock pane's to create. The tree plugin ships
+    zero builtins."""
     import pluggable_protocol_tree.views.protocol_tree_pane as ptp
     from pluggable_protocol_tree.builtins.name_column import make_name_column
 
     pane = ptp.ProtocolTreePane([make_name_column()])
-    assert pane.quick_action_bar is None
+    assert pane.quick_action_bar.buttons == {}
+    assert pane.quick_action_bar.isHidden()
     assert pane.quick_actions_controller is None
 
 
