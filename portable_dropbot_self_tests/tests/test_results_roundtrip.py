@@ -188,7 +188,7 @@ def test_report_formats_from_the_received_result(name):
 
     report = st.generate_report({name: result})
 
-    assert st._TEST_TITLES[name] in report
+    assert st.test_title(name) in report
     assert "report formatting failed" not in report
 
 
@@ -200,7 +200,7 @@ def test_report_of_a_whole_run_formats():
     report = st.generate_report(results)
 
     assert "**Overall**" in report
-    assert all(st._TEST_TITLES[name] in report for name in results)
+    assert all(st.test_title(name) in report for name in results)
 
 
 def test_restore_nan_from_json_nulls_leaves_non_numeric_lists_alone():

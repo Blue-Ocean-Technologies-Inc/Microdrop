@@ -125,7 +125,7 @@ class SelfTestHubModel(HasTraits):
         return [
             SelfTestRow(
                 name=name,
-                title=self_test._TEST_TITLES.get(name, name),
+                title=self_test.test_title(name),
                 pads=PADS_LABELS[self_test.TEST_PADS.get(name, self_test.PADS_ANY)],
             )
             for name in self_test.ALL_TESTS

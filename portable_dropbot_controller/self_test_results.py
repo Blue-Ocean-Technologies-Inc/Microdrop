@@ -121,7 +121,7 @@ def result_payload(run_id, name, result, results_path):
     return {
         "run_id": run_id,
         "name": name,
-        "title": vendor_self_test._TEST_TITLES.get(name, name),
+        "title": vendor_self_test.test_title(name),
         "verdict": safe_verdicts({name: result}).get(name),
         "duration": None if duration is None else float(duration),
         "utc_timestamp": str(result.get("utc_timestamp", "")),
