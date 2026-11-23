@@ -126,6 +126,20 @@ Sending: (Via publish_method)
 Receiving: (Via handlers, image_viewer/message_handler.py)
 - PROTOCOL_RUNNING "microdrop/protocol_running" — sets the ROI analysis model's `protocol_running` on the GUI thread: Calculate/Export/AI Detect/Track ask before starting, the ROI batch computes at most 2 images at once, and a draw/edit holds the view (no auto-follow, no refit)
 
+### notifications
+
+Receiving: (Via handlers, notifications/controllers/message_handler.py)
+- NOTIFICATION_POST "ui/notifications/post" — any plugin posts a notification (`NotificationMessage`, via `notification_publisher`); see the notifications flow below
+- NOTIFICATIONS_SHOW_PANEL "ui/notifications/show_panel" — show and raise the Notifications pane, expanding a section if `section_id` names one (`ShowNotificationsPanelRequest`, via `show_notifications_panel_publisher`)
+
+Sending: (Via an entry's action button)
+- the topic and message of a notification's `PublishAction`, as the poster defined them
+
+### plugin_management
+
+Sending:
+- NOTIFICATIONS_SHOW_PANEL "ui/notifications/show_panel" (`section_id` = `plugin_management.load_status`) when the status-bar plugin loading indicator is clicked and the notifications plugin is loaded; otherwise the indicator opens its own load-status panel
+
 ---
 
 ## Detailed Flows
@@ -753,3 +767,28 @@ Each capturing step stores the resolution and camera properties it captures with
 **Writer (dropbot_status_and_controls) — persists across restarts**
 - `_update_prefs()` does not touch app_globals. It writes the last-applied voltage/frequency straight into the ETS preferences node by path — `get_default_preferences().set(f"{VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH}.ui_default_{voltage|frequency}", value)` — using `VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH = "microdrop.ui.voltage_frequency_range"` (a new constant in `dropbot_preferences_ui/consts.py`; `VoltageFrequencyRangePreferences.preferences_path` now reuses the same constant instead of a duplicate literal).
 - This works because `envisage.application.Application.__init__` installs the running app's own `ScopedPreferences` node as apptools' package-global default (`set_default_preferences(self.preferences)`) before any plugin constructs a `PreferencesHelper`, and `PreferencesHelper._preferences_default()` returns that same default — so `get_default_preferences()` here and any `VoltageFrequencyRangePreferences()` instance's `self.preferences` are the identical node. Verified interactively: writing by path updates a live `VoltageFrequencyRangePreferences` instance's trait (via its `preferences.add_preferences_listener` callback), which fires `_publish_to_app_globals` and keeps app_globals in sync — `dropbot_status_and_controls` remains the only writer of `ui_default_voltage`/`ui_default_frequency` in app_globals, it just triggers that write indirectly through the ETS node rather than writing app_globals itself. A fresh `VoltageFrequencyRangePreferences()` instance (e.g. after a full app + Redis restart) reads the same persisted value straight from the ETS-backed `preferences.ini`, so the last-applied value survives restarts exactly as it did before #610.
+
+### Any plugin → Notifications pane: posting a notification (#1077)
+
+**Posting** — import only `notifications.consts` (allowed by `.importlinter`) and publish a `NotificationMessage`:
+
+```python
+from notifications.consts import notification_publisher
+
+notification_publisher.publish({
+    "title": "Protocol finished",            # one line, required
+    "detail": "12 steps in 4 min",           # optional; a traceback shows monospace
+    "severity": "success",                   # info | success | warning | error
+    "category": "protocol",                  # free text: plugins, log, protocol, hardware, ...
+    "source": "pluggable_protocol_tree",     # who posted
+    "action": {"kind": "open_path", "label": "Show report", "path": "C:/.../report.html"},
+})
+```
+
+`timestamp` defaults to now. `action` is data, never a callable: `{"kind": "publish", "label", "topic", "message"}` publishes `message` on `topic` when the button is pressed, `{"kind": "open_path", "label", "path"}` opens a file or folder.
+
+**Receiving** — `NotificationsMessageHandler._on_post_triggered` validates on the worker thread and hands the message to `NotificationCenter.post_message` with `GUI.invoke_later`. A notification with the same `(source, category, severity, title)` as a listed one collapses into it (count + 1, latest text and time, moved to the top, unread again). The session keeps `MAX_ENTRIES` (300); the oldest go first. Nothing persists across launches.
+
+**In-process sources** (not topics) — the plugin also lists, without any message: warning-and-above log records from the root logger (`services/log_forwarder.py`: batched every 250 ms, collapsed by logger + level + message template + exception line, minus `LOG_IGNORE_RULES` in `notifications/consts.py`), and a "failed to load" error for every failed plugin load record (`application.plugin_load_status`).
+
+**Sections** — `plugin_management` contributes the plugin loading list to the `NOTIFICATION_SECTIONS` extension point (a `NotificationSection`: id, title, summary, order, `factory(parent)`); the indicator click publishes `NOTIFICATIONS_SHOW_PANEL` with that section's id, which shows the pane and expands it.
