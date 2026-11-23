@@ -21,6 +21,7 @@ from types import SimpleNamespace
 
 # Third-party imports.
 import pytest
+from dropbot_portable.portable_dropbot_service import _is_urgent_thread
 
 # Enthought library imports.
 from traits.api import Any, Bool, Dict, HasTraits, List
@@ -235,6 +236,17 @@ def test_motor_stop_skips_the_proxy_lock():
     assert harness.log == [("motorStop", 0)]
     assert harness.serialized == [False]
     assert harness.errors == []
+
+
+def test_motor_stop_runs_as_an_urgent_lane_and_clears_it():
+    harness = _harness(1200)
+    urgent = []
+    harness.proxy.uart.motorStop = lambda motor_id: urgent.append(_is_urgent_thread())
+
+    harness.on_motor_stop_request("tray")
+
+    assert urgent == [True]
+    assert _is_urgent_thread() is False
 
 
 def test_motions_skip_the_proxy_lock():
