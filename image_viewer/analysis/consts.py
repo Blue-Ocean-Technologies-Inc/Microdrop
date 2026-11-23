@@ -205,6 +205,16 @@ ANALYSIS_RESULT_DRAIN_INTERVAL_MS = 50
 #: plot redraw — a drain burst paints once.
 ROI_PLOT_COALESCE_MS = 100
 
+#: Most plotted experiments read from disk swapped into the set per
+#: paced GUI turn: each swap unhooks and hooks the plot's and the ROI
+#: table's observers, a few milliseconds per experiment.
+PLOTTED_EXPERIMENTS_PER_TURN = 16
+
+#: Seconds the plotted-experiments reader rests after reading each one,
+#: leaving the GIL to the GUI thread: a few times what reading an
+#: unanalysed experiment takes.
+PLOTTED_EXPERIMENTS_READER_REST_S = 0.005
+
 #: The same delay while a batch is running. A redraw refits every ROI
 #: over the whole series, which measurably crowds the GUI thread: at
 #: the idle cadence the redraws queue back to back and the progress
