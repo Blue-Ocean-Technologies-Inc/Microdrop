@@ -39,6 +39,7 @@ from ..interfaces.i_portable_dropbot_control_mixin_service import (
 )
 from ..port_lease_guard import PortLeaseGuard
 from ..session_shutdown import deenergize_session
+from ..status_events import StatusEventsMixin
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -47,7 +48,7 @@ logger = get_logger(__name__)
 
 
 @provides(IPortableDropbotControlMixinService)
-class PortableDropbotMonitorMixinService(BoardFirmwareMixin):
+class PortableDropbotMonitorMixinService(StatusEventsMixin, BoardFirmwareMixin):
     id = Str("portable_dropbot_monitor_mixin_service")
     name = Str("Portable Dropbot Monitor Mixin")
     monitor_scheduler = Instance(
@@ -233,9 +234,9 @@ class PortableDropbotMonitorMixinService(BoardFirmwareMixin):
         self.on_start_device_monitoring_request(message)
 
     def _monitor_tick(self):
-        """Every tick: while connected, publish a fresh status
-        snapshot (which doubles as the liveness check — a serial
-        failure inside it triggers the disconnect path); while
+        """Every tick: while connected, refresh the status (see
+        _refresh_status; the full read doubles as the liveness check — a
+        serial failure inside it triggers the disconnect path); while
         disconnected, return port candidates to try. A firmware update
         taking priority on our port disconnects us, and scanning pauses
         until it lets go."""
@@ -255,7 +256,7 @@ class PortableDropbotMonitorMixinService(BoardFirmwareMixin):
             if not self._proxy_lock.acquire(blocking=False):
                 return []
             try:
-                self._publish_status_snapshot()
+                self._refresh_status()
             finally:
                 self._proxy_lock.release()
             return []
@@ -375,6 +376,8 @@ class PortableDropbotMonitorMixinService(BoardFirmwareMixin):
             self._apply_light_intensity()
             self._publish_connected()
             firmware_versions_publisher.publish(firmware)
+            # Before the first snapshot, which is the events' merge base.
+            self._start_status_events(session)
             self._publish_status_snapshot()
             logger.info(f"Connected to Portable Dropbot on {port_name}")
             self._error_shown = False
@@ -416,7 +419,7 @@ class PortableDropbotMonitorMixinService(BoardFirmwareMixin):
 
     def _deenergize(self, reason):
         """HV off, electrodes cleared and PMT off before a deliberate close
-        of the port (see session_shutdown)."""
+        of the port (see session_shutdown), then the status events off."""
 
         if self.proxy is None:
             return
@@ -426,6 +429,7 @@ class PortableDropbotMonitorMixinService(BoardFirmwareMixin):
             f"Portable Dropbot de-energized for {reason}: "
             f"{'; '.join(steps) or 'signal board not attached'}"
         )
+        self._stop_status_events(disable_on_board=True)
 
     def _end_realtime_mode(self):
         """Realtime off, published: the frontend's own realtime-off request
@@ -441,6 +445,7 @@ class PortableDropbotMonitorMixinService(BoardFirmwareMixin):
         firmware versions become unknown, and the port use claim is dropped
         — only once the port is closed, as the vendor worker does."""
         self._end_realtime_mode()
+        self._stop_status_events()
         self.board_firmware_versions = {}
         self._connected_port = ""
         self.port_lease_guard.release()

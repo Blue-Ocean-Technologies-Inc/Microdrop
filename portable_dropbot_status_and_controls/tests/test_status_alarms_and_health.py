@@ -17,6 +17,7 @@ import pytest
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import AlarmRaised, FirmwareVersionsUpdated
+from portable_dropbot_status_and_controls.consts import FAN_DUTY_BITS
 from portable_dropbot_status_and_controls.message_handlers import (
     message_handler as mod,
 )
@@ -109,7 +110,7 @@ def test_dead_humidity_sensor_reads_n_a(value, expected):
     [(0, "Off"), (1, "Fan 1 on"), (2, "Fan 2 on"), (3, "Fan 1, Fan 2 on")],
 )
 def test_fan_duty_is_a_bitmask(fan_duty, expected):
-    assert mod.summarize_fan_duty(fan_duty) == expected
+    assert mod.summarize_switched_on(fan_duty, FAN_DUTY_BITS) == expected
 
 
 @pytest.mark.parametrize(
@@ -133,3 +134,25 @@ def test_status_update_drops_the_dead_pmt_key_and_shows_the_halt(handler):
     assert handler.model.halted is True
     assert handler.model.fan_duty_display == "Fan 1 on"
     assert not hasattr(handler.model, "pmt_display")
+
+
+def test_both_heater_loops_show_from_the_status_tail(handler):
+    handler._on_status_updated_triggered(
+        '{"cur_temp": 25.0, "target_temp": 37.0, "out_power": 50.0,'
+        ' "cur_temp1": 36.5, "target_temp1": 65.0, "out_power1": 12.5,'
+        ' "temp_onoff": 3}'
+    )
+
+    assert handler.model.chip_temp_display == "25.00 °C (target 37.00)"
+    assert handler.model.out_power_display == "50 %"
+    assert handler.model.heater2_temp_display == "36.50 °C (target 65.00)"
+    assert handler.model.heater2_power_display == "12.5 %"
+    assert handler.model.heater_on_display == "Heater 1, Heater 2 on"
+
+
+def test_heater_2_reads_n_a_on_firmware_without_it(handler):
+    handler._on_status_updated_triggered('{"cur_temp": 25.0, "temp_onoff": 0}')
+
+    assert handler.model.heater2_temp_display == "n/a"
+    assert handler.model.heater2_power_display == "n/a"
+    assert handler.model.heater_on_display == "Off"
