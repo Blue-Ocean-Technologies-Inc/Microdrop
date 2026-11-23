@@ -30,7 +30,10 @@ from portable_dropbot_controller.self_test_choreography import (
     validate_run_request,
 )
 from portable_dropbot_controller.self_test_results import unsaved_parts
-from portable_dropbot_self_tests.consts import tray_in_required
+from portable_dropbot_self_tests.consts import (
+    SelfTestRunRequest,
+    tray_in_required,
+)
 
 CALIBRATION = "test_on_board_feedback_calibration"
 #: A STATUS reply with a chip on the pads and the test board's chip_res.
@@ -338,10 +341,38 @@ def test_validation_refusals():
         ([CALIBRATION], {CALIBRATION: {"max_rail_pct": 60.0}}, "outside"),
         ([CALIBRATION], {CALIBRATION: {"check_other_polarity": True}}, "not a"),
         (["system_info"], {"system_info": {"full": True}}, "not a settable"),
+        # The health tests' switches take bools only; their sizes stay fixed.
+        (["test_motors"], {"test_motors": {"moves": 1}}, "is not bool"),
+        (["test_heaters"], {"test_heaters": {"heat_step": "yes"}}, "is not bool"),
+        (["test_heaters"], {"test_heaters": {"duty_pct": 90}}, "not a settable"),
+        (["test_motors"], {"test_motors": {"move_um": 5000}}, "not a settable"),
+        (["test_heaters_fast"], {}, "unknown test"),
     ]
 
     for tests, kwargs, expected in cases:
         assert expected in validate_run_request(tests, kwargs)[1]
+
+
+def test_validation_accepts_the_health_tests_and_their_switches():
+    tests, reason = validate_run_request(
+        ["test_heaters", "test_motors"],
+        {"test_heaters": {"heat_step": False}, "test_motors": {"moves": True}},
+    )
+
+    assert reason == ""
+    assert tests == ["test_heaters", "test_motors"]
+
+
+def test_bool_switches_survive_the_run_request_model():
+    request = SelfTestRunRequest(
+        run_id="r",
+        tests=["test_motors", "test_voltage"],
+        test_kwargs={"test_motors": {"moves": True}, "test_voltage": {"n": 3}},
+    )
+    echoed = SelfTestRunRequest.model_validate_json(request.model_dump_json())
+
+    assert echoed.test_kwargs["test_motors"]["moves"] is True
+    assert validate_run_request(echoed.tests, echoed.test_kwargs)[1] == ""
 
 
 # --------------------------------------------------------------------- #

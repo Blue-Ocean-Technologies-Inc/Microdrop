@@ -8,28 +8,32 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The self-test hub's state between runs: pre-flight reads and the
-backend-owned unsaved-calibration state with its flash save, per the
-contract in ``portable_dropbot_self_tests.consts``. The run itself is
+"""The self-test hub's state around runs: pre-flight and board
+diagnostics reads, the backend-owned unsaved-calibration state with its
+flash save, and the heaters a running test drives, per the contract in
+``portable_dropbot_self_tests.consts``. The run itself is
 ``portable_dropbot_self_test_mixin_service``; this mixin reads its
-``_self_test_run_id`` and the run writes ``_self_test_unsaved`` here.
+``_self_test_run_id`` and the run writes ``_self_test_unsaved`` and
+``_self_test_heaters`` here.
 """
 
 # Third-party imports.
 from pydantic import ValidationError
 
 # Enthought library imports.
-from traits.api import HasTraits, List, Str, observe, provides
+from traits.api import HasTraits, Int, List, Str, observe, provides
 
 # Microdrop package imports.
 from portable_dropbot_self_tests.consts import (
     PREFLIGHT_BOARD_BUSY_ERROR,
+    SELF_TEST_DIAG_INFO_READ,
     SELF_TEST_PREFLIGHT_READ,
     SELF_TEST_SAVE_CALIBRATION,
     UNSAVED_CALIBRATION,
     UNSAVED_TARE,
     SelfTestSaveCalibrationRequest,
     self_test_calibration_saved_publisher,
+    self_test_diag_info_publisher,
     self_test_preflight_publisher,
 )
 
@@ -38,7 +42,12 @@ from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
 from ..self_test_choreography import preflight_fields, read_board_state
-from ..self_test_results import cap_calibration_save_outcome, elec_tare_save_outcome
+from ..self_test_results import (
+    cap_calibration_save_outcome,
+    diag_info_fields,
+    elec_tare_save_outcome,
+)
+from ..session_shutdown import switch_heaters_off
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -55,19 +64,45 @@ class PortableDropbotSelfTestStateMixinService(HasTraits):
     #: contract's "Unsaved calibration").
     _self_test_unsaved = List(Str)
 
+    #: Heater loops the running test drives (the heat step), set by
+    #: SelfTestBoard for the test's duration: the vendor worker's
+    #: ``shutdown_heaters``.
+    _self_test_heaters = List(Int)
+
     @observe("portable_dropbot_connection_active")
     def _forget_unsaved_on_disconnect(self, event):
-        """The board's RAM calibration goes with the connection."""
+        """The board's RAM calibration goes with the connection. A heat step
+        in flight loses its host-side bounds with it, so its heaters are
+        switched off first; every disconnect path clears the flag before
+        closing the session, so the port is still open for a deliberate
+        close (a lost link just fails the commands, bounded)."""
 
         if not event.new:
             self._self_test_unsaved = []
+            self._switch_off_self_test_heaters("disconnect")
+
+    def _switch_off_self_test_heaters(self, reason):
+        """TEMP_START_STOP 0 on the heaters a running test drives, bounded and
+        past the proxy lock (the test holds it); never raises."""
+        channels = list(self._self_test_heaters)
+
+        if not channels or self.proxy is None:
+            return
+
+        steps = switch_heaters_off(self.proxy, channels)
+        logger.warning(
+            f"Self-test heaters switched off for {reason}: "
+            f"{'; '.join(steps) or 'signal board not attached'}"
+        )
 
     def _on_request_refused(self, topic, message, reason):
-        """Answer a refused pre-flight read or save with its reply's error,
-        as the contract promises."""
+        """Answer a refused pre-flight read, diagnostics read or save with
+        its reply's error, as the contract promises."""
 
         if topic == SELF_TEST_PREFLIGHT_READ:
             self._publish_preflight({"error": reason})
+        elif topic == SELF_TEST_DIAG_INFO_READ:
+            self._publish_diag_info({"error": reason})
         elif topic == SELF_TEST_SAVE_CALIBRATION:
             self._publish_calibration_saved({"error": reason})
         else:
@@ -80,6 +115,11 @@ class PortableDropbotSelfTestStateMixinService(HasTraits):
         self._publish_preflight(
             {} if self._self_test_run_id else self._read_preflight()
         )
+
+    def on_self_test_diag_info_read_request(self, message):
+        """The signal board's diagnostics, read-only (the listener refuses
+        this during a run)."""
+        self._publish_diag_info(self._read_diag_info())
 
     def on_self_test_save_calibration_request(self, message):
         try:
@@ -141,6 +181,26 @@ class PortableDropbotSelfTestStateMixinService(HasTraits):
 
         return preflight_fields(reads)
 
+    def _read_diag_info(self):
+        """The SelfTestDiagInfo fields, or the error that kept them unread;
+        busy while a long locked sequence holds the lock, as the
+        pre-flight read."""
+
+        if not self._proxy_lock.acquire(blocking=False):
+            return {"error": PREFLIGHT_BOARD_BUSY_ERROR}
+
+        try:
+            ok, reply = self._proxy_call(
+                "self-test diagnostics read", lambda: self.proxy.sig.diag_info()
+            )
+        finally:
+            self._proxy_lock.release()
+
+        if not ok:
+            return {"error": f"diagnostics not read: {reply or 'no reply'}"}
+
+        return diag_info_fields(reply)
+
     def _save_calibration_part(self, reply, part, save, decode):
         """Run one flash save, decode its outcome into ``reply`` and clear
         ``part`` from the unsaved state when it saved; returns the failure,
@@ -171,6 +231,17 @@ class PortableDropbotSelfTestStateMixinService(HasTraits):
             self_test_preflight_publisher.publish(preflight)
         except Exception as error:
             logger.error(f"Self-test preflight not published: {error}")
+
+    def _publish_diag_info(self, diag_info):
+        logger.info(
+            f"Portable Dropbot board diagnostics --> "
+            f"{diag_info.get('error') or diag_info.get('stalled_sources') or 'ok'}"
+        )
+
+        try:
+            self_test_diag_info_publisher.publish(diag_info)
+        except Exception as error:
+            logger.error(f"Self-test board diagnostics not published: {error}")
 
     def _publish_calibration_saved(self, reply):
         reply["unsaved"] = list(self._self_test_unsaved)

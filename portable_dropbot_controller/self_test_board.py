@@ -17,7 +17,7 @@ import threading
 import time
 
 # Third-party imports.
-from dropbot_portable.self_test import self_test
+from dropbot_portable.self_test import HEATER_SENSORS, self_test
 
 # Enthought library imports.
 from traits.api import Any, Dict, Float, HasTraits, Instance, Int, List, Str
@@ -30,7 +30,7 @@ from portable_dropbot_self_tests.consts import (
 
 # Local imports.
 from .consts import HV_ENABLE_STATUS_OFF
-from .self_test_choreography import hv_status_byte
+from .self_test_choreography import HEATERS_TEST, hv_status_byte
 from .self_test_results import result_payload, strip_traceback, write_result_json
 
 # Logger import.
@@ -40,6 +40,16 @@ logger = get_logger(__name__)
 
 #: The vendor tests' step events are published at most this often.
 PROGRESS_STEP_INTERVAL_S = 0.2
+
+
+def heaters_driven(name, overrides):
+    """The heater loops test ``name`` drives: both, for the heater test with
+    its heat step (on by default, as in the vendor tab); none otherwise."""
+
+    if name == HEATERS_TEST and overrides.get("heat_step", True):
+        return list(HEATER_SENSORS)
+
+    return []
 
 
 class SelfTestBoard(HasTraits):
@@ -103,22 +113,31 @@ class SelfTestBoard(HasTraits):
         return accepted, read_back if ok else None, ""
 
     def run_test(self, step):
-        """One ``self_test(tests=[name])`` call; publishes its result."""
+        """One ``self_test(tests=[name])`` call; publishes its result. The
+        heaters the test drives are registered for its duration, so a
+        disconnect or teardown meanwhile switches them off (the vendor
+        runner's ``shutdown_heaters``); the test's own finally covers cancel
+        and errors."""
         name = step.test
-        overrides = self.test_kwargs.get(name)
+        overrides = self.test_kwargs.get(name) or {}
         extra = {"test_kwargs": {name: dict(overrides)}} if overrides else {}
 
         self._test_index = step.index
-        ok, results = self.controller._proxy_call(
-            f"self-test {name}",
-            lambda: self_test(
-                self.bot,
-                tests=[name],
-                progress=self._on_vendor_progress,
-                cancel=self.cancel,
-                **extra,
-            ),
-        )
+        self.controller._self_test_heaters = heaters_driven(name, overrides)
+
+        try:
+            ok, results = self.controller._proxy_call(
+                f"self-test {name}",
+                lambda: self_test(
+                    self.bot,
+                    tests=[name],
+                    progress=self._on_vendor_progress,
+                    cancel=self.cancel,
+                    **extra,
+                ),
+            )
+        finally:
+            self.controller._self_test_heaters = []
 
         if ok:
             raw = results.get(name) if isinstance(results, dict) else None

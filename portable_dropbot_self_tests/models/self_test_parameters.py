@@ -9,10 +9,11 @@
 # Thanks for using Microdrop open source!
 
 """The self-test parameters the operator can set: the repeat counts of the
-looping tests and the channels / calibration limits."""
+looping tests, the channels / calibration limits and the health tests'
+switches."""
 
 # Enthought library imports.
-from traits.api import HasTraits, Range
+from traits.api import Bool, HasTraits, Range
 
 # Local imports.
 from .consts import (
@@ -23,6 +24,8 @@ from .consts import (
     CHANNELS_REPLICATES_BOUNDS,
     CHANNELS_TEST,
     CHANNELS_THRESHOLD_PF_BOUNDS,
+    HEATERS_TEST,
+    MOTORS_TEST,
     VOLTAGE_POINTS_BOUNDS,
     VOLTAGE_TEST,
 )
@@ -52,6 +55,13 @@ class SelfTestParameters(HasTraits):
 
     #: A channel is active above this capacitance (pF, baseline removed).
     channels_threshold_pf = Range(*CHANNELS_THRESHOLD_PF_BOUNDS)
+
+    #: The heater test heats each OFF heater briefly (the vendor default).
+    heaters_heat_step = Bool(True)
+
+    #: The motor test moves PMT-Y and the filter out and back; off by
+    #: default, as in the vendor tab, since the axes MOVE.
+    motors_moves = Bool(False)
 
     def _voltage_points_default(self):
         return self._vendor_repeat_default(VOLTAGE_TEST)
@@ -83,6 +93,10 @@ class SelfTestParameters(HasTraits):
 
         return self_test.REPEAT_PARAMS[name][1]
 
+    def motor_moves(self, tests):
+        """Whether a run of ``tests`` moves axes in the motor test."""
+        return MOTORS_TEST in tests and self.motors_moves
+
     def test_kwargs(self, tests):
         """The parameters of ``tests`` as a run request's test_kwargs."""
         from dropbot_portable import self_test
@@ -99,6 +113,10 @@ class SelfTestParameters(HasTraits):
             },
             CHANNELS_TEST: {"threshold_pf": float(self.channels_threshold_pf)},
         }
+        switches = {
+            HEATERS_TEST: {"heat_step": bool(self.heaters_heat_step)},
+            MOTORS_TEST: {"moves": bool(self.motors_moves)},
+        }
 
         kwargs = {}
 
@@ -106,5 +124,8 @@ class SelfTestParameters(HasTraits):
             if name in repeats:
                 param = self_test.REPEAT_PARAMS[name][0]
                 kwargs[name] = {param: int(repeats[name]), **limits.get(name, {})}
+
+            elif name in switches:
+                kwargs[name] = switches[name]
 
         return kwargs

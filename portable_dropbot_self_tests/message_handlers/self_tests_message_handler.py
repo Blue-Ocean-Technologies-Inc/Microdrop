@@ -25,6 +25,7 @@ from template_status_and_controls.base_message_handler import BaseMessageHandler
 from ..consts import (
     SELF_TEST_LISTENER,
     SelfTestCalibrationSaved,
+    SelfTestDiagInfo,
     SelfTestFinished,
     SelfTestPreflight,
     SelfTestProgress,
@@ -62,6 +63,9 @@ class SelfTestsMessageHandler(BaseMessageHandler):
         self._apply_on_gui_thread(
             SelfTestCalibrationSaved, body, self.model.apply_calibration_saved
         )
+
+    def _on_self_test_diag_info_updated_triggered(self, body):
+        self._apply_on_gui_thread(SelfTestDiagInfo, body, self.model.apply_diag_info)
 
     @staticmethod
     def _apply_on_gui_thread(message_class, body, apply):

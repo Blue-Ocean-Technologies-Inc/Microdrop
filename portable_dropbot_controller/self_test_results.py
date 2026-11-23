@@ -8,17 +8,20 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Self-test results: the SelfTestResult payload, the per-test JSON files and
-the backend-owned unsaved-calibration state. No Traits, Qt or messaging."""
+"""Self-test results: the SelfTestResult payload, the per-test JSON files,
+the backend-owned unsaved-calibration state and the board diagnostics
+payload. No Traits, Qt or messaging."""
 
 # Standard library imports.
 import json
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
 # Third-party imports.
 from dropbot_portable import DropBotUart
 from dropbot_portable import self_test as vendor_self_test
+from dropbot_portable.diag_info import format_diag_info, parse_diag_info
 
 # Microdrop package imports.
 from microdrop_application.helpers import get_current_experiment_directory
@@ -202,3 +205,23 @@ def elec_tare_save_outcome(ok, saved):
         why = "refused or no reply"
 
     return {"tare_ok": False}, f"electrode tare not saved: {why}"
+
+
+def diag_info_fields(reply):
+    """The SelfTestDiagInfo fields of a ``sig.diag_info()`` reply, parsed and
+    formatted by the vendor's ``diag_info``; firmware without DIAG_INFO
+    answers UNKNOWN, which the proxy returns as None."""
+
+    if reply is None:
+        return {"error": "no DIAG_INFO reply (the firmware may predate it)"}
+
+    try:
+        info = parse_diag_info(reply.raw)
+    except ValueError as error:
+        return {"error": f"DIAG_INFO reply not understood: {error}"}
+
+    return {
+        "text": format_diag_info(info),
+        "stalled_sources": info.stalled_sources(),
+        "diagnostics": vendor_self_test._to_jsonable(asdict(info)),
+    }

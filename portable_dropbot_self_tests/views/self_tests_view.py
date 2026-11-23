@@ -156,6 +156,23 @@ parameters_group = HGroup(
             "on an ADC rail is clipped and not judged",
         ),
     ),
+    VGroup(
+        Item(
+            "object.parameters.heaters_heat_step",
+            label="Heaters: heat step",
+            tooltip="Drive each heater that is OFF at 30 % until it rose 1 °C "
+            "(at most 60 s, never past 50 °C), then switch it off. Unticked: "
+            "sensors and alarms only.",
+        ),
+        Item(
+            "object.parameters.motors_moves",
+            label="Motors: short moves (AXES MOVE)",
+            tooltip="Off by default. Moves PMT-Y and the filter 1 mm out and "
+            "back (homed, fault-free axes, inside their soft limits) and checks "
+            "arrival, stall and fault bits. The tray, magnet and pogo pads "
+            "never move. Keep hands clear.",
+        ),
+    ),
     label="Parameters",
     show_border=True,
     enabled_when="idle",
@@ -168,6 +185,12 @@ run_buttons = HGroup(
         "abort_button",
         enabled_when="running and not aborting",
         tooltip="Abort between steps: HV off, pads back to where they were",
+    ),
+    UItem(
+        "diagnostics_button",
+        enabled_when="idle",
+        tooltip="Read the signal board's diagnostics (read-only): watchdog "
+        "liveness, kernel asserts and thread stacks, shown after the report",
     ),
 )
 
@@ -191,7 +214,7 @@ outputs_views = VGroup(
     ),
     VGroup(
         UItem(
-            "object.outputs.report_markdown",
+            "object.outputs.display_markdown",
             editor=MarkdownBrowserEditor(min_height=REPORT_HEIGHT_PX),
             resizable=True,
         ),

@@ -19,6 +19,8 @@ from ..consts import UNSAVED_CALIBRATION, UNSAVED_TARE
 VOLTAGE_TEST = "test_voltage"
 CALIBRATION_TEST = "test_on_board_feedback_calibration"
 CHANNELS_TEST = "test_channels"
+HEATERS_TEST = "test_heaters"
+MOTORS_TEST = "test_motors"
 
 #: Tests that collect information only, so "no verdict" is their normal end.
 INFO_TESTS = ("system_info", "test_system_metrics", "test_boards")
