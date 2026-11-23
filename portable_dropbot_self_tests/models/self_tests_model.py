@@ -56,7 +56,8 @@ class SelfTestHubModel(HasTraits):
     """Qt-free hub state, mutated on the GUI thread only. Messages of any
     run but the tracked ``run_id`` are ignored."""
 
-    #: One row per vendor test, in the vendor's run order.
+    #: One row per vendor test, in the vendor tab's order: ``ALL_TESTS``,
+    #: then the health tests.
     rows = List(Instance(SelfTestRow))
 
     #: The test parameters of the next run.
@@ -146,7 +147,7 @@ class SelfTestHubModel(HasTraits):
                 title=self_test.test_title(name),
                 pads=PADS_LABELS[self_test.TEST_PADS.get(name, self_test.PADS_ANY)],
             )
-            for name in self_test.ALL_TESTS
+            for name in self_test.ALL_TESTS + self_test.HEALTH_TESTS
         ]
 
     def _get_idle(self):

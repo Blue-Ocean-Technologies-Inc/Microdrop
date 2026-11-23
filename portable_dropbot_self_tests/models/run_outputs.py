@@ -111,8 +111,16 @@ class SelfTestRunOutputs(HasTraits):
     def _received_result(result):
         """The vendor result as the vendor's formatters expect it: NaN
         restored, and the message's error / timing fields folded back in
-        where the backend left them out of the dict."""
-        received = restore_nan_from_json_nulls(dict(result.result))
+        where the backend left them out of the dict. The health tests
+        record a missing reading as None, never NaN (e.g. a dead sensor in
+        test_heaters' ``sensors``), so their nulls stay None."""
+        from dropbot_portable import self_test
+
+        received = dict(result.result)
+
+        if result.name not in self_test.HEALTH_TESTS:
+            received = restore_nan_from_json_nulls(received)
+
         message_fields = {
             "error": result.error,
             "cancelled": result.cancelled,
