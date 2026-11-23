@@ -23,6 +23,16 @@ from pyface.qt.QtWidgets import QVBoxLayout, QWidget
 from ...interfaces.descriptors import SidebarSection as SidebarSection
 
 
+class SizedSidebarSection(SidebarSection):
+    """A built-in section whose widgets take sizes from the device viewer
+    preferences; the pane applies them once the section is built and on
+    every change of those preferences."""
+
+    def apply_sizes(self, preferences):
+        """Size the section's widgets from ``preferences``, the
+        DeviceViewerPreferences; nothing to size by default."""
+
+
 def stack_widgets(widgets):
     """Stack widgets into one container with no margins or spacing.
 
