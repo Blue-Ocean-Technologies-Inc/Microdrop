@@ -11,18 +11,21 @@
 """Build the deferred device viewer sidebar sections after the first paint,
 one per event-loop turn (#1064).
 
-The window repaints and takes input between turns, so the sections fill in
+The turns go through the shared paced queue (``microdrop_utils.gui_pacing``),
+so the window repaints and takes input between them and the sections fill in
 instead of holding up the main window. Code that needs a section before it
 exists asks ``when_built``: it runs at once for a built section, or when
 the section is built — or, should its build fail, its failure callback
 runs instead, so no request waits forever.
 
-Qt-free: turns are scheduled with ``pyface.api.GUI.invoke_later``.
+Qt-free: turns are scheduled with ``invoke_paced``.
 """
 
 # Enthought library imports.
-from pyface.api import GUI
 from traits.api import Bool, Callable, Dict, Event, HasTraits, Instance, List
+
+# Microdrop utils imports.
+from microdrop_utils.gui_pacing import invoke_paced
 
 # Local imports.
 from ..models.deferred_sidebar_section import (
@@ -44,7 +47,7 @@ class SidebarSectionBuilder(HasTraits):
     #: The sections to build, in the order they are built.
     sections = List(Instance(DeferredSidebarSection))
 
-    #: Runs a callable on a later event-loop turn.
+    #: Runs a callable on a later, paced event-loop turn.
     invoke_later = Callable()
 
     #: True once ``start`` has scheduled the first turn.
@@ -57,7 +60,7 @@ class SidebarSectionBuilder(HasTraits):
     _waiting = Dict()
 
     def _invoke_later_default(self):
-        return GUI.invoke_later
+        return invoke_paced
 
     def start(self):
         """Build the sections from the next turn on; later calls do nothing."""
