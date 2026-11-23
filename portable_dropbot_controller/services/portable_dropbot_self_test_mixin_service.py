@@ -21,15 +21,17 @@ watchdog keeps seeing answers.
 While a run owns the board, ``_exclusive_owner_reason`` makes the
 controller's listener refuse every request but SELF_TEST_ALLOWED_TOPICS; a
 refused DISCONNECT becomes an abort, so the port never closes under a test
-whose restore still has to switch the HV off. Pre-flight reads and the
+whose restore still has to switch the HV off. The motor E-STOP always
+passes, and halts the run (``_on_motor_estop``). Pre-flight reads and the
 unsaved-calibration state (``_self_test_unsaved``, which a run updates) are
 ``portable_dropbot_self_test_state_mixin_service``.
 
-The vendor runner also ends a run on an E-STOP or the 24 V rail dropping
-(its worker's ``estop_queued`` / ``rails24_off`` signals). The controller
-has no such signal, so that branch is not ported: an E-STOP surfaces as
+As the vendor runner (its worker's ``estop_queued`` signal), an E-STOP
+ends the run: the test stops at its next step and the restore switches the
+HV off without moving the pads. The vendor's 24 V rail-off halt
+(``rails24_off``) has no controller signal and is not ported: it surfaces as
 failing tests and pad moves, which end the run through the normal error
-path, and a lost link skips the restore moves.
+path. A lost link skips the restore moves.
 """
 
 # Standard library imports.
@@ -53,7 +55,7 @@ from portable_dropbot_self_tests.consts import (
 )
 
 # Local imports.
-from ..consts import DISCONNECT
+from ..consts import DISCONNECT, MOTOR_ESTOP
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
@@ -79,7 +81,9 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 #: The requests a running self-test lets through (see the contract).
-SELF_TEST_ALLOWED_TOPICS = (SELF_TEST_ABORT, SELF_TEST_PREFLIGHT_READ)
+SELF_TEST_ALLOWED_TOPICS = (SELF_TEST_ABORT, SELF_TEST_PREFLIGHT_READ, MOTOR_ESTOP)
+#: Why a run's restore leaves the pads where they are after an E-STOP.
+SELF_TEST_ESTOP_HALT = "E-STOP"
 #: How long plugin stop waits for a cancelled run to restore (a pad move
 #: alone may take 30 s).
 SELF_TEST_JOIN_TIMEOUT_S = 45.0
@@ -98,6 +102,9 @@ class PortableDropbotSelfTestMixinService(HasTraits):
     _self_test_cancel = Instance(threading.Event)
     #: The running run's daemon thread (see the module docstring).
     _self_test_thread = Instance(threading.Thread)
+    #: Set by an E-STOP during the run: no pad move is sent after it, the
+    #: restore's included (SelfTestBoard.move_pads). Reset by every claim.
+    _self_test_halt_reason = Str()
     #: Serializes the run claim. `Instance(threading.Lock)` is rejected on
     #: the Pi's Python 3.12, hence `Any()` with a `_default`.
     _self_test_claim = Any()
@@ -136,13 +143,42 @@ class PortableDropbotSelfTestMixinService(HasTraits):
         else:
             super()._on_request_refused(topic, message, reason)
 
+    def _on_motor_estop(self):
+        """Halt a running self-test, as the vendor runner does on an E-STOP:
+        the test stops at its next step, the restore switches the HV off and
+        no pad moves afterwards."""
+        super()._on_motor_estop()
+
+        with self._self_test_claim:
+            cancel = self._self_test_cancel
+
+            if cancel is not None:
+                self._self_test_halt_reason = SELF_TEST_ESTOP_HALT
+
+        if cancel is None:
+            return
+
+        cancel.set()
+        logger.warning(
+            f"Portable Dropbot E-STOP: self-test run {self._self_test_run_id} "
+            f"halted; HV off, the pads are not moved"
+        )
+
     def _board_session_reason(self):
         """Why another session or mode keeps the board from a self-test; the
         caller holds the PMT and fluorescence claims. A protocol run turns
-        realtime mode on for its duration, so realtime covers protocols."""
+        realtime mode on for its duration, so realtime covers protocols.
+        Home All and a smart pad engage hold no proxy lock, so their own
+        locks are checked."""
 
         if self.realtime_mode:
             return "realtime mode is on (a protocol may be running)"
+
+        if self._home_all_lock.locked():
+            return "Home All is running"
+
+        if self._pad_engage_lock.locked():
+            return "a smart chip lock or unlock is running"
 
         pmt_reason = self._pmt_busy_reason()
 
@@ -170,6 +206,7 @@ class PortableDropbotSelfTestMixinService(HasTraits):
 
             cancel = threading.Event()
             self._self_test_cancel = cancel
+            self._self_test_halt_reason = ""
             self._self_test_run_id = run_id
 
         return "", cancel
@@ -217,24 +254,11 @@ class PortableDropbotSelfTestMixinService(HasTraits):
         if thread is not None and thread.is_alive():
             thread.join(timeout=SELF_TEST_JOIN_TIMEOUT_S)
 
-            if thread.is_alive():
-                # Still stuck in a driver call holding the proxy lock: send
-                # the HV off past the lock rather than wait on it.
-                self._send_teardown_hv_off()
-            else:
-                with self._proxy_lock:
-                    self._send_teardown_hv_off()
+            # Bounded and past the proxy lock, which a run still stuck in a
+            # driver call holds; never raises.
+            self._deenergize("self-test teardown")
 
         super().cleanup()
-
-    def _send_teardown_hv_off(self):
-        """Best-effort HV off; a failure is logged, never raised."""
-
-        try:
-            if self.proxy is not None:
-                self.proxy.uart.hv_enable(0)
-        except Exception as error:
-            logger.warning(f"Self-test teardown: HV off failed: {error}")
 
     # ------------------------------------------------------------------ #
     # Requests                                                            #
@@ -387,6 +411,9 @@ class PortableDropbotSelfTestMixinService(HasTraits):
             self._resync_after_self_test(board, summary.get("hv_off_confirmed", False))
 
         error = summary["error"]
+
+        if self._self_test_halt_reason:
+            error = error or f"{self._self_test_halt_reason}: the run was halted"
 
         if board.link_lost():
             error = error or "the Portable DropBot disconnected during the run"

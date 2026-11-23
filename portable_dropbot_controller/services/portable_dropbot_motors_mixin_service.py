@@ -10,21 +10,22 @@
 
 # Standard library imports.
 import json
+import threading
 
 # Third-party imports.
+from dropbot_portable import MotorBoard
 from pydantic import ValidationError
 
 # Enthought library imports.
-from traits.api import HasTraits, Str, provides
+from traits.api import Any, Str, provides
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
 from ..consts import (
-    CHIP_CABIN_STATUS_ERROR,
-    CHIP_CABIN_STATUS_INDEX,
     CHIP_CABIN_TRAY_ONLY_FLAG,
+    CHIP_CABIN_WITH_POGOS_FLAG,
     CHIP_ENGAGE_MODE_SMART,
     FILTER_POSITIONS,
     MAGNET_APPLIED,
@@ -42,6 +43,7 @@ from ..consts import (
     PAD_ENGAGE_STATUS_MOTOR_ERROR,
     PAD_ENGAGE_STATUS_OK,
     PAD_ENGAGE_STEP_UM,
+    PMT_PRESET_PARK_MOTOR_FIRMWARE,
     SMART_ENGAGE_NEEDS,
     TRAY_ACTION_CODES,
     MoveTrayRequest,
@@ -50,6 +52,12 @@ from ..consts import (
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
+from ..motion_replies import (
+    acknowledged_failure,
+    filter_move_failure,
+    motor_command_failure,
+)
+from ..motion_safety import MotionSafetyMixin
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -77,13 +85,21 @@ def parse_move_tray_request(message):
 
 
 @provides(IPortableDropbotControlMixinService)
-class PortableDropbotMotorsMixinService(HasTraits):
-    """Mechanism macros and advanced per-motor moves. Every handler
-    finishes by republishing the motor picture, so the motor panel
-    repaints from what the hardware reports, not what was asked."""
+class PortableDropbotMotorsMixinService(MotionSafetyMixin):
+    """Mechanism macros and per-motor moves (Home All, the stops and the
+    judged ``_motion_call``: see MotionSafetyMixin). Every handler
+    republishes the motor picture, so the panel repaints from what the
+    hardware reports."""
 
     id = Str("portable_dropbot_motors_mixin_service")
     name = Str("Portable Dropbot Motors Mixin")
+
+    #: Held while a PAD_ENGAGE runs: a second engage is refused and a
+    #: retract waits for it, as on the vendor UI's slow lane.
+    _pad_engage_lock = Any()
+
+    def __pad_engage_lock_default(self):
+        return threading.Lock()
 
     # ------------------------------------------------------------------ #
     # Mechanism macros                                                     #
@@ -98,77 +114,75 @@ class PortableDropbotMotorsMixinService(HasTraits):
         direction = request.direction
 
         if direction == "toggle":
-            # The status pane's device picture: one click ejects, the
-            # next brings it back. Read the cabin state from the motor
-            # STATUS (byte 1) — the CHIP_CABIN_READ blob goes
-            # undecoded even in the vendor UI, but STATUS answers
-            # reliably (it feeds the mechanisms readout) and its state
-            # mirrors the ctrl vocabulary (0 = in, 1 = out), the same
-            # way mag reports 1 while engaged.
-            ok, motor_status = self._proxy_call(
-                "motor status read", lambda: self.proxy.uart.GetBoardStatus("motor")
-            )
+            direction = self._tray_toggle_direction()
 
-            if not ok or not motor_status or len(motor_status) < 2:
-                logger.warning("Tray toggle ignored: current tray position unknown.")
+            if direction is None:
                 return
 
-            direction = "in" if motor_status[1] == 1 else "out"
-
+        flags = (
+            CHIP_CABIN_WITH_POGOS_FLAG
+            if request.actuate_pogos
+            else CHIP_CABIN_TRAY_ONLY_FLAG
+        )
         move = f"tray {direction}" + ("" if request.actuate_pogos else " (tray only)")
         logger.info(f"Portable Dropbot {move} requested")
 
-        if request.actuate_pogos:
-            ok = self._move_tray_with_pogos(direction)
-        else:
-            ok = self._move_tray_only(direction)
-
-        logger.info(f"Portable Dropbot {move} --> {'ok' if ok else 'FAILED'}")
+        # The vendor UI's tray move: one CHIP_CABIN_CTRL, the pogo pushpad
+        # macro unless tray-only. The firmware's own interlocks park the
+        # PMT and make the magnet tray-safe first, or refuse the move.
+        self._motion_call(
+            move,
+            lambda: self.proxy.motor.chip_cabin_ctrl(
+                TRAY_ACTION_CODES[direction], flags
+            ),
+            MotorBoard.CHIP_CABIN_CTRL,
+        )
         self._publish_status_snapshot()
 
-    def _move_tray_with_pogos(self, direction):
-        """Run the firmware macro: release the pogo pushpads, move the
-        tray, press them again."""
-        # move_tray returns the driver error flag: True means the move
-        # reported an error status.
-        ok, error_flag = self._proxy_call(
-            f"tray {direction}", lambda: self.proxy.move_tray(direction)
+    def _tray_toggle_direction(self):
+        """The direction that flips the tray, or None when its state has no
+        single opposite. The status pane's device picture: one click
+        ejects, the next brings it back.
+
+        The cabin state comes from the motor STATUS (byte 1), in the ctrl
+        vocabulary (TRAY_ACTION_CODES: 0 in, 1 out). The magnet view
+        position, moving and FAULT states are reported instead of guessed.
+        """
+        ok, motor_status = self._proxy_call(
+            "motor status read", lambda: self.proxy.uart.GetBoardStatus("motor")
         )
 
-        return ok and error_flag is not True
+        if not ok or not motor_status or len(motor_status) < 2:
+            logger.warning("Tray toggle ignored: current tray position unknown.")
+            return None
 
-    def _move_tray_only(self, direction):
-        """Move the tray alone; the pogo pushpads stay where they are."""
-        ok, reply = self._proxy_call(
-            f"tray {direction} (tray only)",
-            lambda: self.proxy.motor.chip_cabin_ctrl(
-                TRAY_ACTION_CODES[direction], CHIP_CABIN_TRAY_ONLY_FLAG
-            ),
+        state = motor_status[1]
+
+        if state == TRAY_ACTION_CODES["in"]:
+            return "out"
+
+        if state == TRAY_ACTION_CODES["out"]:
+            return "in"
+
+        logger.warning(
+            f"Tray toggle ignored: the tray reports state 0x{state:02X} (moving, "
+            f"FAULT or the magnet view position); home or move it explicitly."
         )
 
-        # No reply at all is a failure too: the board never answered.
-        if not ok or reply is None:
-            return False
-
-        status = reply.status_data
-
-        return (
-            len(status) > CHIP_CABIN_STATUS_INDEX
-            and status[CHIP_CABIN_STATUS_INDEX] != CHIP_CABIN_STATUS_ERROR
-        )
+        return None
 
     def on_move_magnet_request(self, message):
         action = str(message).strip().lower()
+
         if action not in _MAGNET_ACTIONS:
             logger.warning(f"Unknown magnet action: {action!r}")
             return
+
         logger.info(f"Portable Dropbot magnet {action} requested")
-        ok, result = self._proxy_call(
-            f"magnet {action}", lambda: self.proxy.move_magnet(action)
-        )
-        logger.info(
-            f"Portable Dropbot magnet {action} --> "
-            f"{'ok' if ok and result not in (None, False) else 'FAILED'}"
+        self._motion_call(
+            f"magnet {action}",
+            lambda: self.proxy.move_magnet(action),
+            MotorBoard.MAG_CTRL,
         )
         self._publish_status_snapshot()
 
@@ -180,44 +194,46 @@ class PortableDropbotMotorsMixinService(HasTraits):
         MAGNET_HEIGHT_MM_BOUNDS[0] (the column's "Default" sentinel)
         runs the firmware's engage macro; any other height drives the
         magnet motor to that absolute position (mm, converted to the
-        firmware's µm move units). On hardware error the ack is NOT
-        published — the protocol step's wait_for times out and the
-        step fails (consistent with the rest of this mixin's request
-        handlers).
+        firmware's µm move units). Only a move the board confirms is
+        acked: on a refusal (the magnet needs the tray in and the axis
+        homed), a timeout or a FAULT the error is published instead, the
+        protocol step's wait_for times out and the step fails.
         """
         payload = json.loads(str(message))
         on = bool(payload["on"])
         height_mm = float(payload["height_mm"])
 
         if not on:
-            ok, result = self._proxy_call(
-                "protocol magnet disengage", lambda: self.proxy.move_magnet("disengage")
+            applied = self._motion_call(
+                "protocol magnet disengage",
+                lambda: self.proxy.move_magnet("disengage"),
+                MotorBoard.MAG_CTRL,
             )
         elif height_mm < MAGNET_HEIGHT_MM_BOUNDS[0]:
-            ok, result = self._proxy_call(
-                "protocol magnet engage", lambda: self.proxy.move_magnet("engage")
+            applied = self._motion_call(
+                "protocol magnet engage",
+                lambda: self.proxy.move_magnet("engage"),
+                MotorBoard.MAG_CTRL,
             )
         else:
             value_um = round(height_mm * 1000)
-            ok, result = self._proxy_call(
+            applied = self._motion_call(
                 f"protocol magnet absolute {value_um}",
                 lambda: self.proxy.uart.motorAbsoluteMove(
                     MOTOR_IDS["magnet"], value_um
                 ),
+                MotorBoard.MOTOR_CONTROL,
+                failure=motor_command_failure,
             )
 
-        if ok and result not in (None, False):
-            logger.info(
-                f"Portable Dropbot protocol magnet "
-                f"{'on' if on else 'off'} ({height_mm} mm) --> ok"
-            )
+        if applied:
             publish_message(topic=MAGNET_APPLIED, message=str(int(on)))
         else:
             logger.warning(
                 f"Portable Dropbot protocol magnet "
-                f"{'on' if on else 'off'} ({height_mm} mm) --> "
-                f"FAILED; no ack published"
+                f"{'on' if on else 'off'} ({height_mm} mm) --> no ack published"
             )
+
         self._publish_status_snapshot()
 
     def on_set_filter_request(self, message):
@@ -231,13 +247,11 @@ class PortableDropbotMotorsMixinService(HasTraits):
         # The generated motor proxy waits up to 60 s for the move reply;
         # the uart facade's setFilter gives up after 5 s and reports a
         # wheel still turning as a failure.
-        ok, result = self._proxy_call(
+        self._motion_call(
             f"filter {position}",
             lambda: self.proxy.motor.fluorescence_ctrl(position),
-        )
-        logger.info(
-            f"Portable Dropbot filter --> {position}: "
-            f"{'ok' if ok and result is not None else 'FAILED'}"
+            MotorBoard.FLUORESCENCE_CTRL,
+            failure=filter_move_failure,
         )
         self._publish_status_snapshot()
 
@@ -254,15 +268,12 @@ class PortableDropbotMotorsMixinService(HasTraits):
         # moves only via the raw per-motor moves/home.
         action = "press" if engaged else "release"
         logger.info(f"Portable Dropbot pogo {action} requested")
-        ok, result = self._proxy_call(
-            f"pogo {action}", lambda: self.proxy.uart.setPogo(1 if engaged else 0)
-        )
-        accepted = ok and result not in (None, False)
-        logger.info(
-            f"Portable Dropbot pogo {action} --> {'ok' if accepted else 'FAILED'}"
-        )
 
-        return accepted
+        return self._motion_call(
+            f"pogo {action}",
+            lambda: self.proxy.uart.setPogo(1 if engaged else 0),
+            MotorBoard.PUSHPAD_CTRL,
+        )
 
     def on_lock_chip_request(self, message):
         """Chip lock IS the pogo pads pressing the chip; a topic of
@@ -288,22 +299,38 @@ class PortableDropbotMotorsMixinService(HasTraits):
 
     def _pad_engage(self, action, mode):
         """Run one PAD_ENGAGE with the fixed smart descent. The board
-        replies only once the pads stop (up to 45 s), and the proxy lock
-        is held until then. A failure is published on CHIP_LOCK_FAILED."""
+        replies only once the pads stop (up to 45 s); the pad engage lock,
+        not the proxy lock, is held until then. A failure is published on
+        CHIP_LOCK_FAILED."""
         engage = action == PAD_ENGAGE_ACTION_ENGAGE
         context = "smart chip lock" if engage else "chip unlock (pad retract)"
         logger.info(f"Portable Dropbot {context} requested")
 
-        ok, reply = self._proxy_call(
-            context,
-            lambda: self.proxy.sig.pad_engage(
-                action,
-                mode,
-                PAD_ENGAGE_STEP_UM,
-                PAD_ENGAGE_MAX_STEPS,
-                PAD_ENGAGE_OVERDRIVE_UM,
-            ),
-        )
+        if not self._pad_engage_lock.acquire(blocking=not engage):
+            chip_lock_failed_publisher.publish(
+                {
+                    "action": "lock",
+                    "error": "a pad engage is already in flight",
+                    "pads_may_be_pressed": self.pads_smart_engaged,
+                }
+            )
+            return
+
+        try:
+            ok, reply = self._proxy_call(
+                context,
+                lambda: self.proxy.sig.pad_engage(
+                    action,
+                    mode,
+                    PAD_ENGAGE_STEP_UM,
+                    PAD_ENGAGE_MAX_STEPS,
+                    PAD_ENGAGE_OVERDRIVE_UM,
+                ),
+                serialize=False,
+            )
+        finally:
+            self._pad_engage_lock.release()
+
         status = reply.status if ok and reply is not None else None
 
         if status == PAD_ENGAGE_STATUS_OK:
@@ -349,22 +376,15 @@ class PortableDropbotMotorsMixinService(HasTraits):
 
         return error
 
-    def on_home_all_request(self, message):
-        # The full homing sequence runs tens of seconds; it executes
-        # here on the worker thread, so the GUI stays live and the
-        # snapshot lands when the hardware is truly home.
-        logger.info("Portable Dropbot home-all requested (runs tens of seconds)")
-        ok, _ = self._proxy_call("home all", lambda: self.proxy.home_all())
-        logger.info(f"Portable Dropbot home-all --> {'finished' if ok else 'FAILED'}")
-        self._publish_status_snapshot()
-
     # ------------------------------------------------------------------ #
     # Per-motor moves (µm — the firmware's 0.001 mm move units)           #
     # ------------------------------------------------------------------ #
     def _motor_id(self, name):
         motor_id = MOTOR_IDS.get(str(name).strip().lower())
+
         if motor_id is None:
             logger.warning(f"Unknown motor: {name!r}")
+
         return motor_id
 
     def on_motor_move_request(self, message):
@@ -372,73 +392,78 @@ class PortableDropbotMotorsMixinService(HasTraits):
         "value": distance in µm (the firmware's 0.001 mm units)}."""
         payload = json.loads(str(message))
         motor_id = self._motor_id(payload.get("motor"))
+
         if motor_id is None:
             return
-        mode = str(payload.get("mode", "absolute"))
+
+        mode = "relative" if payload.get("mode") == "relative" else "absolute"
         value = int(payload.get("value", 0))
-        if mode == "relative":
-            ok, result = self._proxy_call(
-                f"motor {payload['motor']} relative {value}",
-                lambda: self.proxy.uart.motorRelativeMove(motor_id, value),
-            )
-        else:
-            ok, result = self._proxy_call(
-                f"motor {payload['motor']} absolute {value}",
-                lambda: self.proxy.uart.motorAbsoluteMove(motor_id, value),
-            )
-        # motorAction returns the final position on success, an error
-        # string or status otherwise.
-        logger.info(
-            f"Portable Dropbot motor {payload['motor']} {mode} "
-            f"move {value} um --> "
-            f"{result if ok and result is not None else 'FAILED'}"
+        self._stopped_motor_ids.discard(motor_id)
+
+        self._motion_call(
+            f"motor {payload['motor']} {mode} move {value} um",
+            lambda: self.proxy.uart.motorAction(motor_id, mode, value),
+            MotorBoard.MOTOR_CONTROL,
+            failure=motor_command_failure,
+            motor_id=motor_id,
         )
         self._publish_motors()
 
     def on_motor_set_speed_request(self, message):
-        """JSON {"motor": name, "value": run speed in µm/s}. Runtime
-        only — the flashed default returns on reboot, and homing
-        shares this speed, so keep bumps temporary (see the driver's
-        setMotorSpeed notes)."""
+        """JSON {"motor": name, "value": run speed in REAL µm/s}. The
+        driver converts it for motor firmware before layout 2.0, and
+        refuses the write (a raised error, published) while it cannot
+        confirm the board's units. Runtime only, until the motor board
+        reboots; homing's leave-origin phase runs at it too (the driver's
+        setMotorSpeed CAUTION). The vendor UI applies it as is and never
+        restores a default, so neither does this."""
         payload = json.loads(str(message))
         motor_id = self._motor_id(payload.get("motor"))
-        if motor_id is None:
-            return
-        speed = int(payload.get("value", 0))
-        ok, accepted = self._proxy_call(
-            f"motor {payload['motor']} speed {speed}",
-            lambda: self.proxy.uart.setMotorSpeed(motor_id, speed),
-        )
-        logger.info(
-            f"Portable Dropbot motor {payload['motor']} speed "
-            f"{speed} um/s --> "
-            f"{accepted if ok and accepted is not None else 'FAILED'}"
-        )
 
-    def on_motor_stop_request(self, message):
-        motor_id = self._motor_id(message)
         if motor_id is None:
             return
-        ok, result = self._proxy_call(
-            f"motor {message} stop", lambda: self.proxy.uart.motorStop(motor_id)
+
+        speed = int(payload.get("value", 0))
+
+        self._motion_call(
+            f"motor {payload['motor']} speed {speed} um/s",
+            lambda: self.proxy.uart.setMotorSpeed(motor_id, speed),
+            MotorBoard.MOTOR_SPEED_SET,
+            failure=motor_command_failure,
         )
-        logger.info(
-            f"Portable Dropbot motor {message} stop --> "
-            f"{result if ok and result is not None else 'FAILED'}"
-        )
-        self._publish_motors()
 
     def on_motor_home_request(self, message):
+        """Home one motor with a raw MOTOR_CONTROL home, except the PMT on
+        motor firmware PMT_PRESET_PARK_MOTOR_FIRMWARE and newer: there it
+        runs the driver's PMT_RESET, which homes and then parks at
+        `_dp_park`, so it ends where the PMT pane's spot pick says homing
+        ends. Older firmware parks where its raw home ends."""
         motor_id = self._motor_id(message)
+
         if motor_id is None:
             return
-        ok, result = self._proxy_call(
-            f"motor {message} home", lambda: self.proxy.uart.motorHome(motor_id)
-        )
-        logger.info(
-            f"Portable Dropbot motor {message} home --> "
-            f"{result if ok and result is not None else 'FAILED'}"
-        )
+
+        self._stopped_motor_ids.discard(motor_id)
+
+        if motor_id == MOTOR_IDS["pmt"] and self._motor_firmware_at_least(
+            PMT_PRESET_PARK_MOTOR_FIRMWARE
+        ):
+            self._motion_call(
+                "motor pmt home (PMT_RESET, ends at park)",
+                lambda: self.proxy.motor.pmt_reset(),
+                MotorBoard.PMT_RESET,
+                failure=acknowledged_failure,
+                motor_id=motor_id,
+            )
+        else:
+            self._motion_call(
+                f"motor {message} home",
+                lambda: self.proxy.uart.motorHome(motor_id),
+                MotorBoard.MOTOR_CONTROL,
+                failure=motor_command_failure,
+                motor_id=motor_id,
+            )
+
         self._publish_motors()
 
     def on_refresh_motors_request(self, message):

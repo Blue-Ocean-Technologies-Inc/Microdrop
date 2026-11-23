@@ -1,0 +1,84 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+"""Portable DropBot device constants: serial link, HV, lighting,
+capacitance calibration, connection monitoring and fans."""
+
+#: Serial defaults for the Portable Dropbot boards. The driver's
+#: connect() probes its own baud whitelist beyond this starting rate.
+DEFAULT_BAUD_RATE = 115200
+
+#: Channel-count fallback for request validation before the driver's
+#: own board detection (120 or 200) has answered.
+DEFAULT_NUM_CHANNELS = 200
+
+#: HV actuation defaults (both Int end-to-end, like every device) and
+#: UI setpoint bounds, carried over from the original portable pane
+#: (which drove this same hardware).
+DEFAULT_VOLTAGE = 100
+DEFAULT_FREQUENCY = 10_000
+VOLTAGE_BOUNDS = (30, 200)
+FREQUENCY_BOUNDS = (50, 60_000)
+
+#: Illumination LED brightness (%), applied on connect and from the
+#: status pane's spinner. The firmware takes a raw 0-255 byte.
+LIGHT_INTENSITY_BOUNDS = (0, 100)
+DEFAULT_LIGHT_INTENSITY = 50
+LIGHT_INTENSITY_RAW_MAX = 255
+
+#: RGB indicator LED states the signal board knows.
+RGB_LIGHT_STATES = ("off", "red", "green", "yellow")
+
+#: ML calibration runs at EXACTLY this V/F (hardware-validated by the
+#: vendor's own calibration macro; anything else invalidates the fit).
+CAL_VOLTAGE = 100
+CAL_FREQUENCY = 10_000
+
+#: Electrode-path capacitance gain (permille, EF-persisted); 692 is
+#: the vendor's HW-benchmark default for the 10 pF/channel board.
+ELECTRODE_GAIN_PERMILLE_BOUNDS = (0, 5000)
+DEFAULT_ELECTRODE_GAIN_PERMILLE = 692
+
+#: Multi-slope reference-cap provisioning: 3 = 10/100/470 pF board,
+#: 5 = new board adding 1000/2200 pF.
+CAL_CAPS_CHOICES = (3, 5)
+
+#: Seconds between monitor ticks: a port scan while disconnected, a
+#: status poll (published to the panes) while connected.
+MONITOR_INTERVAL_S = 2
+
+#: Consecutive status polls with neither board answering before the
+#: link is declared dead and scanning resumes. Without this a silent
+#: board is polled forever — every poll a stack of command timeouts
+#: that overruns the tick and floods the log — while the UI says
+#: "Active".
+STATUS_FAILURE_DISCONNECT_LIMIT = 3
+
+#: Once a firmware update (the vendor flash tool) releases its priority lease
+#: on our port, wait this long before scanning again — the vendor UI's
+#: YIELD_RECONNECT_DELAY_S.
+PORT_LEASE_RELEASE_DELAY_S = 2.0
+
+#: How long each de-energize command (HV off, electrodes cleared, PMT off)
+#: waits for its answer when the link is closed on purpose, so a dead board
+#: cannot stall the disconnect — the vendor UI's SHUTDOWN_TIMEOUT_S.
+SHUTDOWN_TIMEOUT_S = 1.0
+
+#: Pause before the one retry of a firmware version read that went
+#: unanswered at connect: a board still busy with its boot homing answers
+#: late.
+FIRMWARE_READ_RETRY_DELAY_S = 1.0
+
+#: Boards whose fans the driver's setFan(on, board=...) drives, by the
+#: driver's own names: the MCU (signal) board fan or the motor board fans.
+FAN_BOARDS = ("signal", "motor")
+#: The board the status pane's fan toggle drives unless the Portable
+#: DropBot Settings preference says otherwise.
+DEFAULT_FAN_BOARD = "signal"

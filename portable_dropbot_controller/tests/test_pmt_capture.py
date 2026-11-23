@@ -9,8 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """Tests for the PMT capture helpers: frame decode, stream packet assembly
-(capture and live), cadence calibration, stats, the bench-compatible CSV,
-and the position-table decode. Pure functions, no driver, no hardware."""
+(capture and live), cadence calibration, stats, and the bench-compatible
+CSV. Pure functions, no driver, no hardware."""
 
 # Standard library imports.
 import csv
@@ -27,7 +27,6 @@ from portable_dropbot_controller.pmt_capture import (
     calibrate_period,
     capture_filename,
     capture_stats,
-    decode_pmt_positions,
     decode_stream_frame,
     write_capture_csv,
 )
@@ -152,24 +151,3 @@ def test_capture_filename():
     assert (
         capture_filename("acquire", 50, now) == "pmt_acquire_20260908-140509_gain50.csv"
     )
-
-
-def test_decode_pmt_positions_drops_the_park_location():
-    blob = struct.pack(">6i", 0, 1000, 24500, 0, 61000, -5)
-
-    assert decode_pmt_positions(b"_dp_pmt\x00" + blob + b"trailing") == [
-        1000,
-        24500,
-        0,
-        61000,
-        -5,
-    ]
-
-
-def test_decode_pmt_positions_pads_a_legacy_five_location_table():
-    blob = struct.pack(">5i", 0, 1000, 24500, 0, 61000)
-
-    assert decode_pmt_positions(b"_dp_pmt\x00" + blob) == [1000, 24500, 0, 61000, 0]
-
-    with pytest.raises(ValueError):
-        decode_pmt_positions(b"_dp_pmt\x00" + blob[:8])

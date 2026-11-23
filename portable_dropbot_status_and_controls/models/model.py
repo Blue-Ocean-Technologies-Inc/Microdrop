@@ -12,8 +12,10 @@
 from traits.api import (
     Bool,
     Button,
+    Dict,
     Event,
     List,
+    Property,
     Range,
     Str,
     observe,
@@ -158,6 +160,45 @@ class PortableDropbotStatusAndControlsModel(DropletReadoutsModelMixin, BaseStatu
     last_alarm = Str("-", desc="Most recent decoded alarm or error")
     #: Timestamped, one per line; the handler trims it to ALARM_LOG_LENGTH.
     alarm_log = Str("-", desc="Recent alarms and errors, newest first")
+    #: Board alarms raised and not yet cleared: code -> title. A board
+    #: clear (AlarmReport active 0) retires its code.
+    active_alarms = Dict(Str, Str)
+    active_alarms_display = Property(Str, observe="active_alarms.items")
+
+    def _get_active_alarms_display(self):
+        if not self.active_alarms:
+            return "None"
+
+        return "; ".join(
+            f"[{code}] {title}" for code, title in sorted(self.active_alarms.items())
+        )
+
+    # ---- Board health -------------------------------------------------
+    #: Running firmware tags, read once per connect.
+    firmware_display = Str("-", desc="Board firmware versions (MCU, motor)")
+    #: The STATUS tail (MCU firmware 1.0.1.30+); n/a on older firmware.
+    hv_setpoint_display = Str("n/a", desc="HV setpoint the board reports")
+    faults_display = Str("n/a", desc="STATUS fault flags, by name")
+    #: Clears the firmware halt latch (``halted``), after a confirm.
+    clear_halt_button = Button("Clear Halt")
+
+    @observe("connected")
+    def _forget_board_health(self, event):
+        # Per-connection knowledge: the next connect reads it afresh.
+        if not event.new:
+            self.firmware_display = "-"
+            self.active_alarms = {}
+
+    @observe("halted")
+    def _restore_icon_after_halt_clear(self, event):
+        # The base model paints the halt colour; a cleared halt goes back
+        # to the chip colour.
+        if not event.new and self.connected:
+            self.icon_color = (
+                self.CONNECTED_COLOR
+                if self.chip_inserted
+                else self.CONNECTED_NO_DEVICE_COLOR
+            )
 
     # ---- The rest of the signal board's STATUS fields, mirroring
     # the vendor UI's Connection/Status tab -----------------------------
@@ -166,11 +207,10 @@ class PortableDropbotStatusAndControlsModel(DropletReadoutsModelMixin, BaseStatu
     chip_pad_status_text = Str("-", desc="Which pogo pads are on the chip")
     out_power_display = Str("-", desc="Heater output power (%)")
     heater_on_display = Str("-", desc="Heater enable flag (temp_onoff)")
-    fan_duty_display = Str("-", desc="Cooling fan duty (%)")
+    fan_duty_display = Str("-", desc="Which cooling fans are commanded on")
     illumination_display = Str(
         "-", desc="Illumination LED brightness the board reports"
     )
-    pmt_display = Str("-", desc="PMT reading")
     chip_short_display = Str("-", desc="Chip short-circuit flag")
     chip_res_display = Str("-", desc="Chip resistance reading")
     cap_match_display = Str("-", desc="Capacitance-match flag")

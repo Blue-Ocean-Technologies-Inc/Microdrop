@@ -43,10 +43,15 @@ from ..consts import CAPTURE_RESULTS_TABLE_MIN_HEIGHT
 ROW_TABLE_ENABLED_WHEN = "connected and not busy and not protocol_running"
 
 
-def key_column(name, label):
-    """The read-only identity column, sized so its text is never elided."""
+def key_column(name, label, tooltip=""):
+    """The read-only identity column, sized so its text is never elided;
+    `tooltip` is its cells' help text."""
     return ActiveRowObjectColumn(
-        name=name, label=label, editable=False, resize_mode="resize_to_contents"
+        name=name,
+        label=label,
+        tooltip=tooltip,
+        editable=False,
+        resize_mode="resize_to_contents",
     )
 
 

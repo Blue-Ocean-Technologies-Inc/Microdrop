@@ -21,18 +21,24 @@ import json
 import struct
 import threading
 import time
+from collections import namedtuple
 from pathlib import Path
 
 # Third-party imports.
 import pytest
 
 # Enthought library imports.
-from traits.api import Any, HasTraits, List
+from traits.api import Any, HasTraits, Int, List
 
 # Microdrop package imports.
 from portable_dropbot_controller.consts import (
+    MECHANISM_STATE_FAULT,
+    MOTOR_ACTION_PARK,
+    MOTOR_IDS,
     PMT_ADC_FULL_SCALE,
-    PMT_PARK_LOCATION,
+    PMT_LEGACY_PARK_LOCATION,
+    PMT_LOCATION_MOVING,
+    PMT_PRESET_PARK_MOTOR_FIRMWARE,
     PMT_RF_OHMS,
     PMT_SPOT_SLOTS,
     PMT_STREAM_AVG,
@@ -51,6 +57,19 @@ from portable_dropbot_controller.services import (
 from portable_dropbot_controller.services.portable_dropbot_pmt_mixin_service import (
     PortableDropbotPmtMixinService,
 )
+
+#: The generated motor proxy's PMT_CTRL / MOTOR_CONTROL replies.
+_PmtCtrlReply = namedtuple("_PmtCtrlReply", "location")
+_MotorControlReply = namedtuple("_MotorControlReply", "motor_id status position")
+#: Motor firmware older than the preset/park change.
+_LEGACY_MOTOR_FIRMWARE = (1, 0, 0, 24)
+
+
+class _LastResult:
+    """The driver's CommandResult for a refused request."""
+
+    def describe(self):
+        return "BUSY: the board refused the command"
 
 
 def _frame(idx, values):
@@ -117,12 +136,33 @@ class _Uart:
     def read_uid(self):
         return "abc123"
 
+    #: The motor board's PMT position table (pmt_defaults), location 1 first.
+    pmt_locations = (0, 1000, 0, 24500, 0, 0)
+    #: The PMT entry of _dp_park: (source, value_um); None answers no reply.
+    pmt_park = (0, 0)
+
     def getBoardParameter(self, board, name):
-        return b"_dp_pmt\x00" + struct.pack(">6i", 0, 1000, 0, 24500, 0, 0)
+        self.log.append(f"read {name}")
+
+        if name == "park":
+            if self.pmt_park is None:
+                return None
+
+            entries = [(0, 0)] * PMT_SPOT_SLOTS
+            entries[MOTOR_IDS["pmt"]] = self.pmt_park
+
+            return b"_dp_park\x00" + struct.pack(
+                ">12i", *(value for entry in entries for value in entry)
+            )
+
+        return b"_dp_pmt\x00" + struct.pack(">6i", *self.pmt_locations)
 
     def pmt_acquire_collect(self):
         self.log.append("acquire_collect")
         return self.acquire_capture
+
+    def last_result(self, cmd=None):
+        return _LastResult()
 
 
 class _Sig:
@@ -168,10 +208,25 @@ class _Sig:
 class _Motor:
     def __init__(self, log):
         self.log = log
+        #: PMT_CTRL's reply location; None answers no reply (a BUSY), and
+        #: the default lands on the requested location.
+        self.pmt_location = "landed"
+        self.park_status = 0
 
-    def pmt_ctrl(self, slot):
-        self.log.append(f"move {slot}")
-        return object()
+    def pmt_ctrl(self, location):
+        self.log.append(f"move {location}")
+
+        if self.pmt_location is None:
+            return None
+
+        landed = location if self.pmt_location == "landed" else self.pmt_location
+
+        return _PmtCtrlReply(landed)
+
+    def motor_control(self, motor_id, action, distance):
+        self.log.append(f"motor_control {motor_id} {action} {distance}")
+
+        return _MotorControlReply(motor_id, self.park_status, 0)
 
     def read_uid(self):
         return None
@@ -189,8 +244,25 @@ class _Base(HasTraits):
     _proxy_lock = Any()
     errors = List()
     log = List()
+    #: The motor firmware version; None is unknown, even after a re-read.
+    motor_firmware = Any(_LEGACY_MOTOR_FIRMWARE)
+    #: How many times the firmware version was asked for.
+    firmware_queries = Int()
+    #: The contexts of the driver calls made outside the proxy lock.
+    unserialized = List()
 
-    def _proxy_call(self, context, call):
+    def _motor_firmware_known(self):
+        self.firmware_queries += 1
+
+        return self.motor_firmware is not None
+
+    def _motor_firmware_at_least(self, version):
+        return self.motor_firmware is not None and self.motor_firmware >= version
+
+    def _proxy_call(self, context, call, serialize=True):
+        if not serialize:
+            self.unserialized.append(context)
+
         return True, call()
 
     def _publish_error(self, context, error):
@@ -278,32 +350,117 @@ def _run(h, message):
         h._pmt_capture_thread.join(timeout=5)
 
 
-def test_spots_read_publishes_non_zero_slots(published):
-    h = _Harness()
+@pytest.mark.parametrize(
+    "motor_firmware, expected",
+    [
+        # Older firmware: location 1 is park, so location n + 1 is spot n.
+        (_LEGACY_MOTOR_FIRMWARE, {1: 1000, 3: 24500}),
+        # Preset firmware: location n is spot n.
+        (PMT_PRESET_PARK_MOTOR_FIRMWARE, {2: 1000, 4: 24500}),
+    ],
+)
+def test_spots_read_maps_locations_onto_spots(published, motor_firmware, expected):
+    h = _Harness(motor_firmware=motor_firmware)
     h.proxy = _Session(h.log)
+
     h.on_pmt_spots_read_request("")
+
     assert published["spots"] == [
-        {"spots": [{"slot": 1, "position_um": 1000}, {"slot": 3, "position_um": 24500}]}
+        {
+            "spots": [
+                {"slot": slot, "position_um": position}
+                for slot, position in expected.items()
+            ]
+        }
     ]
-    assert h._pmt_spot_positions == {1: 1000, 3: 24500}
+    assert h._pmt_spot_positions == expected
 
 
-def test_move_to_spot_moves_through_the_motor_proxy(published):
-    h = _Harness()
+@pytest.mark.parametrize(
+    "motor_firmware, spot, location",
+    [
+        (_LEGACY_MOTOR_FIRMWARE, 2, 2 + PMT_LEGACY_PARK_LOCATION),
+        (_LEGACY_MOTOR_FIRMWARE, 0, PMT_LEGACY_PARK_LOCATION),
+        (PMT_PRESET_PARK_MOTOR_FIRMWARE, 1, 1),
+        (PMT_PRESET_PARK_MOTOR_FIRMWARE, PMT_SPOT_SLOTS, PMT_SPOT_SLOTS),
+    ],
+)
+def test_move_to_spot_moves_to_the_spots_location(
+    published, motor_firmware, spot, location
+):
+    h = _Harness(motor_firmware=motor_firmware)
     h.proxy = _Session(h.log)
 
-    h.on_pmt_move_to_spot_request("2")
+    h.on_pmt_move_to_spot_request(str(spot))
 
-    assert h.log == [f"move {2 + PMT_PARK_LOCATION}"]
+    assert h.log == [f"move {location}"]
+    assert h.errors == []
 
 
-def test_move_to_spot_refuses_a_spot_out_of_range(published):
-    h = _Harness()
+def test_move_to_park_uses_the_motor_park_on_preset_firmware(published):
+    h = _Harness(motor_firmware=PMT_PRESET_PARK_MOTOR_FIRMWARE)
     h.proxy = _Session(h.log)
 
-    h.on_pmt_move_to_spot_request(str(PMT_SPOT_SLOTS + 1))
+    h.on_pmt_move_to_spot_request("0")
+
+    assert h.log == [f"motor_control {MOTOR_IDS['pmt']} {MOTOR_ACTION_PARK} 0"]
+    assert h.errors == []
+
+
+@pytest.mark.parametrize(
+    "motor_firmware, spot",
+    [
+        # Older firmware has one spot fewer: its location 1 is park.
+        (_LEGACY_MOTOR_FIRMWARE, PMT_SPOT_SLOTS),
+        (PMT_PRESET_PARK_MOTOR_FIRMWARE, PMT_SPOT_SLOTS + 1),
+        (PMT_PRESET_PARK_MOTOR_FIRMWARE, -1),
+    ],
+)
+def test_move_to_spot_refuses_a_spot_the_firmware_lacks(
+    published, motor_firmware, spot
+):
+    h = _Harness(motor_firmware=motor_firmware)
+    h.proxy = _Session(h.log)
+
+    h.on_pmt_move_to_spot_request(str(spot))
 
     assert h.log == []
+    assert len(h.errors) == 1 and f"spot {spot}" in h.errors[0]
+
+
+def test_move_refused_busy_while_the_tray_moves_is_reported(published):
+    h = _Harness(motor_firmware=PMT_PRESET_PARK_MOTOR_FIRMWARE)
+    h.proxy = _Session(h.log)
+    h.proxy.motor.pmt_location = None
+
+    h.on_pmt_move_to_spot_request("3")
+
+    assert h.log == ["move 3"]
+    assert len(h.errors) == 1 and "BUSY" in h.errors[0]
+
+
+@pytest.mark.parametrize(
+    "location, reason",
+    [(MECHANISM_STATE_FAULT, "FAULT"), (PMT_LOCATION_MOVING, "moving")],
+)
+def test_move_that_does_not_land_is_reported(published, location, reason):
+    h = _Harness()
+    h.proxy = _Session(h.log)
+    h.proxy.motor.pmt_location = location
+
+    h.on_pmt_move_to_spot_request("1")
+
+    assert len(h.errors) == 1 and reason in h.errors[0]
+
+
+def test_park_refused_by_the_motor_is_reported(published):
+    h = _Harness(motor_firmware=PMT_PRESET_PARK_MOTOR_FIRMWARE)
+    h.proxy = _Session(h.log)
+    h.proxy.motor.park_status = -7
+
+    h.on_pmt_move_to_spot_request("0")
+
+    assert len(h.errors) == 1 and "-7" in h.errors[0]
 
 
 def test_move_to_spot_refused_while_a_capture_is_running(published):
@@ -366,15 +523,71 @@ def test_capture_runs_each_spot_and_tears_down(published, tmp_path):
     assert h._pmt_capturing is False
 
 
-def test_capture_parks_the_pmt_when_requested(published):
-    h = _Harness()
+@pytest.mark.parametrize(
+    "motor_firmware, spot_move, park",
+    [
+        (_LEGACY_MOTOR_FIRMWARE, "move 2", f"move {PMT_LEGACY_PARK_LOCATION}"),
+        (
+            PMT_PRESET_PARK_MOTOR_FIRMWARE,
+            "move 1",
+            f"motor_control {MOTOR_IDS['pmt']} {MOTOR_ACTION_PARK} 0",
+        ),
+    ],
+)
+def test_capture_moves_and_parks_per_firmware(
+    published, tmp_path, motor_firmware, spot_move, park
+):
+    h = _Harness(motor_firmware=motor_firmware)
     h.proxy = _Session(h.log)
     payload = json.loads(_request([{"slot": 1, "gain": 50, "exposure_s": 1.0}]))
     payload["park_motor"] = True
 
     _run(h, json.dumps(payload))
 
-    assert h.log[-1] == f"move {PMT_PARK_LOCATION}"
+    assert spot_move in h.log
+    assert h.log[-1] == park
+    assert published["done"][-1]["ok"] is True
+
+    # The CSV records the motor location the spot was measured at.
+    csv_path = Path(published["done"][-1]["results"][0]["csv_path"])
+    location = spot_move.split()[-1]
+
+    assert f"# motor_location={location}" in csv_path.read_text().splitlines()
+
+
+def test_capture_fails_a_spot_the_firmware_lacks_and_continues(published):
+    h = _Harness(motor_firmware=_LEGACY_MOTOR_FIRMWARE)
+    h.proxy = _Session(h.log)
+
+    _run(
+        h,
+        _request(
+            [
+                {"slot": PMT_SPOT_SLOTS, "gain": 10, "exposure_s": 1.0},
+                {"slot": 1, "gain": 20, "exposure_s": 1.0},
+            ]
+        ),
+    )
+
+    done = published["done"][-1]
+
+    assert done["ok"] is False
+    assert f"spot {PMT_SPOT_SLOTS}" in done["results"][0]["error"]
+    assert done["results"][1]["error"] == ""
+    assert "move 2" in h.log
+
+
+def test_capture_spot_refused_busy_fails_that_spot(published):
+    h = _Harness(motor_firmware=PMT_PRESET_PARK_MOTOR_FIRMWARE)
+    h.proxy = _Session(h.log)
+    h.proxy.motor.pmt_location = None
+
+    _run(h, _request([{"slot": 2, "gain": 10, "exposure_s": 1.0}]))
+
+    done = published["done"][-1]
+
+    assert done["ok"] is False
+    assert "BUSY" in done["results"][0]["error"]
 
 
 def test_failed_stream_start_records_error_and_continues(published):
@@ -800,3 +1013,115 @@ def test_acquire_old_single_gain_payload_still_validates(published):
     done = published["acquire"][-1]
     assert done["gain"] == 42
     assert done["rf_ohms"] == pytest.approx(PMT_RF_OHMS)
+
+
+# --------------------------------------------------------------------- #
+# Unknown motor firmware and the renumbered spot table                   #
+# --------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("spot", ["0", "2"])
+def test_moves_are_refused_while_the_motor_firmware_stays_unknown(published, spot):
+    h = _Harness(motor_firmware=None)
+    h.proxy = _Session(h.log)
+
+    h.on_pmt_move_to_spot_request(spot)
+
+    # The version was asked for (the monitor re-reads it), then nothing moved.
+    assert h.firmware_queries >= 1
+    assert h.log == []
+    assert len(h.errors) == 1 and "firmware version is unknown" in h.errors[0]
+
+
+def test_spots_read_is_refused_while_the_motor_firmware_stays_unknown(published):
+    h = _Harness(motor_firmware=None)
+    h.proxy = _Session(h.log)
+
+    h.on_pmt_spots_read_request("")
+
+    assert published["spots"] == []
+    assert len(h.errors) == 1 and "firmware version is unknown" in h.errors[0]
+
+
+def test_capture_fails_its_spots_while_the_motor_firmware_stays_unknown(published):
+    h = _Harness(motor_firmware=None)
+    h.proxy = _Session(h.log)
+
+    _run(h, _request([{"slot": 1, "gain": 50, "exposure_s": 1.0}]))
+
+    assert not any(entry.startswith("move") for entry in h.log)
+    assert "firmware version is unknown" in published["done"][-1]["results"][0]["error"]
+
+
+@pytest.mark.parametrize(
+    "locations, park, warned",
+    [
+        # Location 1 at home: the old park slot, never re-taught.
+        ((0, 1000, 0, 24500, 0, 0), (0, 0), True),
+        # Location 1 at the park position (absolute, or following location 1).
+        ((5000, 1000, 0, 24500, 0, 0), (0, 5000), True),
+        ((5000, 1000, 0, 24500, 0, 0), (1, 0), True),
+        # Re-taught: location 1 is a real spot away from park.
+        ((5000, 1000, 0, 24500, 0, 0), (0, 0), False),
+        # Park unreadable: only the zero test applies.
+        ((5000, 1000, 0, 24500, 0, 0), None, False),
+    ],
+)
+def test_preset_firmware_warns_of_a_location_one_left_over_from_park(
+    published, locations, park, warned
+):
+    h = _Harness(motor_firmware=PMT_PRESET_PARK_MOTOR_FIRMWARE)
+    h.proxy = _Session(h.log)
+    h.proxy.uart.pmt_locations = locations
+    h.proxy.uart.pmt_park = park
+
+    h.on_pmt_spots_read_request("")
+
+    warnings = [e for e in h.errors if e.startswith("PMT spot table check")]
+    assert bool(warnings) is warned
+    assert published["spots"]
+
+    if warned:
+        assert "re-check saved PMT protocol steps" in warnings[0]
+
+
+def test_the_location_one_warning_is_given_once_per_connection(published):
+    h = _Harness(motor_firmware=PMT_PRESET_PARK_MOTOR_FIRMWARE)
+    h.proxy = _Session(h.log)
+
+    h.on_pmt_spots_read_request("")
+    h.on_pmt_spots_read_request("")
+
+    assert len(h.errors) == 1
+    assert h.log.count("read park") == 1
+
+    # A new connection (a new session) warns again.
+    h.proxy = _Session(h.log)
+    h.on_pmt_spots_read_request("")
+
+    assert len(h.errors) == 2
+
+
+def test_older_firmware_never_checks_location_one(published):
+    h = _Harness(motor_firmware=_LEGACY_MOTOR_FIRMWARE)
+    h.proxy = _Session(h.log)
+
+    h.on_pmt_spots_read_request("")
+
+    assert h.errors == []
+    assert "read park" not in h.log
+
+
+@pytest.mark.parametrize(
+    "motor_firmware, spot",
+    [(PMT_PRESET_PARK_MOTOR_FIRMWARE, "2"), (PMT_PRESET_PARK_MOTOR_FIRMWARE, "0")],
+)
+def test_pmt_moves_and_parks_run_outside_the_proxy_lock(
+    published, motor_firmware, spot
+):
+    h = _Harness(motor_firmware=motor_firmware)
+    h.proxy = _Session(h.log)
+
+    h.on_pmt_move_to_spot_request(spot)
+
+    assert h.unserialized == [f"PMT move to spot {spot}"]

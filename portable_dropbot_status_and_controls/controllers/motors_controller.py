@@ -16,10 +16,12 @@ from traits.api import observe
 from traitsui.api import Controller
 
 # Microdrop package imports.
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
 from portable_dropbot_controller.consts import (
     FILTER_POSITIONS,
     HOME_ALL,
     LOCK_CHIP,
+    MOTOR_ESTOP,
     MOTOR_HOME,
     MOTOR_MOVE,
     MOTOR_SET_SPEED,
@@ -105,12 +107,29 @@ class MotorsController(Controller):
 
     @observe("model:home_all_button")
     def _home_all(self, event):
-        # The coordinated resets, which also initialize the motion
-        # coordinator the mechanism macros depend on after a
-        # motor-board power-up.
+        # The vendor UI's Home all confirmation, in its words.
+        answer = confirm(
+            None,
+            "This runs the home sequence on the host, one unit at a time "
+            "(the board's home-sequence table; by default PMT, magnet, "
+            "pads, tray, filter). Realtime mode and HV are switched off "
+            "first. A failed step does not cancel the later ones. "
+            "Confirm the deck is actually clear. Continue?",
+            title="Home ALL",
+        )
+
+        if answer != YES:
+            return
+
         self.model.filter_cycle_index = 0
         logger.info("Homing all mechanisms (coordinated resets)...")
         publish_message(topic=HOME_ALL, message="True")
+
+    @observe("model:estop_button")
+    def _estop(self, event):
+        # Never behind a confirmation, as the vendor's E-STOP.
+        logger.warning("E-STOP: stopping ALL motor axes")
+        publish_message(topic=MOTOR_ESTOP, message="")
 
     # ------------------------------------------------------------------ #
     # Manual Move                                                          #

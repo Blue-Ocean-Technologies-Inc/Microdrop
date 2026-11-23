@@ -41,7 +41,8 @@ Message order
 Refusals
     A run is refused (before any HV change or pad move) when: a run is
     already in progress; a PMT or fluorescence session holds the board;
-    realtime mode is on or a protocol is running; a test name is not in
+    realtime mode is on or a protocol is running; Home All or a smart chip
+    lock / unlock is running; a test name is not in
     ``ALL_TESTS`` or a ``test_kwargs`` key is not a known parameter of its
     test; the pads' state is unknown and a selected test needs them moved;
     the tray does not read where the run wants it (``tray_in``, forced IN
@@ -52,11 +53,18 @@ Refusals
 
 Exclusive board ownership
     While a run is in progress the backend refuses every other
-    ``portable_dropbot/requests/*`` topic except abort and preflight read
-    (the connection requests that are no-ops while connected also pass),
-    with a logged warning. A disconnect request during a run is turned
-    into an abort: the port is never closed under a running test, whose
-    restore must still reach the board to switch HV off.
+    ``portable_dropbot/requests/*`` topic except abort, preflight read and
+    the motor E-STOP (``portable_dropbot/requests/motor_estop``; the
+    connection requests that are no-ops while connected also pass), with a
+    logged warning. A disconnect request during a run is turned into an
+    abort: the port is never closed under a running test, whose restore
+    must still reach the board to switch HV off.
+
+E-STOP
+    An E-STOP during a run halts it, as the vendor runner does: the test
+    stops at its next step, the restore switches HV off and no pad move is
+    sent afterwards (the restore note says why). The finished message is
+    ``cancelled`` with ``error`` naming the E-STOP.
 
 Verdicts and titles
     Computed by the backend (``self_test.verdicts`` and the vendor titles),

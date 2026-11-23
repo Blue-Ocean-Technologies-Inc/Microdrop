@@ -22,20 +22,23 @@ from apscheduler.schedulers.base import (
     STATE_STOPPED,
 )
 from apscheduler.triggers.interval import IntervalTrigger
-from dropbot_portable import DropBotSession
+from dropbot_portable import DropBotSession, port_lease
 from serial.tools import list_ports
 
 # Enthought library imports.
-from traits.api import Bool, HasTraits, Instance, Str, provides
+from traits.api import Bool, Instance, Str, provides
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
-from ..consts import MONITOR_INTERVAL_S, PORTS_UPDATED
+from ..board_firmware import BoardFirmwareMixin
+from ..consts import MONITOR_INTERVAL_S, PORTS_UPDATED, firmware_versions_publisher
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
+from ..port_lease_guard import PortLeaseGuard
+from ..session_shutdown import deenergize_session
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -44,7 +47,7 @@ logger = get_logger(__name__)
 
 
 @provides(IPortableDropbotControlMixinService)
-class PortableDropbotMonitorMixinService(HasTraits):
+class PortableDropbotMonitorMixinService(BoardFirmwareMixin):
     id = Str("portable_dropbot_monitor_mixin_service")
     name = Str("Portable Dropbot Monitor Mixin")
     monitor_scheduler = Instance(
@@ -65,6 +68,11 @@ class PortableDropbotMonitorMixinService(HasTraits):
     #: message), reported instead of the generic handshake text;
     #: cleared by a successful connect.
     _last_connect_error = Str()
+    #: The vendor port lease: our use claim while connected, and the yield
+    #: to a firmware update that takes priority on our port.
+    port_lease_guard = Instance(PortLeaseGuard, ())
+    #: The port of the live connection, for the lease checks.
+    _connected_port = Str()
 
     def on_start_device_monitoring_request(self, *args, **kwargs):
         if self.portable_dropbot_connection_active and self.proxy is not None:
@@ -104,7 +112,9 @@ class PortableDropbotMonitorMixinService(HasTraits):
         and once interpreter shutdown kills its executor pool every
         tick spams 'cannot schedule new futures after shutdown'."""
         self._shutdown_monitor_scheduler()
+        self._deenergize("app exit")
         super().cleanup()
+        self.port_lease_guard.release()
 
     def _shutdown_monitor_scheduler(self):
         """Idempotent scheduler shutdown, shared by cleanup and the
@@ -143,12 +153,17 @@ class PortableDropbotMonitorMixinService(HasTraits):
         ):
             self.monitor_scheduler.pause()
         self.portable_dropbot_connection_active = False
+
         if self.proxy is not None:
+            self._deenergize("user disconnect")
+
             try:
                 self.proxy.disconnect()
             except Exception as exc:
                 logger.debug(f"Error closing the session on user disconnect: {exc}")
             self.proxy = None
+
+        self._forget_connection()
         self._publish_disconnected()
 
     def on_connect_to_port_request(self, message):
@@ -158,6 +173,9 @@ class PortableDropbotMonitorMixinService(HasTraits):
         surfaced as an error signal instead of the scanner's silent
         debug line."""
         self._user_disconnected = False
+        # The user's own connect takes over from a yield (vendor UI); a
+        # port still reserved is refused by the lease claim itself.
+        self.port_lease_guard.end_yield()
         port_name = str(message or "").strip()
         if not port_name:
             self.on_retry_connection_request(message)
@@ -200,6 +218,8 @@ class PortableDropbotMonitorMixinService(HasTraits):
 
     def on_retry_connection_request(self, message):
         self._user_disconnected = False
+        self.port_lease_guard.end_yield()
+
         if self.portable_dropbot_connection_active:
             logger.info("Retry ignored: Portable Dropbot already connected.")
             return
@@ -216,13 +236,21 @@ class PortableDropbotMonitorMixinService(HasTraits):
         """Every tick: while connected, publish a fresh status
         snapshot (which doubles as the liveness check — a serial
         failure inside it triggers the disconnect path); while
-        disconnected, return port candidates to try."""
+        disconnected, return port candidates to try. A firmware update
+        taking priority on our port disconnects us, and scanning pauses
+        until it lets go."""
         if self.portable_dropbot_connection_active and self.proxy is not None:
-            # A long driver call (home-all, a tray move) holds the
-            # proxy lock for tens of seconds. Blocking on it would
-            # stretch this tick past the interval — apscheduler then
-            # skip-warns every fire until the move ends — for a
-            # snapshot that is stale the moment it is taken. Skip it;
+            holder = self.port_lease_guard.other_holder(self._connected_port)
+
+            if holder is not None:
+                self._yield_port_to_firmware_update(holder)
+                return []
+
+            # Motion runs outside the proxy lock, but a multi-call
+            # sequence (the calibration macro) still holds it. Blocking
+            # on it would stretch this tick past the interval —
+            # apscheduler then skip-warns every fire until it ends — for
+            # a snapshot that is stale the moment it is taken. Skip it;
             # the post-action republish refreshes everything anyway.
             if not self._proxy_lock.acquire(blocking=False):
                 return []
@@ -231,6 +259,10 @@ class PortableDropbotMonitorMixinService(HasTraits):
             finally:
                 self._proxy_lock.release()
             return []
+
+        if self.port_lease_guard.scan_paused():
+            return []
+
         return self._candidate_ports()
 
     def _candidate_ports(self):
@@ -263,6 +295,12 @@ class PortableDropbotMonitorMixinService(HasTraits):
             for port_name in event.retval or []:
                 if self.portable_dropbot_connection_active:
                     return
+
+                # Never open a port a firmware update holds priority on.
+                if self.port_lease_guard.other_holder(port_name) is not None:
+                    logger.debug(f"Skipping {port_name}: reserved by a firmware update")
+                    continue
+
                 # The full 4-rate autodetect ladder costs seconds and
                 # a dozen warning lines per silent port; while
                 # scanning, one login at the configured baud is the
@@ -277,6 +315,10 @@ class PortableDropbotMonitorMixinService(HasTraits):
     def _attempt_connect(self, port_name: str, autodetect: bool = False) -> bool:
         session = None
         try:
+            # Register as a port user before opening it, like the vendor
+            # UI: refused while a firmware update holds priority, and a
+            # flash that starts later waits for us to let go.
+            self.port_lease_guard.claim(port_name)
             session = DropBotSession()
             if not session.connect(
                 port=port_name,
@@ -311,6 +353,16 @@ class PortableDropbotMonitorMixinService(HasTraits):
                     "the motor board did not answer; motor controls "
                     "stay dead until a reconnect reaches it",
                 )
+
+            firmware = self._read_board_firmware(session)
+            # HV follows realtime mode, and every connection starts with
+            # both off (the previous link's end reset realtime): only the
+            # operator's realtime toggle after this point energizes the
+            # board. Sent before the connection goes active, so no realtime
+            # request can land in between.
+            self._end_realtime_mode()
+            session.sig.hv_enable(0, 0)
+            self._connected_port = port_name
             self.proxy = session
             self.portable_dropbot_connection_active = True
             # Alarms stream in unsolicited; hand them straight to the
@@ -321,11 +373,8 @@ class PortableDropbotMonitorMixinService(HasTraits):
             self.light_intensity = int(self.preferences.default_light_intensity)
             self._apply_actuation()
             self._apply_light_intensity()
-            # Align the HV master enable with realtime mode (HV
-            # follows the Realtime toggle): a freshly connected board
-            # must not sit energized while realtime is off.
-            session.sig.hv_enable(1 if self.realtime_mode else 0, 0)
             self._publish_connected()
+            firmware_versions_publisher.publish(firmware)
             self._publish_status_snapshot()
             logger.info(f"Connected to Portable Dropbot on {port_name}")
             self._error_shown = False
@@ -340,12 +389,61 @@ class PortableDropbotMonitorMixinService(HasTraits):
                     pass
             self.proxy = None
             self.portable_dropbot_connection_active = False
+            self._forget_connection()
             self._last_connect_error = f"{type(exc).__name__}: {exc}"
 
             if not self._error_shown:
                 logger.debug(f"Connection attempt failed on {port_name}: {exc}")
                 self._error_shown = True
             return False
+
+    # ------------------------------------------------------------------ #
+    # Port lease and disconnect                                            #
+    # ------------------------------------------------------------------ #
+    def _yield_port_to_firmware_update(self, holder):
+        """Another process (the vendor flash tool) took priority on our
+        port: de-energize, disconnect and keep scanning paused until it
+        lets go."""
+        port = self._connected_port
+        self.port_lease_guard.begin_yield(port, holder)
+        self._publish_error(
+            f"connection on {port}",
+            f"the port is reserved by a firmware update "
+            f"({port_lease.describe(holder)}); reconnecting once it finishes",
+        )
+        self._deenergize("firmware update yield")
+        self.on_disconnected_signal("")
+
+    def _deenergize(self, reason):
+        """HV off, electrodes cleared and PMT off before a deliberate close
+        of the port (see session_shutdown)."""
+
+        if self.proxy is None:
+            return
+
+        steps = deenergize_session(self.proxy)
+        logger.info(
+            f"Portable Dropbot de-energized for {reason}: "
+            f"{'; '.join(steps) or 'signal board not attached'}"
+        )
+
+    def _end_realtime_mode(self):
+        """Realtime off, published: the frontend's own realtime-off request
+        is refused while disconnected, and a realtime left on would let the
+        next connection energize the board without the operator."""
+
+        if self.realtime_mode:
+            self.realtime_mode = False
+            self._publish_realtime_mode()
+
+    def _forget_connection(self):
+        """Per-connection state ends with the link: realtime mode ends, the
+        firmware versions become unknown, and the port use claim is dropped
+        — only once the port is closed, as the vendor worker does."""
+        self._end_realtime_mode()
+        self.board_firmware_versions = {}
+        self._connected_port = ""
+        self.port_lease_guard.release()
 
     def on_connected_signal(self, message):
         self.portable_dropbot_connection_active = True
@@ -357,6 +455,8 @@ class PortableDropbotMonitorMixinService(HasTraits):
             except Exception:
                 pass
             self.proxy = None
+
+        self._forget_connection()
         logger.warning("Portable Dropbot disconnected.")
         if self.portable_dropbot_connection_active:
             self._publish_disconnected()

@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from traits.api import Bool, Button, Enum, Float, Int, List, Str
+from traits.api import Any, Bool, Button, Dict, Enum, Float, Int, List, Str
 
 # Microdrop package imports.
 from microdrop_application.helpers import is_advanced_mode
@@ -24,9 +24,9 @@ class PortableDropbotAdvancedControlsModel(BaseStatusModel):
     """Qt-free state for the Advanced Controls pane: the power-system
     buzzer plus one motor's mechanical tuning struct
     (MOTOR_PARAM_FIELDS wire order), read from the board into the
-    field traits below, written back to RAM, presetted to flash, and
-    made effective by a motor-board reboot. Unlocked only in Advanced
-    Mode."""
+    field traits below, written back to RAM (live on the motor's next
+    idle moment) and presetted to flash. Speeds are real µm/s on every
+    firmware. Unlocked only in Advanced Mode."""
 
     DEFAULT_ICON_PATH = PORTABLE_DROPBOT_IMAGE
 
@@ -59,38 +59,53 @@ class PortableDropbotAdvancedControlsModel(BaseStatusModel):
     step_len = Float(desc="distance per microstep (µm)")
     motor_polarity = Int(
         desc=(
-            "direction polarity, 1 = as wired, 0 = mirrored; changing it "
-            "alone can send homing away from the home flag"
+            "direction polarity, 1 = as wired, 0 = mirrored; one setting with "
+            "home direction: change both together or homing runs away"
         )
     )
     I_hold = Int(desc="hold current, 0–31")
     I_run = Int(desc="run current, 0–31")
-    subdiv = Int(desc="microsteps per full step")
+    subdiv = Int(desc="microsteps per full step, a power of two up to 256")
     run_sgt = Int(desc="StallGuard threshold while running")
     rst_sgt = Int(desc="StallGuard threshold while homing")
     bspd = Int(
         desc=(
-            "homing speed as stored: µm/s on layout-2.0 motor firmware, "
-            "1.398× the real µm/s on older"
+            "homing speed in real µm/s on every motor firmware (the board "
+            "converts for firmware before layout 2.0)"
         )
     )
     rspd = Int(
         desc=(
-            "default run speed as stored: µm/s on layout-2.0 motor firmware, "
-            "1.398× the real µm/s on older"
+            "default run speed in real µm/s on every motor firmware (the "
+            "board converts for firmware before layout 2.0)"
         )
     )
     acc_run = Int(desc="acceleration ramp factor while running (0 or less means 6)")
     acc_rst = Int(desc="acceleration ramp factor while homing (0 or less means 6)")
+    stealthchop = Int(
+        desc="StealthChop enable, 0 or 1 (homing always runs SpreadCycle)"
+    )
+    home_dir = Int(
+        desc=(
+            "home direction: 0 = flag at the near / negative side, 1 = far / "
+            "positive side; pairs with the direction polarity, and a change "
+            "un-homes the axis"
+        )
+    )
 
-    #: The fields the last read actually returned (old firmware stops
-    #: at rspd) — a write sends back exactly these, and Write stays
-    #: disabled until a read has succeeded.
+    #: The fields the last read actually returned (each older firmware
+    #: generation serves a shorter prefix) — a write sends back exactly
+    #: these, and Write stays disabled until a read has succeeded.
     loaded_fields = List(Str)
+    #: The values the board holds as last read or written: the baseline
+    #: the home direction / polarity pairing warning compares against.
+    board_values = Dict(Str, Any)
     params_loaded = Bool(False)
+    #: The blob size the board served and its speed units, from the read.
+    params_layout = Str("-", desc="blob size and speed units of the last read")
 
     read_button = Button("Read")
-    write_button = Button("Write (RAM)")
+    write_button = Button("Write (RAM, live)")
     preset_button = Button("Preset to Flash")
     reboot_button = Button("Reboot Motor Board")
     params_status = Str("-", desc="Last read/write/preset/reboot outcome")

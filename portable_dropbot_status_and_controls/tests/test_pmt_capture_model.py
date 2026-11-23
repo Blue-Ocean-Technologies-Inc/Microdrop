@@ -45,7 +45,7 @@ def test_live_spot_labels_list_park_then_configured_spots_in_slot_order():
     m = PortableDropbotPmtCaptureModel()
     m.merge_spots([(3, 24500), (1, 1000)])
     assert m.live_spot_labels == {
-        0: "0:Park (spot 0)",
+        0: "0:Park",
         1: "1:Spot 1 · 1.00 mm",
         3: "3:Spot 3 · 24.50 mm",
     }

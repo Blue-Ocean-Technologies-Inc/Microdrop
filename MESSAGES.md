@@ -363,7 +363,7 @@ Everything a protocol run's HTML report contains flows through one dramatiq list
 
 Two ways to move the chip tray, one topic. The firmware's eject/insert macro releases the pogo pushpads before the tray moves and presses them after; the tray-only move leaves the pushpads where they are (the firmware still drops the magnet out of the way, as a safety interlock, either way).
 
-**Topic (`portable_dropbot_controller/consts.py`)**
+**Topic (`portable_dropbot_controller/consts/`)**
 - `MOVE_TRAY = "portable_dropbot/requests/move_tray"` — `MoveTrayRequest {direction: "in" | "out" | "toggle", actuate_pogos: bool = true}`, published through `move_tray_publisher`. A legacy bare string `"in"` / `"out"` / `"toggle"` is still accepted and means `actuate_pogos: true`. `"toggle"` moves the tray opposite to the cabin state the motor STATUS reports (byte 1: 0 = in, 1 = out).
 
 **Senders (`portable_dropbot_status_and_controls`)**
@@ -372,16 +372,39 @@ Two ways to move the chip tray, one topic. The firmware's eject/insert macro rel
 - Motors pane tray In/Out macros → `{direction: "in" | "out", actuate_pogos: not tray_only}`; the `tray_only` checkbox shows only while the target motor is the tray, and is not persisted.
 
 **Backend (`portable_dropbot_controller/services/portable_dropbot_motors_mixin_service.py`)**
-- `on_move_tray_request` parses the message (`parse_move_tray_request`; an unknown direction is logged and ignored), resolves `"toggle"`, then: `actuate_pogos: true` → `proxy.move_tray(direction)` (the legacy CHIP_CABIN_CTRL macro); `actuate_pogos: false` → `proxy.motor.chip_cabin_ctrl(TRAY_ACTION_CODES[direction], CHIP_CABIN_TRAY_ONLY_FLAG)` (action 0 = in, 1 = out; flags 1 = tray only), failed when the reply is missing or its status byte `CHIP_CABIN_STATUS_INDEX` reads `CHIP_CABIN_STATUS_ERROR` (0xFF). Either way it logs the outcome and republishes the status snapshot.
+- `on_move_tray_request` parses the message (`parse_move_tray_request`; an unknown direction is logged and ignored), resolves `"toggle"` from the motor STATUS cabin byte (0 in → out, 1 out → in; the magnet view position, moving and FAULT are logged and ignored), then sends one `proxy.motor.chip_cabin_ctrl(TRAY_ACTION_CODES[direction], flags)` as the vendor UI does (action 0 = in, 1 = out; flags `CHIP_CABIN_WITH_POGOS_FLAG` 0 = pogo pushpad macro, `CHIP_CABIN_TRAY_ONLY_FLAG` 1 = tray only). The reply is judged like the driver's `setTray` (`motion_replies.mechanism_failure`): the state byte of the 1-byte or legacy 12-byte reply, 0xFF (FAULT), an empty reply (refused by an interlock or an un-homed tray) and no reply all fail and go out on `ERROR_RAISED` with the driver's reason. Either way it republishes the status snapshot.
 
 **Traced flow (tray glyph)**
 glyph click → `MOVE_TRAY {direction, actuate_pogos: false}` → `on_move_tray_request` → `motor.chip_cabin_ctrl(action, 1)` → `_publish_status_snapshot()` → `STATUS_UPDATED` + `MOTORS_UPDATED` → status pane `_on_motors_updated_triggered` sets `tray_out_reported` from `mechanisms["cabin"]`, which re-syncs the glyph.
+
+### Portable DropBot motors: Home All, Stop motion, E-STOP
+
+Aligned with the vendor UI (dropbot-portable 1.7.0): Home All is its host plan, not the board's HW_RESET; the stops follow its vocabulary ("Stop motion" = one axis's `MOTOR_CONTROL` STOP, "EMERGENCY STOP — MOTORS" = `MOTOR_ESTOP` 0x11B6).
+
+**Topics (`portable_dropbot_controller/consts/`)**
+- `HOME_ALL = "portable_dropbot/requests/home_all"` — any message.
+- `MOTOR_STOP = "portable_dropbot/requests/motor_stop"` — the motor name.
+- `MOTOR_ESTOP = "portable_dropbot/requests/motor_estop"` — empty message (raw `publish_message`). Motors only: HV, the PMT supply, heaters and the rails are untouched.
+- `MOTORS_UPDATED` also carries `moving: {motor: bool}` and `faults: {motor: [fault names]}` (`drv-err`, `chip-bad`, `last-err`, `busy`, `estopped`, `drv-off`) on motor firmware with `MOTOR_SNAPSHOT`; `{}` otherwise.
+
+**Senders (`portable_dropbot_status_and_controls`, Motors pane)**
+- Home All → `pyface_wrapper.confirm` (the vendor's "confirm the deck is actually clear") → `HOME_ALL`.
+- E-STOP Motors (beside the target motor selector, no confirmation, as the vendor's) → `MOTOR_ESTOP`.
+
+**Backend (`portable_dropbot_controller/motion_safety.py`, composed into the motors mixin)**
+- `on_home_all_request`: refused while one runs; `_leave_realtime_mode()` first (HV off, electrodes cleared); reads the board's `_dp_home_seq` (`motor.get_params`; an empty or unanswered table = the compiled default) and refuses a table the vendor UI would (firmware rules, then its enforced safe order). The plan is the vendor's `home_all_plan` (default `pmt_reset`, `mag_reset`, `pushpad_reset`, `tray_reset`, `flu_reset`; a PARK row or a magnet / pad home + park adds `motor_control(id, 6, 0)`); `tray_reset` falls back to `cabin_mag_reset` on firmware without TRAY_RESET, like the vendor's `tray_reset_job`. Each step runs outside the proxy lock and is judged like the vendor's job outcome (no reply / False → the driver's `last_result`; an answered error status → `ui.device_status.device_status_error`); a failed step → `ERROR_RAISED` (`home all: <step>`) and the later steps still run. A successful `pushpad_reset` clears `pads_smart_engaged`. Ends with the status snapshot.
+- `on_motor_estop_request`: first calls the base's `_on_motor_estop()` hook (the self-test mixin halts a running self-test there), then `motor.motor_estop()` outside the proxy lock; marks every motor stopped and ends a running Home All after its current step (no error for the aborted step). An unanswered E-STOP → `ERROR_RAISED`. Republishes the motor picture.
+- `on_motor_stop_request`: `uart.motorStop(id)` outside the proxy lock; the move it interrupts logs its failed reply instead of publishing an error.
+- Every motion (`_motion_call`, in `MotionSafetyMixin`: tray, magnet, pogo, filter, per-motor move / home, PMT_RESET) runs outside the proxy lock: the driver matches every reply to its request and serialises only param writes and firmware upgrades itself, and the firmware refuses conflicting motion with BUSY. The status poll therefore keeps running during a long move. Skipping the lock takes and releases nothing, so a caller that already holds it keeps it across the motion: the self-test hub's HV off → pad press / release (`_set_pogo`, which returns whether the board accepted the move, judged by `mechanism_failure`) → read-back stays one locked span.
+
+**Traced flow (E-STOP during Home All)**
+E-STOP click → `MOTOR_ESTOP` → `on_motor_estop_request` (its own Dramatiq worker, no lock) → `motor_estop()` → the running reset answers aborted → Home All logs it and sends no further step → status snapshot.
 
 ### Portable DropBot chip lock: classic vs smart pad engage
 
 Chip lock is the pogo pads pressing the chip. The Portable DropBot Settings preference "Chip engage mode" (`chip_engage_mode`, `CHIP_ENGAGE_MODE_KEY`, default classic) picks how a lock presses: classic is the motor board's fixed-position press (`PUSHPAD_CTRL`), smart is the signal board's `PAD_ENGAGE` (0x1250), where each pad descends until its own contact sensor trips, then overdrives. Smart runs at the vendor UI's fixed defaults (`PAD_ENGAGE_STEP_UM` 200, `PAD_ENGAGE_MAX_STEPS` 18, `PAD_ENGAGE_OVERDRIVE_UM` 300) and needs both pads homed.
 
-**Topics (`portable_dropbot_controller/consts.py`)**
+**Topics (`portable_dropbot_controller/consts/`)**
 - `LOCK_CHIP = "portable_dropbot/requests/lock_chip"` — `"True"` locks, `"False"` unlocks (unchanged wire format; the backend reads the mode from its own preferences).
 - `CHIP_LOCK_FAILED = "portable_dropbot/signals/chip_lock_failed"` — `ChipLockFailed {action: "lock" | "unlock", error: str, pads_may_be_pressed: bool}`, published through `chip_lock_failed_publisher` when a smart lock or a pad retract does not finish.
 - `MOTORS_UPDATED` carries `pads_smart_engaged: bool` beside `mechanisms`.
@@ -392,19 +415,46 @@ Chip lock is the pogo pads pressing the chip. The Portable DropBot Settings pref
 **Backend (`portable_dropbot_controller/services/portable_dropbot_motors_mixin_service.py`)**
 - `on_lock_chip_request`: lock in smart mode → `sig.pad_engage(1, 1, step, max_steps, overdrive)`; unlock while the mode is smart **or** `pads_smart_engaged` is set → `sig.pad_engage(0, 0, ...)`, the vendor UI's Retract (its way out of any engage, classic or smart), so changing the mode between lock and unlock never strands the pads; anything else → `on_set_pogo_request` (`uart.setPogo`, classic, exactly as before).
 - The `PAD_ENGAGE` reply's status: 0 sets `pads_smart_engaged` to the action (engaged / retracted); 1 no contact, 2 motor error, 3 busy publish `CHIP_LOCK_FAILED` (a lock's motor error, or a call that got no reply, adds that smart engage needs both pads homed); 4 retract failed and 5 E-stopped set `pads_smart_engaged` and publish `CHIP_LOCK_FAILED` with `pads_may_be_pressed`. A call answering `None` is described through `uart.last_result(PAD_ENGAGE_CMD)`; a raised error carries its message. Every failed unlock sets `pads_may_be_pressed`. The handler always republishes the status snapshot.
+- `PAD_ENGAGE` runs outside the proxy lock, under its own pad engage lock, as on the vendor UI's slow lane: a second lock while one is in flight is refused at once (`CHIP_LOCK_FAILED` "a pad engage is already in flight"), and a retract waits for the engage to finish.
 
 **Frontend (`portable_dropbot_status_and_controls/message_handlers/message_handler.py`)**
 - `_on_motors_updated_triggered`: `chip_locked_reported = pads_smart_engaged or (lpush == 1 and rpush == 1)`.
 - `_on_chip_lock_failed_triggered`: logs the failure to the Alarms box, puts the toggle back on `chip_locked_reported`, and raises a `pyface_wrapper` dialog on the GUI thread (`GUI.invoke_later`): a warning that the pads may still be pressed when `pads_may_be_pressed`, an error otherwise.
 
 **Traced flow (smart lock)**
-toggle click → `LOCK_CHIP "True"` → `on_lock_chip_request` → `sig.pad_engage(1, 1, 200, 18, 300)` (proxy lock held up to 45 s) → status 0: `pads_smart_engaged = True` → `_publish_status_snapshot()` → `MOTORS_UPDATED {pads_smart_engaged: true}` → `chip_locked_reported = True`; status 1–5 / no reply: `CHIP_LOCK_FAILED` → dialog + toggle back to unlocked (locked after 4/5, so the next click retracts).
+toggle click → `LOCK_CHIP "True"` → `on_lock_chip_request` → `sig.pad_engage(1, 1, 200, 18, 300)` (the pad engage lock held up to 45 s, not the proxy lock) → status 0: `pads_smart_engaged = True` → `_publish_status_snapshot()` → `MOTORS_UPDATED {pads_smart_engaged: true}` → `chip_locked_reported = True`; status 1–5 / no reply: `CHIP_LOCK_FAILED` → dialog + toggle back to unlocked (locked after 4/5, so the next click retracts).
+
+### Portable DropBot board health: firmware, port lease, alarms, halt latch
+
+Aligned with dropbot-portable 1.7.0 (#1050). MicroDrop reads and reports the firmware but never flashes it — that is the vendor UI's Firmware tab.
+
+**Topics (`portable_dropbot_controller/consts/`)**
+- `FIRMWARE_VERSIONS_UPDATED = "portable_dropbot/signals/firmware_versions_updated"` — `FirmwareVersionsUpdated {mcu: str, motor: str, outdated: list[str]}`, published once per connect through `firmware_versions_publisher`. `mcu` / `motor` are the running tags (`""` unknown); `outdated` has one line per board below the driver bindings' minimum (`proxy.MCU_MIN_COMPATIBLE_FW` / `DRV_MIN_COMPATIBLE_FW`, MCU 1.0.1.31 / motor 1.0.0.26 in 1.7.0).
+- `ALARM_RAISED = "portable_dropbot/signals/alarm"` — now `AlarmRaised {command: str, alarms: list[str], reports: list[AlarmReportEntry]}` through `alarm_raised_publisher`; `AlarmReportEntry {text, code?, title, detail, active?, level?}` carries the driver's `AlarmReport` fields, one per frame. `active` 0 is the board clearing the alarm. `alarms` keeps the legacy display strings, and a payload without `reports` is still read.
+- `CLEAR_HALT = "portable_dropbot/requests/clear_halt"` — empty message (raw `publish_message`, like the capture aborts).
+- `STATUS_UPDATED` gains `halted` (STATUS `hv_state` bit3, `HV_STATE_HALTED_BIT`) and, from MCU 1.0.1.30 (the driver's `uart.last_status_tail`, None on older firmware), `hv_setpoint` (V), `fault_flags` and `faults` (names). The board's `chip_on_pad` is judged by the chip-detect preference, now defaulting to `presence` (bit0 only, the vendor's rule and the HV interlock's); the pogo rules stay as opt-ins.
+- `ERROR_RAISED` also carries refused `HV_ENABLE` replies (`HV enable` / `HV disable` context), refused halt clears, and the port-lease yield.
+
+**Backend (`portable_dropbot_controller`)**
+- Monitor mixin `_attempt_connect`: claims the port with `port_lease.acquire_use` before opening it (`PortLeaseGuard.claim`; refused while a firmware update holds priority), reads `session.check_versions(ignore=True)` into `board_firmware_versions` (`{"mcu": (1, 0, 1, 31), "motor": ...}`; `_mcu_firmware_at_least` / `_motor_firmware_at_least` answer False while unknown), retried once after `FIRMWARE_READ_RETRY_DELAY_S` when a board answers no version (still homing), then publishes `FIRMWARE_VERSIONS_UPDATED` after `connected`. Every connect sends `hv_enable(0, 0)` before the connection goes active: HV comes on only through a realtime-on request after that. Every disconnect path releases the claim (after closing the port), forgets the versions, and ends realtime mode (`REALTIME_MODE_UPDATED False` — the frontend's own realtime-off request is refused while disconnected). The user Disconnect, the firmware-update yield and app exit first de-energize like the vendor UI (`session_shutdown.deenergize_session`: `hv_enable(0, 0)`, electrodes cleared, `pmt_power(0)`, each bounded to `SHUTDOWN_TIMEOUT_S`); a lost link closes without them.
+- `_monitor_tick` checks `port_lease.holder` on our port before each status poll: another process holding priority (the vendor flash tool) → `ERROR_RAISED`, disconnect, and scanning returns no ports until the holder is gone plus `PORT_LEASE_RELEASE_DELAY_S`. Scan probes skip any port a holder owns. A user connect / retry ends the yield.
+- Base `_publish_alarm` (the driver's `on_alarm`) publishes `AlarmRaised` with each report's fields; it runs on the driver's RX thread, so a frame that fails validation is logged with its traceback instead of vanishing.
+- States mixin `on_set_realtime_mode_request` judges the `HV_ENABLE` status byte the vendor's way (0 HV on answers an enable, 1 HV off a disable; 2 no device, 3 busy, 4 24 V off, 5 halt latched are refusals → `ERROR_RAISED`). A refused or failed enable sets realtime mode back off and republishes `REALTIME_MODE_UPDATED False`. Leaving realtime mode (`_leave_realtime_mode`, also run by Home All) sends `hv_enable(0, 0)` then clears every electrode, both outside the proxy lock so they never queue behind a long call. `on_clear_halt_request` → `proxy.clear_halt()` (`HALT_CLEAR`): a refusal → `ERROR_RAISED` with the blocking types; then the status snapshot republishes. HV stays off.
+
+**Frontend (`portable_dropbot_status_and_controls`)**
+- `_on_firmware_versions_updated_triggered`: Board Status "Firmware"; outdated firmware also logs to the Alarms box and raises a `pyface_wrapper.warning` (once per connect) pointing at the vendor UI's Firmware tab.
+- `_on_alarm_triggered`: a raise adds `code -> title` to `active_alarms` (the Alarms box "Active" line) and logs; a clear removes the code and logs `Cleared: ...` without replacing `last_alarm`.
+- `_on_status_updated_triggered`: `halted` drives the model's `halted` (red status icon, realtime off, the "HV halt latched" row with **Clear Halt**); Board Status shows HV Setpoint and Faults ("n/a" before MCU 1.0.1.30); dev temp/humidity 0xFFFF reads "n/a"; `fan_duty` is shown as the fans commanded on (bit0 fan 1, bit1 fan 2). The dead `pmt` key is gone.
+- Clear Halt → `pyface_wrapper.confirm` → `CLEAR_HALT`.
+
+**Traced flow (halt)**
+board latches a halt → STATUS `hv_state` bit3 → `STATUS_UPDATED {halted: true}` → `model.halted` → icon red + `realtime_mode = False` → `SET_REALTIME_MODE False` (HV off, always honoured) → user removes the cause, Clear Halt → confirm → `CLEAR_HALT` → `clear_halt()` → snapshot `{halted: false}` → icon back to the chip colour; realtime on re-enables HV.
 
 ### Portable DropBot magnet engage height: read / RAM write / flash preset
 
 The magnet's engage height is `z_up` (µm), the first int32 of the motor board's `magnet_defaults` device-defaults struct (flash key `_dp_magnet`: `z_up, z_down, y_0, y_space`, big-endian, `MAGNET_DEFAULTS_FIELDS`/`MAGNET_DEFAULTS_FORMAT`). The workflow mirrors the vendor debug UI: Write = RAM only (used from the next engage, lost on reboot); Preset = persists what is in RAM to flash. No motor-board reboot is needed.
 
-**Topics (`portable_dropbot_controller/consts.py`)**
+**Topics (`portable_dropbot_controller/consts/`)**
 - `MAGNET_ENGAGE_READ = "portable_dropbot/requests/magnet_engage_read"` — empty message.
 - `MAGNET_ENGAGE_WRITE = "portable_dropbot/requests/magnet_engage_write"` — `MagnetEngageWriteRequest {engage_mm: float >= 0}`, published through `magnet_engage_write_publisher`.
 - `MAGNET_ENGAGE_PRESET = "portable_dropbot/requests/magnet_engage_preset"` — empty message.
@@ -447,13 +497,29 @@ A step whose Zone Target cell names a zone type resolves, at step start, the fir
 - `PROTOCOL_LOGGING_DATA_CONTRIBUTION` — `{"Zone Target", "Zone Target Criterion", "Zone Target Region"}` (strings, stored in the report's data files, not charted).
 - A missing zone type, a failed or timed-out detection, or no matching region raises, failing the step through the executor's protocol-error path. A step with an empty Zone Target publishes nothing; preview mode skips the column.
 
+### Portable DropBot settings: motor params, heater, calibration macro
+
+Aligned with dropbot-portable 1.7.0 (#1050).
+
+**Motor mechanical params (advanced controls pane ↔ system mixin)**
+- `MOTOR_PARAMS_READ` (motor name) → `MOTOR_PARAMS_UPDATED {motor, fields, blob_size, speed_units}`: `fields` are the ones the board's firmware serves (a wire-order prefix of `MOTOR_PARAM_FIELDS`: 56 / 64 / 68 / 72 B), bspd / rspd in real µm/s (converted with `uart.motor_speed_units()`).
+- `MOTOR_PARAMS_WRITE` — `MotorParamsWriteRequest {motor, fields}` through `motor_params_write_publisher`. The backend re-reads the board's blob, puts the edits in place (`motor_params.encode_motor_params`: an unchanged speed keeps the board's own number, `param_layout.motor_blob_problem` refusals reported) and writes it back at the served length; refused while the speed units are unconfirmed. Outcome: `MOTOR_PARAMS_UPDATED {motor, written}` or `{motor, error}`. The write is live on the motor's next idle moment.
+- `REBOOT_MOTOR_BOARD` → `{motor_board_rebooted}`; the MCU re-runs the motor boot homing after it and motor commands answer BUSY until it finishes.
+
+**Heater (more controls pane ↔ temp mixin)**
+- `TEMP_SET_TARGET` — `TempSetTargetRequest {channel 0..1, target_c}`; a target at or above the board's max_temp_c − 5 °C → `ERROR_RAISED`, nothing sent.
+- `TEMP_SET_PID` — `TempSetPidRequest {channel, kp, ki, kd 0..100, period_ms}` (Kp = Ki = 0 refused) through `temp_set_pid_publisher`; outcome `TEMP_UPDATED {channel, pid_applied, pid_error}`. The pane reads the PID (`TEMP_READ_PID`) on connect and on a channel switch.
+
+**Calibration macro (calibration pane ↔ calibration mixin)**
+- `CALIBRATION_UPDATED {stage, ok, error}` per step, then `{stage: "done", ok, error, retry}`: HV_ENABLE must answer HV on / HV off, CAP_CALIBRATE_ML status 1; a BUSY fit sets `retry`. A failed setup step skips to the teardown (HV off, restore V/F, press pogos), which always runs.
+
 ### Portable DropBot protocol columns: magnet + heater step execution
 
 The portable's built-in magnet and heater join a protocol through `portable_dropbot_protocol_controls` (one plugin for every portable peripheral, since they all sit behind the one backend). Each column is a PPT-11 compound column: a "set" checkbox gates the step, and a checked step publishes one request and blocks on one ack, mirroring the standalone magnet/heater plugins.
 
-**Topics (all in `portable_dropbot_controller/consts.py`)**
+**Topics (all in `portable_dropbot_controller/consts/`)**
 - `PROTOCOL_SET_MAGNET = "portable_dropbot/requests/protocol_set_magnet"` — JSON `{"on": bool, "height_mm": float}`. Ack: `MAGNET_APPLIED = "portable_dropbot/signals/magnet_applied"`.
-- `PROTOCOL_SET_TEMPERATURE = "portable_dropbot/requests/protocol_set_temperature"` — JSON `{"channel": int, "target_c": float, "tolerance_c": float}`. Ack: `TEMPERATURE_REACHED = "portable_dropbot/signals/temperature_reached"`.
+- `PROTOCOL_SET_TEMPERATURE = "portable_dropbot/requests/protocol_set_temperature"` — JSON `{"channel": int, "target_c": float, "tolerance_c": float}` (`ProtocolSetTemperatureRequest`, validated by the backend). Ack: `TEMPERATURE_REACHED = "portable_dropbot/signals/temperature_reached"` — `TemperatureReached {channel: int, current_c: float?, error: str}` through `temperature_reached_publisher`; a non-empty `error` fails the step (`TemperatureHandler` raises).
 - `TEMP_CONTROL` (existing) — the temperature handler's `on_post_protocol_end` publishes `{"channel": DEFAULT_TEMP_CHANNEL, "on": False}` after every run so nothing keeps heating unattended.
 
 **Frontend (handlers in `portable_dropbot_protocol_controls/protocol_columns/`)**
@@ -461,17 +527,18 @@ The portable's built-in magnet and heater join a protocol through `portable_drop
 - A magnet height below `MAGNET_HEIGHT_MM_BOUNDS[0]` is the "Default" sentinel: the spinbox shows "Default" and the backend runs the firmware engage macro; any other height is an absolute position on the magnet Z motor.
 
 **Backend (`portable_dropbot_controller/services/`)**
-- `on_protocol_set_magnet_request` (motors mixin) — disengage / engage macro / `motorAbsoluteMove` on the magnet motor (mm × 1000 µm), then publishes `MAGNET_APPLIED` only on success — a failed move leaves the step to time out — and republishes the status snapshot.
-- `on_protocol_set_temperature_request` (temp mixin) — sets the channel target and turns control on, then arms a watcher thread that polls the channel every `TEMP_REACHED_POLL_INTERVAL_S` (republishing `TEMP_UPDATED` so the pane keeps tracking) and publishes `TEMPERATURE_REACHED` once `|current - target| <= tolerance`; it gives up after `TEMP_REACHED_TIMEOUT_S`. A new request cancels the previous watcher.
+- `on_protocol_set_magnet_request` (motors mixin) — disengage / engage macro / `motorAbsoluteMove` on the magnet motor (mm × 1000 µm), then publishes `MAGNET_APPLIED` only when the reply confirms the move (a mechanism state that is not FAULT, or the final position of the absolute move); a refusal, FAULT or timeout goes out on `ERROR_RAISED` instead and leaves the step to time out. It republishes the status snapshot.
+- `on_protocol_set_temperature_request` (temp mixin) — sets the channel target and turns control on, then arms a watcher thread that polls the channel every `TEMP_REACHED_POLL_INTERVAL_S` (republishing `TEMP_UPDATED` so the pane keeps tracking) and publishes `TEMPERATURE_REACHED` once `|current - target| <= tolerance`; after `TEMP_REACHED_TIMEOUT_S` it publishes a failure. A new request cancels the previous watcher. A target at or above the board's `heat_fs` max_temp_c − 5 °C (`uart.heater_failsafe()`, 120 °C default), or a setpoint the board does not accept, fails the step at once with the reason.
+- `on_alarm_signal` (temp mixin) — the backend listener also subscribes to its own `ALARM_RAISED`: a raised heater failsafe alarm (`HEATER_FAILSAFE_ALARM_CODES` 09001 / 09002 / 09004 / 09005; clears skipped, an alarm naming the other loop `htrN` ignored) cancels the watcher and publishes `TEMPERATURE_REACHED` with the alarm as `error`. Once the setpoint was reached the watcher does not end: it holds the loop armed until a `TEMP_CONTROL` off for that channel (the handler's end-of-run one, or the pane) or a newer setpoint, and an alarm in that hold phase is republished on `TEMPERATURE_REACHED` every `TEMP_REACHED_POLL_INTERVAL_S` (so a pause between steps cannot drop it). `TemperatureHandler` marks the run as heater-armed in the protocol scratch when a step drives the heater, and from then on its `on_pre_step` / `on_post_step` drain any error on that topic and raise, which the executor surfaces as the protocol error.
 
 ### Portable DropBot PMT capture, live stream, ADC query, buffered acquire (#601)
 
-The PMT Capture pane (`portable_dropbot_status_and_controls`) and the PMT mixin (`portable_dropbot_controller/services/portable_dropbot_pmt_mixin_service.py`) talk over validated topics; the Pydantic contracts and publishers live in `portable_dropbot_controller/consts.py`. Three sessions — the multi-spot capture, the live stream, and the buffered acquire — share the tube and the ADC and so share one claim in the backend: `_pmt_claim` guards the check-and-set of `_pmt_capturing` / `_pmt_streaming` / `_pmt_acquiring`, and a request for a different session while one is running is refused with a reason naming which one ("a PMT capture is running", "the live stream is running", "a buffered acquire is running"). A `PMT_STREAM_START` received while the stream is already running is not a new session — it is a live avg/osr/gain update, handled before the claim is even consulted, so it never restarts the stream or drops a sample.
+The PMT Capture pane (`portable_dropbot_status_and_controls`) and the PMT mixin (`portable_dropbot_controller/services/portable_dropbot_pmt_mixin_service.py`) talk over validated topics; the Pydantic contracts and publishers live in `portable_dropbot_controller/consts/pmt.py`, re-exported from the `consts` package. Three sessions — the multi-spot capture, the live stream, and the buffered acquire — share the tube and the ADC and so share one claim in the backend: `_pmt_claim` guards the check-and-set of `_pmt_capturing` / `_pmt_streaming` / `_pmt_acquiring`, and a request for a different session while one is running is refused with a reason naming which one ("a PMT capture is running", "the live stream is running", "a buffered acquire is running"). A `PMT_STREAM_START` received while the stream is already running is not a new session — it is a live avg/osr/gain update, handled before the claim is even consulted, so it never restarts the stream or drops a sample.
 
 **Spot table**
 - On `PORTABLE_DROPBOT_CONNECTED` (and the pane's Refresh button) the pane publishes `PMT_SPOTS_READ = "portable_dropbot/requests/pmt_spots_read"` (empty message).
-- Live stream & acquire's **Move to** dropdown (Park = spot 0, then the board's configured spots) publishes `PMT_MOVE_TO_SPOT = "portable_dropbot/requests/pmt_move_to_spot"` (the spot number as text) as soon as it changes; the backend moves via `motor.pmt_ctrl(spot + PMT_PARK_LOCATION)`, refusing (logged) while a PMT capture runs — a live stream or acquire keeps running. **Home PMT** publishes the Motors pane's `MOTOR_HOME` with `"pmt"` and resets the dropdown to Park without a second move.
-- The backend reads the motor board's `pmt_defaults` flash parameter (one int32 Y position in µm per motor location 1–6; location 1 is park and never offered, so spot `slot` n is `pmt_ctrl` location n + 1) and publishes `PMT_SPOTS_UPDATED = "portable_dropbot/signals/pmt_spots_updated"` — `PmtSpotsUpdated {spots: [{slot, position_um}]}`, non-zero slots only. The pane merges it into its rows by slot, keeping the operator's tick/gain/exposure and order. A future add/remove-spot feature only has to republish this topic.
+- Live stream & acquire's **Move to** dropdown (Park = spot 0, then the board's configured spots) publishes `PMT_MOVE_TO_SPOT = "portable_dropbot/requests/pmt_move_to_spot"` (the spot number as text) as soon as it changes; the backend moves via `motor.pmt_ctrl(location)` for the spot's motor location (below) and parks with `MOTOR_CONTROL` action `MOTOR_ACTION_PARK` on motor firmware `PMT_PRESET_PARK_MOTOR_FIRMWARE` (DroDri_1.0.0.25) and newer, `pmt_ctrl(PMT_LEGACY_PARK_LOCATION)` before it; refusing (logged) while a PMT capture runs — a live stream or acquire keeps running. **Home PMT** publishes the Motors pane's `MOTOR_HOME` with `"pmt"` and resets the dropdown to Park without a second move.
+- The backend reads the motor board's `pmt_defaults` flash parameter (one int32 Y position in µm per motor location 1–6). **The spot numbering depends on the motor firmware:** from DroDri_1.0.0.25 all six locations are spots and spot n is location n (park is the separate `_dp_park`); before it location 1 was park and never offered, so spot n is location n + 1. A saved PMT protocol step's spot numbers therefore point at a different location after the motor board is upgraded across .25 — re-check them. While the motor firmware version is unknown (re-read once on demand, and retried once at connect for a board still homing) the spot read and every PMT move are refused with that reason rather than guessing. On .25+, a location 1 that reads 0 µm or the PMT's `_dp_park` position is reported once per connection as an `ERROR_RAISED` (context "PMT spot table check"): the sign of a board upgraded from older firmware whose table was never re-taught and publishes `PMT_SPOTS_UPDATED = "portable_dropbot/signals/pmt_spots_updated"` — `PmtSpotsUpdated {spots: [{slot, position_um}]}`, non-zero slots only. The pane merges it into its rows by slot, keeping the operator's tick/gain/exposure and order. A future add/remove-spot feature only has to republish this topic.
 
 **ADC query**
 - The pane publishes `PMT_ADC_QUERY = "portable_dropbot/requests/pmt_adc_query"` (empty message) on connect, so the pane's conversion (counts -> volts -> amps) has a real full scale before the operator does anything.
@@ -510,7 +577,7 @@ except the two camera stages are delegated to `device_viewer` over a
 small request/reply seam rather than done in the backend itself, since
 the camera lives in the frontend process.
 
-**Topics (`portable_dropbot_controller/consts.py`)**
+**Topics (`portable_dropbot_controller/consts/`)**
 - `FLUORESCENCE_CAPTURE = "portable_dropbot/requests/fluorescence_capture"` — `FluorescenceCaptureRequest {entries: [{filter_position, led_percent, exposure_ms, focus_distance}], request_id, label, directory}` (`exposure_ms` `null` = the camera's auto exposure, settled `FLUORESCENCE_AUTO_EXPOSURE_SETTLE_S` before the grab instead of `FLUORESCENCE_SETTLE_S`; `directory` empty = current experiment directory; `label` filename-safe per the PMT capture's `PMT_CAPTURE_LABEL_PATTERN`).
 - `FLUORESCENCE_CAPTURE_ABORT = "portable_dropbot/requests/fluorescence_capture_abort"` — stops the routine after the current entry's teardown.
 - `FLUORESCENCE_CAPTURE_PROGRESS = "portable_dropbot/signals/fluorescence_capture_progress"` — `FluorescenceCaptureProgress {request_id, index, total, filter_position, stage, detail}` (stages `filter`/`led`/`camera`/`frame`/`teardown`).
@@ -561,8 +628,9 @@ Each signal has a matching `self_test_*_publisher` (`ValidatedTopicPublisher`) i
 **Behaviour rules**
 - The frontend mints a `run_id` per run; every progress/result/finished message carries it and the frontend ignores any other id (a second frontend or stale message cannot corrupt its model).
 - Per run request the backend publishes EXACTLY ONE `SELF_TEST_FINISHED`, always last. A refused run publishes only that message with `refused_reason` set; an accepted run publishes per test progress (start, steps, done) then one result, interleaved with `choreography` progress.
-- Refusals (before any HV change or pad move): a run already in progress; a PMT or fluorescence session holds the board; realtime mode on or a protocol running; unknown test name or `test_kwargs` key; pad state unknown while a selected test needs pads moved; no board detected by the backend's own chip read and `chip_absent_acknowledged` False. Preflight reads and calibration saves report refusals/failures in the reply's `error`.
-- Exclusive ownership: while a run is in progress the backend refuses every other `portable_dropbot/requests/*` topic except abort and preflight read (connection requests that are no-ops while connected also pass), with a logged warning. A disconnect request during a run becomes an abort, so the port is never closed under a running test.
+- Refusals (before any HV change or pad move): a run already in progress; a PMT or fluorescence session holds the board; realtime mode on or a protocol running; Home All or a smart chip lock / unlock running (neither holds the proxy lock); unknown test name or `test_kwargs` key; pad state unknown while a selected test needs pads moved; no board detected by the backend's own chip read and `chip_absent_acknowledged` False. Preflight reads and calibration saves report refusals/failures in the reply's `error`.
+- Exclusive ownership: while a run is in progress the backend refuses every other `portable_dropbot/requests/*` topic except abort, preflight read and `MOTOR_ESTOP` (connection requests that are no-ops while connected also pass), with a logged warning. A disconnect request during a run becomes an abort, so the port is never closed under a running test.
+- E-STOP during a run: `MOTOR_ESTOP` passes the gate and halts the run, as the vendor runner does — the test stops at its next step, the restore switches HV off and sends no pad move (`SelfTestBoard.move_pads` refuses after the halt); `SELF_TEST_FINISHED` has `cancelled` and an `error` naming the E-STOP.
 - Unsaved calibration: the feedback-cap calibration and electrode tare live in board RAM until saved. `unsaved` (`calibration` / `tare`) is backend-owned: set when a run leaves either captured-but-unsaved, cleared by a successful save and on disconnect, reported on finished, preflight and save replies.
 - Verdicts and titles are computed by the backend so every frontend shows the same judgement. `SelfTestResult.result` is the vendor result made JSON-safe (arrays to lists, NaN to None); the backend also writes each test's JSON under the experiment directory (`results_path` / `directory`, reference only) and the frontend regenerates any Markdown/HTML report locally from the inline results, so a remote frontend works.
 

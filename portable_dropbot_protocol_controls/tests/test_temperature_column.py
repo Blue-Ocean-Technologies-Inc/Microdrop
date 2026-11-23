@@ -13,9 +13,17 @@ column."""
 
 # Standard library imports.
 import json
+import threading
+
+# Third-party imports.
+import pytest
 
 # Microdrop package imports.
 import portable_dropbot_protocol_controls.protocol_columns.temperature_column as tc_mod
+from pluggable_protocol_tree.execution.step_context import (
+    ProtocolContext,
+    StepContext,
+)
 from portable_dropbot_controller.consts import (
     DEFAULT_TEMP_CHANNEL,
     PROTOCOL_SET_TEMPERATURE,
@@ -42,7 +50,7 @@ class _Row:
 
 class _Ctx:
     def __init__(self, preview=False):
-        self.protocol = type("P", (), {"preview_mode": preview})()
+        self.protocol = type("P", (), {"preview_mode": preview, "scratch": {}})()
         self.waited = None
 
     def wait_for(self, topic, timeout=None):
@@ -166,3 +174,66 @@ def test_post_protocol_end_skips_in_preview_mode(monkeypatch):
     ctx = type("Ctx", (), {"preview_mode": True})()
     handler.on_post_protocol_end(ctx)
     assert pub == []
+
+
+# --------------------------------------------------------------------- #
+# A failsafe alarm on the held loop fails the run at a step boundary     #
+# --------------------------------------------------------------------- #
+
+
+def _step_ctx(protocol):
+    ctx = StepContext(row=None, protocol=protocol)
+    ctx.open_mailbox(TEMPERATURE_REACHED)
+
+    return ctx
+
+
+@pytest.fixture
+def protocol():
+    return ProtocolContext(stop_event=threading.Event())
+
+
+def _failure(error):
+    return json.dumps({"channel": DEFAULT_TEMP_CHANNEL, "error": error})
+
+
+def test_a_hold_phase_failure_fails_the_next_step_boundary(protocol, monkeypatch):
+    monkeypatch.setattr(tc_mod, "publish_message", lambda topic, message: None)
+    handler = TemperatureHandler()
+    handler.ack_time_s = 0.0
+
+    # A step drives the heater (fire-and-forget here, no ack wait)...
+    handler.on_step(_Row(), _step_ctx(protocol))
+
+    # ...and a later step's mailbox receives the backend's hold-phase error.
+    later = _step_ctx(protocol)
+    later.deposit(
+        TEMPERATURE_REACHED, _failure("heater failsafe alarm 09001: over temp")
+    )
+
+    with pytest.raises(RuntimeError, match="09001"):
+        handler.on_post_step(_Row(), later)
+
+
+def test_step_boundaries_pass_without_a_failure(protocol, monkeypatch):
+    monkeypatch.setattr(tc_mod, "publish_message", lambda topic, message: None)
+    handler = TemperatureHandler()
+    handler.ack_time_s = 0.0
+    handler.on_step(_Row(), _step_ctx(protocol))
+    ctx = _step_ctx(protocol)
+    ctx.deposit(
+        TEMPERATURE_REACHED,
+        json.dumps({"channel": DEFAULT_TEMP_CHANNEL, "current_c": 55.0}),
+    )
+
+    handler.on_pre_step(_Row(), ctx)
+    handler.on_post_step(_Row(), ctx)
+
+
+def test_a_run_that_never_drove_the_heater_ignores_the_topic(protocol):
+    handler = TemperatureHandler()
+    ctx = _step_ctx(protocol)
+    ctx.deposit(TEMPERATURE_REACHED, _failure("stale from another run"))
+
+    handler.on_pre_step(_Row(), ctx)
+    handler.on_post_step(_Row(), ctx)

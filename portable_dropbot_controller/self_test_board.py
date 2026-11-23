@@ -29,7 +29,8 @@ from portable_dropbot_self_tests.consts import (
 )
 
 # Local imports.
-from .self_test_choreography import HV_OFF_CONFIRMED, hv_status_byte
+from .consts import HV_ENABLE_STATUS_OFF
+from .self_test_choreography import hv_status_byte
 from .self_test_results import result_payload, strip_traceback, write_result_json
 
 # Logger import.
@@ -74,7 +75,9 @@ class SelfTestBoard(HasTraits):
     def move_pads(self, step):
         """HV off (confirmed), the pad move and its PUSHPAD_READ read-back,
         all under one proxy-lock span: nothing can re-enable the HV between
-        the confirmation and the move."""
+        the confirmation and the move. The move itself skips the lock
+        (``_motion_call``) without releasing this span. After an E-STOP no
+        move is sent, as the vendor runner's halt."""
         self._publish_progress(step.index, phase="choreography", text=step.text)
 
         with self.controller._proxy_lock:
@@ -84,8 +87,13 @@ class SelfTestBoard(HasTraits):
             )
             status = hv_status_byte(reply) if ok else None
 
-            if status != HV_OFF_CONFIRMED:
+            if status != HV_ENABLE_STATUS_OFF:
                 return False, None, f"HV off not confirmed (reply {status!r})"
+
+            halt = self.controller._self_test_halt_reason
+
+            if halt:
+                return False, None, f"{halt}: the pads are left where they are"
 
             accepted = self.controller._set_pogo(step.target)
             ok, read_back = self.controller._proxy_call(

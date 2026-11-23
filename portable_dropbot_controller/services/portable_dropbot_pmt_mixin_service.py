@@ -45,7 +45,7 @@ from datetime import datetime
 from pydantic import ValidationError
 
 # Enthought library imports.
-from traits.api import Any, Bool, Dict, HasTraits, Instance, Int, Str, provides
+from traits.api import Any, Bool, Dict, Instance, Int, Str, provides
 
 # Microdrop package imports.
 from microdrop_application.helpers import get_current_experiment_directory
@@ -60,8 +60,6 @@ from ..consts import (
     PMT_ADC_TYPES,
     PMT_CAPTURE_SUBDIR,
     PMT_GAIN_BOUNDS,
-    PMT_PARK_LOCATION,
-    PMT_SPOT_SLOTS,
     PMT_STREAM_AVG,
     PMT_STREAM_DATA_CMD,
     PMT_STREAM_OSR,
@@ -89,9 +87,9 @@ from ..pmt_capture import (
     calibrate_period,
     capture_filename,
     capture_stats,
-    decode_pmt_positions,
     write_capture_csv,
 )
+from ..pmt_motion import PmtMotionMixin
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -100,7 +98,7 @@ logger = get_logger(__name__)
 
 
 @provides(IPortableDropbotControlMixinService)
-class PortableDropbotPmtMixinService(HasTraits):
+class PortableDropbotPmtMixinService(PmtMotionMixin):
     id = Str("portable_dropbot_pmt_mixin_service")
     name = Str("Portable Dropbot PMT Mixin")
 
@@ -274,7 +272,7 @@ class PortableDropbotPmtMixinService(HasTraits):
             return
 
         try:
-            positions = decode_pmt_positions(reply)
+            positions = self._pmt_spot_table(reply)
         except ValueError as error:
             self._publish_error("PMT spots read", error)
             return
@@ -298,25 +296,19 @@ class PortableDropbotPmtMixinService(HasTraits):
         the capture routine owns the motor; a live stream or acquire keeps
         running, so the operator can watch the signal at the new spot."""
         spot = int(float(str(message)))
-
-        if not 0 <= spot <= PMT_SPOT_SLOTS:
-            logger.warning(f"PMT spot out of range: {spot}")
-
-            return
+        context = f"PMT move to spot {spot}"
 
         if self._pmt_capturing:
-            logger.warning(f"PMT move to spot {spot} refused: a capture is running")
+            logger.warning(f"{context} refused: a capture is running")
 
             return
 
-        ok, location = self._proxy_call(
-            f"PMT move to spot {spot}",
-            lambda: self.proxy.motor.pmt_ctrl(spot + PMT_PARK_LOCATION),
-        )
-        logger.info(
-            f"Portable Dropbot PMT --> spot {spot}: "
-            f"{'ok' if ok and location is not None else 'FAILED'}"
-        )
+        failure = self._move_pmt(context, spot)
+
+        if failure:
+            self._publish_error(context, failure)
+        else:
+            logger.info(f"Portable Dropbot PMT --> spot {spot}: ok")
 
     # ------------------------------------------------------------------ #
     # PMT Capture pane: multi-spot capture routine                         #
@@ -504,9 +496,9 @@ class PortableDropbotPmtMixinService(HasTraits):
                 raise RuntimeError("PMT capture: no proxy connected")
 
             # pmt_stream/pmt_gain_set/pmt_power live only on the generated
-            # sig/motor proxies, not the uart facade the single-acquire
+            # sig proxy, not the uart facade the single-acquire
             # path uses — one dialect per routine keeps the log readable.
-            uart, sig, motor = self.proxy.uart, self.proxy.sig, self.proxy.motor
+            uart, sig = self.proxy.uart, self.proxy.sig
             self._query_pmt_adc()
             self._proxy_call(
                 "PMT capture: fluorescence LED off",
@@ -554,13 +546,12 @@ class PortableDropbotPmtMixinService(HasTraits):
 
                 try:
                     progress("move")
-                    ok, location = self._proxy_call(
-                        f"PMT capture: move to spot {entry.slot}",
-                        lambda: motor.pmt_ctrl(entry.slot + PMT_PARK_LOCATION),
+                    failure = self._move_pmt(
+                        f"PMT capture: move to spot {entry.slot}", entry.slot
                     )
 
-                    if not ok or location is None:
-                        raise RuntimeError(f"move to spot {entry.slot}: no reply")
+                    if failure:
+                        raise RuntimeError(f"move to spot {entry.slot}: {failure}")
 
                     progress("gain")
                     ok, set_ok = self._proxy_call(
@@ -661,13 +652,10 @@ class PortableDropbotPmtMixinService(HasTraits):
             self._publish_pmt(acquiring=False)
 
             if request.park_motor:
-                ok, location = self._proxy_call(
-                    "PMT capture: park",
-                    lambda: self.proxy.motor.pmt_ctrl(PMT_PARK_LOCATION),
-                )
+                failure = self._move_pmt("PMT capture: park", 0)
 
-                if not ok or location is None:
-                    logger.error("Portable Dropbot PMT park after capture FAILED")
+                if failure:
+                    self._publish_error("PMT park after capture", failure)
 
         complete = (
             not aborted
@@ -750,7 +738,7 @@ class PortableDropbotPmtMixinService(HasTraits):
             "source": "Microdrop portable PMT capture",
             "taken": datetime.now().isoformat(timespec="seconds"),
             "slot": entry.slot,
-            "motor_location": entry.slot + PMT_PARK_LOCATION,
+            "motor_location": self._pmt_spot_location(entry.slot),
             "position_um": self._pmt_spot_positions.get(entry.slot, ""),
             "gain": entry.gain,
             "exposure_s": entry.exposure_s,

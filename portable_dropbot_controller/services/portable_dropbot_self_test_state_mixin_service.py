@@ -122,8 +122,9 @@ class PortableDropbotSelfTestStateMixinService(HasTraits):
 
     def _read_preflight(self):
         """The pre-flight board fields, or the error that kept them unread.
-        A held lock is a long driver call (a pad move, home-all): waiting on
-        it would stall this worker, so the reply says busy instead."""
+        A held lock is a long locked sequence (a self-test step, the
+        calibration macro): waiting on it would stall this worker, so the
+        reply says busy instead."""
 
         if not self._proxy_lock.acquire(blocking=False):
             return {"error": PREFLIGHT_BOARD_BUSY_ERROR}

@@ -42,18 +42,19 @@ from collections import namedtuple
 # Third-party imports.
 from dropbot_portable import self_test as vendor_self_test
 
+# Local imports.
+from .consts import CHIP_ON_PAD_PRESENCE_BIT, HV_ENABLE_STATUS_OFF, TRAY_ACTION_CODES
+
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-#: PUSHPAD_READ / STATUS bytes the choreography decodes.
+#: PUSHPAD_READ bytes the choreography decodes. The HV off status, the
+#: chip presence bit and the tray-in byte are the controller's consts
+#: (HV_ENABLE_STATUS_OFF, CHIP_ON_PAD_PRESENCE_BIT, TRAY_ACTION_CODES).
 PADS_PRESSED_BYTE = 1
 PADS_RELEASED_BYTE = 0
-HV_OFF_CONFIRMED = 1
-CHIP_ON_PAD_PRESENT_BIT = 0x1
-TRAY_IN_BYTE = 0
-TRAY_OUT_BYTE = 1
 #: STATUS chip_res window of the capacitor test board (raw counts), read
 #: with the pads pressed; the vendor pre-flight's TEST_BOARD_CHIP_RES_RANGE.
 TEST_BOARD_CHIP_RES_RANGE = (1200, 2200)
@@ -205,7 +206,7 @@ def tray_text(tray_byte):
     if tray_byte is None:
         return "no reply"
 
-    return {TRAY_IN_BYTE: "in", TRAY_OUT_BYTE: "out"}.get(
+    return {code: name for name, code in TRAY_ACTION_CODES.items()}.get(
         tray_byte, f"state 0x{int(tray_byte):02X}"
     )
 
@@ -248,7 +249,7 @@ def preflight_fields(reads):
     chip_res = None if status is None else int(status.chip_res)
 
     return {
-        "tray_in": None if tray is None else tray == TRAY_IN_BYTE,
+        "tray_in": None if tray is None else tray == TRAY_ACTION_CODES["in"],
         "pads_pressed": pads_state(reads.get("pads")),
         "chip_on_pad_mask": chip_on_pad,
         "chip_res": chip_res,
@@ -261,7 +262,7 @@ def board_present(reads):
     fields = preflight_fields(reads)
     contact = fields["chip_on_pad_mask"]
 
-    return bool(contact is not None and contact & CHIP_ON_PAD_PRESENT_BIT) or bool(
+    return bool(contact is not None and contact & CHIP_ON_PAD_PRESENCE_BIT) or bool(
         fields["board_detected"]
     )
 
@@ -334,7 +335,7 @@ def start_refusal_reason(tests, reads, chip_absent_acknowledged, tray_in=True):
             f"the pads, so nothing was started"
         )
 
-    if tray_byte != (TRAY_IN_BYTE if tray_in else TRAY_OUT_BYTE):
+    if tray_byte != TRAY_ACTION_CODES["in" if tray_in else "out"]:
         return (
             f"the tray is not {'in' if tray_in else 'out'} "
             f"({tray_text(tray_byte)}), where the run wants it"
@@ -376,7 +377,7 @@ def _hv_off(board, step):
     """Switch the HV off; returns "" when confirmed, else why not."""
     status = hv_status_byte(board.hv_off(step))
 
-    if status == HV_OFF_CONFIRMED:
+    if status == HV_ENABLE_STATUS_OFF:
         return ""
 
     return f"HV off not confirmed (reply {status!r}); pads not moved"

@@ -19,10 +19,22 @@ import pytest
 from portable_dropbot_controller.consts import (
     CHIP_DETECT_RULE_ANY_POGO,
     CHIP_DETECT_RULE_BOTH_POGOS,
+    CHIP_DETECT_RULE_PRESENCE,
+    DEFAULT_CHIP_DETECT_RULE,
 )
 from portable_dropbot_controller.portable_dropbot_controller_base import (
     chip_seated,
 )
+
+
+def test_default_rule_is_the_vendors_presence_rule():
+    assert DEFAULT_CHIP_DETECT_RULE == CHIP_DETECT_RULE_PRESENCE
+
+
+@pytest.mark.parametrize("contacts", range(8))
+def test_presence_rule_reads_only_the_debounced_bit(contacts):
+    # The raw pad bits are diagnostic only (vendor field doc): never gated on.
+    assert chip_seated(contacts, CHIP_DETECT_RULE_PRESENCE) is bool(contacts & 1)
 
 
 @pytest.mark.parametrize(

@@ -19,13 +19,18 @@ from traits.api import Instance
 # Microdrop package imports.
 from device_viewer.consts import VolumeEstimateMessage
 from microdrop_application.dialogs.pyface_wrapper import error, warning
-from portable_dropbot_controller.consts import FLUORESCENCE_LED_RAW_MAX, ChipLockFailed
+from portable_dropbot_controller.consts import (
+    FLUORESCENCE_LED_RAW_MAX,
+    AlarmRaised,
+    ChipLockFailed,
+    FirmwareVersionsUpdated,
+)
 from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
 )
 
 # Local imports.
-from ..consts import ALARM_LOG_LENGTH
+from ..consts import ALARM_LOG_LENGTH, FAN_DUTY_BITS, HUMIDITY_SENSOR_DEAD_RAW
 from ..models.model import PortableDropbotStatusAndControlsModel
 
 # Logger import.
@@ -64,6 +69,41 @@ def summarize_chip_pad_contacts(contacts):
         summary = "No pogos on chip"
 
     return f"{summary} ({contacts})"
+
+
+def format_environment_reading(value, unit):
+    """A device temperature or humidity reading, or "n/a" for the 0xFFFF
+    the board sends while its humidity sensor is not answering."""
+
+    if round(value * 100) == HUMIDITY_SENSOR_DEAD_RAW:
+        return "n/a"
+
+    return f"{value:.2f} {unit}"
+
+
+def summarize_fan_duty(fan_duty):
+    """Say which fans the STATUS fan_duty bitmask has commanded on."""
+    fans_on = [name for name, bit in FAN_DUTY_BITS.items() if int(fan_duty) & bit]
+
+    return f"{', '.join(fans_on)} on" if fans_on else "Off"
+
+
+def summarize_status_tail(data):
+    """The STATUS tail's HV setpoint and faults as the vendor UI words them:
+    "n/a" on firmware without the tail, "not set" / "none" when empty."""
+    setpoint, faults = data.get("hv_setpoint"), data.get("faults")
+
+    if setpoint is None:
+        setpoint_text = "n/a"
+    else:
+        setpoint_text = "not set" if setpoint == 0 else f"{setpoint:.2f} V"
+
+    if faults is None:
+        faults_text = "n/a"
+    else:
+        faults_text = ", ".join(faults) if faults else "none"
+
+    return setpoint_text, faults_text
 
 
 class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
@@ -136,11 +176,13 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
         dev_temp = data.get("dev_temp")
         if dev_temp is not None:
-            self.model.device_temp_display = f"{dev_temp:.2f} °C"
+            self.model.device_temp_display = format_environment_reading(dev_temp, "°C")
 
         dev_hum = data.get("dev_hum")
         if dev_hum is not None:
-            self.model.device_humidity_display = f"{dev_hum:.2f} %RH"
+            self.model.device_humidity_display = format_environment_reading(
+                dev_hum, "%RH"
+            )
 
         out_power = data.get("out_power")
         if out_power is not None:
@@ -152,13 +194,18 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
 
         fan_duty = data.get("fan_duty")
         if fan_duty is not None:
-            self.model.fan_duty_display = f"{fan_duty:g} %"
+            self.model.fan_duty_display = summarize_fan_duty(fan_duty)
 
-        # Board diagnostics: PMT and the chip health flags.
-        pmt = data.get("pmt")
-        if pmt is not None:
-            self.model.pmt_display = f"{pmt:g}"
+        # Board health: the firmware halt latch and the STATUS tail.
+        halted = data.get("halted")
+        if halted is not None:
+            self.model.halted = bool(halted)
 
+        self.model.hv_setpoint_display, self.model.faults_display = (
+            summarize_status_tail(data)
+        )
+
+        # Board diagnostics: the chip health flags.
         chip_short = data.get("chip_short_circuit")
         if chip_short is not None:
             self.model.chip_short_display = "Yes" if chip_short else "No"
@@ -189,10 +236,54 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
             )
 
     def _on_alarm_triggered(self, body):
-        data = json.loads(str(body))
-        alarms = data.get("alarms", [])
-        if alarms:
-            self._record_alarm("; ".join(str(alarm) for alarm in alarms))
+        """One REPORT_ALARM frame: a raise adds its code to the active
+        alarms and the log; a clear (active 0) retires the code and is
+        logged as a clear, never as a new alarm."""
+        alarm = AlarmRaised.model_validate_json(str(body))
+
+        if not alarm.reports:
+            # A backend without the report fields: display strings only.
+            if alarm.alarms:
+                self._record_alarm("; ".join(alarm.alarms))
+
+            return
+
+        for report in alarm.reports:
+            if report.active == 0:
+                if report.code:
+                    self.model.active_alarms.pop(report.code, None)
+
+                self._log_alarm(f"Cleared: {report.text}")
+                continue
+
+            if report.code:
+                self.model.active_alarms[report.code] = report.title or report.text
+
+            self._record_alarm(report.text)
+
+    def _on_firmware_versions_updated_triggered(self, body):
+        """Show the boards' firmware; firmware below the driver's minimum
+        gets a warning once per connect (the backend publishes once). The
+        update itself is the vendor UI's job — MicroDrop never flashes."""
+        firmware = FirmwareVersionsUpdated.model_validate_json(str(body))
+        self.model.firmware_display = (
+            f"MCU {firmware.mcu or 'unknown'}, Motor {firmware.motor or 'unknown'}"
+        )
+
+        if not firmware.outdated:
+            return
+
+        self._record_alarm(f"Firmware outdated: {'; '.join(firmware.outdated)}")
+        GUI.invoke_later(
+            warning,
+            None,
+            "The Portable DropBot firmware is older than this driver supports:\n\n"
+            + "\n".join(firmware.outdated)
+            + "\n\nUpdate it from the Firmware tab of the vendor's DropBot "
+            "Portable UI. MicroDrop does not flash firmware.",
+            title="Portable DropBot Firmware Outdated",
+            cancel=False,
+        )
 
     def _on_error_triggered(self, body):
         data = json.loads(str(body))
@@ -223,10 +314,13 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
             GUI.invoke_later(error, None, message, title="Chip Lock Failed")
 
     def _record_alarm(self, text):
-        """Show text as the last alarm and push it, timestamped, onto the
-        top of the alarm log, which keeps the newest ALARM_LOG_LENGTH."""
+        """Show text as the last alarm and log it."""
         self.model.last_alarm = text
+        self._log_alarm(text)
 
+    def _log_alarm(self, text):
+        """Push text, timestamped, onto the top of the alarm log, which
+        keeps the newest ALARM_LOG_LENGTH."""
         entries = [f"{datetime.now():%H:%M:%S} {text}"]
 
         if self.model.alarm_log != "-":
