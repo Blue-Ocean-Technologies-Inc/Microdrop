@@ -14,10 +14,63 @@ matplotlib is imported only when a canvas is made, so importing a view that
 uses this editor does not load it."""
 
 # Enthought library imports.
-from pyface.qt import QtWidgets
-from traits.api import Instance, Int
+from pyface.qt import QtGui, QtWidgets
+from traits.api import Bool, Instance, Int
 from traitsui.api import BasicEditorFactory
 from traitsui.qt.editor import Editor as QtEditor
+
+# Microdrop style imports.
+from microdrop_style.helpers import is_dark_mode
+
+#: RGB of the black reference lines ("k--" identity, baselines) that would
+#: vanish on a dark background.
+BLACK_RGB = (0.0, 0.0, 0.0)
+
+
+def theme_figure(figure, base, text, mid):
+    """Paint an on-screen ``figure`` in UI palette colours: ``base`` for the
+    backgrounds, ``text`` for axes, ticks, labels, titles and black
+    reference lines, ``mid`` for the grid and the legend frame. Data colours
+    stay. Ported from the vendor UI's ``self_test_plots.theme_figure``, which
+    reads the colours from Qt itself; exports never call it."""
+    # Imported here: only a shown figure should load matplotlib.
+    from matplotlib.colors import to_rgb
+
+    figure.patch.set_facecolor(base)
+
+    for figure_text in figure.texts:
+        figure_text.set_color(text)
+
+    for axes in figure.axes:
+        axes.set_facecolor(base)
+        axes.tick_params(colors=text, which="both")
+        axes.xaxis.label.set_color(text)
+        axes.yaxis.label.set_color(text)
+        axes.title.set_color(text)
+
+        for spine in axes.spines.values():
+            spine.set_edgecolor(text)
+
+        for line in axes.get_xgridlines() + axes.get_ygridlines():
+            line.set_color(mid)
+
+        for line in axes.get_lines():
+            try:
+                if to_rgb(line.get_color()) == BLACK_RGB:
+                    line.set_color(text)
+
+            except ValueError:
+                # A colour matplotlib cannot read as RGB is no black line.
+                pass
+
+        legend = axes.get_legend()
+
+        if legend is not None:
+            legend.get_frame().set_facecolor(base)
+            legend.get_frame().set_edgecolor(mid)
+
+            for legend_text in legend.get_texts():
+                legend_text.set_color(text)
 
 
 class _MatplotlibFigureEditor(QtEditor):
@@ -52,6 +105,9 @@ class _MatplotlibFigureEditor(QtEditor):
         # backend (the frontends that never plot skip it entirely).
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 
+        if self.factory.follow_dark_theme and is_dark_mode():
+            self._theme_from_palette()
+
         self.canvas = FigureCanvasQTAgg(self.value)
         self.canvas.setMinimumHeight(self.factory.min_height)
         self.control.layout().addWidget(self.canvas)
@@ -60,6 +116,15 @@ class _MatplotlibFigureEditor(QtEditor):
     def dispose(self):
         self._remove_canvas()
         super().dispose()
+
+    def _theme_from_palette(self):
+        palette = QtWidgets.QApplication.palette()
+        roles = QtGui.QPalette.ColorRole
+        base, text, mid = (
+            palette.color(role).name() for role in (roles.Base, roles.Text, roles.Mid)
+        )
+
+        theme_figure(self.value, base, text, mid)
 
     def _remove_canvas(self):
         if self.canvas is None:
@@ -77,3 +142,8 @@ class MatplotlibFigureEditor(BasicEditorFactory):
 
     #: Minimum canvas height (px): a squeezed figure is unreadable.
     min_height = Int(300)
+
+    #: In dark mode, repaint each shown Figure in the app palette's colours
+    #: (``theme_figure``). It recolours the trait's Figure itself, so use it
+    #: only for Figures drawn for the screen.
+    follow_dark_theme = Bool(False)

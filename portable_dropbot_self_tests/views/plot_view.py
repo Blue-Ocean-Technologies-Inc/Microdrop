@@ -32,7 +32,9 @@ plot_view = View(
         UItem(
             "figure",
             resizable=True,
-            editor=MatplotlibFigureEditor(min_height=PLOT_CANVAS_HEIGHT_PX),
+            editor=MatplotlibFigureEditor(
+                min_height=PLOT_CANVAS_HEIGHT_PX, follow_dark_theme=True
+            ),
             visible_when="figure is not None",
         ),
         UItem(
