@@ -21,10 +21,14 @@ from traitsui.api import UI
 from microdrop_style.button_styles import TEXT_BUTTON_STYLE
 
 # Local imports.
+from ...consts import CAMERA_PROPERTIES_LOADING_TEXT
 from ..alpha_view.alpha_table import alpha_table_view
 from ..camera_control_view.properties_window import CameraPropertiesWindow
 from ..camera_control_view.widget import CameraControlWidget
 from .section import SidebarSection, stack_widgets
+
+#: The Camera Properties button's text, once the properties are in.
+CAMERA_PROPERTIES_LABEL = "Camera Properties"
 
 
 class CameraControlsSection(SidebarSection):
@@ -37,7 +41,8 @@ class CameraControlsSection(SidebarSection):
     camera_properties_window = Instance(CameraPropertiesWindow)
 
     #: Opens the Camera Properties window; shown only while the selected
-    #: camera has focus or image controls.
+    #: camera has focus or image controls, and greyed out, saying so, while
+    #: they are still being looked up.
     camera_properties_button = Instance(QPushButton)
 
     #: Layer opacity table UI; the pane sizes it from preferences.
@@ -45,20 +50,29 @@ class CameraControlsSection(SidebarSection):
 
     @observe(
         "camera_properties_button, "
-        "camera_properties_window.camera_model.[focus.available,image_settings]"
+        "camera_properties_window.camera_model.[focus.available,image_settings,"
+        "camera_properties_loading]"
     )
     def _offer_camera_properties_when_controllable(self, event):
         window = self.camera_properties_window
+        button = self.camera_properties_button
 
-        if self.camera_properties_button is None or window is None:
+        if button is None or window is None:
             return
 
         model = window.camera_model
+        loading = model.camera_properties_loading
         controllable = model.focus.available or bool(model.image_settings)
 
-        self.camera_properties_button.setVisible(controllable)
+        # The button stands in for the loading line, so the row keeps its
+        # place from the lookup's start to its outcome.
+        button.setVisible(controllable or loading)
+        button.setEnabled(not loading)
+        button.setText(
+            CAMERA_PROPERTIES_LOADING_TEXT if loading else CAMERA_PROPERTIES_LABEL
+        )
 
-        if not controllable:
+        if not controllable and not loading:
             window.close()
 
 
@@ -103,7 +117,7 @@ def build_camera_controls(
 
     properties_widget = QWidget()
     properties_layout = QHBoxLayout(properties_widget)
-    camera_properties_button = QPushButton("Camera Properties")
+    camera_properties_button = QPushButton(CAMERA_PROPERTIES_LABEL)
     camera_properties_button.setStyleSheet(TEXT_BUTTON_STYLE)
     camera_properties_button.setToolTip(
         "Focus, exposure and image controls of the selected camera"
