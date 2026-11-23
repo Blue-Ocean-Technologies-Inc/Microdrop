@@ -15,6 +15,9 @@ frame, an exposure aid like a camera's histogram display."""
 from pyface.tasks.api import TraitsDockPane
 from traits.api import Instance, observe
 
+# Microdrop utils imports.
+from microdrop_utils.lazy_dock_pane import LazyContentDockPane
+
 # Local imports.
 from ...consts import PKG
 from .controller import LiveHistogramController
@@ -22,8 +25,11 @@ from .model import LiveHistogramModel
 from .view import LiveHistogramView
 
 
-class LiveHistogramDockPane(TraitsDockPane):
-    """Histogram of the device view's camera feed; samples only while shown."""
+class LiveHistogramDockPane(LazyContentDockPane, TraitsDockPane):
+    """Histogram of the device view's camera feed; samples only while shown.
+
+    The plot is built the first time the pane is shown.
+    """
 
     id = PKG + ".live_histogram.dock_pane"
     name = "Live Histogram"
@@ -53,8 +59,9 @@ class LiveHistogramDockPane(TraitsDockPane):
 
         return getattr(device_viewer_pane, "video_item", None)
 
-    @observe("visible")
-    def _sample_while_visible(self, event):
+    @observe("showing_contents")
+    def _sample_while_shown(self, event):
+        """Not on ``visible``: pyface keeps that True behind another tab."""
         self.controller.active = event.new
 
     def destroy(self):
