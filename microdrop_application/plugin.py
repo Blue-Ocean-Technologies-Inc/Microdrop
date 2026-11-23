@@ -149,17 +149,11 @@ class MicrodropPlugin(Plugin):
         return [preferences_dialog_service_offer]
 
     def _create_preferences_dialog_service(self):
-        """Factory method for preferences dialog service."""
+        """Factory method for preferences dialog service.
+
+        The registry caches the dialog for the session, so the dialog reads
+        the contributed panes and categories itself, each time it opens.
+        """
         from .preferences_dialog import PreferencesDialog
 
-        dialog = PreferencesDialog(application=self.application)
-
-        dialog.trait_set(
-            categories=self.application.get_extensions(PREFERENCES_CATEGORIES),
-            panes=[
-                factory(dialog=dialog)
-                for factory in self.application.get_extensions(PREFERENCES_PANES)
-            ],
-        )
-
-        return dialog
+        return PreferencesDialog(application=self.application)
