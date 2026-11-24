@@ -41,6 +41,24 @@ EMPTY_TITLE = "You're all caught up"
 EMPTY_HINT = "New notifications pop up by the bell and are kept here."
 
 
+def make_card(entry, pane_model, parent):
+    """A drawer card for ``entry`` whose clicks go to ``pane_model``."""
+    card = NotificationCard(entry, parent)
+
+    card.dismiss_clicked.connect(lambda entry: setattr(pane_model, "dismiss", entry))
+    card.action_clicked.connect(lambda entry: setattr(pane_model, "run_action", entry))
+    card.secondary_clicked.connect(
+        lambda entry: setattr(pane_model, "run_secondary_action", entry)
+    )
+    card.expand_clicked.connect(_toggle_expanded)
+
+    return card
+
+
+def _toggle_expanded(entry):
+    entry.expanded = not entry.expanded
+
+
 class EmptyState(QtWidgets.QWidget):
     """A large muted glyph over a headline and a hint, centred."""
 
@@ -65,6 +83,12 @@ class EmptyState(QtWidgets.QWidget):
 
         layout.addStretch(2)
         self._restyle()
+
+    def set_hint(self, title):
+        """Say ``title`` alone (a filter's "No errors."), or the default
+        headline and hint when empty."""
+        self._title.setText(title or EMPTY_TITLE)
+        self._hint.setVisible(not title)
 
     def _restyle(self):
         muted = muted_text(self.palette()).name()
@@ -182,21 +206,7 @@ class CardListView(QtWidgets.QScrollArea):
         return height if height > 0 else self._column.sizeHint().height()
 
     def _make_card(self, entry):
-        card = NotificationCard(entry, self._column)
-        model = self.pane_model
-
-        card.dismiss_clicked.connect(lambda entry: setattr(model, "dismiss", entry))
-        card.action_clicked.connect(lambda entry: setattr(model, "run_action", entry))
-        card.secondary_clicked.connect(
-            lambda entry: setattr(model, "run_secondary_action", entry)
-        )
-        card.expand_clicked.connect(self._toggle_expanded)
-
-        return card
-
-    @staticmethod
-    def _toggle_expanded(entry):
-        entry.expanded = not entry.expanded
+        return make_card(entry, self.pane_model, self._column)
 
     # ------------------------------------------------------------------ #
     # Times                                                               #

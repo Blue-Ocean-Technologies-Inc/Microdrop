@@ -29,7 +29,7 @@ from microdrop_status_bar.consts import ICON_PRIORITY_RIGHTMOST
 from notifications.consts import SEVERITY_COLORS
 
 # Microdrop style imports.
-from microdrop_style.colors import WHITE
+from microdrop_style.colors import INFO_COLOR, WHITE
 from microdrop_style.icons.icons import ICON_NOTIFICATIONS, ICON_NOTIFICATIONS_ACTIVE
 
 # Local imports.
@@ -44,6 +44,10 @@ BELL_SIZE = 20
 #: centre.
 BADGE_HEIGHT = 15
 BADGE_OFFSET = 3
+
+#: The quiet mark: a moon at the bell's lower left, and its pixel size.
+QUIET_GLYPH = "bedtime"
+QUIET_SIZE = 12
 
 #: Most degrees the bell swings either way when the count goes up.
 SWING_DEGREES = 16
@@ -62,6 +66,9 @@ class UxBellIcon(QtWidgets.QWidget):
         self.count = 0
         self.color = None
 
+        #: Whether toasts are held (a protocol runs): a small moon shows.
+        self.quiet = False
+
         #: 0-1 through the swing; 1 at rest.
         self._swing = 1.0
 
@@ -77,10 +84,12 @@ class UxBellIcon(QtWidgets.QWidget):
 
         self._fit()
 
-    def show_count(self, count, color):
-        """Show ``count`` in a ``color`` pill; nothing at zero."""
+    def show_count(self, count, color, quiet=False):
+        """Show ``count`` in a ``color`` pill (nothing at zero), and the
+        quiet mark."""
         self.count = count
         self.color = color
+        self.quiet = quiet
         self._fit()
         self.update()
 
@@ -151,6 +160,14 @@ class UxBellIcon(QtWidgets.QWidget):
         )
         painter.restore()
 
+        if self.quiet:
+            moon = QtCore.QRectF(
+                bell.left() - 3, bell.bottom() - QUIET_SIZE + 3, QUIET_SIZE, QUIET_SIZE
+            )
+            painter.setFont(icon_font(QUIET_SIZE))
+            painter.setPen(QtGui.QColor(INFO_COLOR))
+            painter.drawText(moon, _ALIGN.AlignCenter, QUIET_GLYPH)
+
         if self.count:
             self._paint_badge(painter, bell, progress)
 
@@ -207,6 +224,8 @@ class UxBellIndicator(HasTraits):
         return UxBellIcon()
 
     @observe("pane_model.[bell_count, bell_severity]")
+    @observe("pane_model:toasts:quiet")
+    @observe("pane_model:center:bulk_changed")
     def _queue_refresh(self, event):
         """Show the count once the current changes are done: the count is a
         Property, and one changed while its change is being announced can
@@ -227,7 +246,9 @@ class UxBellIndicator(HasTraits):
         severity = self.pane_model.bell_severity
         color = SEVERITY_COLORS.get(severity)
 
-        self.widget.show_count(count, color)
+        quiet = self.pane_model.toasts.quiet
+
+        self.widget.show_count(count, color, quiet)
 
         if count > self._shown:
             self.widget.ring()
@@ -235,7 +256,14 @@ class UxBellIndicator(HasTraits):
         self._shown = count
 
         if count:
-            self.widget.setToolTip(f"Notifications: {count} new. Click to show them.")
+            tooltip = f"Notifications: {count} new. Click to show them."
 
         else:
-            self.widget.setToolTip("Notifications: nothing new. Click to show them.")
+            tooltip = "Notifications: nothing new. Click to show them."
+
+        if quiet:
+            tooltip += (
+                "\nQuiet while the protocol runs: only errors and actions pop up."
+            )
+
+        self.widget.setToolTip(tooltip)

@@ -39,7 +39,7 @@ from microdrop_style.icons.icons import ICON_CLOSE
 
 # Local imports.
 from .card_parts import ClampedLabel, NewDot, meta_text
-from .ux_consts import CARD_BODY_LINES, HelpAction
+from .ux_consts import CARD_BODY_LINES, HIGHLIGHT_MS, HelpAction
 from .view_styles import (
     card_border,
     card_fill,
@@ -74,6 +74,52 @@ _PALETTE_EVENTS = (
     QtCore.QEvent.Type.PaletteChange,
     QtCore.QEvent.Type.ApplicationPaletteChange,
 )
+
+
+#: The cards' shared style sheet, by palette.
+_STYLE_SHEETS = {}
+
+
+def _palette_key(palette):
+    return (
+        palette.color(QtGui.QPalette.ColorRole.Window).rgba(),
+        palette.color(QtGui.QPalette.ColorRole.Text).rgba(),
+    )
+
+
+def card_style_sheet(palette):
+    """The style sheet every card shares in ``palette``, its parts picked
+    by object name; made once per theme."""
+    key = _palette_key(palette)
+    sheet = _STYLE_SHEETS.get(key)
+
+    if sheet is not None:
+        return sheet
+
+    text = palette.color(QtGui.QPalette.ColorRole.Text)
+    muted = muted_text(palette)
+    glyphs = " ".join(
+        f"QLabel#cardGlyph_{severity} {{ color: {color}; }}"
+        for severity, color in SEVERITY_COLORS.items()
+    )
+    sheet = " ".join(
+        [
+            f"QLabel#cardMeta, QLabel#cardActed {{ color: {css(muted)}; }}",
+            f"QLabel#cardBody {{ color: {css(text)}; }}",
+            glyphs,
+            icon_button_style(palette, 16, "QToolButton#cardDismiss"),
+            link_button_style(palette, INFO_COLOR, "QPushButton#cardMore"),
+            link_button_style(palette, INFO_COLOR, "QPushButton#cardHelp"),
+            quiet_button_style(palette, "QPushButton#cardLater"),
+            primary_button_style("QPushButton#cardPrimary"),
+            "QPlainTextEdit#cardTraceback {"
+            f" background: {css(with_alpha(text, 0.05))};"
+            " border: none; border-radius: 4px; }",
+        ]
+    )
+    _STYLE_SHEETS[key] = sheet
+
+    return sheet
 
 
 class _CardBinding(HasTraits):
@@ -119,6 +165,15 @@ class NotificationCard(QtWidgets.QFrame):
         self._hovered = False
         self._palette_key = None
 
+        #: The highlight's strength, 0-1, fading after ``flash()``.
+        self._flash = 0.0
+        self._flash_fade = QtCore.QVariantAnimation(self)
+        self._flash_fade.setDuration(HIGHLIGHT_MS)
+        self._flash_fade.setStartValue(1.0)
+        self._flash_fade.setEndValue(0.0)
+        self._flash_fade.setEasingCurve(QtCore.QEasingCurve.Type.InQuad)
+        self._flash_fade.valueChanged.connect(self._set_flash)
+
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
         self.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Maximum
@@ -139,6 +194,7 @@ class NotificationCard(QtWidgets.QFrame):
         outer.setSpacing(10)
 
         self._glyph = QtWidgets.QLabel(self)
+        self._glyph.setObjectName(f"cardGlyph_{self.entry.severity}")
         self._glyph.setFont(icon_font(GLYPH_SIZE))
         self._glyph.setFixedWidth(GLYPH_SIZE + 2)
         self._glyph.setAlignment(_ALIGN.AlignHCenter | _ALIGN.AlignTop)
@@ -165,6 +221,7 @@ class NotificationCard(QtWidgets.QFrame):
         top.addWidget(self._new_dot, 0, _ALIGN.AlignTop)
 
         self._dismiss = QtWidgets.QToolButton(self)
+        self._dismiss.setObjectName("cardDismiss")
         self._dismiss.setText(ICON_CLOSE)
         self._dismiss.setToolTip(
             "Hide (it stays in notifications)" if self.toast else "Dismiss"
@@ -175,6 +232,7 @@ class NotificationCard(QtWidgets.QFrame):
         column.addLayout(top)
 
         self._meta = QtWidgets.QLabel(self)
+        self._meta.setObjectName("cardMeta")
         self._meta.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Fixed
         )
@@ -183,10 +241,12 @@ class NotificationCard(QtWidgets.QFrame):
         column.addSpacing(4)
 
         self._body = ClampedLabel(self)
+        self._body.setObjectName("cardBody")
         self._body.overflow_changed.connect(self._show_more_link)
         column.addWidget(self._body)
 
         self._traceback = QtWidgets.QPlainTextEdit(self)
+        self._traceback.setObjectName("cardTraceback")
         self._traceback.setReadOnly(True)
         self._traceback.setLineWrapMode(QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap)
         self._traceback.setFont(
@@ -202,6 +262,7 @@ class NotificationCard(QtWidgets.QFrame):
         footer.setSpacing(10)
 
         self._primary = QtWidgets.QPushButton(self._footer)
+        self._primary.setObjectName("cardPrimary")
         self._primary.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self._primary.clicked.connect(lambda: self.action_clicked.emit(self.entry))
         footer.addWidget(self._primary)
@@ -213,12 +274,14 @@ class NotificationCard(QtWidgets.QFrame):
         footer.addStretch(1)
 
         self._more = QtWidgets.QPushButton(self._footer)
+        self._more.setObjectName("cardMore")
         self._more.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self._more.clicked.connect(lambda: self.expand_clicked.emit(self.entry))
         footer.addWidget(self._more)
         column.addWidget(self._footer)
 
         self._acted = QtWidgets.QLabel(self)
+        self._acted.setObjectName("cardActed")
         column.addWidget(self._acted)
 
     # ------------------------------------------------------------------ #
@@ -231,7 +294,6 @@ class NotificationCard(QtWidgets.QFrame):
         palette = self.palette()
 
         self._glyph.setText(SEVERITY_GLYPHS[entry.severity])
-        self._glyph.setStyleSheet(f"color: {SEVERITY_COLORS[entry.severity]};")
 
         bold = self.toast or entry.unread or entry.needs_attention
         self._title.setFont(
@@ -280,6 +342,15 @@ class NotificationCard(QtWidgets.QFrame):
         self._meta.setText(
             metrics.elidedText(text, _ELIDE, max(self._meta.width(), 60))
         )
+
+    def flash(self):
+        """Highlight the card, fading out: "this is the one"."""
+        self._flash_fade.stop()
+        self._flash_fade.start()
+
+    def _set_flash(self, value):
+        self._flash = value
+        self.update()
 
     def set_progress(self, progress):
         """Draw a toast's countdown at ``progress`` (0-1), or none."""
@@ -357,42 +428,30 @@ class NotificationCard(QtWidgets.QFrame):
     # ------------------------------------------------------------------ #
 
     def _restyle(self):
+        """One shared style sheet for the card's parts, by object name: a
+        style sheet per part made building a card several times slower."""
         palette = self.palette()
-        key = (
-            palette.color(QtGui.QPalette.ColorRole.Window).rgba(),
-            palette.color(QtGui.QPalette.ColorRole.Text).rgba(),
-        )
+        key = _palette_key(palette)
 
         if key == self._palette_key:
             return
 
         self._palette_key = key
-        muted = muted_text(palette)
-
         self._meta.setFont(text_font(self.font(), -1.0))
-        self._meta.setStyleSheet(f"color: {muted.name()};")
-        self._body.setStyleSheet(
-            f"color: {palette.color(QtGui.QPalette.ColorRole.Text).name()};"
-        )
         self._acted.setFont(text_font(self.font(), -0.5))
-        self._acted.setStyleSheet(f"color: {muted.name()};")
-        self._dismiss.setStyleSheet(icon_button_style(palette, 16))
-        self._more.setStyleSheet(link_button_style(palette, INFO_COLOR))
-        self._primary.setStyleSheet(primary_button_style())
-
-        code_fill = with_alpha(palette.color(QtGui.QPalette.ColorRole.Text), 0.05)
-        self._traceback.setStyleSheet(
-            f"QPlainTextEdit {{ background: {css(code_fill)};"
-            " border: none; border-radius: 4px; }"
-        )
-        self._style_secondary(palette)
+        self.setStyleSheet(card_style_sheet(palette))
 
     def _style_secondary(self, palette):
-        if isinstance(self.entry.secondary_action, HelpAction):
-            self._secondary.setStyleSheet(link_button_style(palette, INFO_COLOR))
+        name = (
+            "cardHelp"
+            if isinstance(self.entry.secondary_action, HelpAction)
+            else "cardLater"
+        )
 
-        else:
-            self._secondary.setStyleSheet(quiet_button_style(palette))
+        if self._secondary.objectName() != name:
+            self._secondary.setObjectName(name)
+            self._secondary.style().unpolish(self._secondary)
+            self._secondary.style().polish(self._secondary)
 
     def event(self, event):
         if event.type() in _PALETTE_EVENTS:
@@ -413,6 +472,11 @@ class NotificationCard(QtWidgets.QFrame):
         painter.setPen(QtGui.QPen(card_border(palette), 1))
         painter.setBrush(card_fill(palette, self._hovered and not self.toast))
         painter.drawPath(path)
+
+        if self._flash > 0:
+            painter.setPen(QtCore.Qt.PenStyle.NoPen)
+            painter.setBrush(with_alpha(INFO_COLOR, 0.3 * self._flash))
+            painter.drawPath(path)
 
         severity = QtGui.QColor(SEVERITY_COLORS[self.entry.severity])
         painter.save()

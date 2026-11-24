@@ -35,7 +35,12 @@ from microdrop_style.icons.icons import ICON_CLOSE, ICON_DELETE_SWEEP, ICON_DONE
 
 # Local imports.
 from .section_view import DrawerSection
-from .ux_consts import DRAWER_GRIP_WIDTH, DRAWER_MAX_WIDTH, DRAWER_MIN_WIDTH
+from .ux_consts import (
+    DRAWER_GRIP_WIDTH,
+    DRAWER_MAX_WIDTH,
+    DRAWER_MIN_WIDTH,
+    LAYOUT_COLUMN,
+)
 from .ux_models import UxPaneModel
 from .view_styles import (
     icon_button_style,
@@ -43,6 +48,11 @@ from .view_styles import (
     text_font,
     with_alpha,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 #: Object name of the sections' area, behind which the drawer is translucent.
 SECTIONS_OBJECT_NAME = "notifications_ux.sections"
@@ -222,6 +232,7 @@ class _ContentsBinding(HasTraits):
     _queued = Bool(False)
 
     @observe("model:center:entries.items.[is_new, needs_attention, unread]")
+    @observe("model:center:bulk_changed")
     def _show_counts(self, event):
         """Once the current burst of changes is done."""
 
@@ -370,8 +381,17 @@ class UxDrawerHost(NotificationsDrawerHost):
             self._open()
 
     def _build_contents(self):
+        """The contents in the model's layout: one scrolling column, or the
+        resizable sections."""
+        view = UxDrawerView
+
+        if self.model.drawer_layout == LAYOUT_COLUMN:
+            from .column_view import ColumnDrawerView
+
+            view = ColumnDrawerView
+
         self._ui = self.model.edit_traits(
-            view=UxDrawerView, kind="subpanel", parent=self.drawer
+            view=view, kind="subpanel", parent=self.drawer
         )
         contents = self._ui.control
         area = contents.findChild(QtWidgets.QWidget, SECTIONS_OBJECT_NAME)
@@ -395,6 +415,27 @@ class UxDrawerHost(NotificationsDrawerHost):
 
     def _resize_to(self, width):
         self.model.drawer_width = drawer_width_for(self.window.width(), width)
+
+    @observe("model:drawer_layout")
+    def _switch_layout(self, event):
+        """Rebuild the contents in the other layout: now if the drawer is
+        open, else when it next opens."""
+
+        if self._ui is None:
+            return
+
+        control = self._ui.control
+        self._dispose_contents()
+
+        try:
+            control.setParent(None)
+            control.deleteLater()
+
+        except RuntimeError as error:
+            logger.debug(f"Drawer contents already deleted: {error}")
+
+        if self.drawer is not None and self.drawer.isVisible():
+            self._build_contents()
 
     @observe("model:drawer_width")
     def _follow_width(self, event):

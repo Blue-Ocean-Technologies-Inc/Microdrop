@@ -167,54 +167,54 @@ def rounded_path(rect, radius=CARD_RADIUS):
     return path
 
 
-def primary_button_style():
+def primary_button_style(selector="QPushButton"):
     """A filled button for the card's main action."""
     return (
-        "QPushButton {"
+        f"{selector} {{"
         f" background: {PRIMARY_FILL}; color: {WHITE}; border: none;"
         " border-radius: 5px; padding: 4px 12px; font-weight: 600; }"
-        f" QPushButton:hover {{ background: {PRIMARY_FILL_HOVER}; }}"
-        f" QPushButton:pressed {{ background: {PRIMARY_FILL_PRESSED}; }}"
+        f" {selector}:hover {{ background: {PRIMARY_FILL_HOVER}; }}"
+        f" {selector}:pressed {{ background: {PRIMARY_FILL_PRESSED}; }}"
     )
 
 
-def quiet_button_style(palette):
+def quiet_button_style(palette, selector="QPushButton"):
     """An outlined button for a second action such as "Later"."""
     text = palette.color(_ROLE.Text)
 
     return (
-        "QPushButton {"
+        f"{selector} {{"
         f" background: transparent; color: {css(text)};"
         f" border: 1px solid {css(with_alpha(text, 0.28))};"
         " border-radius: 5px; padding: 3px 11px; }"
-        f" QPushButton:hover {{ background: {css(with_alpha(text, 0.07))}; }}"
-        f" QPushButton:pressed {{ background: {css(with_alpha(text, 0.14))}; }}"
+        f" {selector}:hover {{ background: {css(with_alpha(text, 0.07))}; }}"
+        f" {selector}:pressed {{ background: {css(with_alpha(text, 0.14))}; }}"
     )
 
 
-def link_button_style(palette, accent):
+def link_button_style(palette, accent, selector="QPushButton"):
     """A button that reads as a link, e.g. "How do I…?" or "Show more"."""
     color = readable_accent(accent, palette)
 
     return (
-        "QPushButton {"
+        f"{selector} {{"
         f" background: transparent; color: {css(color)}; border: none;"
         " padding: 3px 2px; text-align: left; }"
-        " QPushButton:hover { text-decoration: underline; }"
+        f" {selector}:hover {{ text-decoration: underline; }}"
     )
 
 
-def icon_button_style(palette, pixel_size=18):
+def icon_button_style(palette, pixel_size=18, selector="QToolButton"):
     """A borderless glyph button, e.g. a card's dismiss cross."""
     text = palette.color(_ROLE.Text)
 
     return (
-        "QToolButton {"
+        f"{selector} {{"
         f" font-family: '{ICON_FONT_FAMILY}'; font-size: {pixel_size}px;"
         f" color: {css(muted_text(palette))}; background: transparent;"
         " border: none; border-radius: 4px; padding: 2px; }"
-        f" QToolButton:hover {{ color: {css(text)};"
+        f" {selector}:hover {{ color: {css(text)};"
         f" background: {css(with_alpha(text, 0.08))}; }}"
-        f" QToolButton:pressed {{ background: {css(with_alpha(text, 0.15))}; }}"
-        f" QToolButton:disabled {{ color: {css(with_alpha(text, 0.22))}; }}"
+        f" {selector}:pressed {{ background: {css(with_alpha(text, 0.15))}; }}"
+        f" {selector}:disabled {{ color: {css(with_alpha(text, 0.22))}; }}"
     )

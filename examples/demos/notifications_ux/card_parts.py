@@ -28,6 +28,8 @@ NEW_DOT_SIZE = 8
 
 _ELIDE = QtCore.Qt.TextElideMode.ElideRight
 
+LINE_SEPARATOR = "\u2028"
+
 
 def source_label(entry):
     """Who posted ``entry``, readable: "device_viewer.models" -> "Device
@@ -80,7 +82,9 @@ class ClampedLabel(QtWidgets.QLabel):
     def _clamp(self):
         width = max(self.width(), 40)
         metrics = QtGui.QFontMetrics(self.font())
-        layout = QtGui.QTextLayout(self._full_text, self.font())
+        # QTextLayout breaks lines only at the Unicode line separator.
+        laid_out = self._full_text.replace("\n", LINE_SEPARATOR)
+        layout = QtGui.QTextLayout(laid_out, self.font())
         option = QtGui.QTextOption()
         option.setWrapMode(QtGui.QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         layout.setTextOption(option)

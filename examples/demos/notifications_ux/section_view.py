@@ -81,6 +81,10 @@ class SectionHeader(QtWidgets.QAbstractButton):
         self.title = ""
         self.summary = ""
 
+        #: Drawn opaque with a rule under it, as the pinned copy at the top
+        #: of a scrolling column.
+        self.pinned = False
+
         #: 0 collapsed, 1 expanded; animated between.
         self._openness = 1.0
 
@@ -129,6 +133,13 @@ class SectionHeader(QtWidgets.QAbstractButton):
         accent = QtGui.QColor(self.style_.accent)
         readable = readable_accent(accent, palette)
         rect = self.rect().adjusted(0, 3, 0, -3)
+
+        if self.pinned:
+            painter.fillRect(
+                self.rect(), palette.color(QtGui.QPalette.ColorRole.Window)
+            )
+            painter.setPen(with_alpha(text_color, 0.12))
+            painter.drawLine(0, self.height() - 1, self.width(), self.height() - 1)
 
         if self.underMouse():
             painter.setPen(QtCore.Qt.PenStyle.NoPen)

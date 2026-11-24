@@ -201,7 +201,7 @@ class ToastStackView(HasTraits):
         self._more.restyle()
         self._more.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self._more.setToolTip("These went straight to the bell. Click to see them.")
-        self._more.clicked.connect(self._open_drawer)
+        self._more.clicked.connect(self._reveal_overflow)
         self._more.hide()
 
         self._sync(animate=False)
@@ -221,8 +221,16 @@ class ToastStackView(HasTraits):
         elif event_type == QtCore.QEvent.Type.ChildAdded:
             self._raise_all()
 
-    def _open_drawer(self):
-        self.pane_model.is_open = True
+    def _reveal_overflow(self):
+        """Open the drawer on the newest toast that did not fit: the others
+        are listed right under it."""
+        overflow = self.pane_model.toasts.overflow_entries
+
+        if overflow:
+            self.pane_model.reveal_entry(overflow[-1])
+
+        else:
+            self.pane_model.is_open = True
 
     # ------------------------------------------------------------------ #
     # Following the model                                                 #
@@ -291,7 +299,7 @@ class ToastStackView(HasTraits):
         card.secondary_clicked.connect(
             lambda entry: setattr(model, "run_secondary_action", entry)
         )
-        card.body_clicked.connect(lambda entry: self._open_drawer())
+        card.body_clicked.connect(model.reveal_entry)
         widget.hover_changed.connect(self._pause_all)
 
         return widget
