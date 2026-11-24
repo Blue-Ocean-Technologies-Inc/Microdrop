@@ -47,8 +47,8 @@ from .typography import BODY_TEXT, CARD_TITLE, META, role_font
 from .ux_consts import (
     CARD_BODY_LINES,
     HIGHLIGHT_MS,
-    NEWS_ACCENT,
     HelpAction,
+    header_accent,
 )
 from .view_styles import (
     card_border,
@@ -88,9 +88,14 @@ _PALETTE_EVENTS = (
 )
 
 
-def _accent(entry):
-    """The stripe's colour: the severity's, or News's for a new post."""
-    return NEWS_ACCENT if entry.feed_post_id else SEVERITY_COLORS[entry.severity]
+def _accent(entry, palette):
+    """The stripe's colour: the severity's, or for a new post its News
+    sub-section's."""
+
+    if entry.feed_post_id:
+        return header_accent(entry.feed_group_id, is_dark(palette))
+
+    return SEVERITY_COLORS[entry.severity]
 
 
 #: The cards' shared style sheet, by palette.
@@ -511,7 +516,7 @@ class NotificationCard(QtWidgets.QFrame):
             painter.setBrush(with_alpha(INFO_COLOR, 0.3 * self._flash))
             painter.drawPath(path)
 
-        severity = QtGui.QColor(_accent(self.entry))
+        severity = QtGui.QColor(_accent(self.entry, palette))
         painter.save()
         painter.setClipPath(path)
         painter.fillRect(QtCore.QRect(0, 0, STRIPE_WIDTH, self.height()), severity)

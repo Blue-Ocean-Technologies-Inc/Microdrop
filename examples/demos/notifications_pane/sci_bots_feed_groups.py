@@ -20,11 +20,11 @@ from typing import NamedTuple
 
 # Microdrop style imports.
 from microdrop_style.colors import (
-    ACCENT_COLOR,
+    GOLD,
     GREY,
-    INFO_COLOR,
     PRIMARY_SHADE,
     SECONDARY_SHADE,
+    TEAL,
 )
 
 #: Cards a group shows before its "Show all".
@@ -71,7 +71,7 @@ FEED_GROUPS = (
         title="Top stories",
         kinds=("announcement", "product", "newsletter", "post", "release"),
         pinned=True,
-        accent=(ACCENT_COLOR, ACCENT_COLOR),
+        accent=(GOLD["light"], GOLD["dark"]),
         glyph="push_pin",
         subtitle=SUBTITLE_COUNT,
         noun=("story", "stories"),
@@ -81,7 +81,7 @@ FEED_GROUPS = (
         title="What's new",
         kinds=("release",),
         pinned=False,
-        accent=(PRIMARY_SHADE[700], PRIMARY_SHADE[400]),
+        accent=(PRIMARY_SHADE[900], PRIMARY_SHADE[200]),
         glyph="new_releases",
         subtitle=SUBTITLE_LATEST,
         noun=("release", "releases"),
@@ -91,7 +91,7 @@ FEED_GROUPS = (
         title="Newsletters",
         kinds=("newsletter",),
         pinned=False,
-        accent=(INFO_COLOR, INFO_COLOR),
+        accent=(TEAL["light"], TEAL["dark"]),
         glyph="mail",
         subtitle=SUBTITLE_COUNT,
         noun=("issue", "issues"),
@@ -119,6 +119,16 @@ FEED_GROUPS = (
 )
 
 
+def group_for(post, specs=FEED_GROUPS):
+    """The first group in ``specs`` that takes ``post``, or None."""
+
+    for spec in specs:
+        if post.kind in spec.kinds and (post.pinned or not spec.pinned):
+            return spec
+
+    return None
+
+
 def group_posts(posts, specs=FEED_GROUPS):
     """``(spec, posts)`` for each group that takes any of ``posts``, in
     ``specs`` order; each post in the first group that takes it, the
@@ -126,11 +136,10 @@ def group_posts(posts, specs=FEED_GROUPS):
     grouped = {spec.id: [] for spec in specs}
 
     for post in posts:
-        for spec in specs:
-            if post.kind in spec.kinds and (post.pinned or not spec.pinned):
-                grouped[spec.id].append(post)
+        spec = group_for(post, specs)
 
-                break
+        if spec is not None:
+            grouped[spec.id].append(post)
 
     return [(spec, grouped[spec.id]) for spec in specs if grouped[spec.id]]
 

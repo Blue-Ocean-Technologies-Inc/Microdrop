@@ -89,6 +89,10 @@ class UxNotification(Notification):
     #: never listed in the centre; it toasts and counts on the bell.
     feed_post_id = Str()
 
+    #: For a new post's stand-in: the News sub-section it goes under, whose
+    #: accent its stripe takes.
+    feed_group_id = Str()
+
     #: The condition that raised it; resolving that id clears it.
     condition_id = Str()
 

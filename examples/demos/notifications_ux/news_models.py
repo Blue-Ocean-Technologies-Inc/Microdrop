@@ -20,6 +20,7 @@ from traits.api import Any, HasTraits, Instance, Int, Set, Str, observe
 from examples.demos.notifications_pane.sci_bots_feed_controller import (
     SciBotsFeedController,
 )
+from examples.demos.notifications_pane.sci_bots_feed_groups import group_for
 from examples.demos.notifications_pane.sci_bots_feed_releases import (
     ChangelogFeedSource,
 )
@@ -126,6 +127,7 @@ class FeedAlertWatcher(HasTraits):
                 category=CATEGORY_FEED,
                 source=f"{source} · {post.kind.title()}",
                 feed_post_id=post.id,
+                feed_group_id=getattr(group_for(post), "id", ""),
                 category_id=NEWS_NEW_POSTS,
             )
             self.pane_model.feed_alerts.append(entry)

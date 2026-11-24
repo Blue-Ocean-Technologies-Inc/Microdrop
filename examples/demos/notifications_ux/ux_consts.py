@@ -23,6 +23,7 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, Field
 
 # Microdrop package imports.
+from examples.demos.notifications_pane.sci_bots_feed_groups import FEED_GROUPS
 from notifications.consts import (
     DRAWER_WIDTH,
     NOTIFICATION_POST,
@@ -273,13 +274,43 @@ ATTENTION_ACCENT = "#E8710A"
 #: glyph, if any.
 SectionStyle = namedtuple("SectionStyle", "glyph accent logo", defaults=("",))
 
+#: THE one map of header accents, ``(light theme, dark theme)``: every
+#: section and News sub-section a hue of its own. Sub-sections take theirs
+#: from the feed's group specs (FEED_GROUPS), which own them; sections set
+#: theirs here. Cards, kickers, links and a new post's toast stripe follow
+#: their header's entry.
+HEADER_ACCENTS = {
+    ATTENTION_SECTION_ID: (ATTENTION_ACCENT, ATTENTION_ACCENT),
+    LOAD_STATUS_SECTION_ID: (ACCENT_COLOR, ACCENT_COLOR),
+    NEWS_SECTION_ID: (NEWS_ACCENT, NEWS_ACCENT),
+    HISTORY_SECTION_ID: (INFO_COLOR, INFO_COLOR),
+    **{spec.id: spec.accent for spec in FEED_GROUPS},
+}
+
+
+def header_accent(header_id, dark):
+    """The accent of the header ``header_id`` for the theme, News's if it
+    has none of its own."""
+    light, dark_accent = HEADER_ACCENTS.get(header_id, HEADER_ACCENTS[NEWS_SECTION_ID])
+
+    return dark_accent if dark else light
+
+
 SECTION_STYLES = {
-    ATTENTION_SECTION_ID: SectionStyle("priority_high", ATTENTION_ACCENT),
-    LOAD_STATUS_SECTION_ID: SectionStyle("extension", ACCENT_COLOR),
-    NEWS_SECTION_ID: SectionStyle(
-        "newspaper", NEWS_ACCENT, str(BLUE_OCEAN_SCI_BOTS_LOGO)
+    ATTENTION_SECTION_ID: SectionStyle(
+        "priority_high", HEADER_ACCENTS[ATTENTION_SECTION_ID][0]
     ),
-    HISTORY_SECTION_ID: SectionStyle(ICON_HISTORY, INFO_COLOR),
+    LOAD_STATUS_SECTION_ID: SectionStyle(
+        "extension", HEADER_ACCENTS[LOAD_STATUS_SECTION_ID][0]
+    ),
+    NEWS_SECTION_ID: SectionStyle(
+        "newspaper",
+        HEADER_ACCENTS[NEWS_SECTION_ID][0],
+        str(BLUE_OCEAN_SCI_BOTS_LOGO),
+    ),
+    HISTORY_SECTION_ID: SectionStyle(
+        ICON_HISTORY, HEADER_ACCENTS[HISTORY_SECTION_ID][0]
+    ),
 }
 
 #: The look of a section with no entry above.
