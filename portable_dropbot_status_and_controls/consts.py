@@ -32,6 +32,7 @@ from portable_dropbot_controller.consts import (
     HEATER_TUNE_APPLIED,
     HEATER_TUNE_DONE,
     HEATER_TUNE_PROGRESS,
+    HEATER_TUNE_VERIFY_DONE,
     MAGNET_ENGAGE_UPDATED,
     MOTOR_PARAMS_UPDATED,
     PMT_ACQUIRE_DONE,
@@ -128,10 +129,12 @@ ACTOR_TOPIC_DICT = {
         PORTABLE_DROPBOT_DISCONNECTED,
         TEMP_UPDATED,
         PMT_UPDATED,
-        #: The heater auto-tune group's progress, result and apply outcome.
+        #: The heater auto-tune group's progress, result, apply outcome and
+        #: verify run outcome.
         HEATER_TUNE_PROGRESS,
         HEATER_TUNE_DONE,
         HEATER_TUNE_APPLIED,
+        HEATER_TUNE_VERIFY_DONE,
     ],
     PMT_CAPTURE_LISTENER: [
         PORTABLE_DROPBOT_CONNECTED,
@@ -190,6 +193,17 @@ PMT_LIVE_WINDOW_SAMPLES = 3000
 #: How often the PMT status line's exposure countdown refreshes; it shows
 #: tenths of a second.
 PMT_COUNTDOWN_TICK_S = 0.1
+
+#: Heater auto-tune live plot: the readings kept (a capture's longest
+#: record at 1 Hz is 10 s baseline + 3600 s step + 30 s cool-down), the
+#: canvas height (px), and the time step of the fitted model's simulation
+#: (s), fine enough to place the dead time between 1 s readings.
+HEATER_TUNE_PLOT_MAX_SAMPLES = 4000
+HEATER_TUNE_PLOT_HEIGHT = 260
+HEATER_TUNE_MODEL_SIM_STEP_S = 0.1
+#: The verify set point suggested after a run: this far above the last
+#: reading (°C), held below the cap minus the run margin.
+HEATER_TUNE_VERIFY_SETPOINT_STEP_C = 10.0
 
 #: Capture panes (PMT, fluorescence): the results table's minimum height
 #: (px); the row table hugs its rows instead.

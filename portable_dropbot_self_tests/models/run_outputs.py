@@ -10,13 +10,14 @@
 
 """What a run produced on the frontend: the received results, the report
 regenerated from them, its saved copy, and the figures; plus the last board
-diagnostics read, shown after the report."""
+diagnostics read, shown after the report and saved with it."""
 
 # Standard library imports.
+import re
 from pathlib import Path
 
 # Enthought library imports.
-from traits.api import Dict, HasTraits, Instance, List, Property, Str
+from traits.api import Bool, Dict, HasTraits, Instance, List, Property, Str
 
 # Microdrop utils imports.
 from microdrop_utils.json_helpers import restore_nan_from_json_nulls
@@ -47,6 +48,9 @@ class SelfTestRunOutputs(HasTraits):
     #: The last board diagnostics read, as a Markdown report section.
     diagnostics_markdown = Str()
 
+    #: A diagnostics read is in flight: its placeholder section is not saved.
+    diagnostics_reading = Bool(False)
+
     #: What the report view shows: the report, then the diagnostics.
     display_markdown = Property(Str, observe="report_markdown, diagnostics_markdown")
 
@@ -69,6 +73,7 @@ class SelfTestRunOutputs(HasTraits):
         self.plots = []
         self.report_markdown = ""
         self.diagnostics_markdown = ""
+        self.diagnostics_reading = False
         self.report_status = ""
 
     def show_diagnostics(self, diag_info):
@@ -89,6 +94,7 @@ class SelfTestRunOutputs(HasTraits):
 
             lines += ["```", diag_info.text, "```"]
 
+        self.diagnostics_reading = diag_info is None
         self.diagnostics_markdown = "\n".join(lines)
 
     def add_result(self, result):
@@ -114,7 +120,8 @@ class SelfTestRunOutputs(HasTraits):
     def save_report(self, path):
         """Write the report to ``path``: Markdown (figures beside it) for a
         Markdown suffix, else the self-contained HTML report with one
-        raw-data JSON per plottable test beside it."""
+        raw-data JSON per plottable test beside it. The last diagnostics
+        read follows the test results in either."""
         from dropbot_portable import self_test
 
         target = Path(path)
@@ -122,12 +129,14 @@ class SelfTestRunOutputs(HasTraits):
         try:
             if target.suffix.lower() in MARKDOWN_REPORT_SUFFIXES:
                 target = self_test.generate_markdown_report(self.results, target)
+                self._append_diagnostics(target)
                 saved = f"{target} (+ figures in {target.stem}_figures/)"
 
             else:
                 target = self_test.generate_html_report(
                     self.results, target, force=True
                 )
+                self._append_diagnostics(target)
                 saved = str(target)
 
         except Exception as exc:
@@ -139,6 +148,40 @@ class SelfTestRunOutputs(HasTraits):
 
         self.report_status = f"Saved to {saved}"
         logger.info(f"Self-test report saved to {saved}")
+
+    def _append_diagnostics(self, report_path):
+        """Add the last completed diagnostics read to a saved report, one
+        heading level under its title like each test: a Markdown section at
+        the end, or an HTML section before ``</body>`` (where the vendor's
+        ``append_raw_data_links`` puts its section)."""
+        from dropbot_portable import self_test
+
+        if self.diagnostics_reading or not self.diagnostics_markdown:
+            return
+
+        section = self_test._demote(self.diagnostics_markdown)
+        text = report_path.read_text(encoding="utf-8")
+
+        if report_path.suffix.lower() in MARKDOWN_REPORT_SUFFIXES:
+            text = f"{text.rstrip()}\n\n---\n\n{section}\n"
+
+        else:
+            # The vendor renderer escapes the fenced DIAG_INFO text in a <pre>.
+            html_section = (
+                '<hr>\n<section id="board-diagnostics">\n'
+                f"{self_test._markdown_to_html(section)}\n</section>\n"
+            )
+            body_end = re.search(r"</body>", text, re.IGNORECASE)
+
+            if body_end is None:
+                text += html_section
+
+            else:
+                text = (
+                    text[: body_end.start()] + html_section + text[body_end.start() :]
+                )
+
+        report_path.write_text(text, encoding="utf-8")
 
     @staticmethod
     def _received_result(result):

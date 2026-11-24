@@ -40,6 +40,9 @@ from .services.portable_dropbot_fluorescence_mixin_service import (
 from .services.portable_dropbot_heater_tune_mixin_service import (
     PortableDropbotHeaterTuneMixinService,
 )
+from .services.portable_dropbot_heater_tune_verify_mixin_service import (
+    PortableDropbotHeaterTuneVerifyMixinService,
+)
 from .services.portable_dropbot_monitor_mixin_service import (
     PortableDropbotMonitorMixinService,
 )
@@ -111,6 +114,12 @@ class PortableDropbotControllerPlugin(Plugin):
                 protocol=IPortableDropbotControlMixinService,
                 factory=self._create_heater_tune_service,
             ),
+            # Its runs share the heater-tune mixin's claim; same placement
+            # (its _on_request_refused must chain before the self-test's).
+            ServiceOffer(
+                protocol=IPortableDropbotControlMixinService,
+                factory=self._create_heater_tune_verify_service,
+            ),
             ServiceOffer(
                 protocol=IPortableDropbotControlMixinService,
                 factory=self._create_temp_service,
@@ -164,6 +173,10 @@ class PortableDropbotControllerPlugin(Plugin):
     @staticmethod
     def _create_heater_tune_service(*args, **kwargs):
         return PortableDropbotHeaterTuneMixinService
+
+    @staticmethod
+    def _create_heater_tune_verify_service(*args, **kwargs):
+        return PortableDropbotHeaterTuneVerifyMixinService
 
     @staticmethod
     def _create_temp_service(*args, **kwargs):
