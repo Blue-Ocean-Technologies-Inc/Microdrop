@@ -8,20 +8,27 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The prototype's drawer: the product's fixed, translucent right-hand
-drawer, with a left edge that drags its width and a header (title, count,
-Mark all read, Clear all, Close) over one scrolling column of sections
-(``column_view``).
+"""The prototype's drawer: the product's translucent right-hand drawer as a
+floating panel, with a left edge that drags its width and a header (title,
+count, Mark all read, Clear all, Close) over one scrolling column of
+sections (``column_view``).
 
-The product host still opens, closes, slides and places it; the subclasses
-here only swap in the contents and the width.
+Like Windows 11's notification centre, its height fits its contents: it
+sits above the status bar, next to the bell, and grows upward to at most
+the window's height, scrolling beyond. A change of the column's laid-out
+height (a card dismissed, a section folded, an arrival) eases the top edge
+to the new height; the bottom stays put.
+
+The product host still opens, closes, slides and watches clicks; the
+subclasses here swap in the contents, the width and the height.
 """
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
-from traits.api import Any, Bool, HasTraits, Instance, observe
+from traits.api import Any, Bool, HasTraits, Instance, Int, observe
 
 # Microdrop package imports.
+from notifications.consts import DRAWER_OPACITY
 from notifications.views.drawer import NotificationsDrawer, anchored_drawer_rect
 from notifications.views.drawer_host import NotificationsDrawerHost, _EventRelay
 
@@ -31,9 +38,14 @@ from microdrop_style.icons.icons import ICON_CLOSE, ICON_DELETE_SWEEP, ICON_DONE
 
 # Local imports.
 from .ux_consts import (
+    DRAWER_FIT_MS,
+    DRAWER_FIT_STEP_PX,
     DRAWER_GRIP_WIDTH,
+    DRAWER_INSET,
     DRAWER_MAX_WIDTH,
+    DRAWER_MIN_HEIGHT,
     DRAWER_MIN_WIDTH,
+    DRAWER_RADIUS,
 )
 from .ux_models import UxPaneModel
 from .view_styles import (
@@ -109,7 +121,8 @@ class _EdgeGrip(QtWidgets.QWidget):
 
 
 class UxDrawer(NotificationsDrawer):
-    """The product drawer with a draggable left edge."""
+    """The product drawer as a floating panel with rounded corners and a
+    draggable left edge."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -121,6 +134,43 @@ class UxDrawer(NotificationsDrawer):
 
         self.edge.setGeometry(0, 0, DRAWER_GRIP_WIDTH, self.height())
         self.edge.raise_()
+
+        # Clicks and paint outside the corners reach what lies beneath.
+        outline = self._outline().toFillPolygon().toPolygon()
+        self.setMask(QtGui.QRegion(outline))
+
+    def _outline(self):
+        path = QtGui.QPainterPath()
+        path.addRoundedRect(
+            QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+            DRAWER_RADIUS,
+            DRAWER_RADIUS,
+        )
+
+        return path
+
+    def paintEvent(self, event):
+        """As the product's, within rounded corners and a full border."""
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        outline = self._outline()
+        color = self.palette().color(QtGui.QPalette.ColorRole.Window)
+        split = self.height()
+
+        if self.is_translucent():
+            split = self._translucent_area.mapTo(self, QtCore.QPoint(0, 0)).y()
+
+        painter.setClipPath(outline)
+        painter.fillRect(0, 0, self.width(), split, color)
+
+        if split < self.height():
+            color.setAlphaF(DRAWER_OPACITY)
+            painter.fillRect(0, split, self.width(), self.height() - split, color)
+
+        painter.setClipping(False)
+        painter.setPen(QtGui.QPen(self.palette().color(QtGui.QPalette.ColorRole.Mid)))
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+        painter.drawPath(outline)
 
 
 class DrawerHeader(QtWidgets.QWidget):
@@ -239,9 +289,19 @@ class _ContentsBinding(HasTraits):
 
 
 class UxDrawerHost(NotificationsDrawerHost):
-    """The product host, with the prototype's drawer, contents and width."""
+    """The product host, with the prototype's drawer, contents, width, and a
+    height that follows the contents."""
 
     model = Instance(UxPaneModel)
+
+    #: The column, whose laid-out height the drawer follows.
+    _column = Any()
+
+    #: The height the drawer is easing to.
+    _height_target = Int(0)
+
+    #: Eases the drawer's height; its bottom stays put.
+    _fit = Any()
 
     def attach(self, window):
         """Put a UxDrawer on ``window``; as the product host otherwise."""
@@ -256,6 +316,11 @@ class UxDrawerHost(NotificationsDrawerHost):
         self._slide = QtCore.QPropertyAnimation(drawer, b"pos", drawer)
         self._slide.setEasingCurve(QtCore.QEasingCurve.Type.OutCubic)
 
+        self._fit = QtCore.QVariantAnimation(drawer)
+        self._fit.setDuration(DRAWER_FIT_MS)
+        self._fit.setEasingCurve(QtCore.QEasingCurve.Type.OutCubic)
+        self._fit.valueChanged.connect(self._set_height)
+
         self._window_relay = _EventRelay(self._on_window_event, window)
         window.installEventFilter(self._window_relay)
         window.destroyed.connect(self._forget_window)
@@ -264,7 +329,7 @@ class UxDrawerHost(NotificationsDrawerHost):
             self._open()
 
     def _build_contents(self):
-        from .column_view import ColumnDrawerView
+        from .column_view import ColumnDrawerContents, ColumnDrawerView
 
         self._ui = self.model.edit_traits(
             view=ColumnDrawerView, kind="subpanel", parent=self.drawer
@@ -274,12 +339,50 @@ class UxDrawerHost(NotificationsDrawerHost):
 
         self.drawer.set_contents(contents, translucent_area=area)
 
-    def _place(self):
-        """Anchor the drawer as the product does, at the model's width."""
+        self._column = contents.findChild(ColumnDrawerContents)
+        self._column.height_changed.connect(self._fit_height)
+
+    def _dispose_contents(self):
+        self._column = None
+
+        super()._dispose_contents()
+
+    # ------------------------------------------------------------------ #
+    # Placement                                                           #
+    # ------------------------------------------------------------------ #
+
+    def _available(self):
+        """The room the drawer may take: inset within the product's
+        anchored area, at the model's width."""
         rect = anchored_drawer_rect(self.window)
         width = drawer_width_for(self.window.width(), self.model.drawer_width)
-        rect.setLeft(self.window.width() - width)
+        right = self.window.width() - DRAWER_INSET
 
+        return QtCore.QRect(
+            right - width,
+            rect.top() + DRAWER_INSET,
+            width,
+            max(rect.height() - 2 * DRAWER_INSET, 0),
+        )
+
+    def _fitted_height(self, available):
+        """The contents' height, within the room there is."""
+        natural = self._column.natural_height() if self._column else available
+
+        return min(max(natural, DRAWER_MIN_HEIGHT), available)
+
+    def _place(self):
+        """Above the status bar at the right, at the model's width and the
+        contents' height; return where it ends up."""
+        available = self._available()
+        height = self._fitted_height(available.height())
+        rect = QtCore.QRect(available)
+        rect.setTop(available.bottom() + 1 - height)
+
+        self._fit.stop()
+        self._height_target = height
+
+        # Mid-slide, only where the slide ends moves.
         if self._slide.state() == QtCore.QAbstractAnimation.State.Running:
             self._slide.setEndValue(rect.topLeft())
             self.drawer.resize(rect.size())
@@ -288,6 +391,53 @@ class UxDrawerHost(NotificationsDrawerHost):
             self.drawer.setGeometry(rect)
 
         return rect
+
+    def _fit_height(self):
+        """Ease the top edge to the contents' new height: at once for small
+        steps (a section folding frame by frame), not at all for a pixel or
+        two, never during the slide."""
+        drawer = self.drawer
+
+        if drawer is None or not drawer.isVisible() or self._column is None:
+            return
+
+        if self._slide.state() == QtCore.QAbstractAnimation.State.Running:
+            self._place()
+
+            return
+
+        target = self._fitted_height(self._available().height())
+
+        if abs(target - self._height_target) < 2:
+            return
+
+        self._height_target = target
+        current = drawer.height()
+        self._fit.stop()
+
+        if abs(target - current) < DRAWER_FIT_STEP_PX:
+            self._set_height(target)
+
+            return
+
+        self._fit.setStartValue(current)
+        self._fit.setEndValue(target)
+        self._fit.start()
+
+    def _set_height(self, height):
+        available = self._available()
+
+        self.drawer.setGeometry(
+            available.left(),
+            available.bottom() + 1 - int(height),
+            available.width(),
+            int(height),
+        )
+
+    def _clear_references(self):
+        super()._clear_references()
+
+        self._fit = None
 
     def _resize_to(self, width):
         self.model.drawer_width = drawer_width_for(self.window.width(), width)

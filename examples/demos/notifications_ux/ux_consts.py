@@ -169,6 +169,20 @@ DRAWER_MAX_WIDTH = 760
 #: Width (px) of the grab strip along the drawer's left edge.
 DRAWER_GRIP_WIDTH = 6
 
+#: The drawer floats: inset (px) from the window's right edge, the status
+#: bar and the top, with rounded corners of this radius (px).
+DRAWER_INSET = 8
+DRAWER_RADIUS = 10
+
+#: The drawer's height follows its contents, never below this (px).
+DRAWER_MIN_HEIGHT = 140
+
+#: Duration (ms) of the drawer's height following its contents; changes
+#: under DRAWER_FIT_STEP_PX (a section folding, frame by frame) follow at
+#: once, and under 2 px not at all.
+DRAWER_FIT_MS = 180
+DRAWER_FIT_STEP_PX = 24
+
 # ---------------------------------------------------------------------------
 # Sections
 # ---------------------------------------------------------------------------

@@ -229,13 +229,18 @@ class _RevealBinding(HasTraits):
 
 
 class ColumnDrawerContents(QtWidgets.QWidget):
-    """The fixed header over one scrolling column of sections."""
+    """The fixed header over one scrolling column of sections.
+    ``height_changed`` follows the column's laid-out height, once per GUI
+    turn: paint-only changes (hover, countdowns) never fire it."""
+
+    height_changed = QtCore.Signal()
 
     def __init__(self, model, parent=None):
         super().__init__(parent)
 
         self.model = model
         self._sections = []
+        self._height_queued = False
 
         #: The section whose header is pinned, if any.
         self._pinned_section = None
@@ -265,6 +270,7 @@ class ColumnDrawerContents(QtWidgets.QWidget):
         self._column_layout.setSpacing(2)
         self._column_layout.addStretch(1)
         self.scroll.setWidget(self.column)
+        self.column.installEventFilter(self)
 
         self.pinned = SectionHeader(DEFAULT_SECTION_STYLE, self.scroll.viewport())
         self.pinned.pinned = True
@@ -288,6 +294,19 @@ class ColumnDrawerContents(QtWidgets.QWidget):
         self._binding = _ContentsBinding(model=model, view=self)
         self._reveal_binding = _RevealBinding(model=model, view=self)
         self.show_counts()
+
+    def natural_height(self):
+        """The drawer height (px) showing the whole column unscrolled."""
+        layout = self._column_layout
+        width = self.column.width()
+
+        if layout.hasHeightForWidth():
+            column = layout.totalHeightForWidth(width)
+
+        else:
+            column = layout.totalSizeHint().height()
+
+        return self.height() - self.scroll.viewport().height() + column
 
     def show_counts(self):
         center = self.model.center
@@ -472,12 +491,29 @@ class ColumnDrawerContents(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(0, self._place_pinned)
 
     def eventFilter(self, watched, event):
+        event_type = event.type()
 
-        if event.type() == QtCore.QEvent.Type.Resize:
+        if watched is self.column:
+            if event_type == QtCore.QEvent.Type.LayoutRequest:
+                self._queue_height_changed()
+
+            return False
+
+        if event_type == QtCore.QEvent.Type.Resize:
             self.column.setFixedWidth(watched.width())
             QtCore.QTimer.singleShot(0, self._place_pinned)
 
         return False
+
+    def _queue_height_changed(self):
+
+        if not self._height_queued:
+            self._height_queued = True
+            QtCore.QTimer.singleShot(0, self._announce_height)
+
+    def _announce_height(self):
+        self._height_queued = False
+        self.height_changed.emit()
 
 
 class _ColumnContentsEditor(Editor):
