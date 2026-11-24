@@ -42,7 +42,7 @@ from microdrop_style.icons.icons import ICON_CLOSE, ICON_HELP
 from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
 
 # Local imports.
-from .card_parts import ClampedLabel, NewDot, meta_text
+from .card_parts import CardFooter, ClampedLabel, NewDot, meta_text
 from .ux_consts import (
     CARD_BODY_LINES,
     HIGHLIGHT_MS,
@@ -273,29 +273,14 @@ class NotificationCard(QtWidgets.QFrame):
         self._traceback.hide()
         column.addWidget(self._traceback)
 
-        # The buttons, then "Show more" at the far end, on one row.
-        self._footer = QtWidgets.QWidget(self)
-        footer = QtWidgets.QHBoxLayout(self._footer)
-        footer.setContentsMargins(0, 0, 0, 0)
-        footer.setSpacing(10)
-
-        self._primary = QtWidgets.QPushButton(self._footer)
-        self._primary.setObjectName("cardPrimary")
-        self._primary.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        # The buttons, then "Show more" at the far end, on one row or two.
+        self._footer = CardFooter(self)
+        self._primary = self._footer.primary
         self._primary.clicked.connect(lambda: self.action_clicked.emit(self.entry))
-        footer.addWidget(self._primary)
-
-        self._secondary = QtWidgets.QPushButton(self._footer)
-        self._secondary.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self._secondary = self._footer.secondary
         self._secondary.clicked.connect(lambda: self.secondary_clicked.emit(self.entry))
-        footer.addWidget(self._secondary)
-        footer.addStretch(1)
-
-        self._more = QtWidgets.QPushButton(self._footer)
-        self._more.setObjectName("cardMore")
-        self._more.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self._more = self._footer.more
         self._more.clicked.connect(lambda: self.expand_clicked.emit(self.entry))
-        footer.addWidget(self._more)
         column.addWidget(self._footer)
 
         self._acted = QtWidgets.QLabel(self)
@@ -437,6 +422,7 @@ class NotificationCard(QtWidgets.QFrame):
 
         self._footer.setVisible(buttons or not self._more.isHidden())
         self._footer.layout().setContentsMargins(0, 6 if buttons else 0, 0, 0)
+        self._footer.arrange()
 
     def _tooltip(self):
         entry = self.entry

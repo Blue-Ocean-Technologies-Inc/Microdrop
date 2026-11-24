@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 """Small pieces of a notification card: its meta line, its text cut to two
-lines, and its "new" marker."""
+lines, its "new" marker, and its footer of buttons."""
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
@@ -136,3 +136,91 @@ class NewDot(QtWidgets.QWidget):
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.setBrush(QtGui.QColor(INFO_COLOR))
         painter.drawEllipse(QtCore.QRectF(2, 2, NEW_DOT_SIZE, NEW_DOT_SIZE))
+
+
+#: Space (px) between the footer's controls, across and between rows.
+FOOTER_SPACING = 10
+FOOTER_ROW_SPACING = 4
+
+
+class CardFooter(QtWidgets.QWidget):
+    """A card's buttons and its "Show more" link, on one row while they fit;
+    narrower, "Show more" takes a row of its own beneath, then the second
+    button joins it. Labels are never cut."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.primary = self._button("cardPrimary")
+        self.secondary = self._button("")
+        self.more = self._button("cardMore")
+        self._arrangement = None
+
+        # Its width is the card's to give: the rows follow it.
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred
+        )
+
+        rows = QtWidgets.QVBoxLayout(self)
+        rows.setContentsMargins(0, 0, 0, 0)
+        rows.setSpacing(FOOTER_ROW_SPACING)
+
+        self._rows = [QtWidgets.QHBoxLayout(), QtWidgets.QHBoxLayout()]
+
+        for row in self._rows:
+            row.setSpacing(FOOTER_SPACING)
+            rows.addLayout(row)
+
+    def _button(self, name):
+        button = QtWidgets.QPushButton(self)
+        button.setObjectName(name)
+        button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        button.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+
+        return button
+
+    def arrange(self):
+        """Lay the shown controls out for the footer's width."""
+        buttons = [b for b in (self.primary, self.secondary) if not b.isHidden()]
+        more = [] if self.more.isHidden() else [self.more]
+
+        if self._fits(buttons + more):
+            rows = (buttons + more, [])
+
+        elif self._fits(buttons):
+            rows = (buttons, more)
+
+        else:
+            rows = (buttons[:1], buttons[1:] + more)
+
+        arrangement = tuple(tuple(id(control) for control in row) for row in rows)
+
+        if arrangement == self._arrangement:
+            return
+
+        self._arrangement = arrangement
+
+        for layout, controls in zip(self._rows, rows):
+            while layout.count():
+                layout.takeAt(0)
+
+            for control in controls:
+                if control is not self.more:
+                    layout.addWidget(control)
+
+            # "Show more" sits at the far end of its row.
+            layout.addStretch(1)
+
+            if self.more in controls:
+                layout.addWidget(self.more)
+
+    def _fits(self, controls):
+        width = sum(control.sizeHint().width() for control in controls)
+
+        return width + FOOTER_SPACING * max(len(controls) - 1, 0) <= self.width()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.arrange()
