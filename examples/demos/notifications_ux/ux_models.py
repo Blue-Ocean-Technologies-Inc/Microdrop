@@ -54,6 +54,7 @@ from .ux_consts import (
     ATTENTION_SECTION_ID,
     ATTENTION_SECTION_ORDER,
     DRAWER_DEFAULT_WIDTH,
+    FEED_SEVERITY,
     FILTER_ACTION,
     FILTER_ALL,
     FILTER_ERRORS,
@@ -82,6 +83,10 @@ class UxNotification(Notification):
 
     #: What the user did with it, e.g. "Calibrate"; empty until then.
     acted = Str()
+
+    #: For a new Sci-Bots Feed post's stand-in: the post's id. Such an
+    #: entry is never listed in the centre; it toasts and counts on the bell.
+    feed_post_id = Str()
 
     #: Whether it stays on screen as a toast until dismissed or acted on.
     sticky = Property(Bool, observe="severity, action, needs_attention")
@@ -370,13 +375,21 @@ class UxPaneModel(NotificationsPaneModel):
 
     #: The bell's count: unread entries not on screen as toasts. A toast
     #: landing in the bell ticks it up.
-    bell_count = Property(Int, observe="center.unread_count, toasts.items.items")
+    bell_count = Property(
+        Int, observe="center.unread_count, toasts.items.items, feed_alerts.items.unread"
+    )
 
     #: The most urgent severity counted on the bell; "" when none.
-    bell_severity = Property(Str, observe="center.unread_count, toasts.items.items")
+    bell_severity = Property(
+        Str, observe="center.unread_count, toasts.items.items, feed_alerts.items.unread"
+    )
 
     #: Fired with the entry whose second button the user pressed.
     run_secondary_action = Event(Instance(Notification))
+
+    #: Stand-ins for new Sci-Bots Feed posts, oldest first: unread until
+    #: the feed has been seen in the open drawer, new until it closes.
+    feed_alerts = List(Instance(Notification))
 
     #: Which layout the drawer shows.
     drawer_layout = Enum(LAYOUT_COLUMN, LAYOUT_SECTIONS)
@@ -394,20 +407,27 @@ class UxPaneModel(NotificationsPaneModel):
 
     def _bell_entries(self):
         shown = self.toasts.entries_shown
+        entries = [*self.center.entries, *self.feed_alerts]
 
-        return [
-            entry
-            for entry in self.center.entries
-            if entry.unread and entry not in shown
-        ]
+        return [entry for entry in entries if entry.unread and entry not in shown]
 
     def _get_bell_count(self):
         return len(self._bell_entries())
 
     def _get_bell_severity(self):
-        levels = [SEVERITIES.index(entry.severity) for entry in self._bell_entries()]
+        """The most urgent severity counted; FEED_SEVERITY when only new
+        feed posts are."""
+        counted = self._bell_entries()
+        levels = [
+            SEVERITIES.index(entry.severity)
+            for entry in counted
+            if not entry.feed_post_id
+        ]
 
-        return SEVERITIES[max(levels)] if levels else ""
+        if levels:
+            return SEVERITIES[max(levels)]
+
+        return FEED_SEVERITY if counted else ""
 
 
 def matches_filter(entry, name):

@@ -29,11 +29,11 @@ from microdrop_status_bar.consts import ICON_PRIORITY_RIGHTMOST
 from notifications.consts import SEVERITY_COLORS
 
 # Microdrop style imports.
-from microdrop_style.colors import INFO_COLOR, WHITE
+from microdrop_style.colors import INFO_COLOR, PRIMARY_COLOR, WHITE
 from microdrop_style.icons.icons import ICON_NOTIFICATIONS, ICON_NOTIFICATIONS_ACTIVE
 
 # Local imports.
-from .ux_consts import BADGE_MAX_COUNT, BELL_PULSE_MS
+from .ux_consts import BADGE_MAX_COUNT, BELL_PULSE_MS, FEED_SEVERITY
 from .ux_models import UxPaneModel
 from .view_styles import icon_font, muted_text, text_font
 
@@ -244,7 +244,11 @@ class UxBellIndicator(HasTraits):
 
         count = self.pane_model.bell_count
         severity = self.pane_model.bell_severity
-        color = SEVERITY_COLORS.get(severity)
+        color = (
+            PRIMARY_COLOR
+            if severity == FEED_SEVERITY
+            else SEVERITY_COLORS.get(severity)
+        )
 
         quiet = self.pane_model.toasts.quiet
 

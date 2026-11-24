@@ -25,6 +25,7 @@ from notifications.controllers.notifications_controller import NotificationsCont
 
 # Local imports.
 from .ux_consts import (
+    FEED_SECTION_ID,
     QUIET_SUMMARY_SOURCE,
     TOAST_LIMIT,
     TOAST_TICK_MS,
@@ -98,6 +99,30 @@ class UxNotificationsController(NotificationsController):
             marked = [entry for entry in center.entries if entry.is_new]
             center.update_all(marked, is_new=False)
 
+        if event.name == "is_open":
+            self._see_feed()
+
+    @observe("pane_model:sections:items:expanded")
+    def _see_feed_when_expanded(self, event):
+
+        if event.object.id == FEED_SECTION_ID:
+            self._see_feed()
+
+    def _see_feed(self):
+        """New feed posts are seen once the drawer is open on an expanded
+        Sci-Bots Feed: off the bell, still marked new; closing the drawer
+        lets go of them."""
+        model = self.pane_model
+        feed = next((s for s in model.sections if s.id == FEED_SECTION_ID), None)
+
+        if model.is_open and feed is not None and feed.expanded:
+            for entry in model.feed_alerts:
+                if entry.unread:
+                    entry.trait_set(unread=False, is_new=True)
+
+        elif not model.is_open:
+            model.feed_alerts = [entry for entry in model.feed_alerts if entry.unread]
+
 
 class ToastStackController(HasTraits):
     """Turns arrivals into toasts and runs their timers.
@@ -151,7 +176,11 @@ class ToastStackController(HasTraits):
 
     @observe("pane_model:center:arrived")
     def _show_arrival(self, event):
-        entry = event.new
+        self.offer(event.new)
+
+    def offer(self, entry):
+        """Pop ``entry`` up, hold it while quiet, or count it past the
+        limit; nothing while the drawer is open."""
         toasts = self.pane_model.toasts
 
         if not self.enabled or self.pane_model.is_open or not entry.unread:
@@ -234,7 +263,9 @@ class ToastStackController(HasTraits):
         entries = self.pane_model.center.entries
 
         for item in self.pane_model.toasts.items:
-            if item.entry not in entries and not item.leaving:
+            listed = item.entry in entries or item.entry.feed_post_id
+
+            if not listed and not item.leaving:
                 item.trait_set(into_bell=False, leaving=True)
 
     @observe("pane_model:toasts:items:items:entry:[acted, unread]")

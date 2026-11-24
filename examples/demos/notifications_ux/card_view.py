@@ -34,12 +34,18 @@ from notifications.models.notification import Notification
 from notifications.views.formatting import format_exact_time, format_preview
 
 # Microdrop style imports.
-from microdrop_style.colors import INFO_COLOR
+from microdrop_style.colors import INFO_COLOR, PRIMARY_COLOR
 from microdrop_style.icons.icons import ICON_CLOSE
 
 # Local imports.
 from .card_parts import ClampedLabel, NewDot, meta_text
-from .ux_consts import CARD_BODY_LINES, HIGHLIGHT_MS, HelpAction
+from .ux_consts import (
+    CARD_BODY_LINES,
+    FEED_GLYPH,
+    FEED_SEVERITY,
+    HIGHLIGHT_MS,
+    HelpAction,
+)
 from .view_styles import (
     card_border,
     card_fill,
@@ -76,6 +82,20 @@ _PALETTE_EVENTS = (
 )
 
 
+#: A new feed post's colour: the feed's brand green.
+FEED_COLOR = PRIMARY_COLOR
+
+
+def _style_key(entry):
+    """The glyph's colour rule: the severity's, or the feed's."""
+    return FEED_SEVERITY if entry.feed_post_id else entry.severity
+
+
+def _accent(entry):
+    """The stripe's colour: the severity's, or the feed's green."""
+    return FEED_COLOR if entry.feed_post_id else SEVERITY_COLORS[entry.severity]
+
+
 #: The cards' shared style sheet, by palette.
 _STYLE_SHEETS = {}
 
@@ -100,7 +120,7 @@ def card_style_sheet(palette):
     muted = muted_text(palette)
     glyphs = " ".join(
         f"QLabel#cardGlyph_{severity} {{ color: {color}; }}"
-        for severity, color in SEVERITY_COLORS.items()
+        for severity, color in {**SEVERITY_COLORS, FEED_SEVERITY: FEED_COLOR}.items()
     )
     sheet = " ".join(
         [
@@ -194,7 +214,7 @@ class NotificationCard(QtWidgets.QFrame):
         outer.setSpacing(10)
 
         self._glyph = QtWidgets.QLabel(self)
-        self._glyph.setObjectName(f"cardGlyph_{self.entry.severity}")
+        self._glyph.setObjectName(f"cardGlyph_{_style_key(self.entry)}")
         self._glyph.setFont(icon_font(GLYPH_SIZE))
         self._glyph.setFixedWidth(GLYPH_SIZE + 2)
         self._glyph.setAlignment(_ALIGN.AlignHCenter | _ALIGN.AlignTop)
@@ -293,7 +313,9 @@ class NotificationCard(QtWidgets.QFrame):
         entry = self.entry
         palette = self.palette()
 
-        self._glyph.setText(SEVERITY_GLYPHS[entry.severity])
+        self._glyph.setText(
+            FEED_GLYPH if entry.feed_post_id else SEVERITY_GLYPHS[entry.severity]
+        )
 
         bold = self.toast or entry.unread or entry.needs_attention
         self._title.setFont(
@@ -367,7 +389,9 @@ class NotificationCard(QtWidgets.QFrame):
         self._body.setVisible(bool(entry.detail) and not (traceback and expanded))
         self._body.set_full_text(
             format_preview(entry) if traceback else entry.detail,
-            lines=0 if expanded else CARD_BODY_LINES,
+            lines=0
+            if expanded
+            else (1 if self.entry.feed_post_id else CARD_BODY_LINES),
         )
 
         self._traceback.setVisible(traceback and expanded)
@@ -478,7 +502,7 @@ class NotificationCard(QtWidgets.QFrame):
             painter.setBrush(with_alpha(INFO_COLOR, 0.3 * self._flash))
             painter.drawPath(path)
 
-        severity = QtGui.QColor(SEVERITY_COLORS[self.entry.severity])
+        severity = QtGui.QColor(_accent(self.entry))
         painter.save()
         painter.setClipPath(path)
         painter.fillRect(QtCore.QRect(0, 0, STRIPE_WIDTH, self.height()), severity)

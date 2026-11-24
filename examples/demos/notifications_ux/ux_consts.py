@@ -179,13 +179,20 @@ BUILD_BUDGET_MS = 15
 #: Pixels from the end of the column within which the next batch is built.
 LOAD_AHEAD_PX = 600
 
-#: Sci-Bots Feed cards shown in the column before "Show N more".
-FEED_PREVIEW_CARDS = 3
-
 #: Duration (ms) of a revealed card's highlight fading out, and of the
 #: scroll to it.
 HIGHLIGHT_MS = 1600
 REVEAL_SCROLL_MS = 260
+
+#: The bell's "severity" when only new feed posts are counted: below info.
+FEED_SEVERITY = "feed"
+
+#: Category of a new feed post's stand-in notification, and its glyph.
+CATEGORY_FEED = "feed"
+FEED_GLYPH = "newspaper"
+
+#: A feed sub-section's posts before its "Show N more".
+FEED_GROUP_PREVIEW = 1
 
 # ---------------------------------------------------------------------------
 # Quiet mode
