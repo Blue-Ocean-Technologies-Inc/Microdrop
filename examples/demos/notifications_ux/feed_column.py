@@ -45,6 +45,7 @@ from examples.demos.notifications_pane.sci_bots_feed_view import (
 # Microdrop style imports.
 from microdrop_style.colors import INFO_COLOR
 from microdrop_style.icons.icons import ICON_CHEVRON_RIGHT, ICON_EXPAND_MORE
+from microdrop_style.icons.logos import MICRODROP_MARK
 
 # Local imports.
 from .card_parts import NEW_DOT_SIZE, NewDot
@@ -55,7 +56,15 @@ from .ux_consts import (
     SECTION_ANIMATION_MS,
 )
 from .ux_models import UxPaneModel
-from .view_styles import css, icon_font, link_button_style, muted_text, with_alpha
+from .view_styles import (
+    css,
+    icon_font,
+    link_button_style,
+    muted_text,
+    scaled_logo,
+    tinted,
+    with_alpha,
+)
 
 #: The largest widget height Qt allows.
 _UNBOUNDED = 16_777_215
@@ -100,8 +109,10 @@ class _Highlight(QtWidgets.QWidget):
         )
 
 
-#: The group whose header names its newest post's date.
+#: The group whose header names its newest post's date, and MicroDrop's
+#: release notes' group, whose header shows MicroDrop's mark.
 NEWSLETTERS_GROUP_ID = "newsletters"
+RELEASES_GROUP_ID = "releases"
 
 
 def group_detail(group):
@@ -167,9 +178,19 @@ class FeedGroupHeader(QtWidgets.QWidget):
         row = QtWidgets.QHBoxLayout()
         row.setSpacing(GRID)
 
+        # MicroDrop's releases carry its mark, in the group's colour.
         glyph = QtWidgets.QLabel(group.spec.glyph, self)
-        glyph.setFont(icon_font(HEADER_GLYPH_SIZE))
-        glyph.setStyleSheet(f"QLabel {{ color: {accent}; }}")
+
+        if group.spec.id == RELEASES_GROUP_ID:
+            mark = scaled_logo(
+                MICRODROP_MARK, HEADER_GLYPH_SIZE, self.devicePixelRatioF()
+            )
+            glyph.setPixmap(tinted(mark, accent))
+
+        else:
+            glyph.setFont(icon_font(HEADER_GLYPH_SIZE))
+            glyph.setStyleSheet(f"QLabel {{ color: {accent}; }}")
+
         row.addWidget(glyph)
 
         title = QtWidgets.QLabel(group.spec.title, self)
