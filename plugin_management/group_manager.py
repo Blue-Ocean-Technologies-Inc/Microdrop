@@ -33,6 +33,7 @@ those.
 
 # Standard library imports.
 import importlib
+import traceback
 
 # Enthought library imports.
 from apptools.preferences.api import get_default_preferences
@@ -40,6 +41,16 @@ from traits.api import Bool, Dict, HasTraits, Instance, List, Str, provides
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.isolating_plugin_manager import (
+    registered_service_ids,
+    unregister_services,
+    withdraw_plugin,
+)
+from microdrop_utils.plugin_load_status import (
+    LOAD_FAILED,
+    PluginLoadStatus,
+    summarize_exception,
+)
 
 # Local imports.
 from . import entry_point_discovery
@@ -116,6 +127,9 @@ class PluginGroup(HasTraits):
     optional = Bool(True)
     #: Short label for the toggle checkbox column (falls back to label).
     toggle_label = Str()
+    #: Why the last enable failed ("<plugin>: <error>"); empty after a
+    #: successful one. Read by callers that report it, e.g. hot_load.
+    load_error = Str()
 
 
 @provides(IPluginGroupManager)
@@ -125,6 +139,10 @@ class PluginGroupManager(HasTraits):
     the Manage Plugins dialog and the launch-restore hook use it."""
 
     groups = Dict(Str, Instance(PluginGroup))
+
+    #: Records each enabled plugin's start: the application's
+    #: ``plugin_load_status``, injected by PluginManagementPlugin.
+    load_status = Instance(PluginLoadStatus, ())
 
     def _groups_default(self):
         """Built-in groups plus every group declared by an installed package's
@@ -295,6 +313,10 @@ class PluginGroupManager(HasTraits):
         services they register, and run the optional post-enable publish.
         Idempotent — a no-op if the group is already loaded.
 
+        All or nothing: when a spec, a plugin's construction or its start
+        fails, the plugins added are rolled back, the group is not marked
+        loaded nor persisted, and the reason goes to ``group.load_error``.
+
         Dock panes + the menu bar are mounted/rebuilt reactively by
         LiveTaskExtensionsController when these plugins contribute their
         TASK_EXTENSIONS — this method never touches the view layer."""
@@ -309,42 +331,80 @@ class PluginGroupManager(HasTraits):
         # Prefer the specs that were active in this process before (adoption /
         # last enable); fall back to the full list on first-ever enable.
         specs = group.active_specs or group.plugin_specs
+        group.load_error = ""
+
+        # A spec's record stays only while its import keeps failing.
+        for spec in specs:
+            self.load_status.discard(spec)
+
+        services_before = registered_service_ids(application)
+        instances = []
+        added = []
+        current = None
+
         try:
-            factories = [_resolve_plugin_class(spec) for spec in specs]
-        except Exception:
-            logger.exception(
-                f"enable: could not import plugin classes for '{group_name}'; "
-                f"group not loaded"
-            )
-            return
+            # Import every spec before adding any plugin: an import failure
+            # leaves the group cleanly not loaded.
+            factories = []
 
-        registry = application.service_registry
-        before = set(registry._services.keys())
+            for spec in specs:
+                current = spec
+                factories.append(_resolve_plugin_class(spec))
 
-        for factory in factories:
-            try:
+            for spec, factory in zip(specs, factories):
+                current = spec
+
                 # Belt-and-braces: if this plugin class is already registered
                 # (startup composition raced ahead of adoption), ADOPT the
                 # live instance — adding a second one duplicates its service
                 # offers and crashes the mixin composition ("duplicate base
                 # class" at the device controller's start).
                 existing = _find_registered_plugin(application, factory)
+
                 if existing is not None:
-                    group.instances.append(existing)
+                    instances.append(existing)
                     logger.info(f"enable: adopted already-registered {existing.id}")
+
                     continue
+
                 plugin = factory()
+                current = plugin.id
+                self.load_status.mark_pending(plugin.id, plugin.name)
+
                 application.add_plugin(plugin)
-                application.start_plugin(plugin)
-                group.instances.append(plugin)
+                added.append(plugin)
+
+                with self.load_status.recording(plugin):
+                    application.start_plugin(plugin)
+
+                instances.append(plugin)
                 logger.info(f"enable: started {plugin.id}")
-            except Exception:
-                logger.exception(
-                    f"enable: failed to load {getattr(factory, '__name__', factory)}"
+
+        except Exception as error:
+            logger.error(
+                f"enable: {current} failed; unloading group '{group_name}'",
+                exc_info=True,
+            )
+
+            record = self.load_status.get_record(current)
+
+            # The recording block already captured a failed start; a failed
+            # import, construction or add_plugin has not been recorded yet.
+            if record is None or record.state != LOAD_FAILED:
+                self.load_status.mark_failed(
+                    current, summarize_exception(error), traceback.format_exc()
                 )
 
+            group.load_error = f"{current}: {summarize_exception(error)}"
+            self._roll_back_enable(application, added, current, services_before)
+
+            return
+
+        group.instances = instances
         group.active_specs = list(specs)
-        group.service_ids = sorted(set(registry._services.keys()) - before)
+        group.service_ids = sorted(
+            registered_service_ids(application) - services_before
+        )
         logger.debug(f"enable: captured service ids {group.service_ids}")
 
         if group.post_enable_publish_topic:
@@ -359,6 +419,23 @@ class PluginGroupManager(HasTraits):
         group.loaded = True
         self._persist_flag(group, True)
         logger.info(f"enable: group '{group_name}' loaded")
+
+    def _roll_back_enable(self, application, added, failed_id, services_before):
+        """Unwind a failed enable so the group is all-or-nothing.
+
+        Withdraws the added plugins in reverse and the services registered
+        since it began; adopted startup plugins were already running and stay.
+        Only the failed plugin keeps its load record.
+        """
+        for plugin in reversed(added):
+            withdraw_plugin(application, plugin)
+
+            if plugin.id != failed_id:
+                self.load_status.discard(plugin.id)
+
+        unregister_services(
+            application, registered_service_ids(application) - services_before
+        )
 
     def disable(self, application, group_name):
         """Reverse of enable: stop + remove every plugin (reverse order) and
@@ -383,6 +460,8 @@ class PluginGroupManager(HasTraits):
                 application.remove_plugin(plugin)
             except Exception:
                 logger.exception(f"disable: remove_plugin failed for {pid}")
+
+            self.load_status.discard(pid)
             logger.info(f"disable: removed {pid}")
         group.instances = []
 

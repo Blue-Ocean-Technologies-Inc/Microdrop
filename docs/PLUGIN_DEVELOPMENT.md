@@ -124,6 +124,21 @@ appear; `LiveTaskExtensionsController` (a listener on that extension point) **de
 on the next GUI-loop turn, mounts the new panes via `add_dock_pane_live` and rebuilds the menu
 **once** (see §1.8 and Part 3 §5). So `enable()` owns only plugin + service lifecycle.
 
+An enable is **all or nothing**. When a plugin fails to construct or start, every plugin the
+enable added is stopped and removed again (`withdraw_plugin` in
+`microdrop_utils/isolating_plugin_manager.py`), the services registered since it began are
+unregistered, the group is neither marked loaded nor persisted, and the reason is kept in
+`group.load_error` (the hot-load relaunch prompt shows it).
+
+Each plugin's start (pending → loading → loaded/failed, with its duration and, for a failure,
+the traceback) is recorded in the application's `plugin_load_status`
+(`microdrop_utils/plugin_load_status.py`). Launch-time starts are recorded there too:
+`MicrodropApplication`'s plugin manager (`IsolatingPluginManager`) starts plugins one at a
+time and skips and rolls back a failing one, unless its id is in
+`application.essential_plugin_ids`, which still fails the launch. The status-bar indicator
+contributed by `PluginManagementPlugin` summarises the records (pulsing while loading, a check,
+or a red X) and opens a panel listing them.
+
 **Disable** reverses the lifecycle: `stop_plugin` + `remove_plugin` in reverse → **unregister
 the captured services** → clear the flag. Withdrawing each plugin's `TASK_EXTENSIONS` triggers
 the same reactive controller to unmount its panes and rebuild the menu.

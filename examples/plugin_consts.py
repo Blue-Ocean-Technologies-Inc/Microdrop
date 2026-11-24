@@ -172,6 +172,11 @@ SERVICE_PLUGINS = [
     SSHControlsPlugin,
 ]
 
+# A failure to start one of these, or of the application shell, fails the
+# launch; any other plugin that fails is skipped. The essential set is
+# MicrodropApplication.essential_plugin_ids (default
+# microdrop_application.consts.ESSENTIAL_PLUGIN_IDS) — pass
+# essential_plugin_ids= to the application to change it.
 REQUIRED_PLUGINS = [CorePlugin, MessageRouterPlugin, LoggerPlugin]
 
 # Worker kwargs come from redis_settings.json when present (e.g. written by

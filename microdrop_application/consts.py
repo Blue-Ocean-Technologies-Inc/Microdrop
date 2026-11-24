@@ -13,13 +13,36 @@ from pathlib import Path
 
 # Microdrop package imports.
 from dropbot_controller.consts import SHORTS_DETECTED
+from message_router.consts import PKG as message_router_PKG
+from microdrop_status_bar.consts import PKG as microdrop_status_bar_PKG
+from plugin_management.consts import PKG as plugin_management_PKG
 
 # Microdrop utils imports.
 from microdrop_utils.datetime_helpers import get_current_utc_datetime
 
+# Logger import.
+from logger.consts import PKG as logger_PKG
+
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
+
+#: Ids of the plugins MicroDrop cannot run without — the default of
+#: ``MicrodropApplication.essential_plugin_ids``. A failure to start one of
+#: these fails the launch; any other plugin that fails is skipped and rolled
+#: back. The REQUIRED_PLUGINS of examples/plugin_consts.py, then the
+#: application shell: this package's plugin, Envisage's Tasks plugin, the
+#: status bar, and plugin management (which reports the failures). Envisage's
+#: own ids are literals: a Plugin's id cannot be read off its class.
+ESSENTIAL_PLUGIN_IDS = [
+    "envisage.core",
+    f"{message_router_PKG}.plugin",
+    f"{logger_PKG}.plugin",
+    f"{PKG}.plugin",
+    "envisage.ui.tasks",
+    f"{microdrop_status_bar_PKG}.plugin",
+    f"{plugin_management_PKG}.plugin",
+]
 
 # Topics actor declared by plugin subscribes to
 ACTOR_TOPIC_DICT = {f"{PKG}_listener": [SHORTS_DETECTED]}
