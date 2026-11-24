@@ -195,6 +195,17 @@ class UxNotificationCenter(NotificationCenter):
         if entry is not None:
             was_unread = entry.unread
 
+            # A thread's post is its entry's new state, whole.
+            if thread_id:
+                entry.trait_set(
+                    severity=severity,
+                    detail=detail,
+                    action=action,
+                    secondary_action=secondary_action,
+                    needs_attention=needs_attention,
+                    condition_id=condition_id,
+                )
+
             entry.trait_set(
                 title=title,
                 detail=detail or entry.detail,

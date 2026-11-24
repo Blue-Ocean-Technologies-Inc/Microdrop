@@ -254,8 +254,11 @@ class ToastStackController(HasTraits):
 
         model.rang = entry
 
+        # A refreshed toast counts down afresh; its entry may have changed
+        # from one that stays (a warning) to one that times out.
         if outcome == ARRIVAL_REFRESH:
             item.remaining_ms = toasts.settings.timeout_ms
+            self._start_timer()
 
         if outcome != ARRIVAL_POP_UP:
             return

@@ -307,6 +307,14 @@ class NotificationCard(QtWidgets.QFrame):
         else:
             self._glyph.setText(SEVERITY_GLYPHS[entry.severity])
 
+            # A state entry can change severity: the glyph's colour follows.
+            name = f"cardGlyph_{entry.severity}"
+
+            if self._glyph.objectName() != name:
+                self._glyph.setObjectName(name)
+                self._glyph.style().unpolish(self._glyph)
+                self._glyph.style().polish(self._glyph)
+
         bold = self.toast or entry.unread or entry.needs_attention
         self._title.setFont(
             role_font(CARD_TITLE, None if bold else QtGui.QFont.Weight.Medium)
