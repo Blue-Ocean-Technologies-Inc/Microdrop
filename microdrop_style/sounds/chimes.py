@@ -23,5 +23,10 @@ CHIME_GENTLE = SOUNDS_DIR / "chime_gentle.wav"
 #: A short rising pair, for warnings, errors and Needs attention.
 CHIME_ALERT = SOUNDS_DIR / "chime_alert.wav"
 
+#: A rising and a falling pair, for something connected or inserted, and
+#: disconnected or removed.
+CHIME_CONNECTED = SOUNDS_DIR / "chime_connected.wav"
+CHIME_DISCONNECTED = SOUNDS_DIR / "chime_disconnected.wav"
+
 #: Three even beeps, longer and stronger, for something finished.
 CHIME_COMPLETION = SOUNDS_DIR / "chime_completion.wav"

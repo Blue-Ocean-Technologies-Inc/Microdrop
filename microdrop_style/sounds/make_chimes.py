@@ -23,7 +23,13 @@ import struct
 import wave
 
 # Local imports.
-from .chimes import CHIME_ALERT, CHIME_COMPLETION, CHIME_GENTLE
+from .chimes import (
+    CHIME_ALERT,
+    CHIME_COMPLETION,
+    CHIME_CONNECTED,
+    CHIME_DISCONNECTED,
+    CHIME_GENTLE,
+)
 
 #: Samples per second: plenty for tones under 4 kHz, and small files.
 SAMPLE_RATE = 22050
@@ -57,6 +63,21 @@ ALERT_NOTES = [
 ]
 ALERT_PARTIALS = [(1.0, 1.0), (2.0, 0.35), (3.0, 0.12), (4.0, 0.04)]
 ALERT_MS = 700
+
+#: The connected and disconnected pair (a device or a chip coming and
+#: going): one figure of two soft notes a fifth apart, E5 up to B5 for
+#: connected and back down for disconnected. Lower and rounder than the
+#: alert, and two notes where the soft chime has one.
+CONNECTED_NOTES = [
+    (0, 659.3, 0.26, 20, 120),
+    (130, 987.8, 0.28, 30, 200),
+]
+DISCONNECTED_NOTES = [
+    (0, 987.8, 0.26, 20, 120),
+    (130, 659.3, 0.28, 30, 200),
+]
+PAIR_PARTIALS = [(1.0, 1.0), (2.0, 0.18), (3.0, 0.05)]
+PAIR_MS = 560
 
 #: The completion tone (a protocol finished), like a microwave's: three
 #: even D6 beeps, each held, then rounded off; nearly pure sines, so it
@@ -122,6 +143,8 @@ def main():
         CHIME_COMPLETION: synthesise(
             COMPLETION_NOTES, COMPLETION_PARTIALS, COMPLETION_MS
         ),
+        CHIME_CONNECTED: synthesise(CONNECTED_NOTES, PAIR_PARTIALS, PAIR_MS),
+        CHIME_DISCONNECTED: synthesise(DISCONNECTED_NOTES, PAIR_PARTIALS, PAIR_MS),
     }
 
     # One gain for all three keeps them in proportion to one another.
