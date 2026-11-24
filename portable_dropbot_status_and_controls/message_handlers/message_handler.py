@@ -22,6 +22,7 @@ from microdrop_application.dialogs.pyface_wrapper import error, warning
 from portable_dropbot_controller.consts import (
     FLUORESCENCE_LED_RAW_MAX,
     AlarmRaised,
+    AlarmsCleared,
     ChipLockFailed,
     FirmwareVersionsUpdated,
 )
@@ -286,6 +287,30 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
                 self.model.active_alarms[report.code] = report.title or report.text
 
             self._record_alarm(report.text)
+
+    def _on_alarms_cleared_triggered(self, body):
+        """A CLEAR_ALARMS outcome: the boards' re-read replaces their codes
+        in the active alarms (the motor board pushes no clear report), and
+        each board's result is logged."""
+        outcome = AlarmsCleared.model_validate_json(str(body))
+
+        for result in outcome.results:
+            for code in result.cleared:
+                self.model.active_alarms.pop(code, None)
+
+            self.model.active_alarms.update(result.still_active)
+
+            if result.error:
+                self._log_alarm(f"{result.board} alarm clear: {result.error}")
+
+            if result.cleared:
+                self._log_alarm(f"Cleared {result.board}: {', '.join(result.cleared)}")
+
+            if result.failed:
+                self._record_alarm(
+                    f"Still active on {result.board} (condition persists?): "
+                    f"{', '.join(result.failed)}"
+                )
 
     def _on_firmware_versions_updated_triggered(self, body):
         """Show the boards' firmware; firmware below the driver's minimum

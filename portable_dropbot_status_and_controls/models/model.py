@@ -164,6 +164,9 @@ class PortableDropbotStatusAndControlsModel(DropletReadoutsModelMixin, BaseStatu
     #: clear (AlarmReport active 0) retires its code.
     active_alarms = Dict(Str, Str)
     active_alarms_display = Property(Str, observe="active_alarms.items")
+    #: Clears every latched alarm on both boards (CLEAR_ALARMS); alarms
+    #: whose condition persists stay active. No confirm: not destructive.
+    clear_alarms_button = Button("Clear Alarms")
 
     def _get_active_alarms_display(self):
         if not self.active_alarms:
