@@ -13,24 +13,31 @@ DropBot status panel, with the real panes' ids so the MicroDrop task's
 default layout places them where the real ones go. They only look the part.
 """
 
+# Standard library imports.
+import importlib.util
+from pathlib import Path
+
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
+from pyface.qt.QtSvg import QSvgRenderer
 from pyface.tasks.api import DockPane
 from traits.api import Callable
 
 # Microdrop style imports.
-from microdrop_style.colors import GREY, PRIMARY_SHADE, SECONDARY_SHADE
+from microdrop_style.colors import BLACK, GREY, WHITE
 
-#: The electrode array drawn by the device viewer stand-in.
-GRID_COLUMNS = 16
-GRID_ROWS = 7
-ELECTRODE_GAP = 4
+#: The chip the device viewer stand-in pictures: the 90-pin array the real
+#: device viewer opens by default. Located, not imported: importing
+#: ``device_viewer`` would bring the real viewer's models with it.
+DEVICE_SVG_PATH = (
+    Path(importlib.util.find_spec("device_viewer").submodule_search_locations[0])
+    / "resources"
+    / "devices"
+    / "90_pin_array.svg"
+)
 
-#: Milliseconds between the droplet's steps.
-DROPLET_STEP_MS = 450
-
-#: The droplet's route, as (column, row) electrodes.
-DROPLET_ROUTE = [(column, 3) for column in range(2, 14)] + [(13, row) for row in (2, 1)]
+#: Space (px) kept around the chip picture.
+DEVICE_MARGIN = 24
 
 #: The protocol stand-in's steps: (name, duration s, voltage V, frequency Hz,
 #: electrodes, video).
@@ -55,108 +62,84 @@ class StandInPane(DockPane):
         return self.factory(parent)
 
 
-class _ElectrodeArray(QtWidgets.QWidget):
-    """An electrode grid with reservoirs and a droplet stepping along a
-    route, on the device viewer's canvas colours."""
+class DevicePicture(QtWidgets.QWidget):
+    """A device SVG, scaled to fit with its aspect kept and centred, its
+    electrodes drawn in the theme's electrode grey on the viewer's canvas
+    colour. Static: drawn again only on resize or a theme change."""
 
-    def __init__(self, parent=None):
+    def __init__(self, svg_path, parent=None):
         super().__init__(parent)
 
-        self._step = 0
+        self._renderer = QSvgRenderer(str(svg_path), self)
 
-        timer = QtCore.QTimer(self)
-        timer.timeout.connect(self._advance)
-        timer.start(DROPLET_STEP_MS)
-
-    def _advance(self):
-        self._step = (self._step + 1) % len(DROPLET_ROUTE)
-        self.update()
+        #: The tinted picture, and the (size, dark) it was drawn for.
+        self._picture = None
+        self._picture_key = None
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         dark = self.palette().color(QtGui.QPalette.ColorRole.Window).lightness() < 128
-        painter.fillRect(
-            self.rect(), QtGui.QColor(GREY["darkest"] if dark else "#FAFAFA")
+        painter.fillRect(self.rect(), QtGui.QColor(BLACK if dark else WHITE))
+
+        if not self._renderer.isValid():
+            return
+
+        target = self._fitted_rect()
+        key = (target.size(), dark)
+
+        if key != self._picture_key:
+            self._picture = self._tinted_picture(target.size(), dark)
+            self._picture_key = key
+
+        painter.drawImage(target.topLeft(), self._picture)
+
+    def _fitted_rect(self):
+        """The largest rectangle of the SVG's aspect inside the margins,
+        centred."""
+        room = self.rect().adjusted(
+            DEVICE_MARGIN, DEVICE_MARGIN, -DEVICE_MARGIN, -DEVICE_MARGIN
         )
-
-        size = min(
-            (self.width() - 80) / (GRID_COLUMNS + 2), (self.height() - 60) / GRID_ROWS
+        size = self._renderer.defaultSize().scaled(
+            room.size(), QtCore.Qt.AspectRatioMode.KeepAspectRatio
         )
-        size = max(size, 8)
-        width = size * (GRID_COLUMNS + 2)
-        left = (self.width() - width) / 2 + size
-        top = (self.height() - size * GRID_ROWS) / 2
-        electrode = QtGui.QColor(GREY["dark"] if dark else GREY["light"])
-        actuated = QtGui.QColor(PRIMARY_SHADE[400] if dark else PRIMARY_SHADE[300])
-        column, row = DROPLET_ROUTE[self._step]
+        rect = QtCore.QRect(QtCore.QPoint(), size)
+        rect.moveCenter(room.center())
 
-        painter.setPen(
-            QtGui.QPen(QtGui.QColor(GREY["darker"] if dark else GREY["lighter"]), 1)
+        return rect
+
+    def _tinted_picture(self, size, dark):
+        """The SVG at ``size``, its (black) electrodes recoloured."""
+        image = QtGui.QImage(
+            size.expandedTo(QtCore.QSize(1, 1)),
+            QtGui.QImage.Format.Format_ARGB32_Premultiplied,
         )
+        image.fill(QtCore.Qt.GlobalColor.transparent)
 
-        for x in range(GRID_COLUMNS):
-            for y in range(GRID_ROWS):
-                on = (x, y) == (column, row) or (x, y) == (column + 1, row)
-                painter.setBrush(actuated if on else electrode)
-                cell = QtCore.QRectF(
-                    left + x * size,
-                    top + y * size,
-                    size - ELECTRODE_GAP,
-                    size - ELECTRODE_GAP,
-                )
-                painter.drawRoundedRect(cell, 3, 3)
+        painter = QtGui.QPainter(image)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        self._renderer.render(painter)
 
-        # Reservoirs either side.
-        painter.setBrush(electrode)
-
-        for y in (1, 4):
-            painter.drawRoundedRect(
-                QtCore.QRectF(
-                    left - size * 1.6,
-                    top + y * size,
-                    size * 1.3,
-                    size * 2 - ELECTRODE_GAP,
-                ),
-                6,
-                6,
-            )
-            painter.drawRoundedRect(
-                QtCore.QRectF(
-                    left + GRID_COLUMNS * size + size * 0.3,
-                    top + y * size,
-                    size * 1.3,
-                    size * 2 - ELECTRODE_GAP,
-                ),
-                6,
-                6,
-            )
-
-        # The droplet.
-        droplet = QtCore.QRectF(
-            left + column * size - size * 0.15,
-            top + row * size - size * 0.15,
-            size * 1.2,
-            size * 1.2,
+        # Keep the drawn shapes, in the electrode colour.
+        painter.setCompositionMode(
+            QtGui.QPainter.CompositionMode.CompositionMode_SourceIn
         )
-        color = QtGui.QColor(SECONDARY_SHADE[300])
-        color.setAlpha(190)
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(color)
-        painter.drawEllipse(droplet)
+        painter.fillRect(image.rect(), QtGui.QColor(GREY["dark" if dark else "light"]))
+        painter.end()
+
+        return image
 
 
 def device_viewer(parent):
-    """The device viewer stand-in: a toolbar strip over the array."""
+    """The device viewer stand-in: a strip over a picture of the chip."""
     widget = QtWidgets.QWidget(parent)
     layout = QtWidgets.QVBoxLayout(widget)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(0)
 
-    strip = QtWidgets.QLabel("  90-pin chip · Free mode · 2 electrodes on", widget)
+    strip = QtWidgets.QLabel("  90-pin chip · Free mode", widget)
     strip.setContentsMargins(6, 6, 6, 6)
     layout.addWidget(strip)
-    layout.addWidget(_ElectrodeArray(widget), 1)
+    layout.addWidget(DevicePicture(DEVICE_SVG_PATH, widget), 1)
 
     return widget
 
