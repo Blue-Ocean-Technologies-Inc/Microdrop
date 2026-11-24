@@ -9,21 +9,17 @@
 # Thanks for using Microdrop open source!
 
 """The prototype's drawer: the product's fixed, translucent right-hand
-drawer, with a left edge that drags its width, a header (title, count, Mark
-all read, Clear all, Close) and designed, collapsible, resizable sections.
+drawer, with a left edge that drags its width and a header (title, count,
+Mark all read, Clear all, Close) over one scrolling column of sections
+(``column_view``).
 
 The product host still opens, closes, slides and places it; the subclasses
-here only swap in the contents and the width. The contents run standalone
-against just a model::
-
-    UxPaneModel(sections=[...]).configure_traits(view=UxDrawerView)
+here only swap in the contents and the width.
 """
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
 from traits.api import Any, Bool, HasTraits, Instance, observe
-from traitsui.api import BasicEditorFactory, UItem, View
-from traitsui.qt.editor import Editor
 
 # Microdrop package imports.
 from notifications.views.drawer import NotificationsDrawer, anchored_drawer_rect
@@ -34,12 +30,10 @@ from microdrop_style.colors import INFO_COLOR
 from microdrop_style.icons.icons import ICON_CLOSE, ICON_DELETE_SWEEP, ICON_DONE_ALL
 
 # Local imports.
-from .section_view import DrawerSection
 from .ux_consts import (
     DRAWER_GRIP_WIDTH,
     DRAWER_MAX_WIDTH,
     DRAWER_MIN_WIDTH,
-    LAYOUT_COLUMN,
 )
 from .ux_models import UxPaneModel
 from .view_styles import (
@@ -59,9 +53,6 @@ SECTIONS_OBJECT_NAME = "notifications_ux.sections"
 
 #: Room (px) the widest drawer leaves of the window on its left.
 WINDOW_LEFT_IN_VIEW = 160
-
-#: Space (px) between sections.
-SECTION_SPACING = 2
 
 
 def drawer_width_for(window_width, wanted):
@@ -247,114 +238,6 @@ class _ContentsBinding(HasTraits):
             self.view.show_counts()
 
 
-class UxDrawerContents(QtWidgets.QWidget):
-    """The header over the sections."""
-
-    def __init__(self, model, parent=None):
-        super().__init__(parent)
-
-        self.model = model
-        self._sections = []
-
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        self.header = DrawerHeader(model, self)
-        layout.addWidget(self.header)
-
-        self.sections_area = QtWidgets.QWidget(self)
-        self.sections_area.setObjectName(SECTIONS_OBJECT_NAME)
-        self._sections_layout = QtWidgets.QVBoxLayout(self.sections_area)
-        self._sections_layout.setContentsMargins(0, 6, 0, 0)
-        self._sections_layout.setSpacing(SECTION_SPACING)
-        self._sections_layout.addStretch(1)
-        layout.addWidget(self.sections_area, 1)
-
-        self._binding = _ContentsBinding(model=model, view=self)
-        self.show_counts()
-
-    def show_counts(self):
-        center = self.model.center
-
-        self.header.show_counts(
-            len(center.entries), center.new_count, len(center.attention_entries)
-        )
-
-    def set_sections(self, sections):
-        """Show ``sections``, top first."""
-        self._dispose_sections()
-
-        for position, section in enumerate(sections):
-            view = DrawerSection(
-                section, self.model.section_heights, self.sections_area
-            )
-            self._sections_layout.insertWidget(position, view)
-            self._sections.append(view)
-            view.springiness_changed.connect(self._follow_springiness)
-
-        self._follow_springiness()
-
-    def _follow_springiness(self):
-        """The bottom stretch takes the room only while no springy section
-        is open to take it."""
-        springy = any(view.springy for view in self._sections)
-        stretch_index = self._sections_layout.count() - 1
-
-        self._sections_layout.setStretch(stretch_index, 0 if springy else 1)
-
-        for index, view in enumerate(self._sections):
-            self._sections_layout.setStretch(index, 1 if view.springy else 0)
-
-    def _dispose_sections(self):
-
-        for view in self._sections:
-            view.dispose()
-            view.hide()
-            view.deleteLater()
-
-        self._sections = []
-
-    def dispose(self):
-        self._binding.model = None
-        self._dispose_sections()
-
-
-class _DrawerContentsEditor(Editor):
-    """Shows the pane model's ordered sections as UxDrawerContents."""
-
-    def init(self, parent):
-        self.control = UxDrawerContents(self.object)
-
-    def update_editor(self):
-        self.control.set_sections(list(self.value))
-
-    def dispose(self):
-        # At app exit the window may already have deleted the contents.
-        try:
-            self.control.dispose()
-
-        except RuntimeError:
-            pass
-
-        super().dispose()
-
-
-class DrawerContentsEditor(BasicEditorFactory):
-    """Edit a list of NotificationSections as the drawer's contents."""
-
-    klass = _DrawerContentsEditor
-
-
-UxDrawerView = View(
-    UItem("ordered_sections", editor=DrawerContentsEditor()),
-    resizable=True,
-    width=400,
-    height=720,
-    title="Notifications",
-)
-
-
 class UxDrawerHost(NotificationsDrawerHost):
     """The product host, with the prototype's drawer, contents and width."""
 
@@ -381,17 +264,10 @@ class UxDrawerHost(NotificationsDrawerHost):
             self._open()
 
     def _build_contents(self):
-        """The contents in the model's layout: one scrolling column, or the
-        resizable sections."""
-        view = UxDrawerView
-
-        if self.model.drawer_layout == LAYOUT_COLUMN:
-            from .column_view import ColumnDrawerView
-
-            view = ColumnDrawerView
+        from .column_view import ColumnDrawerView
 
         self._ui = self.model.edit_traits(
-            view=view, kind="subpanel", parent=self.drawer
+            view=ColumnDrawerView, kind="subpanel", parent=self.drawer
         )
         contents = self._ui.control
         area = contents.findChild(QtWidgets.QWidget, SECTIONS_OBJECT_NAME)
@@ -415,27 +291,6 @@ class UxDrawerHost(NotificationsDrawerHost):
 
     def _resize_to(self, width):
         self.model.drawer_width = drawer_width_for(self.window.width(), width)
-
-    @observe("model:drawer_layout")
-    def _switch_layout(self, event):
-        """Rebuild the contents in the other layout: now if the drawer is
-        open, else when it next opens."""
-
-        if self._ui is None:
-            return
-
-        control = self._ui.control
-        self._dispose_contents()
-
-        try:
-            control.setParent(None)
-            control.deleteLater()
-
-        except RuntimeError as error:
-            logger.debug(f"Drawer contents already deleted: {error}")
-
-        if self.drawer is not None and self.drawer.isVisible():
-            self._build_contents()
 
     @observe("model:drawer_width")
     def _follow_width(self, event):

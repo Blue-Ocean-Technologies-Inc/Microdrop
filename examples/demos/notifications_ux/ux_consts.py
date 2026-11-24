@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 # Microdrop package imports.
 from examples.demos.notifications_pane.sci_bots_feed_section import FEED_SECTION_ID
+from microdrop_application.consts import scibots_icon_path
 from notifications.consts import (
     DRAWER_WIDTH,
     NOTIFICATION_POST,
@@ -137,7 +138,10 @@ DRAWER_GRIP_WIDTH = 6
 # ---------------------------------------------------------------------------
 ATTENTION_SECTION_ID = f"{PKG}.attention"
 
-#: The title of the section listing every other notification.
+#: The drawer's section titles, kept short: Needs attention, the Sci-Bots
+#: Feed's section, and the one listing every other notification.
+ATTENTION_SECTION_TITLE = "Needs attention"
+FEED_SECTION_TITLE = "News"
 HISTORY_SECTION_TITLE = "Activity"
 HISTORY_SECTION_ID = f"{PKG}.history"
 
@@ -148,20 +152,9 @@ HISTORY_SECTION_ORDER = 1000
 #: Duration (ms) of a section opening or closing.
 SECTION_ANIMATION_MS = 180
 
-#: Least height (px) a resizable section's contents drag down to.
-SECTION_MIN_HEIGHT = 72
-
-#: Height (px) of the drag handle under a resizable section.
-SECTION_GRIP_HEIGHT = 9
-
 # ---------------------------------------------------------------------------
 # The drawer's one-column layout
 # ---------------------------------------------------------------------------
-#: The drawer's layouts: one scrolling column of sections, or sections that
-#: each scroll and resize inside a fixed-height drawer.
-LAYOUT_COLUMN = "column"
-LAYOUT_SECTIONS = "sections"
-
 #: Activity's filters: every entry, the errors, or those with a button left
 #: to press.
 FILTER_ALL = "all"
@@ -187,9 +180,8 @@ REVEAL_SCROLL_MS = 260
 #: The bell's "severity" when only new feed posts are counted: below info.
 FEED_SEVERITY = "feed"
 
-#: Category of a new feed post's stand-in notification, and its glyph.
+#: Category of a new feed post's stand-in notification.
 CATEGORY_FEED = "feed"
-FEED_GLYPH = "newspaper"
 
 #: A feed sub-section's posts before its "Show N more".
 FEED_GROUP_PREVIEW = 1
@@ -208,15 +200,18 @@ CARD_BODY_LINES = 2
 ATTENTION_ACCENT = "#E8710A"
 
 #: A section's look: its glyph (a Material Symbols ligature), accent colour,
-#: first height (px) and whether it takes the drawer's remaining height.
-SectionStyle = namedtuple("SectionStyle", "glyph accent height springy")
+#: and a logo shown instead of the glyph, if any.
+SectionStyle = namedtuple("SectionStyle", "glyph accent logo", defaults=("",))
+
+#: The Sci-Bots mark: News's icon and the new-post toasts'.
+SCIBOTS_LOGO = str(scibots_icon_path)
 
 SECTION_STYLES = {
-    ATTENTION_SECTION_ID: SectionStyle("priority_high", ATTENTION_ACCENT, 420, False),
-    LOAD_STATUS_SECTION_ID: SectionStyle("extension", ACCENT_COLOR, 200, False),
-    FEED_SECTION_ID: SectionStyle("newspaper", PRIMARY_COLOR, 300, False),
-    HISTORY_SECTION_ID: SectionStyle("notifications", INFO_COLOR, 0, True),
+    ATTENTION_SECTION_ID: SectionStyle("priority_high", ATTENTION_ACCENT),
+    LOAD_STATUS_SECTION_ID: SectionStyle("extension", ACCENT_COLOR),
+    FEED_SECTION_ID: SectionStyle("newspaper", PRIMARY_COLOR, SCIBOTS_LOGO),
+    HISTORY_SECTION_ID: SectionStyle("notifications", INFO_COLOR),
 }
 
 #: The look of a section with no entry above.
-DEFAULT_SECTION_STYLE = SectionStyle("widgets", INFO_COLOR, 200, False)
+DEFAULT_SECTION_STYLE = SectionStyle("widgets", INFO_COLOR)

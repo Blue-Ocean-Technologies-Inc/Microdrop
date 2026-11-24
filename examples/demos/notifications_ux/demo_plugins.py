@@ -23,7 +23,7 @@ from pyface.action.api import Action
 from pyface.action.schema.schema_addition import SchemaAddition
 from pyface.api import GUI
 from pyface.tasks.action.api import SGroup, SMenu
-from traits.api import Any, Bool, Instance, List, Str, observe
+from traits.api import Any, Bool, Instance, List, observe
 
 # Microdrop package imports.
 from examples.demos.notifications_pane.sci_bots_feed_demo import (
@@ -37,7 +37,6 @@ from plugin_management.plugin import PluginManagementPlugin
 # Local imports.
 from . import fake_panes, scenarios
 from .feed_models import FeedAlertWatcher, UxFeedSection
-from .ux_consts import LAYOUT_COLUMN, LAYOUT_SECTIONS
 from .ux_models import ToastSettings
 
 # Logger import.
@@ -131,24 +130,6 @@ class AutoDismissAction(Action):
     @observe("settings.auto_dismiss")
     def _follow_settings(self, event):
         self.checked = self.settings.auto_dismiss
-
-
-class LayoutAction(Action):
-    """One of the drawer's layouts, as a radio item kept in step with the
-    model."""
-
-    style = "radio"
-
-    #: The drawer's model, and the layout this item picks.
-    pane_model = Any()
-    layout_name = Str()
-
-    def perform(self, event=None):
-        self.pane_model.drawer_layout = self.layout_name
-
-    @observe("pane_model.drawer_layout")
-    def _follow_model(self, event):
-        self.checked = self.pane_model.drawer_layout == self.layout_name
 
 
 class _MenuActions:
@@ -265,19 +246,6 @@ class NotificationsDemoPlugin(Plugin):
                 id="notifications_ux_demo.notifications",
             ),
             SGroup(*self._feed_actions(), id="notifications_ux_demo.feed"),
-            SGroup(
-                LayoutAction(
-                    name="Layout: one scrolling column",
-                    pane_model=self._pane_model,
-                    layout_name=LAYOUT_COLUMN,
-                ),
-                LayoutAction(
-                    name="Layout: resizable sections",
-                    pane_model=self._pane_model,
-                    layout_name=LAYOUT_SECTIONS,
-                ),
-                id="notifications_ux_demo.layout",
-            ),
             SGroup(
                 AutoDismissAction(settings=self._toast_settings),
                 action("Notification settings…", self._open_settings),

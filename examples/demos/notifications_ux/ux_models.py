@@ -20,7 +20,6 @@ from datetime import datetime, timedelta
 # Enthought library imports.
 from traits.api import (
     Bool,
-    Dict,
     Enum,
     Event,
     HasTraits,
@@ -53,6 +52,7 @@ from notifications.models.notifications_pane_model import NotificationsPaneModel
 from .ux_consts import (
     ATTENTION_SECTION_ID,
     ATTENTION_SECTION_ORDER,
+    ATTENTION_SECTION_TITLE,
     DRAWER_DEFAULT_WIDTH,
     FEED_SEVERITY,
     FILTER_ACTION,
@@ -61,8 +61,6 @@ from .ux_consts import (
     HISTORY_SECTION_ID,
     HISTORY_SECTION_ORDER,
     HISTORY_SECTION_TITLE,
-    LAYOUT_COLUMN,
-    LAYOUT_SECTIONS,
     TOAST_TIMEOUT_MS,
     HelpAction,
     SnoozeAction,
@@ -369,10 +367,6 @@ class UxPaneModel(NotificationsPaneModel):
     #: The drawer's width (px), for the session.
     drawer_width = Int(DRAWER_DEFAULT_WIDTH)
 
-    #: Each resized section's contents height (px), by section id, for the
-    #: session.
-    section_heights = Dict(Str, Int)
-
     #: The bell's count: unread entries not on screen as toasts. A toast
     #: landing in the bell ticks it up.
     bell_count = Property(
@@ -390,9 +384,6 @@ class UxPaneModel(NotificationsPaneModel):
     #: Stand-ins for new Sci-Bots Feed posts, oldest first: unread until
     #: the feed has been seen in the open drawer, new until it closes.
     feed_alerts = List(Instance(Notification))
-
-    #: Which layout the drawer shows.
-    drawer_layout = Enum(LAYOUT_COLUMN, LAYOUT_SECTIONS)
 
     #: Which Activity entries show.
     history_filter = Enum(FILTER_ALL, FILTER_ERRORS, FILTER_ACTION)
@@ -463,7 +454,7 @@ def time_group(seconds, now=None):
 
 class CardListSection(NotificationSection):
     """A drawer section listing notification cards: Needs attention or the
-    rest."""
+    rest. The drawer's column builds its cards; it needs no factory."""
 
     #: The drawer's model, whose centre lists the entries.
     pane_model = Instance(UxPaneModel)
@@ -475,21 +466,12 @@ class CardListSection(NotificationSection):
     #: Whether the section shows at all; Needs attention hides when empty.
     available = Bool(True)
 
-    def _factory_default(self):
-        return self.build_contents
-
-    def build_contents(self, parent):
-        """The cards, as a scrolled list."""
-        from .card_list_view import CardListView
-
-        return CardListView(self.pane_model, self.entries_name, parent)
-
 
 class AttentionSection(CardListSection):
     """The cards the user has to act on, at the top."""
 
     id = ATTENTION_SECTION_ID
-    title = "Needs attention"
+    title = ATTENTION_SECTION_TITLE
     order = ATTENTION_SECTION_ORDER
     expanded = True
     entries_name = "attention_entries"

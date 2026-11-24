@@ -38,6 +38,45 @@ PRIMARY_FILL_HOVER = PRIMARY_SHADE[500]
 PRIMARY_FILL_PRESSED = PRIMARY_SHADE[800]
 
 
+#: Logo badges made so far, by (path, size, device pixel ratio).
+_BADGES = {}
+
+
+def logo_badge(path, size, ratio=1.0):
+    """The logo at ``path`` on a light disc ``size`` px across: the light
+    disc keeps a mark with dark parts legible on the dark theme too."""
+    key = (str(path), size, ratio)
+    badge = _BADGES.get(key)
+
+    if badge is not None:
+        return badge
+
+    pixels = int(round(size * ratio))
+    badge = QtGui.QPixmap(pixels, pixels)
+    badge.fill(QtCore.Qt.GlobalColor.transparent)
+
+    painter = QtGui.QPainter(badge)
+    painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+    painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
+    painter.setPen(QtCore.Qt.PenStyle.NoPen)
+    painter.setBrush(QtGui.QColor(PRIMARY_SHADE[50]))
+    painter.drawEllipse(QtCore.QRectF(0, 0, pixels, pixels))
+
+    inset = pixels * 0.14
+    logo = QtGui.QPixmap(str(path))
+    painter.drawPixmap(
+        QtCore.QRectF(inset, inset, pixels - 2 * inset, pixels - 2 * inset),
+        logo,
+        QtCore.QRectF(logo.rect()),
+    )
+    painter.end()
+
+    badge.setDevicePixelRatio(ratio)
+    _BADGES[key] = badge
+
+    return badge
+
+
 def is_dark(palette):
     """Whether ``palette`` is a dark one."""
     return palette.color(_ROLE.Window).lightness() < DARK_LIGHTNESS
