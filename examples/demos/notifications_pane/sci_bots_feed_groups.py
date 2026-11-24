@@ -108,7 +108,7 @@ FEED_GROUPS = (
     ),
     FeedGroupSpec(
         id="posts",
-        title="From Sci-Bots",
+        title="Updates",
         kinds=("post",),
         pinned=False,
         accent=(GREY["dark"], GREY["lighter"]),
