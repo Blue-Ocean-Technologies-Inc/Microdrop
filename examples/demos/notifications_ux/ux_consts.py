@@ -32,6 +32,7 @@ from plugin_management.consts import LOAD_STATUS_SECTION_ID
 
 # Microdrop style imports.
 from microdrop_style.colors import ACCENT_COLOR, INFO_COLOR, PRIMARY_COLOR
+from microdrop_style.icons.icons import ICON_HISTORY
 from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
 
 # Microdrop utils imports.
@@ -273,7 +274,7 @@ SECTION_STYLES = {
     NEWS_SECTION_ID: SectionStyle(
         "newspaper", NEWS_ACCENT, str(BLUE_OCEAN_SCI_BOTS_LOGO)
     ),
-    HISTORY_SECTION_ID: SectionStyle("notifications", INFO_COLOR),
+    HISTORY_SECTION_ID: SectionStyle(ICON_HISTORY, INFO_COLOR),
 }
 
 #: The look of a section with no entry above.

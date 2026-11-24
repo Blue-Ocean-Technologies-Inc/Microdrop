@@ -116,6 +116,7 @@ ICON_ADJUST = "adjust"  # show the ball at its size
 ICON_NEGATIVE_MASK = "remove_selection"  # draw negative masks cut out of ROIs
 ICON_NOTIFICATIONS = "notifications"  # the notifications bell, nothing new
 ICON_NOTIFICATIONS_ACTIVE = "notifications_active"  # the bell with news
+ICON_HISTORY = "history"  # a clock turning back: what happened earlier
 ICON_CHECK_CIRCLE = "check_circle"  # a success notification
 ICON_WARNING = "warning"  # a warning notification
 ICON_ERROR = "error"  # an error notification
