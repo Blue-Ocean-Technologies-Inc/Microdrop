@@ -37,10 +37,23 @@ from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, observe
 from notifications.consts import SEVERITY_ERROR, SEVERITY_WARNING
 
 # Microdrop style imports.
-from microdrop_style.sounds.chimes import CHIME_ALERT, CHIME_COMPLETION, CHIME_GENTLE
+from microdrop_style.sounds.chimes import (
+    CHIME_ALERT,
+    CHIME_COMPLETION,
+    CHIME_CONNECTED,
+    CHIME_DISCONNECTED,
+    CHIME_GENTLE,
+)
 
 # Local imports.
-from .settings_models import TONE_ALERT, TONE_COMPLETION, TONE_LABELS, TONE_SOFT
+from .settings_models import (
+    TONE_ALERT,
+    TONE_COMPLETION,
+    TONE_CONNECTED,
+    TONE_DISCONNECTED,
+    TONE_LABELS,
+    TONE_SOFT,
+)
 from .ux_consts import SKIP_START_UP
 from .ux_models import UxPaneModel
 
@@ -57,14 +70,21 @@ CHIME_OVERLAP_S = 0.4
 SKIP_SOUND_OFF = "sound off"
 SKIP_TONE_NONE = "category tone none"
 SKIP_OVERLAP = "rate limit"
+SKIP_FLAP = "state changing again"
 
 #: Each tone's sound, weakest first: within CHIME_OVERLAP_S only a
 #: stronger tone than the last one sounds.
 TONE_SOUNDS = {
     TONE_SOFT: CHIME_GENTLE,
+    TONE_CONNECTED: CHIME_CONNECTED,
+    TONE_DISCONNECTED: CHIME_DISCONNECTED,
     TONE_ALERT: CHIME_ALERT,
     TONE_COMPLETION: CHIME_COMPLETION,
 }
+
+#: A state that keeps changing (a connection flapping) chimes at most once
+#: in this time (s), unless the change is stronger than the last one.
+STATE_FLAP_S = 2.0
 TONE_STRENGTH = {tone: strength for strength, tone in enumerate(TONE_SOUNDS)}
 
 
@@ -109,6 +129,9 @@ class NotificationChime(HasTraits):
     _last_played = Float(-CHIME_OVERLAP_S)
     _last_tone = Str()
 
+    #: ``(time, tone)`` of each state entry's last chime, by its key.
+    _state_chimes = Dict()
+
     #: Set once sound proved unavailable: warned once, then silent.
     _unavailable = Bool(False)
 
@@ -138,6 +161,21 @@ class NotificationChime(HasTraits):
             self._skip(entry, SKIP_OVERLAP)
 
             return
+
+        # A state entry (one updated in place, e.g. a connection) that
+        # changes again within STATE_FLAP_S chimes only if it got worse.
+        state = entry.key[0] == "thread" if isinstance(entry.key, tuple) else False
+
+        if state:
+            when, last = self._state_chimes.get(entry.key, (-STATE_FLAP_S, ""))
+            worse = TONE_STRENGTH[tone] > TONE_STRENGTH.get(last, -1)
+
+            if now - when < STATE_FLAP_S and not worse:
+                self._skip(entry, SKIP_FLAP)
+
+                return
+
+            self._state_chimes[entry.key] = (now, tone)
 
         self._last_played = now
         self._last_tone = tone

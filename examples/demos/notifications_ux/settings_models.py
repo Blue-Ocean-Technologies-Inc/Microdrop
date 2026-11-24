@@ -44,18 +44,29 @@ from traits.api import (
 # Local imports.
 from .ux_consts import TOAST_TIMEOUT_MS
 
-#: The tones a category can play: none, the soft chime, the alert chime, or
-#: the longer completion beeps.
+#: The tones a category can play, weakest first: none, the soft chime, the
+#: connected and disconnected pair, the alert chime, the completion beeps.
 TONE_NONE = "none"
 TONE_SOFT = "soft"
+TONE_CONNECTED = "connected"
+TONE_DISCONNECTED = "disconnected"
 TONE_ALERT = "alert"
 TONE_COMPLETION = "completion"
-TONES = (TONE_NONE, TONE_SOFT, TONE_ALERT, TONE_COMPLETION)
+TONES = (
+    TONE_NONE,
+    TONE_SOFT,
+    TONE_CONNECTED,
+    TONE_DISCONNECTED,
+    TONE_ALERT,
+    TONE_COMPLETION,
+)
 
 #: How each tone is named in the settings.
 TONE_LABELS = {
     TONE_NONE: "None",
     TONE_SOFT: "Soft",
+    TONE_CONNECTED: "Connected",
+    TONE_DISCONNECTED: "Disconnected",
     TONE_ALERT: "Alert",
     TONE_COMPLETION: "Completion",
 }
@@ -158,7 +169,7 @@ class NotificationSettings(HasTraits):
     sound_volume = Range(0, 100, 80)
 
     #: The tone the Test button plays.
-    test_tone = Enum(TONE_SOFT, TONE_ALERT, TONE_COMPLETION)
+    test_tone = Enum(*TONES[1:])
     test_sound = Button("Test")
 
     #: What the chime last did, and last did not, and why: shown in the
