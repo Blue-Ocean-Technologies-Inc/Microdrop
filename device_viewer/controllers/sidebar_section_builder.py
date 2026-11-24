@@ -16,29 +16,20 @@ so the window repaints and takes input between them and the sections fill in
 instead of holding up the main window. Code that needs a section before it
 exists asks ``when_built``: it runs at once for a built section, or when
 the section is built — or, should its build fail, its failure callback
-runs instead, so no request waits forever.
+runs instead, so no request waits forever (each section is a
+``microdrop_utils.deferred_content.DeferredContent``, which keeps them).
 
 Qt-free: turns are scheduled with ``invoke_paced``.
 """
 
 # Enthought library imports.
-from traits.api import Bool, Callable, Dict, Event, HasTraits, Instance, List
+from traits.api import Bool, Callable, Event, HasTraits, Instance, List
 
 # Microdrop utils imports.
 from microdrop_utils.gui_pacing import invoke_paced
 
 # Local imports.
-from ..models.deferred_sidebar_section import (
-    SECTION_BUILT,
-    SECTION_FAILED,
-    SECTION_LOADING,
-    DeferredSidebarSection,
-)
-
-# Logger import.
-from logger.logger_service import get_logger
-
-logger = get_logger(__name__)
+from ..models.deferred_sidebar_section import SECTION_LOADING, DeferredSidebarSection
 
 
 class SidebarSectionBuilder(HasTraits):
@@ -56,9 +47,6 @@ class SidebarSectionBuilder(HasTraits):
     #: Fired once every section is built or has failed.
     finished = Event()
 
-    #: (on_built, on_failed) pairs waiting on each section still loading.
-    _waiting = Dict()
-
     def _invoke_later_default(self):
         return invoke_paced
 
@@ -75,40 +63,11 @@ class SidebarSectionBuilder(HasTraits):
         """Call ``on_built(section)`` with ``deferred``'s built section, now
         or once it is built; ``on_failed(error)`` instead if its build fails.
         Callbacks run in the order they were registered."""
-
-        if deferred.state == SECTION_BUILT:
-            on_built(deferred.section)
-
-        elif deferred.state == SECTION_FAILED:
-            if on_failed is not None:
-                on_failed(deferred.error)
-
-        else:
-            self._waiting.setdefault(deferred, []).append((on_built, on_failed))
+        deferred.when_built(on_built, on_failed)
 
     def build(self, deferred):
         """Build ``deferred`` now, unless it is built or has failed already."""
-
-        if deferred.state != SECTION_LOADING:
-            return
-
-        try:
-            section = deferred.build()
-        except Exception as error:
-            logger.error(
-                f"Device viewer sidebar section {deferred.title!r} could not "
-                f"be built: {error}",
-                exc_info=True,
-            )
-            deferred.error = str(error) or type(error).__name__
-            deferred.state = SECTION_FAILED
-            self._notify(deferred, failed=True)
-
-            return
-
-        deferred.section = section
-        deferred.state = SECTION_BUILT
-        self._notify(deferred, failed=False)
+        deferred.build_content()
 
     def _build_next(self):
         """Build the next section still loading, then schedule the rest."""
@@ -125,23 +84,3 @@ class SidebarSectionBuilder(HasTraits):
             return
 
         self.finished = True
-
-    def _notify(self, deferred, failed):
-        """Run the callbacks waiting on ``deferred``; one that raises is
-        logged and does not keep the others from running."""
-
-        for on_built, on_failed in self._waiting.pop(deferred, []):
-            callback, argument = (
-                (on_failed, deferred.error) if failed else (on_built, deferred.section)
-            )
-
-            if callback is None:
-                continue
-
-            try:
-                callback(argument)
-            except Exception as error:
-                logger.error(
-                    f"Waiting on sidebar section {deferred.title!r}: {error}",
-                    exc_info=True,
-                )

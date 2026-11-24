@@ -88,6 +88,7 @@ from microdrop_style.icons.icons import (
 )
 
 from microdrop_utils.gui_pacing import invoke_paced
+from microdrop_utils.lazy_dock_pane import LazyContentDockPane
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor,
     HoverScrollEnumEditor,
@@ -3739,13 +3740,13 @@ def _loading_line(parent):
     return line
 
 
-class RoiPlotDockPane(DockPane):
+class RoiPlotDockPane(LazyContentDockPane, DockPane):
     """ROI intensity vs time for the filtered image series.
 
-    The chart comes with the pane; its other sections — the controls,
-    the ROI table, the temperature style panel — are built one per paced
-    GUI turn after it (#1086), each a loading line until then: built at
-    once they froze the window for about a second."""
+    Built on its first show (#1085): the chart at once, its other
+    sections — the controls, the ROI table, the temperature style panel —
+    one per paced GUI turn after it (#1086), each a loading line until
+    then: built at once they froze the window for about a second."""
 
     id = ROI_PLOT_DOCK_PANE_ID
     name = ROI_PLOT_DOCK_PANE_NAME
@@ -3915,7 +3916,8 @@ class RoiPlotDockPane(DockPane):
 
         return ui
 
-    @observe("visible")
+    # Not "visible": pyface keeps that True behind another tab.
+    @observe("showing_contents")
     def _mirror_visibility(self, event):
         roi_analysis_model.plot_visible = event.new
 
@@ -4011,9 +4013,8 @@ class RoiPlotDockPane(DockPane):
 
     def destroy(self):
         # Everything below was registered in create_contents, which a
-        # constructed-but-never-shown pane never ran (pyface's own
-        # destroy() guards its teardown the same way).
-        if self.control is not None:
+        # pane never shown never ran: its dock exists, its chart does not.
+        if self.canvas is not None:
             self._destroyed = True
             roi_analysis_model.plot_visible = False
             self.canvas.detach()
