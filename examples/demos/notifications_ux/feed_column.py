@@ -9,13 +9,15 @@
 # Thanks for using Microdrop open source!
 
 """The Sci-Bots Feed in the drawer's one-column layout: its status line,
-then one sub-section per group (Top stories, What's new in MicroDrop,
+then one sub-section per group (Top stories, What's new,
 Newsletters, ...), each a header one level below the main ones that
 collapses and expands, showing the group's newest post and "Show N more".
 
 Built here from the feed model's groups with the feed's own post cards
-(``FeedPostCard``); which sub-sections are collapsed or show everything is
-kept on the section model, for the session.
+(``FeedPostCard``); the sub-headers look like the feed's own group headers
+(its sizes and accent colours), with a count chip and a chevron added.
+Which sub-sections are collapsed or show everything is kept on the section
+model, for the session.
 """
 
 # Enthought library imports.
@@ -24,30 +26,42 @@ from traits.api import Any, HasTraits, Instance, observe
 from traitsui.api import UItem, View
 
 # Microdrop package imports.
-from examples.demos.notifications_pane.sci_bots_feed_cards import FeedPostCard
-from examples.demos.notifications_pane.sci_bots_feed_view import StatusBannerEditor
+from examples.demos.notifications_pane.sci_bots_feed_cards import (
+    GRID,
+    SMALL_POINTS,
+    FeedPostCard,
+    accent_color,
+    scaled_font,
+)
+from examples.demos.notifications_pane.sci_bots_feed_groups import SUBTITLE_LATEST
+from examples.demos.notifications_pane.sci_bots_feed_model import format_post_date
+from examples.demos.notifications_pane.sci_bots_feed_view import (
+    HEADER_GLYPH_SIZE,
+    HEADER_POINTS,
+    HEADER_RULE_SIZE,
+    StatusBannerEditor,
+)
 
 # Microdrop style imports.
 from microdrop_style.colors import INFO_COLOR
+from microdrop_style.icons.icons import ICON_CHEVRON_RIGHT, ICON_EXPAND_MORE
 
 # Local imports.
 from .card_parts import NEW_DOT_SIZE, NewDot
 from .feed_models import UxFeedSection
-from .section_view import SectionHeader
 from .ux_consts import (
     FEED_GROUP_PREVIEW,
     HIGHLIGHT_MS,
     SECTION_ANIMATION_MS,
-    SectionStyle,
 )
 from .ux_models import UxPaneModel
-from .view_styles import link_button_style, with_alpha
+from .view_styles import css, icon_font, link_button_style, muted_text, with_alpha
 
 #: The largest widget height Qt allows.
 _UNBOUNDED = 16_777_215
 
 #: Indent (px) of a sub-section's posts under its header.
-SUB_BODY_INDENT = 12
+SUB_BODY_INDENT = 4
 
 #: Corner radius (px) of a highlighted post.
 HIGHLIGHT_RADIUS = 10
@@ -84,6 +98,149 @@ class _Highlight(QtWidgets.QWidget):
         painter.drawRoundedRect(
             QtCore.QRectF(self.rect()), HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS
         )
+
+
+#: The group whose header names its newest post's date.
+NEWSLETTERS_GROUP_ID = "newsletters"
+
+
+def group_detail(group):
+    """The right-aligned detail of a group's header: the latest release
+    ("latest v1.48.0", as the feed's own header says it), the newest
+    newsletter's date, or nothing."""
+
+    if group.spec.subtitle == SUBTITLE_LATEST:
+        return group.subtitle
+
+    if group.spec.id == NEWSLETTERS_GROUP_ID and group.posts:
+        return format_post_date(group.posts[0])
+
+    return ""
+
+
+class _ElidedLabel(QtWidgets.QLabel):
+    """Right-aligned text cut with an ellipsis when short of room, rather
+    than taking the title's."""
+
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred
+        )
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        metrics = QtGui.QFontMetrics(self.font())
+        text = metrics.elidedText(
+            self.text(), QtCore.Qt.TextElideMode.ElideRight, self.width()
+        )
+
+        painter.setPen(self.palette().color(self.foregroundRole()))
+        painter.drawText(
+            self.rect(),
+            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignBottom,
+            text,
+        )
+
+
+class FeedGroupHeader(QtWidgets.QWidget):
+    """A feed group's header as the feed draws it (glyph and large bold
+    title in the group's colour, the detail muted at the right, a short
+    rule under them), with a count chip and a chevron added on the rule's
+    line, where they leave the title its room; a click emits ``clicked``."""
+
+    clicked = QtCore.Signal()
+
+    def __init__(self, group, parent=None):
+        super().__init__(parent)
+
+        self.group = group
+        accent = accent_color(group.spec, self.palette()).name()
+
+        self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
+
+        header = QtWidgets.QVBoxLayout(self)
+        header.setContentsMargins(4, GRID, 4, GRID // 2)
+        header.setSpacing(GRID // 2)
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(GRID)
+
+        glyph = QtWidgets.QLabel(group.spec.glyph, self)
+        glyph.setFont(icon_font(HEADER_GLYPH_SIZE))
+        glyph.setStyleSheet(f"QLabel {{ color: {accent}; }}")
+        row.addWidget(glyph)
+
+        title = QtWidgets.QLabel(group.spec.title, self)
+        title.setFont(scaled_font(self, HEADER_POINTS, bold=True))
+        title.setStyleSheet(f"QLabel {{ color: {accent}; }}")
+        title.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Preferred
+        )
+        row.addWidget(title)
+        row.addStretch()
+
+        detail = _ElidedLabel(group_detail(group), self)
+        detail.setForegroundRole(QtGui.QPalette.ColorRole.PlaceholderText)
+        detail.setFont(scaled_font(self, SMALL_POINTS))
+        row.addWidget(detail, 1, QtCore.Qt.AlignmentFlag.AlignBottom)
+        header.addLayout(row)
+
+        # The rule, then the chip and the chevron at the right.
+        line = QtWidgets.QHBoxLayout()
+        line.setSpacing(GRID)
+
+        rule = QtWidgets.QFrame(self)
+        rule.setFixedSize(*HEADER_RULE_SIZE)
+        rule.setStyleSheet(f"QFrame {{ background: {accent}; border-radius: 1px; }}")
+        line.addWidget(rule, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+        line.addStretch()
+
+        self._chip = QtWidgets.QLabel(self)
+        self._chip.setFont(scaled_font(self, SMALL_POINTS, bold=True))
+        self._chip.setStyleSheet(
+            f"QLabel {{ color: {accent};"
+            f" background: {css(with_alpha(accent, 0.16))};"
+            " border-radius: 9px; padding: 1px 8px; }"
+        )
+        line.addWidget(self._chip, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+
+        self._chevron = QtWidgets.QLabel(self)
+        self._chevron.setFont(icon_font(20))
+        self._chevron.setStyleSheet(
+            f"QLabel {{ color: {muted_text(self.palette()).name()}; }}"
+        )
+        line.addWidget(self._chevron)
+        header.addLayout(line)
+
+    def show_state(self, summary, expanded):
+        """Show ``summary`` in the chip, the chevron for ``expanded``."""
+        self._chip.setText(summary)
+        self._chip.setVisible(bool(summary))
+        self._chevron.setText(ICON_EXPAND_MORE if expanded else ICON_CHEVRON_RIGHT)
+        self.setToolTip(
+            f"{'Collapse' if expanded else 'Expand'} {self.group.spec.title}"
+        )
+
+    def paintEvent(self, event):
+
+        if not self.underMouse():
+            return
+
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        text = self.palette().color(QtGui.QPalette.ColorRole.Text)
+        painter.setBrush(with_alpha(text, 0.05))
+        painter.drawRoundedRect(QtCore.QRectF(self.rect()), 7, 7)
+
+    def mouseReleaseEvent(self, event):
+
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+
+        event.accept()
 
 
 class PostFrame(QtWidgets.QWidget):
@@ -147,14 +304,11 @@ class FeedSubsection(QtWidgets.QWidget):
         self.column = column
         self._frames = []
 
-        spec = group.spec
-        style = SectionStyle(spec.glyph, spec.accent[0], 0, False)
-
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self.header = SectionHeader(style, self, level=1)
+        self.header = FeedGroupHeader(group, self)
         self.header.clicked.connect(self._toggle)
         layout.addWidget(self.header)
 
@@ -197,7 +351,7 @@ class FeedSubsection(QtWidgets.QWidget):
         self._dispose_frames()
         posts = self.group.posts
         shown = posts if self.shows_all else posts[:FEED_GROUP_PREVIEW]
-        accent = self.header.style_.accent
+        accent = accent_color(self.group.spec, self.palette()).name()
 
         for index, post in enumerate(shown):
             frame = PostFrame(
@@ -226,7 +380,7 @@ class FeedSubsection(QtWidgets.QWidget):
             frame.set_new(frame.post.id in new_ids)
 
         summary = f"{new} new · {total}" if new else str(total)
-        self.header.show_section(self.group.spec.title, summary, self.expanded, False)
+        self.header.show_state(summary, self.expanded)
 
     def frame_for(self, post_id):
         """The frame of the post with ``post_id``, opening the sub-section
