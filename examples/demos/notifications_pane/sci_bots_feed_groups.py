@@ -41,7 +41,7 @@ class FeedGroupSpec(NamedTuple):
     #: Stable id, e.g. "releases".
     id: str
 
-    #: The header, e.g. "What's new in MicroDrop".
+    #: The header, e.g. "What's new".
     title: str
 
     #: The kinds it takes; with ``pinned``, only pinned posts of them.
@@ -78,7 +78,7 @@ FEED_GROUPS = (
     ),
     FeedGroupSpec(
         id="releases",
-        title="What's new in MicroDrop",
+        title="What's new",
         kinds=("release",),
         pinned=False,
         accent=(PRIMARY_SHADE[700], PRIMARY_SHADE[400]),
@@ -98,7 +98,7 @@ FEED_GROUPS = (
     ),
     FeedGroupSpec(
         id="announcements",
-        title="Announcements & products",
+        title="Announcements",
         kinds=("announcement", "product"),
         pinned=False,
         accent=(SECONDARY_SHADE[700], SECONDARY_SHADE[300]),
