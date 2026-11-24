@@ -216,7 +216,6 @@ HISTORY_SECTION_ORDER = 1000
 #: Why an arrival made no sound, as the chime reports it.
 SKIP_START_UP = "start-up history"
 SKIP_READ = "already read"
-SKIP_REPEAT = "repeat"
 SKIP_QUIET = "quiet"
 
 #: Duration (ms) of a section opening or closing.

@@ -29,7 +29,6 @@ from .ux_consts import (
     QUIET_SUMMARY_SOURCE,
     SKIP_QUIET,
     SKIP_READ,
-    SKIP_REPEAT,
     SKIP_START_UP,
     TOAST_LIMIT,
     TOAST_TICK_MS,
@@ -133,6 +132,44 @@ class UxNotificationsController(NotificationsController):
             model.feed_alerts = [entry for entry in model.feed_alerts if entry.unread]
 
 
+#: What an arrival that rings does: pops a toast up (or counts past the
+#: limit, or goes straight to the bell), refreshes the toast already
+#: showing (a repeat, its count up), or lands in the open drawer.
+ARRIVAL_POP_UP = "pop up"
+ARRIVAL_REFRESH = "refresh"
+ARRIVAL_IN_DRAWER = "in drawer"
+
+#: The outcomes that ring the bell (and chime); any other is the reason
+#: the arrival stayed silent.
+RINGING_ARRIVALS = (ARRIVAL_POP_UP, ARRIVAL_REFRESH, ARRIVAL_IN_DRAWER)
+
+
+def arrival_outcome(enabled, drawer_open, unread, toast_showing, held_quietly):
+    """What an arrival (new, or a repeat of an entry already listed) does.
+
+    It rings whenever something visible happens: a toast pops up, the toast
+    already showing is refreshed (its count goes up, its time restarts), or
+    it lands in the open drawer. It is silent only when nothing is seen:
+    start-up history, an entry already read, one held while quiet."""
+
+    if not enabled:
+        return SKIP_START_UP
+
+    if drawer_open:
+        return ARRIVAL_IN_DRAWER
+
+    if not unread:
+        return SKIP_READ
+
+    if toast_showing:
+        return ARRIVAL_REFRESH
+
+    if held_quietly:
+        return SKIP_QUIET
+
+    return ARRIVAL_POP_UP
+
+
 class ToastStackController(HasTraits):
     """Turns arrivals into toasts and runs their timers.
 
@@ -188,58 +225,50 @@ class ToastStackController(HasTraits):
         self.offer(event.new)
 
     def offer(self, entry):
-        """Pop ``entry`` up, hold it while quiet, or count it past the
-        limit, ringing the bell for each arrival, the drawer open or not;
-        what does not ring is reported as ``silenced``, with why."""
+        """Pop ``entry`` up, refresh its toast, hold it while quiet, or count
+        it past the limit; ring the bell (and chime) whenever that shows,
+        and report what does not ring as ``silenced``, with why. A repeat
+        of a listed entry comes here too."""
         model = self.pane_model
         toasts = model.toasts
         urgent = entry.severity == SEVERITY_ERROR or entry.needs_attention
-
-        if not self.enabled:
-            model.silenced = (entry, SKIP_START_UP)
-
-            return
-
-        if model.is_open:
-            model.rang = entry
-
-            return
-
-        if not entry.unread:
-            model.silenced = (entry, SKIP_READ)
-
-            return
-
         item = toasts.find(entry)
-
-        if item is not None and not item.leaving:
-            item.remaining_ms = toasts.settings.timeout_ms
-            model.silenced = (entry, SKIP_REPEAT)
-
-            return
+        showing = item is not None and not item.leaving
 
         # While quiet, the quiet run's own categories still come through.
         kind = toasts.settings.category(entry.category_id)
         own = kind is not None and kind.group == toasts.quiet_reason
+        held = toasts.quiet and not urgent and not own
 
-        if toasts.quiet and not urgent and not own:
-            if entry not in toasts.held:
+        outcome = arrival_outcome(
+            self.enabled, model.is_open, entry.unread, showing, held
+        )
+
+        if outcome not in RINGING_ARRIVALS:
+            if outcome == SKIP_QUIET and entry not in toasts.held:
                 toasts.held.append(entry)
 
-            model.silenced = (entry, SKIP_QUIET)
+            model.silenced = (entry, outcome)
 
             return
 
         model.rang = entry
 
+        if outcome == ARRIVAL_REFRESH:
+            item.remaining_ms = toasts.settings.timeout_ms
+
+        if outcome != ARRIVAL_POP_UP:
+            return
+
         # Pop-ups off for its category: straight to the bell.
         if kind is not None and not kind.popup and not urgent:
             return
 
-        showing = [item for item in toasts.items if not item.leaving]
+        on_screen = [item for item in toasts.items if not item.leaving]
 
-        if len(showing) >= TOAST_LIMIT:
-            toasts.overflow_entries.append(entry)
+        if len(on_screen) >= TOAST_LIMIT:
+            if entry not in toasts.overflow_entries:
+                toasts.overflow_entries.append(entry)
 
             return
 
@@ -250,13 +279,9 @@ class ToastStackController(HasTraits):
 
     @observe("pane_model:center:repeated")
     def _refresh_repeat(self, event):
-        toasts = self.pane_model.toasts
-        item = toasts.find(event.new)
-
-        if item is not None and not item.leaving:
-            item.remaining_ms = toasts.settings.timeout_ms
-
-        self.pane_model.silenced = (event.new, SKIP_REPEAT)
+        """A repeat is an arrival like any other: its toast refreshes, or
+        pops up again if it had gone."""
+        self.offer(event.new)
 
     @observe("pane_model:toasts:settings:[auto_dismiss, auto_dismiss_seconds]")
     def _apply_settings(self, event):
