@@ -9,11 +9,13 @@
 # Thanks for using Microdrop open source!
 
 """Heater auto-tune (dropbot-portable 1.8.0 ``heater_tune``): the bounds the
-vendor's tuning panel offers, and the start / progress / done / apply
-message contracts. A tune is an open-loop duty step on one heater (10 s
-baseline, the step until a plateau, the cap or the time limit, then 30 s of
-cool-down), a first-order-plus-dead-time fit, and proposed PI gains plus the
-Smith predictor model (``temp_smith``), written only on an explicit apply."""
+vendor's tuning panel offers, and the start / progress / done / apply /
+verify message contracts. A tune is an open-loop duty step on one heater
+(10 s baseline, the step until a plateau, the cap or the time limit, then
+30 s of cool-down), a first-order-plus-dead-time fit, and proposed PI gains
+plus the Smith predictor model (``temp_smith``), written only on an explicit
+apply. A verify run then regulates to a set point on the board's own loop
+(the gains it holds) and reports the response (``step_metrics``)."""
 
 # Third-party imports.
 from pydantic import BaseModel, Field
@@ -29,6 +31,8 @@ from .topics import (
     HEATER_TUNE_DONE,
     HEATER_TUNE_PROGRESS,
     HEATER_TUNE_START,
+    HEATER_TUNE_VERIFY_DONE,
+    HEATER_TUNE_VERIFY_START,
 )
 
 #: The vendor panel's step duty spin box (TEMP_HEAT_PWM %).
@@ -60,6 +64,26 @@ HEATER_TUNE_SAMPLE_INTERVAL_S = 1.0
 HEATER_TUNE_OFF_ATTEMPTS = 3
 #: How long plugin stop waits for a cancelled tune to switch its heater off.
 HEATER_TUNE_JOIN_TIMEOUT_S = 10.0
+#: How far below the cap a run keeps the heater (the vendor CaptureConfig /
+#: VerifyConfig margin_c): heating stops, and a set point must stay, there.
+HEATER_TUNE_MARGIN_C = 1.5
+#: HeaterTuneProgress.phase of a verify run (the vendor VerifyRun's
+#: "running").
+HEATER_TUNE_VERIFY_PHASE = "verify"
+#: The verify run's set point; it must also sit at least 1 °C above the
+#: current reading and HEATER_TUNE_MARGIN_C below the run's cap
+#: (heater_tune.verify_problem).
+HEATER_TUNE_VERIFY_SETPOINT_C_BOUNDS = (
+    20.0,
+    HEATER_TUNE_MAX_TEMP_C_BOUNDS[1] - HEATER_TUNE_MARGIN_C,
+)
+HEATER_TUNE_VERIFY_DEFAULT_SETPOINT_C = 40.0
+#: The settling band around the set point (°C) and how long the reading must
+#: stay in it to end the run early (s); defaults are the vendor VerifyConfig's.
+HEATER_TUNE_VERIFY_BAND_C_BOUNDS = (0.1, 5.0)
+HEATER_TUNE_VERIFY_DEFAULT_BAND_C = 0.5
+HEATER_TUNE_VERIFY_HOLD_S_BOUNDS = (0, 600)
+HEATER_TUNE_VERIFY_DEFAULT_HOLD_S = 60
 
 # --------------------------------------------------------------------- #
 # Heater auto-tune message contracts (topic + schema, one unit)          #
@@ -88,14 +112,17 @@ class HeaterTuneStartRequest(BaseModel):
 
 
 class HeaterTuneProgress(BaseModel):
-    """One reading of a running capture: its phase (baseline, step,
-    cooldown, fitting), the time since it started, and the duty driven."""
+    """One reading of a running capture or verify run: its phase (baseline,
+    step, cooldown, fitting, verify), the time since it started, and the
+    duty driven (during a verify run, the loop output the board reports)."""
 
     channel: int
     phase: str
     elapsed_s: float
     current_c: float | None = None
     duty_pct: int = 0
+    #: The verify run's set point; None during a capture.
+    setpoint_c: float | None = None
 
 
 class HeaterTuneFit(BaseModel):
@@ -108,6 +135,8 @@ class HeaterTuneFit(BaseModel):
     r2: float
     rmse_c: float
     reached: float
+    #: The fitted baseline temperature, where the modelled response starts.
+    y0_c: float | None = None
 
 
 class HeaterTuneProposal(BaseModel):
@@ -158,6 +187,69 @@ class HeaterTuneApplied(BaseModel):
     error: str = ""
 
 
+class HeaterTuneVerifyStartRequest(BaseModel):
+    """Regulate one heater to a set point with the gains the board holds
+    (typically right after an apply); both heaters must be off."""
+
+    channel: int = Field(ge=0, le=TEMP_CHANNEL_MAX)
+    setpoint_c: float = Field(
+        HEATER_TUNE_VERIFY_DEFAULT_SETPOINT_C,
+        ge=HEATER_TUNE_VERIFY_SETPOINT_C_BOUNDS[0],
+        le=HEATER_TUNE_VERIFY_SETPOINT_C_BOUNDS[1],
+    )
+    max_temp_c: float = Field(
+        HEATER_TUNE_DEFAULT_MAX_TEMP_C,
+        ge=HEATER_TUNE_MAX_TEMP_C_BOUNDS[0],
+        le=HEATER_TUNE_MAX_TEMP_C_BOUNDS[1],
+    )
+    max_duration_s: int = Field(
+        HEATER_TUNE_DEFAULT_DURATION_S,
+        ge=HEATER_TUNE_DURATION_S_BOUNDS[0],
+        le=HEATER_TUNE_DURATION_S_BOUNDS[1],
+    )
+    band_c: float = Field(
+        HEATER_TUNE_VERIFY_DEFAULT_BAND_C,
+        ge=HEATER_TUNE_VERIFY_BAND_C_BOUNDS[0],
+        le=HEATER_TUNE_VERIFY_BAND_C_BOUNDS[1],
+    )
+    hold_s: int = Field(
+        HEATER_TUNE_VERIFY_DEFAULT_HOLD_S,
+        ge=HEATER_TUNE_VERIFY_HOLD_S_BOUNDS[0],
+        le=HEATER_TUNE_VERIFY_HOLD_S_BOUNDS[1],
+    )
+
+
+class HeaterTuneVerifyMetrics(BaseModel):
+    """The set-point response from the loop start (heater_tune.step_metrics):
+    dead time, 10-90 % rise, peak, overshoot (% of the step), settling time
+    (last exit from the band), steady-state error (mean over the last 30 s);
+    None where the record does not show it."""
+
+    dead_time_s: float | None = None
+    rise_s: float | None = None
+    peak_c: float | None = None
+    overshoot_pct: float | None = None
+    settle_s: float | None = None
+    sse_c: float | None = None
+    settled: bool = False
+    duration_s: float | None = None
+
+
+class HeaterTuneVerifyDone(BaseModel):
+    """A verify run's outcome, or its refusal (`ok` false, `reason` why). An
+    aborted run still carries the metrics of what it recorded. The heater is
+    off by then; `off_confirmed` false means the OFF was never acknowledged
+    and the operator must check it."""
+
+    channel: int
+    ok: bool
+    reason: str = ""
+    off_confirmed: bool = True
+    setpoint_c: float | None = None
+    band_c: float | None = None
+    metrics: HeaterTuneVerifyMetrics | None = None
+
+
 heater_tune_start_publisher = ValidatedTopicPublisher(
     topic=HEATER_TUNE_START, validator_class=HeaterTuneStartRequest
 )
@@ -172,4 +264,10 @@ heater_tune_apply_publisher = ValidatedTopicPublisher(
 )
 heater_tune_applied_publisher = ValidatedTopicPublisher(
     topic=HEATER_TUNE_APPLIED, validator_class=HeaterTuneApplied
+)
+heater_tune_verify_start_publisher = ValidatedTopicPublisher(
+    topic=HEATER_TUNE_VERIFY_START, validator_class=HeaterTuneVerifyStartRequest
+)
+heater_tune_verify_done_publisher = ValidatedTopicPublisher(
+    topic=HEATER_TUNE_VERIFY_DONE, validator_class=HeaterTuneVerifyDone
 )

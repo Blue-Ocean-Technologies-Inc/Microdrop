@@ -182,11 +182,31 @@ from .heater_tune import HEATER_TUNE_DURATION_S_BOUNDS as HEATER_TUNE_DURATION_S
 from .heater_tune import HEATER_TUNE_DUTY_PCT_BOUNDS as HEATER_TUNE_DUTY_PCT_BOUNDS
 from .heater_tune import HEATER_TUNE_FITTING_PHASE as HEATER_TUNE_FITTING_PHASE
 from .heater_tune import HEATER_TUNE_JOIN_TIMEOUT_S as HEATER_TUNE_JOIN_TIMEOUT_S
+from .heater_tune import HEATER_TUNE_MARGIN_C as HEATER_TUNE_MARGIN_C
 from .heater_tune import HEATER_TUNE_MAX_TEMP_C_BOUNDS as HEATER_TUNE_MAX_TEMP_C_BOUNDS
 from .heater_tune import HEATER_TUNE_OFF_ATTEMPTS as HEATER_TUNE_OFF_ATTEMPTS
 from .heater_tune import HEATER_TUNE_PERIOD_MS as HEATER_TUNE_PERIOD_MS
 from .heater_tune import HEATER_TUNE_SAMPLE_INTERVAL_S as HEATER_TUNE_SAMPLE_INTERVAL_S
 from .heater_tune import HEATER_TUNE_STYLES as HEATER_TUNE_STYLES
+from .heater_tune import (
+    HEATER_TUNE_VERIFY_BAND_C_BOUNDS as HEATER_TUNE_VERIFY_BAND_C_BOUNDS,
+)
+from .heater_tune import (
+    HEATER_TUNE_VERIFY_DEFAULT_BAND_C as HEATER_TUNE_VERIFY_DEFAULT_BAND_C,
+)
+from .heater_tune import (
+    HEATER_TUNE_VERIFY_DEFAULT_HOLD_S as HEATER_TUNE_VERIFY_DEFAULT_HOLD_S,
+)
+from .heater_tune import (
+    HEATER_TUNE_VERIFY_DEFAULT_SETPOINT_C as HEATER_TUNE_VERIFY_DEFAULT_SETPOINT_C,
+)
+from .heater_tune import (
+    HEATER_TUNE_VERIFY_HOLD_S_BOUNDS as HEATER_TUNE_VERIFY_HOLD_S_BOUNDS,
+)
+from .heater_tune import HEATER_TUNE_VERIFY_PHASE as HEATER_TUNE_VERIFY_PHASE
+from .heater_tune import (
+    HEATER_TUNE_VERIFY_SETPOINT_C_BOUNDS as HEATER_TUNE_VERIFY_SETPOINT_C_BOUNDS,
+)
 from .heater_tune import HeaterTuneApplied as HeaterTuneApplied
 from .heater_tune import HeaterTuneApplyRequest as HeaterTuneApplyRequest
 from .heater_tune import HeaterTuneDone as HeaterTuneDone
@@ -194,6 +214,9 @@ from .heater_tune import HeaterTuneFit as HeaterTuneFit
 from .heater_tune import HeaterTuneProgress as HeaterTuneProgress
 from .heater_tune import HeaterTuneProposal as HeaterTuneProposal
 from .heater_tune import HeaterTuneStartRequest as HeaterTuneStartRequest
+from .heater_tune import HeaterTuneVerifyDone as HeaterTuneVerifyDone
+from .heater_tune import HeaterTuneVerifyMetrics as HeaterTuneVerifyMetrics
+from .heater_tune import HeaterTuneVerifyStartRequest as HeaterTuneVerifyStartRequest
 from .heater_tune import heater_tune_applied_publisher as heater_tune_applied_publisher
 from .heater_tune import heater_tune_apply_publisher as heater_tune_apply_publisher
 from .heater_tune import heater_tune_done_publisher as heater_tune_done_publisher
@@ -201,6 +224,12 @@ from .heater_tune import (
     heater_tune_progress_publisher as heater_tune_progress_publisher,
 )
 from .heater_tune import heater_tune_start_publisher as heater_tune_start_publisher
+from .heater_tune import (
+    heater_tune_verify_done_publisher as heater_tune_verify_done_publisher,
+)
+from .heater_tune import (
+    heater_tune_verify_start_publisher as heater_tune_verify_start_publisher,
+)
 from .mechanics import CHIP_CABIN_TRAY_ONLY_FLAG as CHIP_CABIN_TRAY_ONLY_FLAG
 from .mechanics import CHIP_CABIN_WITH_POGOS_FLAG as CHIP_CABIN_WITH_POGOS_FLAG
 from .mechanics import MAG_RESET_CMD as MAG_RESET_CMD
@@ -322,6 +351,8 @@ from .topics import HEATER_TUNE_CANCEL as HEATER_TUNE_CANCEL
 from .topics import HEATER_TUNE_DONE as HEATER_TUNE_DONE
 from .topics import HEATER_TUNE_PROGRESS as HEATER_TUNE_PROGRESS
 from .topics import HEATER_TUNE_START as HEATER_TUNE_START
+from .topics import HEATER_TUNE_VERIFY_DONE as HEATER_TUNE_VERIFY_DONE
+from .topics import HEATER_TUNE_VERIFY_START as HEATER_TUNE_VERIFY_START
 from .topics import HOME_ALL as HOME_ALL
 from .topics import LOCK_CHIP as LOCK_CHIP
 from .topics import MAGNET_APPLIED as MAGNET_APPLIED
