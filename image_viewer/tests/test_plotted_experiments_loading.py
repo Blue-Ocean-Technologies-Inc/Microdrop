@@ -216,10 +216,11 @@ class _RoiPaneTask(Task):
         return [_FrontPane(), RoiPlotDockPane()]
 
 
-def _settle(qapp, seconds=0.5):
+def _settle(qapp, seconds=0.5, until=None):
+    """Run the event loop for ``seconds``, or until ``until()`` is true."""
     deadline = time.perf_counter() + seconds
 
-    while time.perf_counter() < deadline:
+    while time.perf_counter() < deadline and not (until and until()):
         qapp.processEvents()
         time.sleep(0.005)
 
@@ -255,8 +256,11 @@ def test_a_roi_pane_builds_on_first_show_and_plots_only_while_shown(
 ):
     window, pane = roi_pane_behind_a_tab
 
+    # The table comes last of the paced sections, and a full garbage
+    # collection over a long test session's heap can hold one of them for
+    # most of a second: wait for it, not for a fixed time.
     pane.control.raise_()
-    _settle(qapp, seconds=1.0)
+    _settle(qapp, seconds=10.0, until=lambda: pane.table is not None)
 
     assert pane.canvas is not None
     assert pane.table is not None

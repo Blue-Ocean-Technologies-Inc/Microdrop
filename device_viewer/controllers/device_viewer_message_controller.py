@@ -14,8 +14,10 @@
 Handlers run on the Dramatiq worker thread. Direct widget calls are marshalled
 to the GUI thread (``GUI.invoke_later`` or a Qt signal); model trait writes are
 not, so the pane's observers on those traits still fire on the worker thread
-(#754). Camera requests that arrive before the camera panel is built, after the
-first paint, wait for it (see ``deliver_to_camera_widget``).
+(#754). The pane's model is loaded from launch, so every handler works before
+the pane's view is built (#1087); camera requests that arrive before the
+camera panel is built build the pane and wait for the panel (see
+``deliver_to_camera_widget``).
 """
 
 # Standard library imports.

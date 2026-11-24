@@ -10,7 +10,8 @@
 
 """The camera requests other plugins send the Device Viewer over pub/sub:
 validating each, and handing it to the camera panel — at once, or once the
-panel is built after the first paint (#1064)."""
+panel is built after the pane's own build, which a request starts (#1064,
+#1087)."""
 
 # Standard library imports.
 import json
@@ -126,9 +127,10 @@ def parse_camera_select_source_request(message):
 
 def deliver_to_camera_widget(pane, deliver, on_unavailable=None):
     """Hand ``deliver`` the pane's camera widget: at once if it exists, else
-    on the GUI thread once the Camera Controls section is built (#1064).
-    ``on_unavailable(error)`` runs instead should that section fail to
-    build."""
+    on the GUI thread once the Camera Controls section is built (#1064),
+    building the pane first if it is not yet (#1087).
+    ``on_unavailable(error)`` runs instead should the pane or that section
+    fail to build."""
     widget = pane.camera_control_widget
 
     if widget:
