@@ -30,8 +30,8 @@ audio device the chime logs one warning and stays silent.
 import time
 
 # Enthought library imports.
-from pyface.qt import QtCore
-from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, observe
+from pyface.qt import QtCore, QtGui
+from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, List, Str, observe
 
 # Microdrop package imports.
 from notifications.consts import SEVERITY_ERROR, SEVERITY_WARNING
@@ -46,6 +46,7 @@ from microdrop_style.sounds.chimes import (
 )
 
 # Local imports.
+from . import chime_trace
 from .settings_models import (
     TONE_ALERT,
     TONE_COMPLETION,
@@ -70,6 +71,10 @@ CHIME_OVERLAP_S = 0.4
 SKIP_SOUND_OFF = "sound off"
 SKIP_TONE_NONE = "category tone none"
 SKIP_OVERLAP = "rate limit"
+SKIP_VOLUME_ZERO = "volume 0"
+
+#: Times a play is retried when its sound reports an error.
+PLAY_RETRIES = 1
 SKIP_FLAP = "state changing again"
 
 #: Each tone's sound, weakest first: within CHIME_OVERLAP_S only a
@@ -114,16 +119,26 @@ def tone_for(entry, settings):
 
 class NotificationChime(HasTraits):
     """Plays the chime the pane model's ``rang`` calls for, as the
-    settings allow, and reports what it did and did not play."""
+    settings allow, and reports what it did and did not play.
+
+    A tone asked to play while its sound is not Ready waits for Ready; one
+    whose sound reports an error is rebuilt and played once it loads, once.
+    A requested play is never dropped without a trace line saying why."""
 
     pane_model = Instance(UxPaneModel)
 
     #: QSoundEffects by sound path, one per tone, made on first use.
     _effects = Dict()
 
+    #: Plays waiting for their sound to be Ready: retries left, by path.
+    _pending = Dict()
+
     #: Lists the audio outputs: a change (headphones plugged in) remakes
     #: the effects, so the next sound goes to the new default output.
     _devices = Any()
+
+    #: The outputs as last seen, for the trace.
+    _outputs = List()
 
     #: time.monotonic() of the last chime, and its tone.
     _last_played = Float(-CHIME_OVERLAP_S)
@@ -132,8 +147,17 @@ class NotificationChime(HasTraits):
     #: ``(time, tone)`` of each state entry's last chime, by its key.
     _state_chimes = Dict()
 
-    #: Set once sound proved unavailable: warned once, then silent.
+    #: Set when Qt Multimedia cannot be imported: warned once, then silent.
     _unavailable = Bool(False)
+
+    def traits_init(self):
+
+        if chime_trace.enabled():
+            self._trace_application()
+
+    # ------------------------------------------------------------------ #
+    # Deciding                                                            #
+    # ------------------------------------------------------------------ #
 
     @observe("pane_model:rang")
     def _ring(self, event):
@@ -146,6 +170,11 @@ class NotificationChime(HasTraits):
 
         if not settings.sound_enabled:
             self._skip(entry, SKIP_SOUND_OFF)
+
+            return
+
+        if not settings.sound_volume:
+            self._skip(entry, SKIP_VOLUME_ZERO)
 
             return
 
@@ -179,12 +208,19 @@ class NotificationChime(HasTraits):
 
         self._last_played = now
         self._last_tone = tone
-        self.play(TONE_SOUNDS[tone])
 
         logger.debug(f"Chime for {entry.title!r}: played {tone}")
+        chime_trace.trace(
+            "arrival",
+            decision="play",
+            tone=tone,
+            title=entry.title,
+            category=entry.category_id,
+        )
         settings.last_sound = (
             f"Last sound: {TONE_LABELS[tone]} · {entry.title} · {_clock()}"
         )
+        self.play(TONE_SOUNDS[tone])
 
     @observe("pane_model:silenced")
     def _silenced(self, event):
@@ -197,18 +233,33 @@ class NotificationChime(HasTraits):
 
     @observe("pane_model:toasts:settings:opened")
     def _settings_opened(self, event):
+        chime_trace.trace("settings window opened")
         self.preload()
 
     @observe("pane_model:toasts:settings:test_sound")
     def _test(self, event):
         """The chosen tone, at the chosen volume."""
-        self.play(TONE_SOUNDS[self.pane_model.toasts.settings.test_tone])
+        tone = self.pane_model.toasts.settings.test_tone
+
+        chime_trace.trace("test", tone=tone)
+        self.play(TONE_SOUNDS[tone])
 
     def _skip(self, entry, reason):
         logger.debug(f"Chime for {entry.title!r}: skipped ({reason})")
+        chime_trace.trace(
+            "arrival",
+            decision="skip",
+            reason=reason,
+            title=entry.title,
+            category=entry.category_id,
+        )
         self.pane_model.toasts.settings.last_skipped = (
             f"Last skipped: {reason} · {entry.title} · {_clock()}"
         )
+
+    # ------------------------------------------------------------------ #
+    # Playing                                                             #
+    # ------------------------------------------------------------------ #
 
     def preload(self):
         """Load every tone's sound now, so a first chime is not also a
@@ -218,22 +269,62 @@ class NotificationChime(HasTraits):
             self._effect(path)
 
     def play(self, path):
-        """Start ``path`` playing at the settings' volume, from its start if
-        it is still playing; returns at once. Called while the sound still
-        loads, Qt plays it once loaded."""
+        """Start ``path`` at the settings' volume, from its start if still
+        playing; returns at once. Not Ready yet, it plays once Ready; in
+        error, its sound is rebuilt first."""
         effect = self._effect(path)
 
         if effect is None:
+            chime_trace.trace(
+                "play dropped", sound=path.name, reason="no Qt Multimedia"
+            )
             logger.debug(f"Chime {path.name}: no sound effect")
 
             return
 
-        effect.setVolume(linear_volume(self.pane_model.toasts.settings.sound_volume))
+        status = effect.status()
 
-        if effect.isPlaying():
+        chime_trace.trace(
+            "play",
+            sound=path.name,
+            status=status.name,
+            loaded=effect.isLoaded(),
+            volume=round(effect.volume(), 3),
+            muted=effect.isMuted(),
+            source=effect.source().toLocalFile(),
+        )
+
+        if status == effect.Status.Error:
+            self._pending[path] = PLAY_RETRIES
+            self._rebuild(path, "error status when asked to play")
+
+            return
+
+        if status != effect.Status.Ready:
+            self._pending.setdefault(path, PLAY_RETRIES)
+            chime_trace.trace("play waits", sound=path.name, status=status.name)
+
+            return
+
+        self._start(effect, path)
+
+    def _start(self, effect, path):
+        volume = self.pane_model.toasts.settings.sound_volume
+        effect.setVolume(linear_volume(volume))
+        restarted = effect.isPlaying()
+
+        if restarted:
             effect.stop()
 
         effect.play()
+
+        chime_trace.trace(
+            "start",
+            sound=path.name,
+            volume_percent=volume,
+            gain=round(effect.volume(), 4),
+            restarted=restarted,
+        )
 
         logger.debug(
             f"Chime {path.name}: play() with status {effect.status().name},"
@@ -259,41 +350,132 @@ class NotificationChime(HasTraits):
         if self._devices is None:
             self._devices = QtMultimedia.QMediaDevices()
             self._devices.audioOutputsChanged.connect(self._outputs_changed)
+            self._outputs = _outputs_now()
 
         effect = QtMultimedia.QSoundEffect()
-        effect.statusChanged.connect(lambda: self._check(effect))
-        effect.playingChanged.connect(
-            lambda: logger.debug(f"Chime {path.name}: playing {effect.isPlaying()}")
+        effect.statusChanged.connect(lambda: self._status_changed(effect, path))
+        effect.loadedChanged.connect(
+            lambda: chime_trace.trace(
+                "loaded", sound=path.name, loaded=effect.isLoaded()
+            )
         )
+        effect.playingChanged.connect(lambda: self._playing_changed(effect, path))
         effect.setSource(QtCore.QUrl.fromLocalFile(str(path)))
         self._effects[path] = effect
 
+        chime_trace.trace("effect made", sound=path.name)
+
         return effect
 
-    def _outputs_changed(self):
-        """New effects for the new default output; the old ones finish."""
-        logger.debug("Chime: audio outputs changed; sounds reload")
-
-        for effect in self._effects.values():
-            effect.deleteLater()
-
-        self._effects = {}
-
-    def _check(self, effect):
-        """A sound that cannot load or play (e.g. no audio device) turns the
-        chime off for the session."""
+    def _status_changed(self, effect, path):
+        """Play what waited for Ready; rebuild a sound in error, once."""
         status = effect.status()
 
-        logger.debug(f"Chime {effect.source().fileName()}: status {status.name}")
+        logger.debug(f"Chime {path.name}: status {status.name}")
+        chime_trace.trace("status", sound=path.name, status=status.name)
 
-        if status == effect.Status.Error:
-            self._give_up(f"could not play {effect.source().toLocalFile()}")
+        # A rebuilt sound's old effect may still report: only the current one counts.
+        if self._effects.get(path) is not effect:
+            return
+
+        if status == effect.Status.Ready and path in self._pending:
+            del self._pending[path]
+            self._start(effect, path)
+
+        elif status == effect.Status.Error:
+            retries = self._pending.get(path, 0)
+
+            if retries > 0:
+                self._pending[path] = retries - 1
+                self._rebuild(path, "error status while loading")
+
+            else:
+                self._pending.pop(path, None)
+                chime_trace.trace(
+                    "play dropped", sound=path.name, reason="error after retry"
+                )
+                logger.warning(f"Notification chime {path.name} could not play")
+
+    def _playing_changed(self, effect, path):
+        logger.debug(f"Chime {path.name}: playing {effect.isPlaying()}")
+        chime_trace.trace("playing", sound=path.name, playing=effect.isPlaying())
+
+    def _rebuild(self, path, reason):
+        """A new effect for ``path``; a play waiting on it plays once it is
+        Ready."""
+        chime_trace.trace("rebuild", sound=path.name, reason=reason)
+        old = self._effects.pop(path, None)
+
+        if old is not None:
+            old.deleteLater()
+
+        self._effect(path)
+
+    def _outputs_changed(self):
+        """New effects for the new default output; plays waiting on them
+        still play once they are Ready."""
+        before, self._outputs = self._outputs, _outputs_now()
+
+        logger.debug("Chime: audio outputs changed; sounds reload")
+        chime_trace.trace("audio outputs changed", before=before, after=self._outputs)
+
+        for path in list(self._effects):
+            self._rebuild(path, "audio outputs changed")
 
     def _give_up(self, reason):
 
         if not self._unavailable:
             self._unavailable = True
             logger.warning(f"Notification chime off for this session: {reason}")
+            chime_trace.trace("chime off", reason=reason)
+
+    # ------------------------------------------------------------------ #
+    # The trace's context                                                 #
+    # ------------------------------------------------------------------ #
+
+    @observe("pane_model:toasts:settings:[sound_enabled, sound_volume]")
+    def _trace_setting(self, event):
+        chime_trace.trace("setting", name=event.name, value=event.new)
+
+    @observe("pane_model:toasts:settings:groups:items:categories:items:tone")
+    def _trace_category_tone(self, event):
+        chime_trace.trace("category tone", category=event.object.id, tone=event.new)
+
+    @observe("pane_model:is_open")
+    def _trace_drawer(self, event):
+        chime_trace.trace("drawer", open=event.new)
+
+    @observe("pane_model:toasts:quiet")
+    def _trace_quiet(self, event):
+        chime_trace.trace("quiet", on=event.new)
+
+    def _trace_application(self):
+        """Theme and focus changes, from the application."""
+        app = QtGui.QGuiApplication.instance()
+
+        chime_trace.trace("trace started", outputs=_outputs_now())
+        app.styleHints().colorSchemeChanged.connect(
+            lambda scheme: chime_trace.trace("theme", scheme=scheme.name)
+        )
+        app.applicationStateChanged.connect(
+            lambda state: chime_trace.trace("application state", state=state.name)
+        )
+
+
+def _outputs_now():
+    """The audio outputs, ``(id, description)``, the default marked."""
+    from pyface.qt import QtMultimedia
+
+    default = QtMultimedia.QMediaDevices.defaultAudioOutput()
+
+    return [
+        (
+            bytes(device.id()).decode(errors="replace"),
+            device.description(),
+            "default" if device == default else "",
+        )
+        for device in QtMultimedia.QMediaDevices.audioOutputs()
+    ]
 
 
 def _clock():
