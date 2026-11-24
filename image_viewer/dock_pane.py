@@ -26,9 +26,6 @@ schedulers), and binds the persisted display-window preferences.
 import threading
 from pathlib import Path
 
-# Third-party imports.
-from PySide6.QtCore import QTimer
-
 # Enthought library imports.
 from pyface.qt import QtCore, QtWidgets
 from pyface.tasks.api import TraitsDockPane
@@ -48,8 +45,9 @@ from .analysis.roi_batch import _shared_executor
 from .analysis.roi_controller import RoiAnalysisController
 from .consts import (
     DISCOVERY_POLL_INTERVAL_MS,
+    DOCK_PANE_ID,
+    DOCK_PANE_NAME,
     IMAGE_FILTERS,
-    PKG,
     SLIDESHOW_INTERVAL_MS,
 )
 from .controller import ImageViewerController
@@ -61,8 +59,6 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-_dock_pane_name = "Image Viewer"
-
 
 def _title_for(browsed_directory: str, info_text: str) -> str:
     """The pane title for the browsed folder — "Name - folder", the
@@ -70,7 +66,7 @@ def _title_for(browsed_directory: str, info_text: str) -> str:
     summary (the model's ``info_text``). The default captures dir would
     just read "captures", so its parent (the experiment folder) names it
     instead; '' (nothing resolved yet) keeps the bare name."""
-    title = _dock_pane_name
+    title = DOCK_PANE_NAME
     if browsed_directory:
         folder = Path(browsed_directory)
         display = (
@@ -210,8 +206,8 @@ class _AdvancedSplit(QtCore.QObject):
 class ImageViewerDockPane(TraitsDockPane):
     """Viewer for captured images (16-bit aware)."""
 
-    id = PKG + ".dock_pane"
-    name = _dock_pane_name
+    id = DOCK_PANE_ID
+    name = DOCK_PANE_NAME
 
     view = ImageViewerView
 
@@ -339,14 +335,14 @@ class ImageViewerDockPane(TraitsDockPane):
         # Qt schedulers are view-owned: the slideshow tick and the
         # experiment-folder-switch poll (new captures arrive event-driven
         # via media_capture_event_model above).
-        self._play_timer = QTimer(control)
+        self._play_timer = QtCore.QTimer(control)
         self._play_timer.setInterval(SLIDESHOW_INTERVAL_MS)
         self._play_timer.timeout.connect(lambda: self.controller.step(1))
-        self._poll_timer = QTimer(control)
+        self._poll_timer = QtCore.QTimer(control)
         self._poll_timer.setInterval(DISCOVERY_POLL_INTERVAL_MS)
         self._poll_timer.timeout.connect(self.controller.request_rescan)
         self._poll_timer.start()
-        self._drain_timer = QTimer(control)
+        self._drain_timer = QtCore.QTimer(control)
         self._drain_timer.setInterval(ANALYSIS_RESULT_DRAIN_INTERVAL_MS)
         self._drain_timer.timeout.connect(self._drain_tick)
         self._drain_timer.start()
@@ -382,7 +378,7 @@ class ImageViewerDockPane(TraitsDockPane):
         # Deferred: the chevron's visible_when hides the block in the same
         # change notification, and the split reads that visibility.
         if self._advanced_split is not None:
-            QTimer.singleShot(0, self._advanced_split.sync)
+            QtCore.QTimer.singleShot(0, self._advanced_split.sync)
 
     @observe("model:playing")
     def _sync_slideshow_timer(self, event):

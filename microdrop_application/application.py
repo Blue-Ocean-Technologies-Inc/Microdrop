@@ -46,6 +46,7 @@ from microdrop_style.helpers import (
 
 # Microdrop utils imports.
 from microdrop_utils.application_home import configure_application_home
+from microdrop_utils.deferred_plugins import DeferredPlugin
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.isolating_plugin_manager import IsolatingPluginManager
 from microdrop_utils.splash_screen import MicrodropSplashScreen
@@ -177,10 +178,16 @@ class MicrodropApplication(TasksApplication):
     #: script may pass its own list to the constructor.
     essential_plugin_ids = DelegatesTo("plugin_manager")
 
+    #: Plugins the run script defers until the main window has painted, with
+    #: the dock panes each declares. plugin_management shows placeholders for
+    #: those panes and starts the plugins one at a time after launch.
+    deferred_plugins = List(Instance(DeferredPlugin))
+
     ######### Extra 'Application' Events #############################################
 
     extra_plugins_loaded = Event(
-        desc="Trigger if extra plugins are loaded post app initialization"
+        desc="Fired once the plugin groups and deferred plugins loaded after "
+        "app initialization have all been started"
     )
 
     #: Whether the dock separators already re-style on colour-scheme changes.

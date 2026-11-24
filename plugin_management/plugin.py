@@ -15,9 +15,13 @@ from the running application gets its dock panes mounted/unmounted and the
 menu bar rebuilt automatically — the UI-side analogue of the message router's
 reactive ACTOR_TOPIC_ROUTES handling), offers the PluginGroupManager service
 and the IExternalPluginsProvider an environment update re-adds plugins with,
-contributes the Tools ▸ Manage Plugins action, and restores each group's
-persisted enabled state on launch.
+contributes the Tools ▸ Manage Plugins action, restores each group's
+persisted enabled state on launch, and then starts the run configuration's
+deferred plugins, whose panes show placeholders until then.
 """
+
+# Standard library imports.
+from functools import partial
 
 # Third-party imports.
 import dramatiq
@@ -86,12 +90,18 @@ class PluginManagementPlugin(Plugin):
         "plugin_management.load_status_controller.PluginLoadStatusController"
     )
 
+    #: Starts the run configuration's deferred plugins after launch.
+    _deferred_loader = Instance(
+        "plugin_management.deferred_loader.DeferredPluginLoader"
+    )
+
     def start(self):
         """Listen for runtime TASK_EXTENSIONS changes so a hot-loaded plugin's
         dock panes get mounted and the menu bar rebuilt reactively (debounced).
         Uses the same registry mechanism connect_extension_point_traits() uses,
         applied as a consumer of the TasksApplication-owned TASK_EXTENSIONS
-        extension point. Also contributes the plugin load-status indicator."""
+        extension point. Also contributes the plugin load-status indicator,
+        with the deferred plugins already counted as pending."""
         super().start()
         self._contribute_load_status_indicator()
 
@@ -144,6 +154,10 @@ class PluginManagementPlugin(Plugin):
         from .load_status_view import PluginLoadStatusIndicator
 
         status = self.application.plugin_load_status
+
+        # Before the indicator reads the records, so it pulses until the
+        # last deferred plugin is in.
+        self._deferred_loader.mark_pending()
 
         self._load_status_indicator = PluginLoadStatusIndicator(status=status)
         self._load_status_controller = PluginLoadStatusController(
@@ -210,6 +224,7 @@ class PluginManagementPlugin(Plugin):
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,
+                dock_pane_factories=self._placeholder_pane_factories(),
                 actions=[
                     SchemaAddition(
                         id="plugin_management.tools_actions",
@@ -219,6 +234,52 @@ class PluginManagementPlugin(Plugin):
                 ],
             )
         ]
+
+    def _placeholder_pane_factories(self):
+        """One factory per dock pane a deferred plugin declares.
+
+        The placeholders are created with the window, so its saved layout
+        places them once, and each real pane later takes its placeholder's
+        place.
+        """
+        return [
+            partial(self._create_placeholder_pane, deferred, dock_pane)
+            for deferred in self._deferred_loader.deferred_plugins
+            for dock_pane in deferred.dock_panes
+        ]
+
+    def _create_placeholder_pane(self, deferred, dock_pane, **traits):
+        from .placeholder_pane_model import PlaceholderPaneModel
+        from .placeholder_pane_view import DeferredPanePlaceholder
+
+        model = PlaceholderPaneModel(
+            pane_name=dock_pane.name, record=self._deferred_loader.record_for(deferred)
+        )
+
+        return DeferredPanePlaceholder(
+            id=dock_pane.id,
+            name=dock_pane.name,
+            dock_area=dock_pane.dock_area,
+            visible=dock_pane.visible,
+            model=model,
+            **traits,
+        )
+
+    # --- deferred plugins ---------------------------------------------------
+
+    def __deferred_loader_default(self):
+        from .deferred_loader import DeferredPluginLoader
+
+        return DeferredPluginLoader(
+            application=self.application,
+            deferred_plugins=getattr(self.application, "deferred_plugins", []),
+            load_status=self.application.plugin_load_status,
+        )
+
+    @observe("_deferred_loader:finished")
+    def _announce_extra_plugins_loaded(self, event):
+        """Tell the app every plugin loaded after its initialization is in."""
+        self.application.extra_plugins_loaded = True
 
     def _tools_actions_group(self):
         """Single Manage Plugins action in Tools."""
@@ -261,7 +322,10 @@ class PluginManagementPlugin(Plugin):
         # envisage dropped their saved placement (restore_saved_task_layout).
         GUI.invoke_later(self._reapply_saved_layout_after_launch_restore)
 
-        self.application.extra_plugins_loaded = True
+        # Then the deferred plugins, one per turn; their panes take the
+        # places the layout gave their placeholders. extra_plugins_loaded
+        # fires when the last one is in (_announce_extra_plugins_loaded).
+        GUI.invoke_later(self._deferred_loader.start, self._live_task_exts)
 
     def _reapply_saved_layout_after_launch_restore(self):
         """Give the user back their saved window layout when the enabled
