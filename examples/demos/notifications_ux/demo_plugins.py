@@ -211,6 +211,11 @@ class NotificationsDemoPlugin(Plugin):
                 action("Post warning", scenarios.post_warning),
                 action("Post error (with traceback)", scenarios.post_error),
                 action("Post action required", scenarios.post_action_required),
+                action(
+                    "Chip detected",
+                    scenarios.post_chip_detected,
+                    "Clears the chip card: its condition resolves",
+                ),
                 action("Post plugin updates available", scenarios.post_plugin_updates),
                 action(
                     "Post protocol finished",

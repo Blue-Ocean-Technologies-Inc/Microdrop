@@ -38,7 +38,12 @@ from notifications.consts import (
 )
 
 # Local imports.
-from .ux_consts import HelpAction, SnoozeAction, ux_notification_publisher
+from .ux_consts import (
+    HelpAction,
+    SnoozeAction,
+    ux_notification_publisher,
+    ux_resolve_publisher,
+)
 from .ux_models import UxNotificationCenter
 
 # Logger import.
@@ -62,7 +67,6 @@ SELF_TEST_TOPIC = "demo/self_test"
 UPDATE_PLUGINS_TOPIC = "demo/update_plugins"
 RESTART_TOPIC = "demo/restart"
 RETRY_CONNECTION_TOPIC = "demo/retry_connection"
-CHIP_INSERTED_TOPIC = "demo/chip_inserted"
 OPEN_REPORT_TOPIC = "demo/open_report"
 
 #: Milliseconds a pretend job takes before it reports back.
@@ -175,23 +179,41 @@ def post_error():
     )
 
 
+#: The condition behind "Insert a chip": it clears when the chip is
+#: detected, with no button to press.
+CHIP_MISSING_CONDITION = "dropbot.chip_missing"
+
+
 def post_action_required():
     _publish(
         title="Insert a chip to continue",
         detail=(
             "The protocol is paused at step 3: no chip is detected in the "
-            "DropBot. Insert one, close the lid, then continue."
+            "DropBot. Insert one and close the lid; it goes on once the chip "
+            "is detected."
         ),
         severity=SEVERITY_WARNING,
         category="hardware",
         source="dropbot_status_and_controls",
         needs_attention=True,
-        action=PublishAction(
-            label="I've inserted it", topic=CHIP_INSERTED_TOPIC
-        ).model_dump(),
+        condition_id=CHIP_MISSING_CONDITION,
         secondary_action=HelpAction(
-            label="How do I insert a chip?", tutorial="Inserting a chip"
+            label="How to insert a chip", tutorial="Inserting a chip"
         ).model_dump(),
+    )
+
+
+def post_chip_detected():
+    """The chip is in: its card resolves, and the detection is logged."""
+    ux_resolve_publisher.publish(
+        {"condition_id": CHIP_MISSING_CONDITION, "resolution": "Chip detected"}
+    )
+    _publish(
+        title="Chip detected",
+        detail="The protocol continues from step 3.",
+        severity=SEVERITY_SUCCESS,
+        category="hardware",
+        source="dropbot_status_and_controls",
     )
 
 
@@ -558,10 +580,6 @@ _ANSWERS = {
             SEVERITY_SUCCESS,
             "Firmware 2.4.1, 120 channels.",
         ),
-    ),
-    CHIP_INSERTED_TOPIC: (
-        ("Chip detected", SEVERITY_SUCCESS, "The protocol continues from step 3."),
-        None,
     ),
     RESTART_TOPIC: (
         ("MicroDrop would restart now", SEVERITY_INFO, "Not in the demo."),
