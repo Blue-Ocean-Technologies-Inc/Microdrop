@@ -79,12 +79,16 @@ class UxNotificationsPlugin(NotificationsPlugin):
     #: Shows the toasts on the main window.
     _toast_view = Any()
 
+    #: Sounds the bell's chime.
+    _chime = Any()
+
     #: The prototype's own sections: Needs attention and the list.
     _own_sections = Any()
 
     def start(self):
         """As the product plugin, with the prototype's classes."""
         from .bell_view import UxBellIndicator
+        from .chime_view import NotificationChime
         from .drawer_view import UxDrawerHost
         from .toast_view import ToastStackView
 
@@ -113,6 +117,7 @@ class UxNotificationsPlugin(NotificationsPlugin):
         self.status_bar_icons.append(self._bell.widget)
 
         self.toast_controller = ToastStackController(pane_model=pane_model)
+        self._chime = NotificationChime(pane_model=pane_model)
         self._toast_view = ToastStackView(
             pane_model=pane_model,
             controller=self.toast_controller,

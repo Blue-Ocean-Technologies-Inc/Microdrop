@@ -23,7 +23,7 @@ from pyface.action.api import Action
 from pyface.action.schema.schema_addition import SchemaAddition
 from pyface.api import GUI
 from pyface.tasks.action.api import SGroup, SMenu
-from traits.api import Any, Bool, Instance, List, observe
+from traits.api import Any, Bool, Instance, List, Str, observe
 
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
@@ -104,22 +104,23 @@ class NewsPlugin(Plugin):
         return [make_news_section()]
 
 
-class AutoDismissAction(Action):
-    """A checkable menu item kept in step with the toast settings."""
+class SettingToggleAction(Action):
+    """A checkable menu item kept in step with one switch of the toast
+    settings."""
 
-    name = "Toasts time out automatically"
     style = "toggle"
 
-    #: The settings it shows and sets.
+    #: The settings it shows and sets, and which switch.
     settings = Instance(ToastSettings)
+    setting = Str()
 
     def perform(self, event=None):
         # A toggle action is already flipped when it is performed.
-        self.settings.auto_dismiss = self.checked
+        setattr(self.settings, self.setting, self.checked)
 
-    @observe("settings.auto_dismiss")
+    @observe("settings.[auto_dismiss, sound_enabled]")
     def _follow_settings(self, event):
-        self.checked = self.settings.auto_dismiss
+        self.checked = getattr(self.settings, self.setting)
 
 
 class NotificationsDemoPlugin(Plugin):
@@ -237,7 +238,16 @@ class NotificationsDemoPlugin(Plugin):
             ),
             SGroup(*self._news_actions.actions(), id="notifications_ux_demo.news"),
             SGroup(
-                AutoDismissAction(settings=self._toast_settings),
+                SettingToggleAction(
+                    name="Toasts time out automatically",
+                    settings=self._toast_settings,
+                    setting="auto_dismiss",
+                ),
+                SettingToggleAction(
+                    name="Play a sound for new notifications",
+                    settings=self._toast_settings,
+                    setting="sound_enabled",
+                ),
                 action("Notification settings…", self._open_settings),
                 id="notifications_ux_demo.settings",
             ),

@@ -185,10 +185,21 @@ class ToastStackController(HasTraits):
 
     def offer(self, entry):
         """Pop ``entry`` up, hold it while quiet, or count it past the
-        limit; nothing while the drawer is open."""
+        limit, ringing the bell for what is news; while the drawer is open
+        only errors and Needs attention items ring."""
         toasts = self.pane_model.toasts
+        urgent = entry.severity == SEVERITY_ERROR or entry.needs_attention
 
-        if not self.enabled or self.pane_model.is_open or not entry.unread:
+        if not self.enabled:
+            return
+
+        if self.pane_model.is_open:
+            if urgent:
+                self.pane_model.rang = entry
+
+            return
+
+        if not entry.unread:
             return
 
         item = toasts.find(entry)
@@ -198,14 +209,13 @@ class ToastStackController(HasTraits):
 
             return
 
-        urgent = entry.severity == SEVERITY_ERROR or entry.needs_attention
-
         if toasts.quiet and not urgent:
             if entry not in toasts.held:
                 toasts.held.append(entry)
 
             return
 
+        self.pane_model.rang = entry
         showing = [item for item in toasts.items if not item.leaving]
 
         if len(showing) >= TOAST_LIMIT:

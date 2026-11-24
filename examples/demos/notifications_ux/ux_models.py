@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 # Enthought library imports.
 from traits.api import (
     Bool,
+    Button,
     Enum,
     Event,
     HasTraits,
@@ -27,6 +28,7 @@ from traits.api import (
     Int,
     List,
     Property,
+    Range,
     Str,
     Union,
     observe,
@@ -281,6 +283,13 @@ class ToastSettings(HasTraits):
     #: ``auto_dismiss_seconds`` in milliseconds.
     timeout_ms = Property(Int, observe="auto_dismiss_seconds")
 
+    #: A chime as the bell rings for a new arrival, and its volume (%).
+    sound_enabled = Bool(True)
+    sound_volume = Range(0, 100, 40)
+
+    #: Plays both chimes at the chosen volume.
+    test_sound = Button("Test")
+
     def _get_timeout_ms(self):
         return self.auto_dismiss_seconds * 1000
 
@@ -395,6 +404,10 @@ class UxPaneModel(NotificationsPaneModel):
 
     #: Fired with the entry whose second button the user pressed.
     run_secondary_action = Event(Instance(Notification))
+
+    #: Fired with an arrival the bell rings for: a new toast, a new post,
+    #: or, while the drawer is open, an error or Needs attention item.
+    rang = Event(Instance(Notification))
 
     #: Stand-ins for new news posts, oldest first: unread until
     #: the feed has been seen in the open drawer, new until it closes.

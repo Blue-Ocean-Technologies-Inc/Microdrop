@@ -8,14 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The toast settings as a small window: a sketch of a future Notifications
-tab in Preferences. Runs standalone against just its model::
+"""The toast and sound settings as a small window: a sketch of a future
+Notifications tab in Preferences. Runs standalone against just its model::
 
     ToastSettings().configure_traits(view=ToastSettingsView)
 """
 
 # Enthought library imports.
-from traitsui.api import Item, OKButton, RangeEditor, VGroup, View
+from traitsui.api import HGroup, Item, OKButton, RangeEditor, VGroup, View
 
 #: The range the seconds spinner allows.
 SECONDS_LOW = 2
@@ -36,6 +36,20 @@ ToastSettingsView = View(
             tooltip="How long info and success pop-ups stay; hovering pauses",
         ),
         label="Pop-up notifications",
+        show_border=True,
+    ),
+    VGroup(
+        Item("sound_enabled", label="Play a sound for new notifications"),
+        HGroup(
+            Item(
+                "sound_volume",
+                label="Volume",
+                editor=RangeEditor(low=0, high=100, mode="slider"),
+                enabled_when="sound_enabled",
+            ),
+            Item("test_sound", show_label=False, enabled_when="sound_enabled"),
+        ),
+        label="Sound",
         show_border=True,
     ),
     title="Notification settings",
