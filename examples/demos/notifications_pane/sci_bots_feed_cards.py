@@ -91,9 +91,6 @@ KIND_LABELS = {
 READ_MORE_HREF = "#read-more"
 REMOVE_HREF = "#remove"
 
-#: No maximum height, as Qt writes it.
-QWIDGETSIZE_MAX = 16777215
-
 #: A release summary's "scope: text" item, and its "and N more" line.
 _SCOPED_ITEM = re.compile(r"<li>([\w.-]+): ")
 _MORE_LINE = re.compile(r"<p>(and \d+ more)</p>")
@@ -185,6 +182,91 @@ def fitted(pixmap, width, height, ratio):
     result.setDevicePixelRatio(ratio)
 
     return result
+
+
+def clamp_rich_text(html, font, width, lines):
+    """``html`` cut to what fits in ``lines`` lines of ``font`` at ``width``,
+    measured with the real layout (paragraph spacing and list margins
+    count). It ends on a whole line, with an ellipsis when cut; a cut inside
+    a list item ends instead after the last whole block (the previous item,
+    or the paragraph introducing the list). Returns ``(html, cut)``."""
+    document = QtGui.QTextDocument()
+    document.setDefaultFont(font)
+    document.setDocumentMargin(0)
+    document.setHtml(html)
+    document.setTextWidth(max(width, 1))
+
+    budget = QtGui.QFontMetricsF(font).lineSpacing() * lines
+
+    if document.size().height() <= budget + 0.5:
+        return html, False
+
+    layout = document.documentLayout()
+    end = None
+    whole_block = True
+    block = document.begin()
+
+    while block.isValid():
+        top = layout.blockBoundingRect(block).top()
+        text_layout = block.layout()
+        fitting = [
+            text_layout.lineAt(index)
+            for index in range(text_layout.lineCount())
+            if top + text_layout.lineAt(index).rect().bottom() <= budget + 0.5
+        ]
+
+        # The whole block fits: a clean place to stop.
+        if len(fitting) == text_layout.lineCount():
+            end = block.position() + block.length() - 1
+            block = block.next()
+
+            continue
+
+        # Part of a paragraph fits: stop after its last whole line. Part of
+        # a list item does not: stop after the last whole block instead.
+        if fitting and block.textList() is None:
+            last = fitting[-1]
+            end = block.position() + last.textStart() + last.textLength()
+            whole_block = False
+
+        break
+
+    first = document.begin()
+
+    if end is None:
+        end = first.position() + first.layout().lineAt(0).textLength()
+        whole_block = False
+
+    # The ellipsis follows the last word, not the space after it.
+    while not whole_block and end > 0 and document.characterAt(end - 1).isspace():
+        end -= 1
+
+    cursor = QtGui.QTextCursor(document)
+    cursor.setPosition(end)
+    cursor.movePosition(
+        QtGui.QTextCursor.MoveOperation.End, QtGui.QTextCursor.MoveMode.KeepAnchor
+    )
+    cursor.removeSelectedText()
+    cursor.insertText(" …" if whole_block else "…")
+
+    # The ellipsis may not fit on the last line: give up words until it does.
+    while document.size().height() > budget + 0.5 and cursor.position() > 2:
+        cursor.movePosition(
+            QtGui.QTextCursor.MoveOperation.PreviousWord,
+            QtGui.QTextCursor.MoveMode.KeepAnchor,
+            2,
+        )
+        cursor.removeSelectedText()
+
+        while (
+            cursor.position() > 0
+            and document.characterAt(cursor.position() - 1).isspace()
+        ):
+            cursor.deletePreviousChar()
+
+        cursor.insertText("…")
+
+    return document.toHtml(), True
 
 
 def picture_pair_cells(width, caption_height):
@@ -608,6 +690,10 @@ class FeedPostCard(HasTraits):
     #: ``(label, html)`` of the labels holding links.
     _link_labels = List()
 
+    #: The whole summary as rich text, links styled; the collapsed card
+    #: shows it cut to whole lines.
+    _summary_html = Str()
+
     #: The compact row's picture.
     _thumbnail = Any()
 
@@ -755,6 +841,10 @@ class FeedPostCard(HasTraits):
         summary.setWordWrap(True)
         summary.setAlignment(_ALIGN.AlignLeft | _ALIGN.AlignTop)
 
+        # Plain text too goes through rich text: the collapsed summary is
+        # cut by the rich text layout.
+        summary.setTextFormat(QtCore.Qt.TextFormat.RichText)
+
         if post.summary_html:
             html = post.summary_html
             palette = self.control.palette()
@@ -769,15 +859,15 @@ class FeedPostCard(HasTraits):
                     palette.color(_ROLE.PlaceholderText).name(),
                 )
 
-            summary.setTextFormat(QtCore.Qt.TextFormat.RichText)
             summary.setOpenExternalLinks(False)
             summary.setToolTip(post.summary)
             summary.linkActivated.connect(self._open_link)
             self._link_labels.append((summary, html))
 
         else:
-            summary.setTextFormat(QtCore.Qt.TextFormat.PlainText)
-            summary.setText(post.summary)
+            self._link_labels.append(
+                (summary, f"<p>{escape(post.summary).replace(chr(10), '<br>')}</p>")
+            )
 
         summary.setVisible(bool(post.summary or post.summary_html))
 
@@ -822,7 +912,14 @@ class FeedPostCard(HasTraits):
         style = f"color: {self.accent}; text-decoration: none;"
 
         for label, html in self._link_labels:
-            label.setText(html.replace("<a ", f'<a style="{style}" '))
+            styled = html.replace("<a ", f'<a style="{style}" ')
+
+            if label is self._summary:
+                self._summary_html = styled
+
+            label.setText(styled)
+
+        self._show_expanded()
 
     def _open_link(self, href):
         if self.controller is None or self.post is None:
@@ -889,12 +986,20 @@ class FeedPostCard(HasTraits):
             release = self.post.kind == "release"
             lines = RELEASE_COLLAPSED_LINES if release else SUMMARY_COLLAPSED_LINES
 
-        clamped_height = summary.fontMetrics().lineSpacing() * lines
-        overflows = _text_height(summary, max(summary.width(), 1)) > clamped_height
-        clamped = overflows and not self.post.expanded
+        full = self._summary_html
+        collapsed, overflows = full, True
+
+        if lines:
+            collapsed, overflows = clamp_rich_text(
+                full, summary.font(), summary.width(), lines
+            )
+
+        text = full if self.post.expanded else collapsed
+
+        if summary.text() != text:
+            summary.setText(text)
 
         summary.setVisible(has_summary and (self.post.expanded or lines > 0))
-        summary.setMaximumHeight(clamped_height if clamped else QWIDGETSIZE_MAX)
         self._more.setVisible(has_summary and overflows)
         self._more.setText("Show less" if self.post.expanded else "Show more")
 
@@ -951,21 +1056,3 @@ class FeedPostCard(HasTraits):
         margins.setTop(height + 2 * GRID)
         card.layout().setContentsMargins(margins)
         card.update()
-
-
-def _text_height(label, width):
-    """Height ``label``'s text takes wrapped at ``width``."""
-
-    if label.textFormat() == QtCore.Qt.TextFormat.RichText:
-        document = QtGui.QTextDocument()
-        document.setDefaultFont(label.font())
-        document.setDocumentMargin(0)
-        document.setHtml(label.text())
-        document.setTextWidth(width)
-
-        return document.size().height()
-
-    bounds = QtCore.QRect(0, 0, width, QWIDGETSIZE_MAX)
-    flags = QtCore.Qt.TextFlag.TextWordWrap
-
-    return label.fontMetrics().boundingRect(bounds, flags, label.text()).height()
