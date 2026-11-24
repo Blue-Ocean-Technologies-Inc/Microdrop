@@ -180,6 +180,9 @@ class NotificationSettings(HasTraits):
     #: Fired as the settings window opens: the sounds load then.
     opened = Event()
 
+    #: Sub-section titles in their accent, not the text colour.
+    coloured_header_titles = Bool(False)
+
     #: The declared categories, by owner, in declaration order.
     groups = List(Instance(NotificationCategoryGroup))
 

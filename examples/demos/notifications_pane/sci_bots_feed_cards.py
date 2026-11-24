@@ -677,8 +677,11 @@ class FeedPostCard(HasTraits):
     #: Whether it is its group's lead card.
     lead = Bool(False)
 
-    #: The group's accent, a colour name.
+    #: The group's accent, a colour name: its kicker.
     accent = Str()
+
+    #: The colour of its links (Read more, Show more); the accent if empty.
+    link_color = Str()
 
     #: Fonts by part ("title", "small", "body", "link") from a host with its own
     #: type roles; a part not given is the card's font resized.
@@ -886,6 +889,11 @@ class FeedPostCard(HasTraits):
 
         self._more = QtWidgets.QLabel(self.control)
         self._more.setForegroundRole(_ROLE.PlaceholderText)
+
+        # A host's link colour makes it read as the click it is.
+        if self.link_color:
+            self._more.setForegroundRole(_ROLE.WindowText)
+            self._more.setStyleSheet(f"QLabel {{ color: {self.link_color}; }}")
         self._more.setFont(self._font("small", SMALL_POINTS))
         footer.addWidget(self._more)
         footer.addStretch()
@@ -915,7 +923,7 @@ class FeedPostCard(HasTraits):
     def _render_links(self):
         """Links in the accent, not underlined: Qt's HTML import would take
         the application's link colour, which a preview does not use."""
-        style = f"color: {self.accent}; text-decoration: none;"
+        style = f"color: {self.link_color or self.accent}; text-decoration: none;"
 
         for label, html in self._link_labels:
             styled = html.replace("<a ", f'<a style="{style}" ')

@@ -62,10 +62,15 @@ from .ux_consts import (
 )
 from .ux_models import UxPaneModel
 from .view_styles import (
+    CHIP_TINT,
+    chip_text,
+    coloured_titles,
     css,
     icon_font,
     link_button_style,
+    link_color,
     muted_text,
+    readable_text,
     scaled_logo,
     style_chip,
     tinted,
@@ -217,14 +222,18 @@ class FeedGroupHeader(QtWidgets.QWidget):
 
         title = _ElidedLabel(group.spec.title, self, title=True)
         title.setFont(role_font(SUBSECTION_TITLE))
-        title.setStyleSheet(f"QLabel {{ color: {accent}; }}")
+        # Quiet titles in the text colour; coloured ones in the accent.
+        if coloured_titles():
+            color = readable_text(accent, self.palette())
+            title.setStyleSheet(f"QLabel {{ color: {css(color)}; }}")
         header.addWidget(title, 0, 1)
 
         self._chip = QtWidgets.QLabel(self)
         self._chip.setFont(role_font(CHIP))
         style_chip(
             self._chip,
-            f"color: {accent}; background: {css(with_alpha(accent, 0.16))};",
+            f"color: {css(chip_text(accent, self.palette()))};"
+            f" background: {css(with_alpha(accent, CHIP_TINT))};",
         )
         header.addWidget(self._chip, 0, 2)
 
@@ -290,6 +299,7 @@ class PostFrame(QtWidgets.QWidget):
             controller=controller,
             lead=lead,
             accent=accent,
+            link_color=link_color(self.palette()).name(),
             fonts={
                 "title": role_font(CARD_TITLE),
                 "small": role_font(META),
@@ -392,7 +402,10 @@ class FeedSubsection(QtWidgets.QWidget):
         self._dispose_frames()
         posts = self.group.posts
         shown = posts if self.shows_all else posts[:FEED_GROUP_PREVIEW]
-        accent = accent_color(self.group.spec, self.palette()).name()
+        # The kicker's colour: the accent, readable on a card.
+        accent = readable_text(
+            accent_color(self.group.spec, self.palette()), self.palette(), on_card=True
+        ).name()
 
         for index, post in enumerate(shown):
             frame = PostFrame(
@@ -406,11 +419,8 @@ class FeedSubsection(QtWidgets.QWidget):
             bool(hidden) or (self.shows_all and len(posts) > FEED_GROUP_PREVIEW)
         )
         self._more.setText("Show less" if self.shows_all else f"Show {hidden} more")
-        # The group's own accent, as its cards' links.
         self._more.setStyleSheet(
-            link_button_style(
-                self.palette(), accent_color(self.group.spec, self.palette())
-            )
+            link_button_style(self.palette(), link_color(self.palette()))
         )
         self._cards.removeWidget(self._more)
         self._cards.addWidget(self._more, 0, QtCore.Qt.AlignmentFlag.AlignLeft)

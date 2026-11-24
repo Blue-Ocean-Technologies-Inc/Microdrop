@@ -21,9 +21,6 @@ the pane model; it never decides when a toast comes or goes.
 from pyface.qt import QtCore, QtGui, QtWidgets
 from traits.api import Any, Dict, HasTraits, Instance, observe
 
-# Microdrop style imports.
-from microdrop_style.colors import INFO_COLOR
-
 # Local imports.
 from .card_view import NotificationCard
 from .typography import CHIP, role_font
@@ -37,7 +34,7 @@ from .ux_consts import (
 )
 from .ux_controllers import ToastStackController
 from .ux_models import UxPaneModel
-from .view_styles import card_border, card_fill, css, readable_accent
+from .view_styles import card_border, card_fill, css, link_color, readable_accent
 
 #: Room (px) around a toast's card for its shadow.
 SHADOW = 12
@@ -132,7 +129,7 @@ class _MorePill(QtWidgets.QPushButton):
         self.setStyleSheet(
             "QPushButton {"
             f" background: {css(card_fill(palette))};"
-            f" color: {css(readable_accent(INFO_COLOR, palette))};"
+            f" color: {css(readable_accent(link_color(palette), palette))};"
             f" border: 1px solid {css(card_border(palette))};"
             " border-radius: 13px; padding: 4px 14px; }"
             f" QPushButton:hover {{ background: {css(card_fill(palette, True))}; }}"

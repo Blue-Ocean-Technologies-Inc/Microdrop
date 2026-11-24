@@ -32,7 +32,7 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 from traits.api import Any, HasTraits, Instance, observe
 
 # Microdrop package imports.
-from notifications.consts import SEVERITY_COLORS, SEVERITY_GLYPHS
+from notifications.consts import SEVERITY_GLYPHS
 from notifications.models.notification import Notification
 from notifications.views.formatting import format_exact_time, format_preview
 
@@ -42,6 +42,7 @@ from microdrop_style.icons.icons import ICON_CLOSE, ICON_HELP
 from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
 
 # Local imports.
+from . import colour_roles
 from .card_parts import CardFooter, ClampedLabel, NewDot, meta_text
 from .typography import BODY_TEXT, CARD_TITLE, META, role_font
 from .ux_consts import (
@@ -58,11 +59,13 @@ from .view_styles import (
     icon_font,
     is_dark,
     link_button_style,
+    link_color,
     muted_text,
     outlined_button_icon,
     outlined_button_style,
     primary_button_style,
     quiet_button_style,
+    role_color,
     rounded_path,
     scaled_logo,
     with_alpha,
@@ -95,7 +98,7 @@ def _accent(entry, palette):
     if entry.feed_post_id:
         return header_accent(entry.feed_group_id, is_dark(palette))
 
-    return SEVERITY_COLORS[entry.severity]
+    return role_color(palette, colour_roles.SEVERITY[entry.severity]).name()
 
 
 #: The cards' shared style sheet, by palette.
@@ -121,8 +124,8 @@ def card_style_sheet(palette):
     text = palette.color(QtGui.QPalette.ColorRole.Text)
     muted = muted_text(palette)
     glyphs = " ".join(
-        f"QLabel#cardGlyph_{severity} {{ color: {color}; }}"
-        for severity, color in SEVERITY_COLORS.items()
+        f"QLabel#cardGlyph_{severity} {{ color: {css(role_color(palette, pair))}; }}"
+        for severity, pair in colour_roles.SEVERITY.items()
     )
     sheet = " ".join(
         [
@@ -130,8 +133,8 @@ def card_style_sheet(palette):
             f"QLabel#cardBody {{ color: {css(text)}; }}",
             glyphs,
             icon_button_style(palette, 16, "QToolButton#cardDismiss"),
-            link_button_style(palette, INFO_COLOR, "QPushButton#cardMore"),
-            link_button_style(palette, INFO_COLOR, "QPushButton#cardHelp"),
+            link_button_style(palette, link_color(palette), "QPushButton#cardMore"),
+            link_button_style(palette, link_color(palette), "QPushButton#cardHelp"),
             outlined_button_style(palette, "QPushButton#cardHelpOnly"),
             quiet_button_style(palette, "QPushButton#cardLater"),
             primary_button_style("QPushButton#cardPrimary"),

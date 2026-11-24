@@ -136,7 +136,7 @@ class SettingToggleAction(Action):
         # A toggle action is already flipped when it is performed.
         setattr(self.settings, self.setting, self.checked)
 
-    @observe("setting, settings.[auto_dismiss, sound_enabled]")
+    @observe("setting, settings.[auto_dismiss, sound_enabled, coloured_header_titles]")
     def _follow_settings(self, event):
 
         if self.settings is not None and self.setting:
@@ -297,6 +297,11 @@ class NotificationsDemoPlugin(Plugin):
                     name="Play a sound for new notifications",
                     settings=self._toast_settings,
                     setting="sound_enabled",
+                ),
+                SettingToggleAction(
+                    name="Coloured header titles",
+                    settings=self._toast_settings,
+                    setting="coloured_header_titles",
                 ),
                 action("Notification settings…", self._open_settings),
                 action(

@@ -17,9 +17,6 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 # Microdrop package imports.
 from notifications.views.formatting import format_time
 
-# Microdrop style imports.
-from microdrop_style.colors import INFO_COLOR
-
 # Local imports.
 from .typography import BUTTON, role_font
 from .ux_consts import CARD_BODY_LINES
@@ -135,7 +132,8 @@ class NewDot(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(QtGui.QColor(INFO_COLOR))
+        # The unread state's own colour: the strong text colour.
+        painter.setBrush(self.palette().color(QtGui.QPalette.ColorRole.Text))
         painter.drawEllipse(QtCore.QRectF(2, 2, NEW_DOT_SIZE, NEW_DOT_SIZE))
 
 

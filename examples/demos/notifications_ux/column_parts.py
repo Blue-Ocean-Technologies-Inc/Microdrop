@@ -27,17 +27,17 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 from traits.api import Any, HasTraits, Instance, observe
 
 # Microdrop package imports.
-from notifications.consts import SEVERITY_COLORS, SEVERITY_ERROR, TIME_REFRESH_MS
+from notifications.consts import SEVERITY_ERROR, TIME_REFRESH_MS
 
 # Microdrop style imports.
-from microdrop_style.colors import GREY, WHITE
+from microdrop_style.colors import GREY
 
 # Local imports.
+from . import colour_roles
 from .card_list_view import EmptyState, make_card
 from .card_view import NotificationCard
 from .typography import CHIP, role_font
 from .ux_consts import (
-    ATTENTION_ACCENT,
     BUILD_BUDGET_MS,
     FILTER_ACTION,
     FILTER_ALL,
@@ -46,7 +46,6 @@ from .ux_consts import (
 )
 from .ux_models import UxPaneModel, matches_filter, time_group
 from .view_styles import (
-    contrast,
     css,
     is_dark,
     muted_text,
@@ -66,8 +65,8 @@ FILTER_CHIPS = [
 #: slate, Errors the error red, Needs action Needs attention's orange.
 FILTER_CHIP_ACCENTS = {
     FILTER_ALL: (GREY["dark"], GREY["lighter"]),
-    FILTER_ERRORS: (SEVERITY_COLORS[SEVERITY_ERROR], SEVERITY_COLORS[SEVERITY_ERROR]),
-    FILTER_ACTION: (ATTENTION_ACCENT, ATTENTION_ACCENT),
+    FILTER_ERRORS: colour_roles.ERROR_FILL,
+    FILTER_ACTION: colour_roles.ATTENTION_FILL,
 }
 
 #: What an empty, filtered Activity says.
@@ -135,7 +134,7 @@ class FilterChips(QtWidgets.QWidget):
         for name, (chip, _label) in self._chips.items():
             accent = QtGui.QColor(FILTER_CHIP_ACCENTS[name][1 if dark else 0])
             readable = readable_accent(accent, palette)
-            on_fill = WHITE if contrast(QtGui.QColor(WHITE), accent) >= 3 else "#000000"
+            on_fill = colour_roles.label_on(accent.name())
             empty = not self._counts.get(name, 0)
             text = muted if empty else readable
             edge = with_alpha(muted if empty else accent, 0.3 if empty else 0.55)

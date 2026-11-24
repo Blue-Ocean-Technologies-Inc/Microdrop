@@ -26,16 +26,16 @@ from traits.api import Bool, HasTraits, Instance, Int, observe
 
 # Microdrop package imports.
 from microdrop_status_bar.consts import ICON_PRIORITY_RIGHTMOST
-from notifications.consts import SEVERITY_COLORS
 
 # Microdrop style imports.
-from microdrop_style.colors import INFO_COLOR, WHITE
+from microdrop_style.colors import INFO_COLOR
 from microdrop_style.icons.icons import ICON_NOTIFICATIONS, ICON_NOTIFICATIONS_ACTIVE
 
 # Local imports.
+from . import colour_roles
 from .ux_consts import BADGE_MAX_COUNT, BELL_PULSE_MS, FEED_SEVERITY, NEWS_ACCENT
 from .ux_models import UxPaneModel
-from .view_styles import icon_font, muted_text, text_font
+from .view_styles import icon_font, muted_text, role_color, text_font
 
 #: Pixel size of the bell glyph.
 BELL_SIZE = 20
@@ -190,7 +190,9 @@ class UxBellIcon(QtWidgets.QWidget):
         painter.drawRoundedRect(badge, BADGE_HEIGHT / 2, BADGE_HEIGHT / 2)
 
         painter.setFont(self._badge_font())
-        painter.setPen(QtGui.QColor(WHITE))
+        painter.setPen(
+            QtGui.QColor(colour_roles.label_on(QtGui.QColor(self.color).name()))
+        )
         painter.drawText(
             badge.adjusted(0, 0, 0, -0.5), _ALIGN.AlignCenter, self._badge_text()
         )
@@ -244,9 +246,16 @@ class UxBellIndicator(HasTraits):
 
         count = self.pane_model.bell_count
         severity = self.pane_model.bell_severity
-        color = (
-            NEWS_ACCENT if severity == FEED_SEVERITY else SEVERITY_COLORS.get(severity)
-        )
+        palette = self.widget.palette()
+
+        if severity == FEED_SEVERITY:
+            color = NEWS_ACCENT
+
+        elif severity in colour_roles.SEVERITY:
+            color = role_color(palette, colour_roles.SEVERITY[severity]).name()
+
+        else:
+            color = None
 
         quiet = self.pane_model.toasts.quiet
 

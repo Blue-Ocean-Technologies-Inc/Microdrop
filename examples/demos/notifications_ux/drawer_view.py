@@ -51,7 +51,7 @@ from .ux_consts import (
 from .ux_models import UxPaneModel
 from .view_styles import (
     icon_button_style,
-    readable_accent,
+    set_coloured_titles,
     style_chip,
     with_alpha,
 )
@@ -238,11 +238,12 @@ class DrawerHeader(QtWidgets.QWidget):
 
     def restyle(self):
         palette = self.palette()
-        accent = readable_accent(INFO_COLOR, palette)
-        tint = with_alpha(INFO_COLOR, 0.16).name(QtGui.QColor.NameFormat.HexArgb)
+        # The unread state: the strong text colour, on a faint tint of it.
+        text = palette.color(QtGui.QPalette.ColorRole.Text)
+        tint = with_alpha(text, 0.10).name(QtGui.QColor.NameFormat.HexArgb)
 
         self._chip.setFont(role_font(CHIP))
-        style_chip(self._chip, f"color: {accent.name()}; background: {tint};")
+        style_chip(self._chip, f"color: {text.name()}; background: {tint};")
 
         for button in (self.mark_all_read, self.clear_all, self.close):
             button.setStyleSheet(icon_button_style(palette, 20))
@@ -440,6 +441,21 @@ class UxDrawerHost(NotificationsDrawerHost):
 
     def _resize_to(self, width):
         self.model.drawer_width = drawer_width_for(self.window.width(), width)
+
+    @observe("model:toasts:settings:coloured_header_titles", post_init=True)
+    def _follow_title_colours(self, event=None):
+        """Draw the titles the chosen way: rebuilt, so every header
+        redraws."""
+        set_coloured_titles(self.model.toasts.settings.coloured_header_titles)
+
+        if self._ui is None or self.drawer is None:
+            return
+
+        self._dispose_contents()
+        self._build_contents()
+
+        if self.drawer.isVisible():
+            self._place()
 
     @observe("model:drawer_width")
     def _follow_width(self, event):
