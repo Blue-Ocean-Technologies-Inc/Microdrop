@@ -138,15 +138,31 @@ def group_detail(group):
 
 
 class _ElidedLabel(QtWidgets.QLabel):
-    """Right-aligned text cut with an ellipsis when short of room, rather
-    than taking the title's."""
+    """One line cut with an ellipsis when short of room. The detail
+    (right-aligned) takes only spare room, so it is cut first; the title
+    (``title=True``) asks for its whole width and is cut only when the
+    detail has none left."""
 
-    def __init__(self, text, parent=None):
+    def __init__(self, text, parent=None, title=False):
         super().__init__(text, parent)
 
+        self._alignment = (
+            QtCore.Qt.AlignmentFlag.AlignLeft
+            if title
+            else QtCore.Qt.AlignmentFlag.AlignRight
+        ) | QtCore.Qt.AlignmentFlag.AlignVCenter
+
         self.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred
+            QtWidgets.QSizePolicy.Policy.Preferred
+            if title
+            else QtWidgets.QSizePolicy.Policy.Ignored,
+            QtWidgets.QSizePolicy.Policy.Preferred,
         )
+
+    def minimumSizeHint(self):
+        metrics = QtGui.QFontMetrics(self.font())
+
+        return QtCore.QSize(metrics.horizontalAdvance("W…"), metrics.height())
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
@@ -156,11 +172,7 @@ class _ElidedLabel(QtWidgets.QLabel):
         )
 
         painter.setPen(self.palette().color(self.foregroundRole()))
-        painter.drawText(
-            self.rect(),
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter,
-            text,
-        )
+        painter.drawText(self.rect(), self._alignment, text)
 
 
 class FeedGroupHeader(QtWidgets.QWidget):
@@ -202,12 +214,9 @@ class FeedGroupHeader(QtWidgets.QWidget):
 
         header.addWidget(glyph, 0, 0)
 
-        title = QtWidgets.QLabel(group.spec.title, self)
+        title = _ElidedLabel(group.spec.title, self, title=True)
         title.setFont(role_font(SUBSECTION_TITLE))
         title.setStyleSheet(f"QLabel {{ color: {accent}; }}")
-        title.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Preferred
-        )
         header.addWidget(title, 0, 1)
 
         self._chip = QtWidgets.QLabel(self)
