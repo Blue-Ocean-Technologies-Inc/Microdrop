@@ -35,6 +35,7 @@ from microdrop_style.colors import INFO_COLOR
 # Local imports.
 from .card_list_view import EmptyState, make_card
 from .card_view import NotificationCard
+from .typography import CHIP, role_font
 from .ux_consts import (
     BUILD_BUDGET_MS,
     FILTER_ACTION,
@@ -47,7 +48,6 @@ from .view_styles import (
     css,
     muted_text,
     readable_accent,
-    text_font,
     with_alpha,
 )
 
@@ -91,6 +91,7 @@ class FilterChips(QtWidgets.QWidget):
 
         for name, label in FILTER_CHIPS:
             chip = QtWidgets.QPushButton(label, self)
+            chip.setFont(role_font(CHIP))
             chip.setCheckable(True)
             chip.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
             chip.clicked.connect(lambda checked, name=name: self.chosen.emit(name))
@@ -138,7 +139,7 @@ class DayHeading(QtWidgets.QLabel):
     def __init__(self, text, parent=None):
         super().__init__(text.upper(), parent)
 
-        self.setFont(text_font(self.font(), -1.5, QtGui.QFont.Weight.DemiBold))
+        self.setFont(role_font(CHIP))
         self.setContentsMargins(6, 8, 0, 0)
         self.restyle()
 

@@ -13,11 +13,12 @@ where there are no cards. Clicks go back to the pane model as its
 ``dismiss``, ``run_action`` and ``run_secondary_action`` events."""
 
 # Enthought library imports.
-from pyface.qt import QtCore, QtGui, QtWidgets
+from pyface.qt import QtCore, QtWidgets
 
 # Local imports.
 from .card_view import NotificationCard
-from .view_styles import icon_font, muted_text, text_font
+from .typography import CARD_TITLE, role_font
+from .view_styles import icon_font, muted_text
 
 #: The empty state's glyph, headline and hint.
 EMPTY_GLYPH = "notifications_paused"
@@ -57,7 +58,7 @@ class EmptyState(QtWidgets.QWidget):
         self._glyph = QtWidgets.QLabel(EMPTY_GLYPH, self)
         self._glyph.setFont(icon_font(44))
         self._title = QtWidgets.QLabel(EMPTY_TITLE, self)
-        self._title.setFont(text_font(self.font(), 1.5, QtGui.QFont.Weight.DemiBold))
+        self._title.setFont(role_font(CARD_TITLE))
         self._hint = QtWidgets.QLabel(EMPTY_HINT, self)
         self._hint.setWordWrap(True)
 

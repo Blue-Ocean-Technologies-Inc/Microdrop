@@ -28,16 +28,12 @@ from traitsui.api import UItem, View
 # Microdrop package imports.
 from examples.demos.notifications_pane.sci_bots_feed_cards import (
     GRID,
-    SMALL_POINTS,
     FeedPostCard,
     accent_color,
-    scaled_font,
 )
 from examples.demos.notifications_pane.sci_bots_feed_groups import SUBTITLE_LATEST
 from examples.demos.notifications_pane.sci_bots_feed_model import format_post_date
 from examples.demos.notifications_pane.sci_bots_feed_view import (
-    HEADER_GLYPH_SIZE,
-    HEADER_POINTS,
     HEADER_RULE_SIZE,
     StatusBannerEditor,
 )
@@ -50,6 +46,15 @@ from microdrop_style.icons.logos import MICRODROP_MARK
 # Local imports.
 from .card_parts import NEW_DOT_SIZE, NewDot
 from .news_models import NewsSection
+from .typography import (
+    BODY_TEXT,
+    BUTTON,
+    CARD_TITLE,
+    CHIP,
+    META,
+    SUBSECTION_TITLE,
+    role_font,
+)
 from .ux_consts import (
     FEED_GROUP_PREVIEW,
     HIGHLIGHT_MS,
@@ -108,6 +113,9 @@ class _Highlight(QtWidgets.QWidget):
             QtCore.QRectF(self.rect()), HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS
         )
 
+
+#: Pixel size of a sub-section header's glyph or mark, beside its title.
+SUBSECTION_GLYPH_SIZE = 18
 
 #: The group whose header names its newest post's date, and MicroDrop's
 #: release notes' group, whose header shows MicroDrop's mark.
@@ -184,18 +192,18 @@ class FeedGroupHeader(QtWidgets.QWidget):
 
         if group.spec.id == RELEASES_GROUP_ID:
             mark = scaled_logo(
-                MICRODROP_MARK, HEADER_GLYPH_SIZE, self.devicePixelRatioF()
+                MICRODROP_MARK, SUBSECTION_GLYPH_SIZE, self.devicePixelRatioF()
             )
             glyph.setPixmap(tinted(mark, accent))
 
         else:
-            glyph.setFont(icon_font(HEADER_GLYPH_SIZE))
+            glyph.setFont(icon_font(SUBSECTION_GLYPH_SIZE))
             glyph.setStyleSheet(f"QLabel {{ color: {accent}; }}")
 
         header.addWidget(glyph, 0, 0)
 
         title = QtWidgets.QLabel(group.spec.title, self)
-        title.setFont(scaled_font(self, HEADER_POINTS, bold=True))
+        title.setFont(role_font(SUBSECTION_TITLE))
         title.setStyleSheet(f"QLabel {{ color: {accent}; }}")
         title.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Preferred
@@ -203,7 +211,7 @@ class FeedGroupHeader(QtWidgets.QWidget):
         header.addWidget(title, 0, 1)
 
         self._chip = QtWidgets.QLabel(self)
-        self._chip.setFont(scaled_font(self, SMALL_POINTS, bold=True))
+        self._chip.setFont(role_font(CHIP))
         self._chip.setStyleSheet(
             f"QLabel {{ color: {accent};"
             f" background: {css(with_alpha(accent, 0.16))};"
@@ -213,7 +221,7 @@ class FeedGroupHeader(QtWidgets.QWidget):
 
         detail = _ElidedLabel(group_detail(group), self)
         detail.setForegroundRole(QtGui.QPalette.ColorRole.PlaceholderText)
-        detail.setFont(scaled_font(self, SMALL_POINTS))
+        detail.setFont(role_font(META))
         header.addWidget(detail, 0, 3)
 
         self._chevron = QtWidgets.QLabel(self)
@@ -269,7 +277,16 @@ class PostFrame(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.card = FeedPostCard(
-            post=post, controller=controller, lead=lead, accent=accent
+            post=post,
+            controller=controller,
+            lead=lead,
+            accent=accent,
+            fonts={
+                "title": role_font(CARD_TITLE),
+                "small": role_font(META),
+                "body": role_font(BODY_TEXT),
+                "link": role_font(BUTTON),
+            },
         )
         layout.addWidget(self.card.create(self))
 
@@ -333,6 +350,7 @@ class FeedSubsection(QtWidgets.QWidget):
         layout.addWidget(self.body)
 
         self._more = QtWidgets.QPushButton(self.body)
+        self._more.setFont(role_font(BUTTON))
         self._more.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self._more.clicked.connect(self._toggle_more)
 

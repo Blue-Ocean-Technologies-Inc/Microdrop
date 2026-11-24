@@ -37,6 +37,7 @@ from microdrop_style.colors import INFO_COLOR
 from microdrop_style.icons.icons import ICON_CLOSE, ICON_DELETE_SWEEP, ICON_DONE_ALL
 
 # Local imports.
+from .typography import BODY_TEXT, CHIP, DRAWER_TITLE, role_font
 from .ux_consts import (
     DRAWER_FIT_MS,
     DRAWER_FIT_STEP_PX,
@@ -51,7 +52,6 @@ from .ux_models import UxPaneModel
 from .view_styles import (
     icon_button_style,
     readable_accent,
-    text_font,
     with_alpha,
 )
 
@@ -186,7 +186,7 @@ class DrawerHeader(QtWidgets.QWidget):
         layout.setSpacing(2)
 
         self._title = QtWidgets.QLabel("Notifications", self)
-        self._title.setFont(text_font(self.font(), 3.0, QtGui.QFont.Weight.Bold))
+        self._title.setFont(role_font(DRAWER_TITLE))
         layout.addWidget(self._title)
         layout.addSpacing(8)
 
@@ -240,7 +240,7 @@ class DrawerHeader(QtWidgets.QWidget):
         accent = readable_accent(INFO_COLOR, palette)
         tint = with_alpha(INFO_COLOR, 0.16).name(QtGui.QColor.NameFormat.HexArgb)
 
-        self._chip.setFont(text_font(self.font(), -1.0, QtGui.QFont.Weight.DemiBold))
+        self._chip.setFont(role_font(CHIP))
         self._chip.setStyleSheet(
             f"color: {accent.name()}; background: {tint};"
             " border-radius: 9px; padding: 1px 8px;"
@@ -309,6 +309,7 @@ class UxDrawerHost(NotificationsDrawerHost):
 
         self.window = window
         self.drawer = drawer = UxDrawer(window)
+        drawer.setFont(role_font(BODY_TEXT))
         drawer.hide()
         drawer.close_requested.connect(self._close_from_view)
         drawer.edge.width_requested.connect(self._resize_to)

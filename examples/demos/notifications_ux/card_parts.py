@@ -21,6 +21,7 @@ from notifications.views.formatting import format_time
 from microdrop_style.colors import INFO_COLOR
 
 # Local imports.
+from .typography import BUTTON, role_font
 from .ux_consts import CARD_BODY_LINES
 
 #: Diameter (px) of the "new" marker.
@@ -174,6 +175,7 @@ class CardFooter(QtWidgets.QWidget):
     def _button(self, name):
         button = QtWidgets.QPushButton(self)
         button.setObjectName(name)
+        button.setFont(role_font(BUTTON))
         button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         button.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed

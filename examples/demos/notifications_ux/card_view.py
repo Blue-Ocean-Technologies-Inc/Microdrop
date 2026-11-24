@@ -43,6 +43,7 @@ from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
 
 # Local imports.
 from .card_parts import CardFooter, ClampedLabel, NewDot, meta_text
+from .typography import BODY_TEXT, CARD_TITLE, META, role_font
 from .ux_consts import (
     CARD_BODY_LINES,
     HIGHLIGHT_MS,
@@ -64,7 +65,6 @@ from .view_styles import (
     quiet_button_style,
     rounded_path,
     scaled_logo,
-    text_font,
     with_alpha,
 )
 
@@ -309,11 +309,7 @@ class NotificationCard(QtWidgets.QFrame):
 
         bold = self.toast or entry.unread or entry.needs_attention
         self._title.setFont(
-            text_font(
-                self.font(),
-                0.5,
-                QtGui.QFont.Weight.DemiBold if bold else QtGui.QFont.Weight.Medium,
-            )
+            role_font(CARD_TITLE, None if bold else QtGui.QFont.Weight.Medium)
         )
         self._title.setText(entry.title)
 
@@ -452,8 +448,9 @@ class NotificationCard(QtWidgets.QFrame):
             return
 
         self._palette_key = key
-        self._meta.setFont(text_font(self.font(), -1.0))
-        self._acted.setFont(text_font(self.font(), -0.5))
+        self._meta.setFont(role_font(META))
+        self._acted.setFont(role_font(META))
+        self._body.setFont(role_font(BODY_TEXT))
         self.setStyleSheet(card_style_sheet(palette))
         self._style_secondary(palette)
 

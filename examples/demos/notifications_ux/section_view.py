@@ -28,6 +28,7 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 from microdrop_style.icons.icons import ICON_EXPAND_MORE
 
 # Local imports.
+from .typography import CHIP, SECTION_TITLE, role_font
 from .ux_consts import (
     NEWS_LOGO_HEIGHT,
     SECTION_ANIMATION_MS,
@@ -37,7 +38,6 @@ from .view_styles import (
     muted_text,
     readable_accent,
     scaled_logo,
-    text_font,
     with_alpha,
 )
 
@@ -159,7 +159,7 @@ class SectionHeader(QtWidgets.QAbstractButton):
         painter.restore()
 
         # The title, then the summary chip as room allows.
-        title_font = text_font(self.font(), 1.0, QtGui.QFont.Weight.Bold)
+        title_font = role_font(SECTION_TITLE)
         metrics = QtGui.QFontMetrics(title_font)
         left = int(disc.right()) + 10
         room = int(chevron.left()) - 8 - left
@@ -180,7 +180,7 @@ class SectionHeader(QtWidgets.QAbstractButton):
             )
 
     def _paint_chip(self, painter, left, room, accent, readable):
-        font = text_font(self.font(), -1.0, QtGui.QFont.Weight.DemiBold)
+        font = role_font(CHIP)
         metrics = QtGui.QFontMetrics(font)
         text = metrics.elidedText(
             self.summary, QtCore.Qt.TextElideMode.ElideRight, room - 16

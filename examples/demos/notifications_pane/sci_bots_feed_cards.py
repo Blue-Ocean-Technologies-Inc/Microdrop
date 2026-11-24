@@ -535,7 +535,7 @@ class _PicturePair(QtWidgets.QWidget):
         if not any(self.captions):
             return 0
 
-        return QtGui.QFontMetrics(scaled_font(self, SMALL_POINTS)).height() + GRID // 2
+        return QtGui.QFontMetrics(self.font()).height() + GRID // 2
 
     def _rects(self, width):
         """Where each picture goes at ``width``."""
@@ -578,7 +578,7 @@ class _PicturePair(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         palette = self.palette()
-        font = scaled_font(self, SMALL_POINTS)
+        font = self.font()
 
         painter.setFont(font)
 
@@ -679,6 +679,10 @@ class FeedPostCard(HasTraits):
 
     #: The group's accent, a colour name.
     accent = Str()
+
+    #: Fonts by part ("title", "small", "body", "link") from a host with its own
+    #: type roles; a part not given is the card's font resized.
+    fonts = Dict(Str, Any)
 
     #: The card.
     control = Any()
@@ -793,7 +797,7 @@ class FeedPostCard(HasTraits):
 
         label = QtWidgets.QLabel(self.control)
         label.setTextFormat(QtCore.Qt.TextFormat.RichText)
-        label.setFont(scaled_font(self.control, SMALL_POINTS))
+        label.setFont(self._font("small", SMALL_POINTS))
         label.setText(
             f'<span style="color: {self.accent}; font-weight: 700;">{kind}</span>'
             f'<span style="color: {muted};">{separator}{rest}</span>'
@@ -803,7 +807,7 @@ class FeedPostCard(HasTraits):
 
     def _create_title(self, lines, points):
         title = _ElidedLabel(self.post.title, lines, self.control)
-        title.setFont(scaled_font(self.control, points, bold=True))
+        title.setFont(self._font("title", points, bold=True))
 
         return title
 
@@ -838,6 +842,7 @@ class FeedPostCard(HasTraits):
         """The rich summary if there is one, else the plain one."""
         post = self.post
         summary = QtWidgets.QLabel(self.control)
+        summary.setFont(self._font("body", 0))
         summary.setWordWrap(True)
         summary.setAlignment(_ALIGN.AlignLeft | _ALIGN.AlignTop)
 
@@ -881,7 +886,7 @@ class FeedPostCard(HasTraits):
 
         self._more = QtWidgets.QLabel(self.control)
         self._more.setForegroundRole(_ROLE.PlaceholderText)
-        self._more.setFont(scaled_font(self.control, SMALL_POINTS))
+        self._more.setFont(self._font("small", SMALL_POINTS))
         footer.addWidget(self._more)
         footer.addStretch()
 
@@ -895,6 +900,7 @@ class FeedPostCard(HasTraits):
             label.setTextFormat(QtCore.Qt.TextFormat.RichText)
             label.setOpenExternalLinks(False)
             label.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+            label.setFont(self._font("link", 0))
             label.linkActivated.connect(self._open_link)
             text = f"<b>{text}</b>" if href == READ_MORE_HREF else text
             self._link_labels.append((label, f'<a href="{href}">{text}</a>'))
@@ -934,6 +940,16 @@ class FeedPostCard(HasTraits):
         else:
             self.controller.open_link(href)
 
+    def _font(self, part, points, bold=False):
+        """The host's font for ``part``, or the card's resized by
+        ``points``."""
+        font = self.fonts.get(part)
+
+        if font is None:
+            return scaled_font(self.control, points, bold)
+
+        return QtGui.QFont(font)
+
     def _create_pair(self):
         images = self.post.images
         self._pair = _PicturePair(
@@ -941,6 +957,7 @@ class FeedPostCard(HasTraits):
             [alt for _src, _caption, alt in images],
             self.control,
         )
+        self._pair.setFont(self._font("small", SMALL_POINTS))
         self._pair.picture_clicked.connect(self._preview_picture)
 
         return self._pair

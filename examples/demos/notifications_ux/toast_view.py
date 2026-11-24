@@ -26,6 +26,7 @@ from microdrop_style.colors import INFO_COLOR
 
 # Local imports.
 from .card_view import NotificationCard
+from .typography import CHIP, role_font
 from .ux_consts import (
     TOAST_ENTER_MS,
     TOAST_FLY_MS,
@@ -36,7 +37,7 @@ from .ux_consts import (
 )
 from .ux_controllers import ToastStackController
 from .ux_models import UxPaneModel
-from .view_styles import card_border, card_fill, css, readable_accent, text_font
+from .view_styles import card_border, card_fill, css, readable_accent
 
 #: Room (px) around a toast's card for its shadow.
 SHADOW = 12
@@ -127,7 +128,7 @@ class _MorePill(QtWidgets.QPushButton):
     def restyle(self):
         palette = QtWidgets.QApplication.palette()
 
-        self.setFont(text_font(self.font(), -0.5, QtGui.QFont.Weight.DemiBold))
+        self.setFont(role_font(CHIP))
         self.setStyleSheet(
             "QPushButton {"
             f" background: {css(card_fill(palette))};"
