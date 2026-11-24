@@ -32,7 +32,7 @@ from notifications.consts import (
 from plugin_management.consts import LOAD_STATUS_SECTION_ID
 
 # Microdrop style imports.
-from microdrop_style.colors import ACCENT_COLOR, INFO_COLOR, PRIMARY_COLOR
+from microdrop_style.colors import ACCENT_COLOR, PRIMARY_COLOR, PRIMARY_SHADE, SLATE
 from microdrop_style.icons.icons import ICON_HISTORY
 from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
 
@@ -265,13 +265,13 @@ QUIET_SUMMARY_SOURCE = "notifications"
 #: Lines of a card's text shown before "Show more".
 CARD_BODY_LINES = 2
 
-#: Needs attention's accent: a deep orange, readable as text on both themes
-#: where WARNING_COLOR's yellow is not.
-ATTENTION_ACCENT = "#E8710A"
+#: Needs attention's accent by theme: a deep orange, darker on light and
+#: lighter on dark so its glyph reads (WARNING_COLOR's yellow would not).
+ATTENTION_ACCENT = ("#C2570C", "#F08A3C")
 
 #: A section's look: its glyph (a Material Symbols ligature), accent
-#: colour, and a wide brand mark (a picture's path) shown instead of the
-#: glyph, if any.
+#: colours ``(light, dark)``, and a wide brand mark (a picture's path) shown
+#: instead of the glyph, if any.
 SectionStyle = namedtuple("SectionStyle", "glyph accent logo", defaults=("",))
 
 #: THE one map of header accents, ``(light theme, dark theme)``: every
@@ -280,10 +280,10 @@ SectionStyle = namedtuple("SectionStyle", "glyph accent logo", defaults=("",))
 #: theirs here. Cards, kickers, links and a new post's toast stripe follow
 #: their header's entry.
 HEADER_ACCENTS = {
-    ATTENTION_SECTION_ID: (ATTENTION_ACCENT, ATTENTION_ACCENT),
-    LOAD_STATUS_SECTION_ID: (ACCENT_COLOR, ACCENT_COLOR),
-    NEWS_SECTION_ID: (NEWS_ACCENT, NEWS_ACCENT),
-    HISTORY_SECTION_ID: (INFO_COLOR, INFO_COLOR),
+    ATTENTION_SECTION_ID: ATTENTION_ACCENT,
+    LOAD_STATUS_SECTION_ID: (ACCENT_COLOR, "#C77DDA"),
+    NEWS_SECTION_ID: (PRIMARY_SHADE[700], PRIMARY_SHADE[400]),
+    HISTORY_SECTION_ID: (SLATE["light"], SLATE["dark"]),
     **{spec.id: spec.accent for spec in FEED_GROUPS},
 }
 
@@ -298,20 +298,16 @@ def header_accent(header_id, dark):
 
 SECTION_STYLES = {
     ATTENTION_SECTION_ID: SectionStyle(
-        "priority_high", HEADER_ACCENTS[ATTENTION_SECTION_ID][0]
+        "priority_high", HEADER_ACCENTS[ATTENTION_SECTION_ID]
     ),
     LOAD_STATUS_SECTION_ID: SectionStyle(
-        "extension", HEADER_ACCENTS[LOAD_STATUS_SECTION_ID][0]
+        "extension", HEADER_ACCENTS[LOAD_STATUS_SECTION_ID]
     ),
     NEWS_SECTION_ID: SectionStyle(
-        "newspaper",
-        HEADER_ACCENTS[NEWS_SECTION_ID][0],
-        str(BLUE_OCEAN_SCI_BOTS_LOGO),
+        "newspaper", HEADER_ACCENTS[NEWS_SECTION_ID], str(BLUE_OCEAN_SCI_BOTS_LOGO)
     ),
-    HISTORY_SECTION_ID: SectionStyle(
-        ICON_HISTORY, HEADER_ACCENTS[HISTORY_SECTION_ID][0]
-    ),
+    HISTORY_SECTION_ID: SectionStyle(ICON_HISTORY, HEADER_ACCENTS[HISTORY_SECTION_ID]),
 }
 
 #: The look of a section with no entry above.
-DEFAULT_SECTION_STYLE = SectionStyle("widgets", INFO_COLOR)
+DEFAULT_SECTION_STYLE = SectionStyle("widgets", (SLATE["light"], SLATE["dark"]))

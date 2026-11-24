@@ -20,10 +20,10 @@ from typing import NamedTuple
 
 # Microdrop style imports.
 from microdrop_style.colors import (
-    GOLD,
-    GREY,
     PRIMARY_SHADE,
+    ROSE,
     SECONDARY_SHADE,
+    TAUPE,
     TEAL,
 )
 
@@ -71,7 +71,7 @@ FEED_GROUPS = (
         title="Top stories",
         kinds=("announcement", "product", "newsletter", "post", "release"),
         pinned=True,
-        accent=(GOLD["light"], GOLD["dark"]),
+        accent=(ROSE["light"], ROSE["dark"]),
         glyph="push_pin",
         subtitle=SUBTITLE_COUNT,
         noun=("story", "stories"),
@@ -111,7 +111,7 @@ FEED_GROUPS = (
         title="Updates",
         kinds=("post",),
         pinned=False,
-        accent=(GREY["dark"], GREY["lighter"]),
+        accent=(TAUPE["light"], TAUPE["dark"]),
         glyph="forum",
         subtitle=SUBTITLE_COUNT,
         noun=("post", "posts"),

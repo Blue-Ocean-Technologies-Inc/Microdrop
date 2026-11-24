@@ -34,9 +34,10 @@ from .ux_consts import (
     SECTION_ANIMATION_MS,
 )
 from .view_styles import (
+    chip_text,
     icon_font,
+    is_dark,
     muted_text,
-    readable_accent,
     scaled_logo,
     with_alpha,
 )
@@ -109,8 +110,8 @@ class SectionHeader(QtWidgets.QAbstractButton):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         text_color = palette.color(QtGui.QPalette.ColorRole.Text)
-        accent = QtGui.QColor(self.style_.accent)
-        readable = readable_accent(accent, palette)
+        accent = QtGui.QColor(self.style_.accent[1 if is_dark(palette) else 0])
+        readable = chip_text(accent, palette)
         rect = self.rect().adjusted(0, 3, 0, -3)
 
         if self.pinned:

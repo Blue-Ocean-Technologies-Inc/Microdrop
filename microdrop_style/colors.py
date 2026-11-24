@@ -65,8 +65,10 @@ GREY = {
 BLACK = "#000000"
 WHITE = "#FFFFFF"
 
-# Two more accent hues, for headers that must be told apart from the
+# Further accent hues, for headers that must be told apart from the
 # primary, secondary, info and accent colours; by theme, each readable as
 # text on its theme's cards.
-GOLD = {"light": "#9A6E00", "dark": "#E3B341"}
+ROSE = {"light": "#AD1F78", "dark": "#D86FC9"}
 TEAL = {"light": "#00838F", "dark": "#4DD0E1"}
+SLATE = {"light": "#5B6B7F", "dark": "#A7B4C4"}
+TAUPE = {"light": "#7A6658", "dark": "#C2AE9F"}
