@@ -302,6 +302,9 @@ class UxDrawerHost(NotificationsDrawerHost):
     #: Eases the drawer's height; its bottom stays put.
     _fit = Any()
 
+    #: Whether a rebuild of the contents is queued.
+    _rebuild_queued = Bool(False)
+
     def attach(self, window):
         """Put a UxDrawer on ``window``; as the product host otherwise."""
         self.detach()
@@ -447,6 +450,12 @@ class UxDrawerHost(NotificationsDrawerHost):
         """Draw the titles the chosen way: rebuilt, so every header
         redraws."""
         set_coloured_titles(self.model.toasts.settings.coloured_header_titles)
+        self._rebuild_contents()
+
+    def _rebuild_contents(self):
+        """Build the contents afresh: every colour is resolved anew for the
+        current theme and switches."""
+        self._rebuild_queued = False
 
         if self._ui is None or self.drawer is None:
             return
@@ -456,6 +465,20 @@ class UxDrawerHost(NotificationsDrawerHost):
 
         if self.drawer.isVisible():
             self._place()
+
+    def _on_window_event(self, watched, event):
+        """As the product host's; a theme change rebuilds the contents, once
+        the change has settled, so no part keeps the other theme's colours."""
+        palette_events = (
+            QtCore.QEvent.Type.PaletteChange,
+            QtCore.QEvent.Type.ApplicationPaletteChange,
+        )
+
+        if event.type() in palette_events and not self._rebuild_queued:
+            self._rebuild_queued = True
+            QtCore.QTimer.singleShot(0, self._rebuild_contents)
+
+        return super()._on_window_event(watched, event)
 
     @observe("model:drawer_width")
     def _follow_width(self, event):
