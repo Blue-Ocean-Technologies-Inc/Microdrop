@@ -53,7 +53,7 @@ THUMBNAIL_SIZE = (11 * GRID, 7 * GRID)
 #: over height) so they stand at equal height, side by side unless the
 #: card is narrower than PAIR_MIN_WIDTH, then stacked.
 PAIR_ASPECT = 4 / 3
-PAIR_MIN_WIDTH = 40 * GRID
+PAIR_MIN_WIDTH = 35 * GRID
 
 #: A picture's preview: at most this share of its screen.
 PREVIEW_SCREEN_SHARE = 0.8
@@ -185,6 +185,28 @@ def fitted(pixmap, width, height, ratio):
     result.setDevicePixelRatio(ratio)
 
     return result
+
+
+def picture_pair_cells(width, caption_height):
+    """Where a lead card's two pictures go in a ``width`` wide area, each
+    with ``caption_height`` beneath: ``(x, y, w, h)`` per picture, and the
+    area's height. Side by side, the two are equal halves either side of a
+    GRID gap; narrower than PAIR_MIN_WIDTH they stack, each full width. Every
+    picture is PAIR_ASPECT."""
+
+    if width < PAIR_MIN_WIDTH:
+        height = round(width / PAIR_ASPECT)
+        step = height + caption_height + GRID
+        cells = [(0, index * step, width, height) for index in (0, 1)]
+
+    else:
+        side = (width - GRID) // 2
+        height = round(side / PAIR_ASPECT)
+        cells = [(index * (side + GRID), 0, side, height) for index in (0, 1)]
+
+    _x, y, _w, h = cells[-1]
+
+    return cells, y + h + caption_height
 
 
 def _rounded(rect, radius=CORNER_RADIUS):
@@ -337,8 +359,23 @@ class _CardFrame(QtWidgets.QFrame):
 
         super().mouseReleaseEvent(event)
 
+    def sizeHint(self):
+        """Its height at its current width: a Maximum height policy caps it
+        at the hint, which must follow pictures and text rewrapping."""
+        hint = super().sizeHint()
+
+        if self.width() > 0 and self.hasHeightForWidth():
+            hint.setHeight(self.heightForWidth(self.width()))
+
+        return hint
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
+
+        # A new width is a new height: have the layout ask again.
+        if event.size().width() != event.oldSize().width():
+            self.updateGeometry()
+
         self.resized.emit()
 
     def changeEvent(self, event):
@@ -388,11 +425,17 @@ class _PicturePair(QtWidgets.QWidget):
 
         self.captions = captions
         self.alts = alts
+
+        #: The loaded pictures, as loaded: every crop is made from these.
         self.pixmaps = [None] * len(captions)
 
+        #: Crops made for the current cells, by index; dropped on resize.
+        self._crops = {}
+
+        # Its height follows its width (heightForWidth); never fixed.
         policy = QtWidgets.QSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred,
-            QtWidgets.QSizePolicy.Policy.Fixed,
+            QtWidgets.QSizePolicy.Policy.Preferred,
         )
         policy.setHeightForWidth(True)
         self.setSizePolicy(policy)
@@ -401,59 +444,73 @@ class _PicturePair(QtWidgets.QWidget):
 
     def set_picture(self, index, pixmap):
         self.pixmaps[index] = pixmap
+        self._crops.pop(index, None)
         self.update()
 
     def _caption_height(self):
+        """Room for a caption line beneath each picture; none without any."""
+
+        if not any(self.captions):
+            return 0
+
         return QtGui.QFontMetrics(scaled_font(self, SMALL_POINTS)).height() + GRID // 2
 
     def _rects(self, width):
         """Where each picture goes at ``width``."""
-        caption = self._caption_height()
+        cells, _height = picture_pair_cells(width, self._caption_height())
 
-        if width < PAIR_MIN_WIDTH:
-            height = round(width / PAIR_ASPECT)
-            step = height + caption + GRID
-
-            return [QtCore.QRect(0, index * step, width, height) for index in (0, 1)]
-
-        side = (width - GRID) // 2
-        height = round(side / PAIR_ASPECT)
-
-        return [
-            QtCore.QRect(index * (side + GRID), 0, side, height) for index in (0, 1)
-        ]
+        return [QtCore.QRect(*cell) for cell in cells]
 
     def hasHeightForWidth(self):
         return True
 
     def heightForWidth(self, width):
-        return self._rects(width)[-1].bottom() + 1 + self._caption_height()
+        return picture_pair_cells(width, self._caption_height())[1]
 
     def sizeHint(self):
-        return QtCore.QSize(PAIR_MIN_WIDTH, self.heightForWidth(PAIR_MIN_WIDTH))
+        width = self.width() if self.width() > 0 else PAIR_MIN_WIDTH
+
+        return QtCore.QSize(width, self.heightForWidth(width))
+
+    def minimumSizeHint(self):
+        return QtCore.QSize(0, 0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        self._crops = {}
+
+    def _crop(self, index, rect):
+        """Picture ``index`` cover-cropped to ``rect``, made once per size
+        from the loaded picture, sharp at the device pixel ratio."""
+        crop = self._crops.get(index)
+
+        if crop is None:
+            ratio = self.devicePixelRatioF()
+            crop = cropped(self.pixmaps[index], rect.width(), rect.height(), ratio)
+            self._crops[index] = crop
+
+        return crop
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         palette = self.palette()
         font = scaled_font(self, SMALL_POINTS)
-        ratio = self.devicePixelRatioF()
 
         painter.setFont(font)
 
-        for rect, pixmap, caption in zip(
-            self._rects(self.width()), self.pixmaps, self.captions
+        for index, (rect, caption) in enumerate(
+            zip(self._rects(self.width()), self.captions)
         ):
             painter.save()
             painter.setClipPath(_rounded(rect, CORNER_RADIUS - 2))
 
-            if pixmap is None:
+            if self.pixmaps[index] is None:
                 painter.fillRect(rect, placeholder_fill(palette))
 
             else:
-                painter.drawPixmap(
-                    rect, cropped(pixmap, rect.width(), rect.height(), ratio)
-                )
+                painter.drawPixmap(rect, self._crop(index, rect))
 
             painter.restore()
 
