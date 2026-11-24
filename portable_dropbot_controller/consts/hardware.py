@@ -54,6 +54,23 @@ CAL_CAPS_CHOICES = (3, 5)
 #: status poll (published to the panes) while connected.
 MONITOR_INTERVAL_S = 2
 
+#: Budget for one driver connect before it is abandoned (#1065). A board
+#: answers both logins in well under a second; a port that is not the
+#: board can swallow the login write forever, since the driver opens the
+#: port without a write timeout. Single-rate: open + two 2 s logins.
+CONNECT_TIMEOUT_S = 10
+#: Autodetect walks four baud rates at up to ~5 s each, then the motor login.
+CONNECT_AUTODETECT_TIMEOUT_S = 30
+#: Write timeout forced onto an abandoned attempt's port so the driver's
+#: next login write fails fast instead of blocking again.
+ABANDONED_CONNECT_WRITE_TIMEOUT_S = 0.5
+#: How long an abandoned attempt's release keeps unblocking its writes
+#: before closing the session regardless.
+ABANDONED_CONNECT_RELEASE_S = 15
+#: How often that release re-cancels a stuck write (the autodetect ladder
+#: reopens the port at each baud rate).
+ABANDONED_CONNECT_POLL_S = 0.5
+
 #: Consecutive status polls with neither board answering before the
 #: link is declared dead and scanning resumes. Without this a silent
 #: board is polled forever — every poll a stack of command timeouts

@@ -24,13 +24,13 @@ from ..route_selection_view.route_selection_view import (
     ExecutionSettingsView,
     RouteLayerView,
 )
-from .section import SidebarSection, stack_widgets
+from .section import SizedSidebarSection, stack_widgets
 
 
-class PathsSection(SidebarSection):
+class PathsSection(SizedSidebarSection):
     """The Paths section and the parts the pane drives directly."""
 
-    #: Route layer list UI; the pane sizes it from preferences.
+    #: Route layer list UI, sized from preferences.
     layer_ui = Instance(UI)
 
     #: Execution settings UI, nested collapsed inside the section.
@@ -41,6 +41,9 @@ class PathsSection(SidebarSection):
 
     #: Edit-mode buttons with undo/redo.
     mode_picker_view = Instance(ModePicker)
+
+    def apply_sizes(self, preferences):
+        self.layer_ui.control.setMinimumHeight(preferences.LAYERS_VIEW_MIN_HEIGHT)
 
 
 def build_paths(model, undo, redo):
