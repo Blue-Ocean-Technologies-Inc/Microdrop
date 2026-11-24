@@ -25,7 +25,7 @@ from collections import namedtuple
 from pyface.qt import QtGui
 
 # Microdrop style imports.
-from microdrop_style.brand_fonts import HEADING_FONT_FAMILY, body_family, heading_family
+from microdrop_style.brand_fonts import body_family, heading_family
 
 #: Which face a role takes.
 HEADING = "heading"
@@ -33,18 +33,21 @@ BODY = "body"
 
 _WEIGHT = QtGui.QFont.Weight
 
-#: A role: its face, size (points), weight, and the letter spacing (%) it
-#: takes in the heading face itself (none in a fallback).
-FontRole = namedtuple("FontRole", "face points weight spacing", defaults=(100,))
+#: A role: its face, size (points) and weight. Orbitron runs larger and
+#: wider than Lato at one size, so its headings sit a step below the
+#: nominal scale, and need no extra letter spacing. Weights are ones the
+#: files have: Orbitron's named instances (Medium, SemiBold), Lato's
+#: Regular and Bold, so nothing is synthesised.
+FontRole = namedtuple("FontRole", "face points weight")
 
-DRAWER_TITLE = FontRole(HEADING, 13, _WEIGHT.DemiBold, 104)
-SECTION_TITLE = FontRole(HEADING, 11, _WEIGHT.DemiBold, 103)
-SUBSECTION_TITLE = FontRole(HEADING, 10, _WEIGHT.Medium, 103)
+DRAWER_TITLE = FontRole(HEADING, 12, _WEIGHT.DemiBold)
+SECTION_TITLE = FontRole(HEADING, 10.5, _WEIGHT.DemiBold)
+SUBSECTION_TITLE = FontRole(HEADING, 9.5, _WEIGHT.Medium)
 CARD_TITLE = FontRole(BODY, 10.5, _WEIGHT.Bold)
 BODY_TEXT = FontRole(BODY, 10, _WEIGHT.Normal)
 META = FontRole(BODY, 9, _WEIGHT.Normal)
-CHIP = FontRole(BODY, 9, _WEIGHT.DemiBold)
-BUTTON = FontRole(BODY, 10, _WEIGHT.DemiBold)
+CHIP = FontRole(BODY, 9, _WEIGHT.Bold)
+BUTTON = FontRole(BODY, 10, _WEIGHT.Bold)
 
 
 def role_font(role, weight=None):
@@ -54,8 +57,5 @@ def role_font(role, weight=None):
 
     font.setPointSizeF(role.points)
     font.setWeight(weight if weight is not None else role.weight)
-
-    if family == HEADING_FONT_FAMILY and role.spacing != 100:
-        font.setLetterSpacing(QtGui.QFont.SpacingType.PercentageSpacing, role.spacing)
 
     return font
