@@ -58,6 +58,7 @@ FLOOD_DISTINCT = 12
 BURST_SIZE = 20
 
 #: Demo topics the cards' buttons "publish".
+SELF_TEST_TOPIC = "demo/self_test"
 UPDATE_PLUGINS_TOPIC = "demo/update_plugins"
 RESTART_TOPIC = "demo/restart"
 RETRY_CONNECTION_TOPIC = "demo/retry_connection"
@@ -75,6 +76,23 @@ CALIBRATION_DETAIL = (
 CALIBRATION_HELP = HelpAction(
     label="How to calibrate", tutorial="Calibrating the device"
 )
+
+#: Days without a self test before it is stale, and how long the demo's
+#: last one was.
+SELF_TEST_STALE_DAYS = 10
+SELF_TEST_DEMO_AGE_DAYS = 12
+
+#: The self tests the demo's run passes.
+SELF_TEST_COUNT = 5
+
+SELF_TEST_DETAIL = (
+    "Check the high-voltage output, channels and chip connections before "
+    "your next experiment."
+)
+
+#: The stale self test's buttons: a real command, and what it checks.
+SELF_TEST_ACTION = PublishAction(label="Run self test", topic=SELF_TEST_TOPIC)
+SELF_TEST_HELP = HelpAction(label="What does it check?", tutorial="DropBot self tests")
 
 PLUGIN_UPDATES_DETAIL = (
     "heater-microdrop-plugin 1.4.0 → 1.5.0\n"
@@ -217,6 +235,26 @@ def post_calibration_old():
     )
 
 
+def self_test_title(days):
+    """The stale self test's title, ``days`` after the last run."""
+    return f"Self test last run {days} days ago"
+
+
+def post_self_test_stale():
+    """A self test older than SELF_TEST_STALE_DAYS: the demo's is
+    SELF_TEST_DEMO_AGE_DAYS old."""
+    _publish(
+        title=self_test_title(SELF_TEST_DEMO_AGE_DAYS),
+        detail=SELF_TEST_DETAIL,
+        severity=SEVERITY_WARNING,
+        category="self_test",
+        source="dropbot_status_and_controls",
+        needs_attention=True,
+        action=SELF_TEST_ACTION.model_dump(),
+        secondary_action=SELF_TEST_HELP.model_dump(),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Many at once
 # ---------------------------------------------------------------------------
@@ -268,7 +306,8 @@ def flood_from_thread():
 
 def post_history(center, folder):
     """What a session would hold by the time the window is up: real (scrubbed)
-    log records, an earlier protocol run, and an old calibration."""
+    log records, an earlier protocol run, an old calibration and a stale
+    self test."""
     now = time.time()
 
     post_log_samples(center, now)
@@ -291,6 +330,17 @@ def post_history(center, folder):
         timestamp=now - 600,
         needs_attention=True,
         secondary_action=CALIBRATION_HELP,
+    )
+    center.post(
+        self_test_title(SELF_TEST_DEMO_AGE_DAYS),
+        detail=SELF_TEST_DETAIL,
+        severity=SEVERITY_WARNING,
+        category="self_test",
+        source="dropbot_status_and_controls",
+        timestamp=now - 540,
+        needs_attention=True,
+        action=SELF_TEST_ACTION,
+        secondary_action=SELF_TEST_HELP,
     )
     post_earlier_days(center, folder)
 
@@ -484,6 +534,18 @@ class DemoResponder(HasTraits):
 #: Each demo topic's immediate answer and, after JOB_MS, its outcome:
 #: (title, severity, detail[, action]).
 _ANSWERS = {
+    SELF_TEST_TOPIC: (
+        (
+            "Self test running…",
+            SEVERITY_INFO,
+            "Keep the lid closed; the results follow in a few seconds.",
+        ),
+        (
+            f"Self test passed · 0 of {SELF_TEST_COUNT} failed",
+            SEVERITY_SUCCESS,
+            "High-voltage output, channels and chip connections all passed.",
+        ),
+    ),
     UPDATE_PLUGINS_TOPIC: (
         (
             "Updating 2 plugins…",

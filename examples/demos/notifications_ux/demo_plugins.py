@@ -217,6 +217,7 @@ class NotificationsDemoPlugin(Plugin):
                     lambda: scenarios.post_protocol_finished(self._experiment_folder()),
                 ),
                 action("Post calibration is old", scenarios.post_calibration_old),
+                action("Post self test is stale", scenarios.post_self_test_stale),
                 action(f"Burst of {scenarios.BURST_SIZE}", scenarios.post_burst),
                 action(
                     f"Flood from a thread ({scenarios.FLOOD_RECORDS} log records)",
