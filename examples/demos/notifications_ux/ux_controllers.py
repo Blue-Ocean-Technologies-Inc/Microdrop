@@ -70,8 +70,13 @@ class UxNotificationsController(NotificationsController):
         entry = event.new
         action = entry.secondary_action
 
-        if isinstance(action, HelpAction) and self.open_tutorial is not None:
-            self.open_tutorial(action.tutorial)
+        # Help: read, yet still to do, so it stays in Needs attention until
+        # dismissed or the condition clears; a tutorial changes nothing.
+        if isinstance(action, HelpAction):
+            entry.unread = False
+
+            if self.open_tutorial is not None:
+                self.open_tutorial(action.tutorial)
 
         # Later: out of Needs attention, into the list, still to do.
         elif isinstance(action, SnoozeAction):

@@ -16,6 +16,9 @@
     ▌      Show more
     ▌      [ Primary ]  How do I…?
 
+A card with help and nothing to press shows the help as its one control,
+an outlined button: ``[ ? How to calibrate ]``.
+
 A widget, not a painted delegate: it has real buttons, and the drawer lists
 a few hundred at most. Runs standalone against just an entry::
 
@@ -35,7 +38,7 @@ from notifications.views.formatting import format_exact_time, format_preview
 
 # Microdrop style imports.
 from microdrop_style.colors import INFO_COLOR
-from microdrop_style.icons.icons import ICON_CLOSE
+from microdrop_style.icons.icons import ICON_CLOSE, ICON_HELP
 from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
 
 # Local imports.
@@ -55,6 +58,8 @@ from .view_styles import (
     is_dark,
     link_button_style,
     muted_text,
+    outlined_button_icon,
+    outlined_button_style,
     primary_button_style,
     quiet_button_style,
     rounded_path,
@@ -122,6 +127,7 @@ def card_style_sheet(palette):
             icon_button_style(palette, 16, "QToolButton#cardDismiss"),
             link_button_style(palette, INFO_COLOR, "QPushButton#cardMore"),
             link_button_style(palette, INFO_COLOR, "QPushButton#cardHelp"),
+            outlined_button_style(palette, "QPushButton#cardHelpOnly"),
             quiet_button_style(palette, "QPushButton#cardLater"),
             primary_button_style("QPushButton#cardPrimary"),
             "QPlainTextEdit#cardTraceback {"
@@ -463,12 +469,25 @@ class NotificationCard(QtWidgets.QFrame):
         self._meta.setFont(text_font(self.font(), -1.0))
         self._acted.setFont(text_font(self.font(), -0.5))
         self.setStyleSheet(card_style_sheet(palette))
+        self._style_secondary(palette)
 
     def _style_secondary(self, palette):
-        name = (
-            "cardHelp"
-            if isinstance(self.entry.secondary_action, HelpAction)
-            else "cardLater"
+        """Help as a link beside a primary button, or as the card's one
+        outlined control when there is nothing to press; "Later" quiet."""
+        entry = self.entry
+        help_ = isinstance(entry.secondary_action, HelpAction)
+        help_only = help_ and entry.action is None
+
+        if help_only:
+            name = "cardHelpOnly"
+
+        else:
+            name = "cardHelp" if help_ else "cardLater"
+
+        self._secondary.setIcon(
+            outlined_button_icon(ICON_HELP, palette, self.devicePixelRatioF())
+            if help_only
+            else QtGui.QIcon()
         )
 
         if self._secondary.objectName() != name:

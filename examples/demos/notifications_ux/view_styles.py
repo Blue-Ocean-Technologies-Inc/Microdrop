@@ -229,6 +229,56 @@ def quiet_button_style(palette, selector="QPushButton"):
     )
 
 
+def outlined_button_style(palette, selector="QPushButton"):
+    """An outlined button in the primary colour: a card's one control when
+    it is guidance rather than a command, e.g. "How to calibrate"."""
+    color = css(readable_accent(PRIMARY_FILL, palette))
+
+    return (
+        f"{selector} {{"
+        f" background: transparent; color: {color}; border: 1px solid {color};"
+        " border-radius: 5px; padding: 3px 11px 3px 8px; font-weight: 600; }"
+        f" {selector}:hover {{ background: {css(with_alpha(color, 0.10))}; }}"
+        f" {selector}:pressed {{ background: {css(with_alpha(color, 0.18))}; }}"
+    )
+
+
+#: Glyph pictures made so far, by glyph, size, colour and pixel ratio.
+_GLYPHS = {}
+
+
+def glyph_pixmap(glyph, pixel_size, color, ratio=1.0):
+    """A Material Symbols ``glyph`` drawn in ``color``, for a button's icon."""
+    key = (glyph, pixel_size, QtGui.QColor(color).rgba(), ratio)
+    pixmap = _GLYPHS.get(key)
+
+    if pixmap is None:
+        side = int(round(pixel_size * ratio))
+        pixmap = QtGui.QPixmap(side, side)
+        pixmap.setDevicePixelRatio(ratio)
+        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+
+        painter = QtGui.QPainter(pixmap)
+        painter.setFont(icon_font(pixel_size))
+        painter.setPen(QtGui.QColor(color))
+        painter.drawText(
+            QtCore.QRectF(0, 0, pixel_size, pixel_size),
+            QtCore.Qt.AlignmentFlag.AlignCenter,
+            glyph,
+        )
+        painter.end()
+        _GLYPHS[key] = pixmap
+
+    return pixmap
+
+
+def outlined_button_icon(glyph, palette, ratio=1.0):
+    """``glyph`` in the outlined button's colour."""
+    return QtGui.QIcon(
+        glyph_pixmap(glyph, 16, readable_accent(PRIMARY_FILL, palette), ratio)
+    )
+
+
 def link_button_style(palette, accent, selector="QPushButton"):
     """A button that reads as a link, e.g. "How do I…?" or "Show more"."""
     color = readable_accent(accent, palette)
