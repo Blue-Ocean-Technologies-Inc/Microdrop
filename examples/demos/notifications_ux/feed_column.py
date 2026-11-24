@@ -150,16 +150,16 @@ class _ElidedLabel(QtWidgets.QLabel):
         painter.setPen(self.palette().color(self.foregroundRole()))
         painter.drawText(
             self.rect(),
-            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignBottom,
+            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter,
             text,
         )
 
 
 class FeedGroupHeader(QtWidgets.QWidget):
-    """A feed group's header as the feed draws it (glyph and large bold
-    title in the group's colour, the detail muted at the right, a short
-    rule under them), with a count chip and a chevron added on the rule's
-    line, where they leave the title its room; a click emits ``clicked``."""
+    """A feed group's header on one row: glyph, large bold title in the
+    group's colour, its count chip, the detail muted and elided to the room
+    left, the chevron at the far right; a short rule under the title. A
+    click emits ``clicked``."""
 
     clicked = QtCore.Signal()
 
@@ -172,11 +172,12 @@ class FeedGroupHeader(QtWidgets.QWidget):
         self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
 
-        header = QtWidgets.QVBoxLayout(self)
+        # One row, and the rule under the title's column.
+        header = QtWidgets.QGridLayout(self)
         header.setContentsMargins(4, GRID, 4, GRID // 2)
-        header.setSpacing(GRID // 2)
-        row = QtWidgets.QHBoxLayout()
-        row.setSpacing(GRID)
+        header.setHorizontalSpacing(GRID)
+        header.setVerticalSpacing(GRID // 2)
+        header.setColumnStretch(3, 1)
 
         # MicroDrop's releases carry its mark, in the group's colour.
         glyph = QtWidgets.QLabel(group.spec.glyph, self)
@@ -191,7 +192,7 @@ class FeedGroupHeader(QtWidgets.QWidget):
             glyph.setFont(icon_font(HEADER_GLYPH_SIZE))
             glyph.setStyleSheet(f"QLabel {{ color: {accent}; }}")
 
-        row.addWidget(glyph)
+        header.addWidget(glyph, 0, 0)
 
         title = QtWidgets.QLabel(group.spec.title, self)
         title.setFont(scaled_font(self, HEADER_POINTS, bold=True))
@@ -199,24 +200,7 @@ class FeedGroupHeader(QtWidgets.QWidget):
         title.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Preferred
         )
-        row.addWidget(title)
-        row.addStretch()
-
-        detail = _ElidedLabel(group_detail(group), self)
-        detail.setForegroundRole(QtGui.QPalette.ColorRole.PlaceholderText)
-        detail.setFont(scaled_font(self, SMALL_POINTS))
-        row.addWidget(detail, 1, QtCore.Qt.AlignmentFlag.AlignBottom)
-        header.addLayout(row)
-
-        # The rule, then the chip and the chevron at the right.
-        line = QtWidgets.QHBoxLayout()
-        line.setSpacing(GRID)
-
-        rule = QtWidgets.QFrame(self)
-        rule.setFixedSize(*HEADER_RULE_SIZE)
-        rule.setStyleSheet(f"QFrame {{ background: {accent}; border-radius: 1px; }}")
-        line.addWidget(rule, 0, QtCore.Qt.AlignmentFlag.AlignTop)
-        line.addStretch()
+        header.addWidget(title, 0, 1)
 
         self._chip = QtWidgets.QLabel(self)
         self._chip.setFont(scaled_font(self, SMALL_POINTS, bold=True))
@@ -225,15 +209,24 @@ class FeedGroupHeader(QtWidgets.QWidget):
             f" background: {css(with_alpha(accent, 0.16))};"
             " border-radius: 9px; padding: 1px 8px; }"
         )
-        line.addWidget(self._chip, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        header.addWidget(self._chip, 0, 2)
+
+        detail = _ElidedLabel(group_detail(group), self)
+        detail.setForegroundRole(QtGui.QPalette.ColorRole.PlaceholderText)
+        detail.setFont(scaled_font(self, SMALL_POINTS))
+        header.addWidget(detail, 0, 3)
 
         self._chevron = QtWidgets.QLabel(self)
         self._chevron.setFont(icon_font(20))
         self._chevron.setStyleSheet(
             f"QLabel {{ color: {muted_text(self.palette()).name()}; }}"
         )
-        line.addWidget(self._chevron)
-        header.addLayout(line)
+        header.addWidget(self._chevron, 0, 4)
+
+        rule = QtWidgets.QFrame(self)
+        rule.setFixedSize(*HEADER_RULE_SIZE)
+        rule.setStyleSheet(f"QFrame {{ background: {accent}; border-radius: 1px; }}")
+        header.addWidget(rule, 1, 1, QtCore.Qt.AlignmentFlag.AlignLeft)
 
     def show_state(self, summary, expanded):
         """Show ``summary`` in the chip, the chevron for ``expanded``."""
