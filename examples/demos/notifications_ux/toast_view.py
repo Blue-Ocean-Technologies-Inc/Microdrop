@@ -40,7 +40,7 @@ from .view_styles import card_border, card_fill, css, link_color, readable_accen
 SHADOW = 12
 
 #: Opacity of the shadow right under the card.
-SHADOW_ALPHA = 0.10
+SHADOW_ALPHA = 0.16
 
 #: Size (px) a toast shrinks to as it reaches the bell, and its opacity there.
 LANDED_SIZE = 18

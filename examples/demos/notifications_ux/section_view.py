@@ -35,6 +35,8 @@ from .ux_consts import (
 )
 from .view_styles import (
     chip_text,
+    chip_tint,
+    disc_tint,
     icon_font,
     is_dark,
     muted_text,
@@ -141,7 +143,7 @@ class SectionHeader(QtWidgets.QAbstractButton):
 
         else:
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
-            painter.setBrush(with_alpha(accent, 0.18))
+            painter.setBrush(with_alpha(accent, disc_tint(palette)))
             painter.drawEllipse(disc)
             painter.setFont(icon_font(17))
             painter.setPen(readable)
@@ -191,7 +193,7 @@ class SectionHeader(QtWidgets.QAbstractButton):
         chip = QtCore.QRectF(left, (self.height() - height) / 2, width, height)
 
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(with_alpha(accent, 0.16))
+        painter.setBrush(with_alpha(accent, chip_tint(self.palette())))
         painter.drawRoundedRect(chip, height / 2, height / 2)
         painter.setFont(font)
         painter.setPen(readable)

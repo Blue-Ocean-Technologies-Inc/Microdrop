@@ -27,15 +27,21 @@ WCAG's 4.5:1; ``tests`` check every pair the roles produce.
 
 LIGHT, DARK = 0, 1
 
-#: WCAG's least contrast: normal text, and large text or icons.
-TEXT_CONTRAST = 4.5
-ICON_CONTRAST = 3.0
+#: Least contrast, ``(light theme, dark theme)``: text, and icons or glyphs.
+#: WCAG's 4.5:1 and 3:1, with a margin in the light theme, where colours on
+#: white read paler than their ratio suggests.
+TEXT_CONTRAST = (5.5, 4.5)
+ICON_CONTRAST = (4.0, 3.0)
+
+#: How strongly an accent tints its chip, and its header's glyph disc.
+CHIP_TINT = (0.22, 0.16)
+DISC_TINT = (0.26, 0.18)
 
 #: The drawer's translucent area lets this much of what lies beneath show.
 DRAWER_SHOW_THROUGH = 0.08
 
 #: Secondary text is the text colour this far towards the window's.
-MUTED_MIX = 0.36
+MUTED_MIX = 0.34
 
 #: The themes' own colours, as the app's palettes give them.
 WINDOW = ("#F3F3F3", "#1E1E1E")
@@ -48,14 +54,14 @@ TEXT = ("#000000", "#FFFFFF")
 #: yellow and success green are too light for an icon on a light card, so
 #: the light theme takes darker shades.
 SEVERITY = {
-    "info": ("#2F80ED", "#5C9EF2"),
-    "success": ("#2E8B47", "#7EE29A"),
-    "warning": ("#A86400", "#F5A623"),
-    "error": ("#E0002D", "#F05A6E"),
+    "info": ("#2568C2", "#5C9EF2"),
+    "success": ("#26763C", "#7EE29A"),
+    "warning": ("#9B5C00", "#F5A623"),
+    "error": ("#D7002B", "#F05A6E"),
 }
 
 #: Interactive: every link-like text (Show more, Read more, How do I…?).
-LINK = ("#1A5FB4", "#8AB4F8")
+LINK = ("#17549F", "#8AB4F8")
 
 #: Primary buttons: a dark brand green under white labels; hovered, pressed.
 PRIMARY_FILL = ("#1B7734", "#1B7734")
@@ -69,7 +75,7 @@ UNREAD = TEXT
 #: Large fills in a severity (a chosen Errors or Needs action chip, a
 #: badge): the error red softened on dark, the orange darkened on light.
 ERROR_FILL = ("#C62828", "#F28B82")
-ATTENTION_FILL = ("#B45309", "#F6A04D")
+ATTENTION_FILL = ("#9A4708", "#F6A04D")
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +124,7 @@ def contrast(first, second):
     return (lighter + 0.05) / (darker + 0.05)
 
 
-def readable_on(color, surface, minimum=TEXT_CONTRAST):
+def readable_on(color, surface, minimum=TEXT_CONTRAST[LIGHT]):
     """``color`` darkened (on a light surface) or lightened (on a dark one)
     in small steps until it reaches ``minimum`` contrast with ``surface``."""
     target = "#000000" if luminance(surface) > 0.18 else "#FFFFFF"

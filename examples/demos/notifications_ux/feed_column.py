@@ -62,8 +62,8 @@ from .ux_consts import (
 )
 from .ux_models import UxPaneModel
 from .view_styles import (
-    CHIP_TINT,
     chip_text,
+    chip_tint,
     coloured_titles,
     css,
     icon_font,
@@ -233,7 +233,7 @@ class FeedGroupHeader(QtWidgets.QWidget):
         style_chip(
             self._chip,
             f"color: {css(chip_text(accent, self.palette()))};"
-            f" background: {css(with_alpha(accent, CHIP_TINT))};",
+            f" background: {css(with_alpha(accent, chip_tint(self.palette())))};",
         )
         header.addWidget(self._chip, 0, 2)
 

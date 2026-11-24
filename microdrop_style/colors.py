@@ -69,6 +69,6 @@ WHITE = "#FFFFFF"
 # primary, secondary, info and accent colours; by theme, each readable as
 # text on its theme's cards.
 ROSE = {"light": "#AD1F78", "dark": "#D86FC9"}
-TEAL = {"light": "#00838F", "dark": "#4DD0E1"}
+TEAL = {"light": "#00747F", "dark": "#4DD0E1"}
 SLATE = {"light": "#5B6B7F", "dark": "#A7B4C4"}
 TAUPE = {"light": "#7A6658", "dark": "#C2AE9F"}

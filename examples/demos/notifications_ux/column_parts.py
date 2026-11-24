@@ -46,6 +46,7 @@ from .ux_consts import (
 )
 from .ux_models import UxPaneModel, matches_filter, time_group
 from .view_styles import (
+    chip_tint,
     css,
     is_dark,
     muted_text,
@@ -141,7 +142,8 @@ class FilterChips(QtWidgets.QWidget):
 
             style_chip(
                 chip,
-                f"color: {css(text)}; background: {css(with_alpha(accent, 0.07))};"
+                f"color: {css(text)};"
+                f" background: {css(with_alpha(accent, chip_tint(palette) / 2))};"
                 f" border: 1px solid {css(edge)};",
                 f"QPushButton:hover {{ background: {css(with_alpha(accent, 0.15))}; }}"
                 " QPushButton:checked {"

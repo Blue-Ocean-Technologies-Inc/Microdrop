@@ -29,9 +29,11 @@ _ROLE = QtGui.QPalette.ColorRole
 #: Window lightness below which a palette is dark.
 DARK_LIGHTNESS = 128
 
-#: Least contrast ratio of accent-coloured text against a card: WCAG's
-#: for normal text.
-ACCENT_TEXT_CONTRAST = colour_roles.TEXT_CONTRAST
+
+def text_contrast(palette):
+    """The least contrast accent-coloured text needs in this theme."""
+    return colour_roles.TEXT_CONTRAST[_theme(palette)]
+
 
 #: Corner radius (px) of cards, toasts and section headers.
 CARD_RADIUS = 8
@@ -131,8 +133,9 @@ def card_fill(palette, hovered=False):
 
 
 def card_border(palette):
-    """A card's hairline border."""
-    return with_alpha(palette.color(_ROLE.Text), 0.16 if is_dark(palette) else 0.11)
+    """A card's hairline border: firmer on light, where a faint one is lost
+    against white panes."""
+    return with_alpha(palette.color(_ROLE.Text), 0.16 if is_dark(palette) else 0.18)
 
 
 def muted_text(palette):
@@ -163,13 +166,19 @@ def readable_text(color, palette, on_card=False):
     color = QtGui.QColor(color).name()
 
     for name in names:
-        color = colour_roles.readable_on(color, surfaces[name])
+        color = colour_roles.readable_on(color, surfaces[name], text_contrast(palette))
 
     return QtGui.QColor(color)
 
 
-#: How strongly a chip's accent tints its background.
-CHIP_TINT = 0.16
+def chip_tint(palette):
+    """How strongly an accent tints its chip in this theme."""
+    return colour_roles.CHIP_TINT[_theme(palette)]
+
+
+def disc_tint(palette):
+    """How strongly an accent tints its header's glyph disc."""
+    return colour_roles.DISC_TINT[_theme(palette)]
 
 
 def chip_text(accent, palette):
@@ -180,8 +189,8 @@ def chip_text(accent, palette):
     color = accent
 
     for name in ("drawer", "drawer over black", "drawer over white", "card"):
-        chip = colour_roles.blend(accent, surfaces[name], CHIP_TINT)
-        color = colour_roles.readable_on(color, chip)
+        chip = colour_roles.blend(accent, surfaces[name], chip_tint(palette))
+        color = colour_roles.readable_on(color, chip, text_contrast(palette))
 
     return QtGui.QColor(color)
 
@@ -231,11 +240,11 @@ def readable_accent(color, palette):
     background = card_fill(palette)
     target = QtGui.QColor(WHITE) if is_dark(palette) else QtGui.QColor("#000000")
 
-    for _step in range(10):
-        if contrast(color, background) >= ACCENT_TEXT_CONTRAST:
+    for _step in range(20):
+        if contrast(color, background) >= text_contrast(palette):
             break
 
-        color = mix(color, target, 0.15)
+        color = mix(color, target, 0.1)
 
     return color
 
