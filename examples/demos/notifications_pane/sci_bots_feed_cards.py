@@ -20,11 +20,12 @@ the post's link. Links go to the controller.
 
 # Standard library imports.
 import re
+from functools import partial
 from html import escape
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
-from traits.api import Any, Bool, HasTraits, Instance, List, Str, observe
+from traits.api import Any, Bool, Dict, HasTraits, Instance, Int, List, Str, observe
 
 # Local imports.
 from .sci_bots_feed_model import (
@@ -47,6 +48,15 @@ BANNER_LOADING_HEIGHT = 112
 
 #: A compact row's picture box; the picture fits inside it whole.
 THUMBNAIL_SIZE = (11 * GRID, 7 * GRID)
+
+#: A lead card's two pictures: each centre-cropped to this aspect (width
+#: over height) so they stand at equal height, side by side unless the
+#: card is narrower than PAIR_MIN_WIDTH, then stacked.
+PAIR_ASPECT = 4 / 3
+PAIR_MIN_WIDTH = 40 * GRID
+
+#: A picture's preview: at most this share of its screen.
+PREVIEW_SCREEN_SHARE = 0.8
 
 #: Lines a title takes before it is elided: lead, compact.
 LEAD_TITLE_LINES = 3
@@ -366,8 +376,158 @@ class _Thumbnail(QtWidgets.QWidget):
         painter.drawPixmap(target, self.pixmap)
 
 
+class _PicturePair(QtWidgets.QWidget):
+    """Two captioned pictures, side by side at equal height, or stacked when
+    narrow; each centre-cropped to PAIR_ASPECT. A click on one emits
+    ``picture_clicked`` with its index, and goes no further."""
+
+    picture_clicked = QtCore.Signal(int)
+
+    def __init__(self, captions, alts, parent=None):
+        super().__init__(parent)
+
+        self.captions = captions
+        self.alts = alts
+        self.pixmaps = [None] * len(captions)
+
+        policy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
+        self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.setMouseTracking(True)
+
+    def set_picture(self, index, pixmap):
+        self.pixmaps[index] = pixmap
+        self.update()
+
+    def _caption_height(self):
+        return QtGui.QFontMetrics(scaled_font(self, SMALL_POINTS)).height() + GRID // 2
+
+    def _rects(self, width):
+        """Where each picture goes at ``width``."""
+        caption = self._caption_height()
+
+        if width < PAIR_MIN_WIDTH:
+            height = round(width / PAIR_ASPECT)
+            step = height + caption + GRID
+
+            return [QtCore.QRect(0, index * step, width, height) for index in (0, 1)]
+
+        side = (width - GRID) // 2
+        height = round(side / PAIR_ASPECT)
+
+        return [
+            QtCore.QRect(index * (side + GRID), 0, side, height) for index in (0, 1)
+        ]
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._rects(width)[-1].bottom() + 1 + self._caption_height()
+
+    def sizeHint(self):
+        return QtCore.QSize(PAIR_MIN_WIDTH, self.heightForWidth(PAIR_MIN_WIDTH))
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        palette = self.palette()
+        font = scaled_font(self, SMALL_POINTS)
+        ratio = self.devicePixelRatioF()
+
+        painter.setFont(font)
+
+        for rect, pixmap, caption in zip(
+            self._rects(self.width()), self.pixmaps, self.captions
+        ):
+            painter.save()
+            painter.setClipPath(_rounded(rect, CORNER_RADIUS - 2))
+
+            if pixmap is None:
+                painter.fillRect(rect, placeholder_fill(palette))
+
+            else:
+                painter.drawPixmap(
+                    rect, cropped(pixmap, rect.width(), rect.height(), ratio)
+                )
+
+            painter.restore()
+
+            text = QtCore.QRect(
+                rect.left(),
+                rect.bottom() + 1 + GRID // 2,
+                rect.width(),
+                self._caption_height(),
+            )
+            painter.setPen(palette.color(_ROLE.PlaceholderText))
+            painter.drawText(text, _ALIGN.AlignLeft | _ALIGN.AlignTop, caption)
+
+    def _index_at(self, position):
+
+        for index, rect in enumerate(self._rects(self.width())):
+            if rect.contains(position):
+                return index
+
+        return None
+
+    def event(self, event):
+
+        if event.type() == QtCore.QEvent.Type.ToolTip:
+            index = self._index_at(event.pos())
+
+            if index is not None and self.alts[index]:
+                QtWidgets.QToolTip.showText(event.globalPos(), self.alts[index], self)
+
+            else:
+                QtWidgets.QToolTip.hideText()
+
+            return True
+
+        return super().event(event)
+
+    def mousePressEvent(self, event):
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        index = self._index_at(event.position().toPoint())
+
+        if event.button() == QtCore.Qt.MouseButton.LeftButton and index is not None:
+            self.picture_clicked.emit(index)
+
+        event.accept()
+
+
+def show_picture_preview(pixmap, caption, parent):
+    """``pixmap`` larger, in a small window closed by a click or Esc."""
+    dialog = QtWidgets.QDialog(parent)
+    dialog.setWindowTitle(caption or "Picture")
+    dialog.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+
+    screen = (parent.screen() if parent is not None else None) or (
+        QtGui.QGuiApplication.primaryScreen()
+    )
+    room = screen.availableGeometry().size() * PREVIEW_SCREEN_SHARE
+    label = QtWidgets.QLabel(dialog)
+    label.setPixmap(
+        fitted(pixmap, room.width(), room.height(), dialog.devicePixelRatioF())
+    )
+    label.mouseReleaseEvent = lambda event: dialog.accept()
+
+    layout = QtWidgets.QVBoxLayout(dialog)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.addWidget(label)
+    dialog.show()
+
+    return dialog
+
+
 class FeedPostCard(HasTraits):
-    """One post's card, lead or compact."""
+    """One post's card, lead or compact; a lead card with two pictures shows
+    them side by side."""
 
     #: The post shown.
     post = Instance(FeedPost)
@@ -400,6 +560,10 @@ class FeedPostCard(HasTraits):
     #: The loaded picture.
     _picture = Any()
 
+    #: A lead card's two pictures, and their loaded pixmaps.
+    _pair = Any()
+    _pair_pixmaps = Dict(Int, Any)
+
     def create(self, parent):
         """Build the card."""
         post = self.post
@@ -418,6 +582,11 @@ class FeedPostCard(HasTraits):
         layout.setContentsMargins(2 * GRID, 2 * GRID, 2 * GRID, GRID + GRID // 2)
         layout.setSpacing(GRID)
 
+        pair = self.lead and len(post.images) == 2
+
+        if pair:
+            layout.addWidget(self._create_pair())
+
         if self.lead:
             layout.addWidget(self._create_meta())
             layout.addWidget(self._create_title(LEAD_TITLE_LINES, LEAD_TITLE_POINTS))
@@ -431,7 +600,11 @@ class FeedPostCard(HasTraits):
 
         self._render_links()
 
-        if post.image:
+        if pair:
+            for index, (src, _caption, _alt) in enumerate(post.images):
+                thumbnail_loader().request(src, partial(self._show_pair_picture, index))
+
+        elif post.image:
             self._show_loading()
             thumbnail_loader().request(post.image, self._show_picture)
 
@@ -449,6 +622,8 @@ class FeedPostCard(HasTraits):
             _link_labels=[],
             _thumbnail=None,
             _teaser=None,
+            _pair=None,
+            _pair_pixmaps={},
         )
 
     # ------------------------------------------------------------------ #
@@ -604,6 +779,34 @@ class FeedPostCard(HasTraits):
 
         else:
             self.controller.open_link(href)
+
+    def _create_pair(self):
+        images = self.post.images
+        self._pair = _PicturePair(
+            [caption for _src, caption, _alt in images],
+            [alt for _src, _caption, alt in images],
+            self.control,
+        )
+        self._pair.picture_clicked.connect(self._preview_picture)
+
+        return self._pair
+
+    def _show_pair_picture(self, index, pixmap):
+
+        if self._pair is not None and pixmap is not None:
+            self._pair_pixmaps[index] = pixmap
+            self._pair.set_picture(index, pixmap)
+
+    def _preview_picture(self, index):
+        """The picture larger; the post's link while it is still loading."""
+        pixmap = self._pair_pixmaps.get(index)
+
+        if pixmap is None:
+            self._open_link(READ_MORE_HREF)
+
+            return
+
+        show_picture_preview(pixmap, self.post.images[index][1], self.control.window())
 
     def _toggle(self):
         if self.controller is not None and self.post is not None:
