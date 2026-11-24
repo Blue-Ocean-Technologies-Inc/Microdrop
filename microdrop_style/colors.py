@@ -64,3 +64,10 @@ GREY = {
 
 BLACK = "#000000"
 WHITE = "#FFFFFF"
+
+# The Sci-Bots brand palette, by its names. Black and White are BLACK and
+# WHITE above; the others that already had a value here name it.
+CLOVER = PRIMARY_COLOR
+SPRING_RAIN = "#A0CFA5"
+CARBON = GREY["dark"]
+ALTO = GREY["light"]
