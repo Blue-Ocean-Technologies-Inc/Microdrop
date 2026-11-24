@@ -26,7 +26,6 @@ from notifications.controllers.notifications_controller import NotificationsCont
 from .ux_consts import (
     TOAST_LIMIT,
     TOAST_TICK_MS,
-    TOAST_TIMEOUT_MS,
     HelpAction,
     SnoozeAction,
 )
@@ -103,7 +102,8 @@ class ToastStackController(HasTraits):
     A toast shows for each new (or newly unread) notification while the
     drawer is closed, at most TOAST_LIMIT at once; the rest go straight to
     the bell, counted as the stack's overflow. Info and success toasts leave
-    after TOAST_TIMEOUT_MS of not being hovered; sticky ones stay.
+    after the settings' timeout of not being hovered, if the settings say
+    toasts time out; sticky ones stay.
     """
 
     #: The drawer's model: its centre, toasts and open state.
@@ -155,7 +155,7 @@ class ToastStackController(HasTraits):
         item = toasts.find(entry)
 
         if item is not None and not item.leaving:
-            item.remaining_ms = TOAST_TIMEOUT_MS
+            item.remaining_ms = toasts.settings.timeout_ms
 
             return
 
@@ -166,15 +166,29 @@ class ToastStackController(HasTraits):
 
             return
 
-        toasts.items.append(ToastItem(entry=entry))
+        toasts.items.append(
+            ToastItem(entry=entry, remaining_ms=toasts.settings.timeout_ms)
+        )
         self._start_timer()
 
     @observe("pane_model:center:repeated")
     def _refresh_repeat(self, event):
-        item = self.pane_model.toasts.find(event.new)
+        toasts = self.pane_model.toasts
+        item = toasts.find(event.new)
 
         if item is not None and not item.leaving:
-            item.remaining_ms = TOAST_TIMEOUT_MS
+            item.remaining_ms = toasts.settings.timeout_ms
+
+    @observe("pane_model:toasts:settings:[auto_dismiss, auto_dismiss_seconds]")
+    def _apply_settings(self, event):
+        """Applies to the toasts showing: each counts down afresh, or stays."""
+        toasts = self.pane_model.toasts
+
+        for item in toasts.items:
+            if not item.leaving:
+                item.remaining_ms = toasts.settings.timeout_ms
+
+        self._start_timer()
 
     @observe("pane_model:is_open")
     def _clear_when_drawer_opens(self, event):
@@ -222,8 +236,10 @@ class ToastStackController(HasTraits):
 
         self._last_tick = now
 
-        for item in self.pane_model.toasts.items:
-            if item.leaving or item.entry.sticky:
+        toasts = self.pane_model.toasts
+
+        for item in toasts.items:
+            if item.leaving or not toasts.times_out(item):
                 continue
 
             counting = True

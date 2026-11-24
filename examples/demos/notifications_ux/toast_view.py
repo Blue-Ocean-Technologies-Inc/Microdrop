@@ -32,7 +32,6 @@ from .ux_consts import (
     TOAST_GAP,
     TOAST_MARGIN,
     TOAST_RESTACK_MS,
-    TOAST_TIMEOUT_MS,
     TOAST_WIDTH,
 )
 from .ux_controllers import ToastStackController
@@ -248,13 +247,19 @@ class ToastStackView(HasTraits):
         if widget is not None:
             widget.card.set_progress(self._progress(event.object))
 
+    @observe("pane_model:toasts:settings:[auto_dismiss, auto_dismiss_seconds]")
+    def _show_all_countdowns(self, event):
+        """The countdowns follow a change of the settings at once."""
+
+        for item, widget in self._widgets.items():
+            widget.card.set_progress(self._progress(item))
+
     @observe("pane_model:toasts:overflow")
     def _show_overflow(self, event):
         self._restack(animate=True)
 
-    @staticmethod
-    def _progress(item):
-        return None if item.entry.sticky else item.remaining_ms / TOAST_TIMEOUT_MS
+    def _progress(self, item):
+        return self.pane_model.toasts.progress(item)
 
     def _sync(self, animate):
         """Make a widget for each new toast, drop those of removed ones."""

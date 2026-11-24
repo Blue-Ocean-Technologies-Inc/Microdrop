@@ -214,6 +214,24 @@ class UxNotificationCenter(NotificationCenter):
         super().clear()
 
 
+class ToastSettings(HasTraits):
+    """How toasts behave: the user's choice, a sketch of what a preferences
+    helper would hold once ported."""
+
+    #: Info and success toasts leave on their own; off, every toast stays
+    #: until dismissed or acted on, and no countdown is drawn.
+    auto_dismiss = Bool(True)
+
+    #: Seconds an info or success toast stays, hover not counted.
+    auto_dismiss_seconds = Int(TOAST_TIMEOUT_MS // 1000)
+
+    #: ``auto_dismiss_seconds`` in milliseconds.
+    timeout_ms = Property(Int, observe="auto_dismiss_seconds")
+
+    def _get_timeout_ms(self):
+        return self.auto_dismiss_seconds * 1000
+
+
 class ToastItem(HasTraits):
     """One toast on screen."""
 
@@ -240,6 +258,9 @@ class ToastStackModel(HasTraits):
 
     items = List(Instance(ToastItem))
 
+    #: Whether and when toasts leave on their own.
+    settings = Instance(ToastSettings, ())
+
     #: Toasts that did not fit, gone straight to the bell since the stack
     #: was last empty.
     overflow = Int(0)
@@ -249,6 +270,19 @@ class ToastStackModel(HasTraits):
 
     def _get_entries_shown(self):
         return [item.entry for item in self.items]
+
+    def times_out(self, item):
+        """Whether ``item`` leaves on its own: an info or success toast,
+        while the settings say toasts time out."""
+        return self.settings.auto_dismiss and not item.entry.sticky
+
+    def progress(self, item):
+        """``item``'s time left, 0-1; None when it does not time out."""
+
+        if not self.times_out(item):
+            return None
+
+        return item.remaining_ms / max(self.settings.timeout_ms, 1)
 
     def find(self, entry):
         """The toast showing ``entry``, or None."""

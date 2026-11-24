@@ -23,7 +23,7 @@ from pyface.action.api import Action
 from pyface.action.schema.schema_addition import SchemaAddition
 from pyface.api import GUI
 from pyface.tasks.action.api import SGroup, SMenu
-from traits.api import Any, Bool, List, observe
+from traits.api import Any, Bool, Instance, List, observe
 
 # Microdrop package imports.
 from examples.demos.notifications_pane.sci_bots_feed_demo import (
@@ -36,6 +36,7 @@ from plugin_management.plugin import PluginManagementPlugin
 
 # Local imports.
 from . import fake_panes, scenarios
+from .ux_models import ToastSettings
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -113,6 +114,24 @@ class SciBotsFeedPlugin(Plugin):
         return [section]
 
 
+class AutoDismissAction(Action):
+    """A checkable menu item kept in step with the toast settings."""
+
+    name = "Toasts time out automatically"
+    style = "toggle"
+
+    #: The settings it shows and sets.
+    settings = Instance(ToastSettings)
+
+    def perform(self, event=None):
+        # A toggle action is already flipped when it is performed.
+        self.settings.auto_dismiss = self.checked
+
+    @observe("settings.auto_dismiss")
+    def _follow_settings(self, event):
+        self.checked = self.settings.auto_dismiss
+
+
 class _MenuActions:
     """Takes ``addAction(text, callable)`` calls as a QToolBar does, so the
     notifications_pane demo's toolbar actions can fill a menu group."""
@@ -138,6 +157,9 @@ class NotificationsDemoPlugin(Plugin):
 
     #: Answers the cards' buttons.
     _responder = Any()
+
+    #: The open Notification settings window, if any.
+    _settings_ui = Any()
 
     def start(self):
         """Post the session's history before the window is up: no toasts."""
@@ -211,6 +233,11 @@ class NotificationsDemoPlugin(Plugin):
             ),
             SGroup(*self._feed_actions(), id="notifications_ux_demo.feed"),
             SGroup(
+                AutoDismissAction(settings=self._toast_settings),
+                action("Notification settings…", self._open_settings),
+                id="notifications_ux_demo.settings",
+            ),
+            SGroup(
                 action("Toggle theme", self._toggle_theme),
                 action("Reset", self._reset, "Clear everything and start over"),
                 id="notifications_ux_demo.session",
@@ -229,6 +256,25 @@ class NotificationsDemoPlugin(Plugin):
         add_feed_actions(menu, section, getattr(window, "control", None))
 
         return sorted(menu.actions, key=lambda item: item.name != FEED_CREATOR_ACTION)
+
+    @property
+    def _toast_settings(self):
+        return self._notifications.controller.pane_model.toasts.settings
+
+    def _open_settings(self):
+        """The toast settings, as a future preferences tab would show them;
+        one window at a time."""
+        from .toast_settings_view import ToastSettingsView
+
+        if self._settings_ui is not None and self._settings_ui.control is not None:
+            self._settings_ui.control.raise_()
+
+            return
+
+        window = self.application.active_window
+        self._settings_ui = self._toast_settings.edit_traits(
+            view=ToastSettingsView, parent=getattr(window, "control", None)
+        )
 
     def _toggle_theme(self):
         from microdrop_style.helpers import is_dark_mode
