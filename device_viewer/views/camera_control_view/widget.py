@@ -292,6 +292,9 @@ class CameraControlWidget(QWidget):
         self.record_toggle_button.clicked.connect(self.toggle_recording)
         self.camera_refresh_button.clicked.connect(self.initialize_camera_list)
         self.model.observe(self.on_mode_changed, "mode")
+        self.camera_device.observe(
+            self._report_native_controls_problem, "native_controls_problem"
+        )
         self.combo_cameras.currentIndexChanged.connect(self.on_camera_changed)
         self.combo_resolutions.currentIndexChanged.connect(self.on_resolution_changed)
 
@@ -729,6 +732,24 @@ class CameraControlWidget(QWidget):
 
         if was_running and camera:
             self.turn_on_camera()
+
+    def _report_native_controls_problem(self, event):
+        """Tell the user why the bound camera has no Camera Properties (a
+        stalled driver): once per bind, which resets the message."""
+        message = event.new
+
+        if not message:
+            return
+
+        # Deferred to the event loop, out of the bind or lookup that set it.
+        QTimer.singleShot(
+            0,
+            lambda: error(
+                None,
+                title="Camera Properties unavailable",
+                message=message,
+            ),
+        )
 
     def populate_resolutions(self, allow_strict_mode=True):
         """Populate the resolution combo box from the current camera's formats.
