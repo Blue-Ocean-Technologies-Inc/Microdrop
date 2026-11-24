@@ -38,6 +38,34 @@
       "title": "FeedDocument",
       "type": "object"
     },
+    "FeedImage": {
+      "description": "One of a post's pictures, with its caption.",
+      "properties": {
+        "src": {
+          "description": "A path relative to the feed file, or an https URL.",
+          "minLength": 1,
+          "title": "Src",
+          "type": "string"
+        },
+        "caption": {
+          "default": "",
+          "description": "A word or two beneath it, e.g. \"Concept\".",
+          "title": "Caption",
+          "type": "string"
+        },
+        "alt": {
+          "default": "",
+          "description": "What it shows, for its tooltip.",
+          "title": "Alt",
+          "type": "string"
+        }
+      },
+      "required": [
+        "src"
+      ],
+      "title": "FeedImage",
+      "type": "object"
+    },
     "FeedPostMessage": {
       "description": "One feed post, as pushed or as written in a feed file.",
       "properties": {
@@ -105,6 +133,16 @@
           "description": "Optional picture: a path relative to the feed file, or an https URL. A wide picture shows as a banner.",
           "title": "Image",
           "type": "string"
+        },
+        "images": {
+          "default": [],
+          "description": "Up to two captioned pictures, shown side by side on a top story. A post with only image has that one here.",
+          "items": {
+            "$ref": "#/$defs/FeedImage"
+          },
+          "maxItems": 2,
+          "title": "Images",
+          "type": "array"
         },
         "pinned": {
           "default": false,

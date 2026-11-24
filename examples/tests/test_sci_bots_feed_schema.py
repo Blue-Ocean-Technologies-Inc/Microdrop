@@ -72,6 +72,11 @@ def test_unknown_keys_are_ignored():
         ({"title": ""}, "title: must not be empty"),
         ({"date": "21 Nov"}, 'date: must be a date like "2026-11-21"'),
         ({"image": "http://x.com/a.png"}, "image: must be a file next to the feed"),
+        (
+            {"images": [{"src": "http://x.com/a.png"}]},
+            "images.0.src: must be a file next to the feed",
+        ),
+        ({"images": [{"src": "a.png"}] * 3}, "images: List should have at most 2"),
     ],
 )
 def test_a_bad_field_is_rejected_in_one_line_naming_post_and_field(fields, expected):
@@ -81,6 +86,26 @@ def test_a_bad_field_is_rejected_in_one_line_naming_post_and_field(fields, expec
     assert len(parsed.errors) == 1
     assert parsed.errors[0].startswith("Post 2 ('bad'): ")
     assert expected in parsed.errors[0]
+
+
+def test_two_captioned_images_lead_and_the_first_is_the_image():
+    post = FeedPostMessage.model_validate(
+        _post(
+            images=[
+                {"src": "concept.jpg", "caption": "Concept"},
+                {"src": "https://x.com/real.jpg", "caption": "The real thing"},
+            ]
+        )
+    )
+
+    assert [image.caption for image in post.images] == ["Concept", "The real thing"]
+    assert post.image == "concept.jpg"
+
+
+def test_a_single_image_reads_as_a_one_picture_list():
+    post = FeedPostMessage.model_validate(_post(image="pic.png"))
+
+    assert [(image.src, image.caption) for image in post.images] == [("pic.png", "")]
 
 
 def test_a_missing_title_is_named_by_index():

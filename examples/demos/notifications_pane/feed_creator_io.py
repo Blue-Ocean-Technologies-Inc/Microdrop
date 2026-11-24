@@ -44,6 +44,7 @@ POST_KEY_ORDER = (
     "summary_html",
     "url",
     "image",
+    "images",
     "expires",
 )
 
@@ -60,6 +61,7 @@ def editable_from_message(message):
         summary_html=message.summary_html,
         url=message.url,
         image=message.image,
+        images=[image.model_dump(exclude_defaults=True) for image in message.images],
         pinned=message.pinned,
         source=message.source,
         has_expires=message.expires is not None,
@@ -81,13 +83,14 @@ def post_data(post):
         "summary_html": post.summary_html,
         "url": post.url,
         "image": post.image,
+        "images": post.images if len(post.images) > 1 else [],
         "expires": post.expires.isoformat() if post.has_expires else None,
     }
 
     return {
         key: values[key]
         for key in POST_KEY_ORDER
-        if values[key] not in ("", False, None)
+        if values[key] not in ("", False, None, [])
     }
 
 

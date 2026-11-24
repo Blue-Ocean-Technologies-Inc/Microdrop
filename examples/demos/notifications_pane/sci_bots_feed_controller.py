@@ -22,6 +22,7 @@ reported, and logged, without dropping the good ones.
 
 # Standard library imports.
 import webbrowser
+from functools import partial
 from pathlib import Path
 from typing import NamedTuple
 
@@ -77,10 +78,22 @@ def feed_post_from_message(message, origin=ORIGIN_SOURCE):
         summary_html=sanitise_summary_html(message.summary_html),
         url=message.url,
         image=message.image,
+        images=[(image.src, image.caption, image.alt) for image in message.images],
         pinned=message.pinned,
         source_label=message.source,
         expires=message.expires,
         origin=origin,
+    )
+
+
+def with_resolved_pictures(message, resolve):
+    """``message`` with its picture paths passed through ``resolve``."""
+    images = [
+        image.model_copy(update={"src": resolve(image.src)}) for image in message.images
+    ]
+
+    return message.model_copy(
+        update={"image": resolve(message.image), "images": images}
     )
 
 
@@ -133,9 +146,8 @@ class SciBotsFeedController(Controller):
             problems.extend(parsed.errors)
 
             for message in parsed.posts:
-                image = source.resolve_image(message.image)
                 messages.setdefault(
-                    message.id, message.model_copy(update={"image": image})
+                    message.id, with_resolved_pictures(message, source.resolve_image)
                 )
 
         self._source_messages = messages
@@ -168,8 +180,9 @@ class SciBotsFeedController(Controller):
             (updated if known else added).append(message.id)
 
             if base_dir is not None:
-                image = resolve_image_path(message.image, base_dir)
-                message = message.model_copy(update={"image": image})
+                message = with_resolved_pictures(
+                    message, partial(resolve_image_path, base_dir=base_dir)
+                )
 
             self._pushed_messages[message.id] = message
             self._removed_ids.discard(message.id)

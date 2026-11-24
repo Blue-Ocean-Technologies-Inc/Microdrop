@@ -22,6 +22,7 @@ from traits.api import (
     Bool,
     Button,
     Date,
+    Dict,
     Enum,
     File,
     HasTraits,
@@ -85,6 +86,10 @@ class EditablePost(HasTraits):
 
     #: A file path or an https address.
     image = Str()
+
+    #: The post's captioned pictures as written in the feed file, kept as
+    #: they are: the form does not edit them yet.
+    images = List(Dict)
 
     pinned = Bool(False)
 

@@ -70,6 +70,9 @@ QUIET_KEY_PREFIXES = ("$", "_")
 #: Characters of the url+title digest used as a derived post id.
 DERIVED_ID_LENGTH = 12
 
+#: Pictures a post shows side by side, at most.
+MAX_POST_IMAGES = 2
+
 #: The payload models build their validators on first use, not on import,
 #: as notifications.consts does. Unknown keys are dropped (and noted).
 _FEED_MODEL_CONFIG = ConfigDict(
@@ -101,6 +104,37 @@ def derive_post_id(url, title):
     digest = hashlib.sha1(f"{url}\n{title}".encode()).hexdigest()
 
     return digest[:DERIVED_ID_LENGTH]
+
+
+def check_picture(picture):
+    """``picture`` if it is a path (relative to the feed) or an https URL."""
+    scheme = urlparse(picture).scheme.lower()
+
+    # One letter is a Windows drive, not a scheme.
+    if len(scheme) > 1 and scheme != "https":
+        raise ValueError(
+            "must be a file next to the feed or a web address starting with https://"
+        )
+
+    return picture
+
+
+class FeedImage(BaseModel):
+    """One of a post's pictures, with its caption."""
+
+    model_config = _FEED_MODEL_CONFIG
+
+    src: str = Field(
+        min_length=1,
+        description="A path relative to the feed file, or an https URL.",
+    )
+    caption: str = Field("", description='A word or two beneath it, e.g. "Concept".')
+    alt: str = Field("", description="What it shows, for its tooltip.")
+
+    @field_validator("src")
+    @classmethod
+    def _check_src(cls, src):
+        return check_picture(src)
 
 
 class FeedPostMessage(BaseModel):
@@ -142,6 +176,12 @@ class FeedPostMessage(BaseModel):
         "",
         description="Optional picture: a path relative to the feed file, or "
         "an https URL. A wide picture shows as a banner.",
+    )
+    images: list[FeedImage] = Field(
+        [],
+        max_length=MAX_POST_IMAGES,
+        description="Up to two captioned pictures, shown side by side on a "
+        "top story. A post with only image has that one here.",
     )
     pinned: bool = Field(
         False, description="Pinned posts come first, whatever their date."
@@ -190,21 +230,21 @@ class FeedPostMessage(BaseModel):
     @field_validator("image")
     @classmethod
     def _check_image(cls, image):
-        scheme = urlparse(image).scheme.lower()
-
-        # One letter is a Windows drive, not a scheme.
-        if len(scheme) > 1 and scheme != "https":
-            raise ValueError(
-                "must be a file next to the feed or a web address starting "
-                "with https://"
-            )
-
-        return image
+        return check_picture(image)
 
     @model_validator(mode="after")
-    def _derive_id(self):
+    def _derive_id_and_pair_pictures(self):
+        """Derive a missing id; ``image`` and ``images`` each fill in the
+        other, so either reads as the post's pictures."""
+
         if not self.id:
             self.id = derive_post_id(self.url, self.title)
+
+        if self.image and not self.images:
+            self.images = [FeedImage(src=self.image)]
+
+        elif self.images and not self.image:
+            self.image = self.images[0].src
 
         return self
 

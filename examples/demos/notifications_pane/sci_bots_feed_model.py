@@ -32,6 +32,7 @@ from traits.api import (
     List,
     Property,
     Str,
+    Tuple,
 )
 
 # Local imports.
@@ -121,6 +122,10 @@ class FeedPost(HasTraits):
 
     #: Its picture: an absolute path, an https URL, or "" for none.
     image = Str()
+
+    #: Its pictures as ``(src, caption, alt)``, at most two; a post with
+    #: only ``image`` has that one.
+    images = List(Tuple(Str, Str, Str))
 
     #: Shown before the unpinned posts, whatever its date.
     pinned = Bool(False)
