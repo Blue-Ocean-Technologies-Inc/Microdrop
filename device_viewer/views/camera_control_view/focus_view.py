@@ -91,6 +91,7 @@ camera_focus_view = View(
         ),
         # Hidden for a camera with image controls but no focus.
         visible_when="available",
+        enabled_when="not loading",
     ),
     # Resizable, or TraitsUI fixes the panel at its build-time size, before
     # the sidebar's text-button style makes the Autofocus button taller.

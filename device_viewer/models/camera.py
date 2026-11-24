@@ -96,6 +96,10 @@ class CameraFocusModel(HasTraits):
     #: The autofocus button's text, which shows a running sweep.
     autofocus_label = Property(Str, observe="autofocusing")
 
+    #: CameraModel.camera_properties_loading, top-level here for the focus
+    #: row's ``enabled_when``.
+    loading = Bool(False)
+
     def _get_position_label(self):
         if self.raw_position is None:
             return ""
@@ -229,6 +233,10 @@ class CameraModel(HasTraits):
 
     #: Puts every image control back to the camera's default.
     reset_image_settings = Button("Defaults")
+
+    #: The selected camera's properties (focus, image controls) are still
+    #: being looked up; until then the panel shows neither.
+    camera_properties_loading = Bool(False)
 
     #: v4l2 node the auto-exposure fallback last switched to auto; None while
     #: Qt (or manual exposure) drives the camera's exposure.
