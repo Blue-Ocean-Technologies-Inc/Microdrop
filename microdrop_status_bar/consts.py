@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 # This module's package.
-PKG = '.'.join(__name__.split('.')[:-1])
+PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 #: Extension-point id: QWidget instances to show in the app status bar.
@@ -30,3 +30,4 @@ STATUS_BAR_CONTENTS_MARGINS = (30, 0, 30, 0)
 ICON_PRIORITY_DEFAULT = 0
 ICON_PRIORITY_LEFT = -1
 ICON_PRIORITY_LEFTMOST = -2
+ICON_PRIORITY_RIGHTMOST = 2

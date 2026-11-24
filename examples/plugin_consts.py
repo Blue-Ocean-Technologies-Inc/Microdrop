@@ -31,6 +31,7 @@ from microdrop_application.plugin import MicrodropPlugin
 from microdrop_status_bar.plugin import StatusBarPlugin
 from mock_dropbot_controller.plugin import MockDropbotControllerPlugin
 from mock_dropbot_status.plugin import MockDropbotStatusPlugin
+from notifications.plugin import NotificationsPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
@@ -94,6 +95,8 @@ FRONTEND_PLUGINS = [
     MicrodropPlugin,
     TasksPlugin,
     StatusBarPlugin,
+    # Early, so its log handler and load-record watcher see what follows.
+    NotificationsPlugin,
     LoggerUIPlugin,
     PluginManagementPlugin,
     AppUpdatesPlugin,
