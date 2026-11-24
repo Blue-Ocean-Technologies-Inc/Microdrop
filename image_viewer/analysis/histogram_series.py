@@ -21,7 +21,6 @@ import math
 
 # Third-party imports.
 import numpy as np
-from scipy import stats
 
 # Local imports.
 from .consts import (
@@ -151,6 +150,8 @@ def fit_distribution(pixels, kind):
     The log-normal is fitted with its location pinned at 0, so its μ
     and σ are the mean and standard deviation of ln(intensity) and its
     median is e^μ."""
+    from scipy import stats
+
     values = np.asarray(pixels, dtype=float)
 
     if values.size < HISTOGRAM_FIT_MIN_PIXELS:
