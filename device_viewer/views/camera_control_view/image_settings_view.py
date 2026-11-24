@@ -49,27 +49,31 @@ image_setting_row_view = View(
 )
 
 camera_image_settings_view = View(
-    # Disabled whenever shown, so it reads as muted text.
+    # One outer group: a View holding only sibling groups shows them as
+    # notebook tabs (both named "Group"), and visible_when cannot hide a tab.
     VGroup(
-        Label(CAMERA_PROPERTIES_LOADING_TEXT),
-        visible_when="camera_properties_loading",
-        enabled_when="not camera_properties_loading",
-    ),
-    VGroup(
-        UItem(
-            "image_settings",
-            # Not scrollable: the sidebar scrolls, and a nested scroll area
-            # would squeeze the rows to a sliver.
-            editor=ListEditor(
-                style="custom",
-                mutable=False,
-                scrollable=False,
-                editor=InstanceEditor(view=image_setting_row_view),
-            ),
+        # Disabled whenever shown, so it reads as muted text.
+        VGroup(
+            Label(CAMERA_PROPERTIES_LOADING_TEXT),
+            visible_when="camera_properties_loading",
+            enabled_when="not camera_properties_loading",
         ),
-        HGroup(spring, UItem("reset_image_settings")),
-        visible_when="image_settings",
-        enabled_when="not camera_properties_loading",
+        VGroup(
+            UItem(
+                "image_settings",
+                # Not scrollable: the sidebar scrolls, and a nested scroll
+                # area would squeeze the rows to a sliver.
+                editor=ListEditor(
+                    style="custom",
+                    mutable=False,
+                    scrollable=False,
+                    editor=InstanceEditor(view=image_setting_row_view),
+                ),
+            ),
+            HGroup(spring, UItem("reset_image_settings")),
+            visible_when="image_settings",
+            enabled_when="not camera_properties_loading",
+        ),
     ),
     # Resizable, or TraitsUI fixes the panel at its build-time size: the
     # rows come and go with the selected camera.
