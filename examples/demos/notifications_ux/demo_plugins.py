@@ -74,6 +74,18 @@ class StandInPanesPlugin(Plugin):
 
         return [TaskExtension(task_id=TASK_ID, dock_pane_factories=factories)]
 
+    @observe("application:application_initialized")
+    def _fill_window_with_panes(self, event):
+        """Hide the task's empty central canvas: the real device viewer is a
+        dock pane too, and the canvas would show as a blank band between it
+        and the right-hand panes. Hidden, it leaves the docks all the room."""
+
+        for window in self.application.windows:
+            central = window.control.centralWidget()
+
+            if central is not None:
+                central.hide()
+
 
 class SciBotsFeedPlugin(Plugin):
     """Contributes the Sci-Bots Feed section of the notifications_pane demo."""
