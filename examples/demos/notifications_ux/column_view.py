@@ -35,13 +35,14 @@ from notifications.consts import NotificationSection
 from .column_parts import CardColumn, fit_item_views
 from .drawer_view import SECTIONS_OBJECT_NAME, DrawerHeader, _ContentsBinding
 from .feed_column import FeedColumn
-from .publishers import NewsSection
+from .news_models import NewsSection
 from .section_view import HEADER_HEIGHT, SectionHeader
 from .ux_consts import (
     ATTENTION_SECTION_ID,
     DEFAULT_SECTION_STYLE,
     HISTORY_SECTION_ID,
     LOAD_AHEAD_PX,
+    NEWS_SECTION_ID,
     REVEAL_SCROLL_MS,
     SECTION_ANIMATION_MS,
     SECTION_STYLES,
@@ -117,9 +118,7 @@ class ColumnSection(QtWidgets.QWidget):
 
         self.section = section
         self.pane_model = pane_model
-        self.style_ = getattr(section, "section_style", None) or SECTION_STYLES.get(
-            section.id, DEFAULT_SECTION_STYLE
-        )
+        self.style_ = SECTION_STYLES.get(section.id, DEFAULT_SECTION_STYLE)
 
         #: What was built for it: a widget, or a TraitsUI UI around one.
         self.contents = None
@@ -396,7 +395,7 @@ class ColumnDrawerContents(QtWidgets.QWidget):
         """Scroll to ``entry``'s card, opening its section, and highlight
         it."""
         if entry.feed_post_id:
-            section_id = entry.feed_section_id
+            section_id = NEWS_SECTION_ID
 
         elif entry.needs_attention:
             section_id = ATTENTION_SECTION_ID

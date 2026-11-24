@@ -36,12 +36,14 @@ from notifications.views.formatting import format_exact_time, format_preview
 # Microdrop style imports.
 from microdrop_style.colors import INFO_COLOR
 from microdrop_style.icons.icons import ICON_CLOSE
+from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
 
 # Local imports.
 from .card_parts import ClampedLabel, NewDot, meta_text
 from .ux_consts import (
     CARD_BODY_LINES,
     HIGHLIGHT_MS,
+    NEWS_ACCENT,
     HelpAction,
 )
 from .view_styles import (
@@ -54,9 +56,9 @@ from .view_styles import (
     link_button_style,
     muted_text,
     primary_button_style,
-    publisher_badge,
     quiet_button_style,
     rounded_path,
+    scaled_logo,
     text_font,
     with_alpha,
 )
@@ -82,12 +84,8 @@ _PALETTE_EVENTS = (
 
 
 def _accent(entry):
-    """The stripe's colour: the severity's, or a news post's publisher's."""
-
-    if entry.feed_post_id:
-        return entry.feed_accent
-
-    return SEVERITY_COLORS[entry.severity]
+    """The stripe's colour: the severity's, or News's for a new post."""
+    return NEWS_ACCENT if entry.feed_post_id else SEVERITY_COLORS[entry.severity]
 
 
 #: The cards' shared style sheet, by palette.
@@ -307,16 +305,13 @@ class NotificationCard(QtWidgets.QFrame):
         entry = self.entry
         palette = self.palette()
 
+        # A new post's toast: News's brand mark, at its own width.
         if entry.feed_post_id:
-            self._glyph.setPixmap(
-                publisher_badge(
-                    entry.feed_logo,
-                    entry.feed_monogram,
-                    entry.feed_accent,
-                    GLYPH_SIZE + 2,
-                    self.devicePixelRatioF(),
-                )
+            logo = scaled_logo(
+                BLUE_OCEAN_SCI_BOTS_LOGO, GLYPH_SIZE + 4, self.devicePixelRatioF()
             )
+            self._glyph.setFixedWidth(int(logo.deviceIndependentSize().width()))
+            self._glyph.setPixmap(logo)
 
         else:
             self._glyph.setText(SEVERITY_GLYPHS[entry.severity])

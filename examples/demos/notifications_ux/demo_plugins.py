@@ -33,8 +33,7 @@ from plugin_management.plugin import PluginManagementPlugin
 # Local imports.
 from . import fake_panes, scenarios
 from .news_actions import NewsFeedActions
-from .publishers import FeedAlertWatcher, NewsPublisher, default_publishers
-from .ux_consts import NEWS_SECTION_ORDER
+from .news_models import FeedAlertWatcher, make_news_section
 from .ux_models import ToastSettings
 
 # Logger import.
@@ -94,24 +93,15 @@ class StandInPanesPlugin(Plugin):
 
 
 class NewsPlugin(Plugin):
-    """Contributes one news section per publisher, in order."""
+    """Contributes the News section."""
 
     id = NEWS_PLUGIN_ID
     name = "News Plugin (demo)"
 
-    #: Who publishes news, in the drawer's order.
-    publishers = List(Instance(NewsPublisher))
-
     sections = List(contributes_to=NOTIFICATION_SECTIONS)
 
-    def _publishers_default(self):
-        return default_publishers()
-
     def _sections_default(self):
-        return [
-            publisher.make_section(NEWS_SECTION_ORDER + position)
-            for position, publisher in enumerate(self.publishers)
-        ]
+        return [make_news_section()]
 
 
 class AutoDismissAction(Action):
@@ -147,11 +137,11 @@ class NotificationsDemoPlugin(Plugin):
     #: Answers the cards' buttons.
     _responder = Any()
 
-    #: Turn posts the news feeds gain into alerts: one per section.
-    _feed_watchers = List()
+    #: Turns posts the News feed gains into alerts.
+    _feed_watcher = Any()
 
-    #: Each news section's Demo submenu actions.
-    _news_actions = List()
+    #: The Demo menu's News actions.
+    _news_actions = Any()
 
     #: The open Notification settings window, if any.
     _settings_ui = Any()
@@ -169,18 +159,13 @@ class NotificationsDemoPlugin(Plugin):
         )
         scenarios.post_history(center, self._experiment_folder())
 
-        self._feed_watchers = [
-            FeedAlertWatcher(
-                section=section,
-                pane_model=controller.pane_model,
-                offer=self._notifications.toast_controller.offer,
-            )
-            for section in self._news_sections
-        ]
-        self._news_actions = [
-            NewsFeedActions(section=section, window=self._window_control)
-            for section in self._news_sections
-        ]
+        news = self.application.get_plugin(NEWS_PLUGIN_ID).sections[0]
+        self._feed_watcher = FeedAlertWatcher(
+            section=news,
+            pane_model=controller.pane_model,
+            offer=self._notifications.toast_controller.offer,
+        )
+        self._news_actions = NewsFeedActions(section=news, window=self._window_control)
 
     @observe("application:application_initialized")
     def _after_launch(self, event):
@@ -244,10 +229,7 @@ class NotificationsDemoPlugin(Plugin):
                 ),
                 id="notifications_ux_demo.notifications",
             ),
-            SGroup(
-                *[actions.menu() for actions in self._news_actions],
-                id="notifications_ux_demo.news",
-            ),
+            SGroup(*self._news_actions.actions(), id="notifications_ux_demo.news"),
             SGroup(
                 AutoDismissAction(settings=self._toast_settings),
                 action("Notification settings…", self._open_settings),
@@ -261,10 +243,6 @@ class NotificationsDemoPlugin(Plugin):
             id="Demo",
             name="&Demo",
         )
-
-    @property
-    def _news_sections(self):
-        return self.application.get_plugin(NEWS_PLUGIN_ID).sections
 
     def _window_control(self):
         window = self.application.active_window

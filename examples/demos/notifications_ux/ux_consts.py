@@ -31,7 +31,8 @@ from notifications.consts import (
 from plugin_management.consts import LOAD_STATUS_SECTION_ID
 
 # Microdrop style imports.
-from microdrop_style.colors import ACCENT_COLOR, INFO_COLOR
+from microdrop_style.colors import ACCENT_COLOR, INFO_COLOR, PRIMARY_COLOR
+from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
@@ -142,13 +143,18 @@ ATTENTION_SECTION_ID = f"{PKG}.attention"
 ATTENTION_SECTION_TITLE = "Needs attention"
 HISTORY_SECTION_TITLE = "Activity"
 
-#: The first news section's order (after Plugins); the next publishers'
-#: follow it. A news section's id starts with NEWS_SECTION_PREFIX.
+#: The News section: Blue Ocean Technologies' and Sci-Bots' combined feed.
+NEWS_SECTION_ID = f"{PKG}.news"
+NEWS_SECTION_TITLE = "News"
 NEWS_SECTION_ORDER = 10
-NEWS_SECTION_PREFIX = f"{PKG}.news."
 
-#: A news section's glyph when its publisher has no logo or monogram.
-NEWS_GLYPH = "newspaper"
+#: News's colour (the bell's and the toasts' stripe for new posts), and
+#: the height (px) of its header's brand mark.
+NEWS_ACCENT = PRIMARY_COLOR
+NEWS_LOGO_HEIGHT = 30
+
+#: Who a post is from when it does not say: the feed file is Sci-Bots'.
+NEWS_DEFAULT_SOURCE = "Sci-Bots"
 HISTORY_SECTION_ID = f"{PKG}.history"
 
 #: Sections sort by order: Needs attention first, the history last.
@@ -205,16 +211,17 @@ CARD_BODY_LINES = 2
 #: where WARNING_COLOR's yellow is not.
 ATTENTION_ACCENT = "#E8710A"
 
-#: A section's look: its glyph (a Material Symbols ligature) and accent
-#: colour; a logo (a picture's path) or a monogram shown instead of the
-#: glyph, if any; and the full name its header's tooltip gives.
-SectionStyle = namedtuple(
-    "SectionStyle", "glyph accent logo monogram name", defaults=("", "", "")
-)
+#: A section's look: its glyph (a Material Symbols ligature), accent
+#: colour, and a wide brand mark (a picture's path) shown instead of the
+#: glyph, if any.
+SectionStyle = namedtuple("SectionStyle", "glyph accent logo", defaults=("",))
 
 SECTION_STYLES = {
     ATTENTION_SECTION_ID: SectionStyle("priority_high", ATTENTION_ACCENT),
     LOAD_STATUS_SECTION_ID: SectionStyle("extension", ACCENT_COLOR),
+    NEWS_SECTION_ID: SectionStyle(
+        "newspaper", NEWS_ACCENT, str(BLUE_OCEAN_SCI_BOTS_LOGO)
+    ),
     HISTORY_SECTION_ID: SectionStyle("notifications", INFO_COLOR),
 }
 

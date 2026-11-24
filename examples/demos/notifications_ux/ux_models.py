@@ -86,12 +86,6 @@ class UxNotification(Notification):
     #: never listed in the centre; it toasts and counts on the bell.
     feed_post_id = Str()
 
-    #: The stand-in's news section, and its publisher's look.
-    feed_section_id = Str()
-    feed_accent = Str()
-    feed_logo = Str()
-    feed_monogram = Str()
-
     #: Whether it stays on screen as a toast until dismissed or acted on.
     sticky = Property(Bool, observe="severity, action, needs_attention")
 

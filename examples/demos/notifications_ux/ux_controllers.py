@@ -25,7 +25,7 @@ from notifications.controllers.notifications_controller import NotificationsCont
 
 # Local imports.
 from .ux_consts import (
-    NEWS_SECTION_PREFIX,
+    NEWS_SECTION_ID,
     QUIET_SUMMARY_SOURCE,
     TOAST_LIMIT,
     TOAST_TICK_MS,
@@ -105,27 +105,22 @@ class UxNotificationsController(NotificationsController):
     @observe("pane_model:sections:items:expanded")
     def _see_feed_when_expanded(self, event):
 
-        if event.object.id.startswith(NEWS_SECTION_PREFIX):
+        if event.object.id == NEWS_SECTION_ID:
             self._see_feed()
 
     def _see_feed(self):
-        """New news posts are seen once the drawer is open on their
-        expanded section: off the bell, still marked new; closing the
-        drawer lets go of them."""
+        """New posts are seen once the drawer is open on an expanded News:
+        off the bell, still marked new; closing the drawer lets go of
+        them."""
         model = self.pane_model
+        news = next((s for s in model.sections if s.id == NEWS_SECTION_ID), None)
 
-        if model.is_open:
-            open_ids = {
-                section.id
-                for section in model.sections
-                if section.id.startswith(NEWS_SECTION_PREFIX) and section.expanded
-            }
-
+        if model.is_open and news is not None and news.expanded:
             for entry in model.feed_alerts:
-                if entry.unread and entry.feed_section_id in open_ids:
+                if entry.unread:
                     entry.trait_set(unread=False, is_new=True)
 
-        else:
+        elif not model.is_open:
             model.feed_alerts = [entry for entry in model.feed_alerts if entry.unread]
 
 

@@ -38,59 +38,41 @@ PRIMARY_FILL_HOVER = PRIMARY_SHADE[500]
 PRIMARY_FILL_PRESSED = PRIMARY_SHADE[800]
 
 
-#: Publisher badges made so far, by what they show, size and pixel ratio.
-_BADGES = {}
+#: Logo pictures scaled so far, by path, height and pixel ratio.
+_LOGOS = {}
 
 
-def publisher_badge(logo, monogram, accent, size, ratio=1.0):
-    """A publisher's badge ``size`` px across: its logo (a picture's path)
-    on a light disc, which keeps a mark with dark parts legible on the dark
-    theme too; or, without a logo, ``monogram`` in white on an ``accent``
-    disc."""
-    key = (logo, monogram, accent, size, ratio)
-    badge = _BADGES.get(key)
+def scaled_logo(path, height, ratio=1.0):
+    """The picture at ``path`` ``height`` px tall at its own width, smoothly
+    scaled once and kept."""
+    key = (str(path), height, ratio)
+    logo = _LOGOS.get(key)
 
-    if badge is not None:
-        return badge
-
-    pixels = int(round(size * ratio))
-    disc = QtCore.QRectF(0, 0, pixels, pixels)
-    badge = QtGui.QPixmap(pixels, pixels)
-    badge.fill(QtCore.Qt.GlobalColor.transparent)
-
-    painter = QtGui.QPainter(badge)
-    painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-    painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
-    painter.setPen(QtCore.Qt.PenStyle.NoPen)
-
-    if logo:
-        painter.setBrush(QtGui.QColor(PRIMARY_SHADE[50]))
-        painter.drawEllipse(disc)
-
-        inset = pixels * 0.14
-        picture = QtGui.QPixmap(logo)
-        painter.drawPixmap(
-            disc.adjusted(inset, inset, -inset, -inset),
-            picture,
-            QtCore.QRectF(picture.rect()),
+    if logo is None:
+        logo = QtGui.QPixmap(str(path)).scaledToHeight(
+            int(round(height * ratio)),
+            QtCore.Qt.TransformationMode.SmoothTransformation,
         )
+        logo.setDevicePixelRatio(ratio)
+        _LOGOS[key] = logo
 
-    else:
-        painter.setBrush(QtGui.QColor(accent))
-        painter.drawEllipse(disc)
+    return logo
 
-        font = QtGui.QFont()
-        font.setPixelSize(max(int(pixels * 0.4), 6))
-        font.setBold(True)
-        painter.setFont(font)
-        painter.setPen(QtGui.QColor(WHITE))
-        painter.drawText(disc, QtCore.Qt.AlignmentFlag.AlignCenter, monogram)
 
+def tinted(pixmap, color):
+    """``pixmap``'s shape filled with ``color``: a one-colour mark that
+    reads on either theme."""
+    result = QtGui.QPixmap(pixmap.size())
+    result.setDevicePixelRatio(pixmap.devicePixelRatio())
+    result.fill(QtCore.Qt.GlobalColor.transparent)
+
+    painter = QtGui.QPainter(result)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(result.rect(), QtGui.QColor(color))
     painter.end()
-    badge.setDevicePixelRatio(ratio)
-    _BADGES[key] = badge
 
-    return badge
+    return result
 
 
 def is_dark(palette):

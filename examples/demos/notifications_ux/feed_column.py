@@ -8,7 +8,7 @@
 #
 # Thanks for using Microdrop open source!
 
-"""A news section's feed in the drawer's column: its status line, then one
+"""The News feed in the drawer's column: its status line, then one
 sub-section per group (Top stories, What's new, Newsletters, ...), each a
 header one level below the main ones that collapses and expands, showing
 the group's newest post and "Show N more".
@@ -48,7 +48,7 @@ from microdrop_style.icons.icons import ICON_CHEVRON_RIGHT, ICON_EXPAND_MORE
 
 # Local imports.
 from .card_parts import NEW_DOT_SIZE, NewDot
-from .publishers import NewsSection
+from .news_models import NewsSection
 from .ux_consts import (
     FEED_GROUP_PREVIEW,
     HIGHLIGHT_MS,
@@ -526,8 +526,7 @@ class FeedColumn(QtWidgets.QWidget):
         return [
             entry.feed_post_id
             for entry in self.pane_model.feed_alerts
-            if entry.feed_section_id == self.section.id
-            and (entry.unread or entry.is_new)
+            if entry.unread or entry.is_new
         ]
 
     def schedule_rebuild(self):

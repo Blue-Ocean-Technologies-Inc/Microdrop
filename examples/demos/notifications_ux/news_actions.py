@@ -8,19 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
-"""A news publisher's Demo submenu: its feed creator, reload, and pushes.
+"""The Demo menu's News actions: the feed creator, reload, and pushes.
 
-The same actions as the notifications_pane demo's feed toolbar, aimed at one
-publisher's section and feed file: the creator opens on that file and sends
-to that section.
+The same actions as the notifications_pane demo's feed toolbar, aimed at the
+News section: the creator opens on the feed file and sends to News.
 """
-
-# Standard library imports.
-from pathlib import Path
 
 # Enthought library imports.
 from pyface.action.api import Action
-from pyface.tasks.action.api import SMenu
 from traits.api import Callable, HasTraits, Instance, Int, List
 
 # Microdrop package imports.
@@ -29,16 +24,17 @@ from examples.demos.notifications_pane.sci_bots_feed_demo import (
     JSON_WILDCARD,
     SAMPLE_PUSH_POST,
 )
+from examples.demos.notifications_pane.sci_bots_feed_sources import DEFAULT_FEED_PATH
 from microdrop_application.dialogs.pyface_wrapper import file_dialog
 
 # Local imports.
-from .publishers import NewsSection
+from .news_models import NewsSection
 
 
 class NewsFeedActions(HasTraits):
-    """What the Demo menu does to one publisher's feed."""
+    """What the Demo menu does to the News feed."""
 
-    #: The publisher's section; its controller fills the feed.
+    #: The News section; its controller fills the feed.
     section = Instance(NewsSection)
 
     #: ``window()``: the main window's control, the dialogs' parent.
@@ -50,26 +46,21 @@ class NewsFeedActions(HasTraits):
     #: Sample posts pushed so far, for their ids.
     _pushed = Int(0)
 
-    def menu(self):
-        """The publisher's submenu."""
-        publisher = self.section.publisher
-
-        return SMenu(
+    def actions(self):
+        """The menu items, creator first."""
+        return [
             Action(name="Feed creator…", on_perform=self.open_creator),
             Action(name="Reload feed", on_perform=self.section.controller.reload),
             Action(name="Push post from JSON…", on_perform=self.push_from_file),
             Action(name="Push sample post", on_perform=self.push_sample),
-            id=f"notifications_ux_demo.news.{publisher.id}",
-            name=publisher.short_name,
-        )
+        ]
 
     def open_creator(self):
-        """The feed creator on the publisher's feed file, able to send to
-        its section."""
+        """The feed creator on the feed file, able to send to News."""
         self._creators = [ui for ui in self._creators if ui.control is not None]
         self._creators.append(
             open_feed_creator(
-                self.section.publisher.feed_path,
+                str(DEFAULT_FEED_PATH),
                 feed_controller=self.section.controller,
                 parent=None,
             )
@@ -79,7 +70,7 @@ class NewsFeedActions(HasTraits):
         """Push a post or feed chosen in a file dialog."""
         path = file_dialog(
             parent=self.window(),
-            default_path=str(Path(self.section.publisher.feed_path).parent),
+            default_path=str(DEFAULT_FEED_PATH.parent),
             wildcard=JSON_WILDCARD,
         )
 
@@ -90,16 +81,8 @@ class NewsFeedActions(HasTraits):
     def push_sample(self):
         """Push the demo's placeholder post, under a new id each time, so
         each push is a new post and alerts."""
-        publisher = self.section.publisher
         self._pushed += 1
 
         self.section.controller.push(
-            {
-                **SAMPLE_PUSH_POST,
-                "id": f"{SAMPLE_PUSH_POST['id']}-{publisher.id}-{self._pushed}",
-                "source": publisher.full_name,
-                "summary": "Sample content pushed from the Demo menu.",
-                "summary_html": "",
-                "url": publisher.home_url,
-            }
+            {**SAMPLE_PUSH_POST, "id": f"{SAMPLE_PUSH_POST['id']}-{self._pushed}"}
         )
