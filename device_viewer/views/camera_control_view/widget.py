@@ -625,8 +625,8 @@ class CameraControlWidget(QWidget):
         current_label = self.combo_cameras.currentText()
 
         _available_cameras = get_video_inputs()
-        self.combo_cameras.clear()
         self.combo_cameras.blockSignals(True)
+        self.combo_cameras.clear()
         self._linux_device_containers.clear()
 
         camera_labels = []
@@ -666,17 +666,17 @@ class CameraControlWidget(QWidget):
                     exc_info=True,
                 )
 
-        # account for no camera
         self.combo_cameras.addItem(NO_CAMERA_LABEL, userData=None)
 
-        self.combo_cameras.blockSignals(False)
-
-        self.combo_cameras.setCurrentIndex(-1)
-        self.combo_cameras.setCurrentIndex(
-            self.controller.choose_camera_index(
-                camera_labels, provider_labels, current_label
-            )
+        index = self.controller.choose_camera_index(
+            camera_labels, provider_labels, current_label
         )
+
+        # The camera still selected keeps its binding: no rebind, no lookup.
+        same_camera = self.combo_cameras.itemText(index) == current_label
+        self.combo_cameras.setCurrentIndex(index if same_camera else -1)
+        self.combo_cameras.blockSignals(False)
+        self.combo_cameras.setCurrentIndex(index)
 
     def _disable_camera_buttons(self, disable):
         self.camera_toggle_button.setDisabled(disable)

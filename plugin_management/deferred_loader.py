@@ -10,22 +10,34 @@
 
 """Start the run configuration's deferred plugins once the window is up.
 
-Each deferred plugin loads on its own event-loop turn: import its module,
-construct it, add it to the application and start it through the isolating
-plugin manager, which records the start and withdraws the plugin if it
-fails. Adding it contributes its task extensions, so the live task-extension
-controller mounts its panes (replacing their placeholders) and rebuilds the
-menu bar on the next turn; the turn after that checks the panes against the
-declaration and moves on to the next plugin. The window repaints and takes
-input between the turns. A plugin that fails, its import included, is
-recorded and skipped; ``finished`` fires once after the last one.
+The plugins load one after another, each in steps that leave the event loop
+free in between, so the window repaints and takes input while they load:
 
-Qt-free: it schedules its turns with ``pyface.api.GUI.invoke_later``.
+1. A worker thread imports the plugin's module and the modules it declares
+   it imports lazily (``DeferredPlugin.module_names``); the GUI thread runs
+   on meanwhile.
+2. One GUI turn constructs the plugin, adds it to the application and starts
+   it through the isolating plugin manager, which records the start and
+   withdraws the plugin if it fails. Adding it contributes its task
+   extensions, so the live task-extension controller mounts its panes
+   (replacing their placeholders), one per turn, then rebuilds the menu bar.
+3. Once the controller has settled, the panes are checked against the
+   declaration and the next plugin's import starts.
+
+The GUI turns go through the shared paced queue
+(``microdrop_utils.gui_pacing``), which leaves the event loop free between
+them. A plugin that fails, its import included, is recorded and skipped;
+``finished`` fires once after the last one.
+
+Qt-free: the worker hands back to the GUI thread with ``pyface.api.GUI``.
 """
 
 # Standard library imports.
+import importlib
 import time
 import traceback
+from functools import partial
+from threading import Thread
 
 # Enthought library imports.
 from envisage.api import TASK_EXTENSIONS, IApplication
@@ -34,6 +46,7 @@ from traits.api import Bool, Event, Float, HasTraits, Instance, List
 
 # Microdrop utils imports.
 from microdrop_utils.deferred_plugins import DeferredPlugin
+from microdrop_utils.gui_pacing import invoke_paced
 from microdrop_utils.isolating_plugin_manager import withdraw_plugin
 from microdrop_utils.plugin_load_status import PluginLoadStatus, summarize_exception
 
@@ -62,7 +75,7 @@ def compare_declared_panes(declared_ids, mounted_ids):
 
 
 class DeferredPluginLoader(HasTraits):
-    """Load deferred plugins one per event-loop turn and record each."""
+    """Load deferred plugins one at a time, in steps, and record each."""
 
     #: The application the plugins join. Its plugin manager must be an
     #: ``IsolatingPluginManager``.
@@ -104,7 +117,7 @@ class DeferredPluginLoader(HasTraits):
         return record
 
     def start(self, live_task_extensions=None):
-        """Begin loading, one plugin per event-loop turn."""
+        """Begin loading, one plugin at a time."""
         if self.running:
             return
 
@@ -113,12 +126,12 @@ class DeferredPluginLoader(HasTraits):
         self._started_at = time.perf_counter()
         self.running = True
 
-        GUI.invoke_later(self._load_next)
+        invoke_paced(self._load_next)
 
-    # --- turns ------------------------------------------------------------
+    # --- steps ------------------------------------------------------------
 
     def _load_next(self):
-        """Load the next plugin, or finish when none is left."""
+        """Import the next plugin's modules, or finish when none is left."""
         if not self._queue:
             self._finish()
 
@@ -126,6 +139,40 @@ class DeferredPluginLoader(HasTraits):
 
         deferred = self._queue.pop(0)
 
+        Thread(
+            target=self._import_modules,
+            args=(deferred,),
+            name=f"import {deferred.spec}",
+            daemon=True,
+        ).start()
+
+    def _import_modules(self, deferred):
+        """Import ``deferred``'s modules, on the worker thread, then hand the
+        plugin back to the GUI thread to add and start."""
+        started_at = time.perf_counter()
+
+        for module_name in deferred.module_names:
+            try:
+                importlib.import_module(module_name)
+
+            # Not recorded here: the GUI thread's import of the plugin
+            # raises the same error again and records it as the failure.
+            except Exception as error:
+                logger.warning(
+                    f"Importing {module_name} in the background failed: {error}"
+                )
+
+                break
+
+        logger.debug(
+            f"Imported {deferred.spec} in the background in "
+            f"{time.perf_counter() - started_at:.3f} s"
+        )
+
+        GUI.invoke_later(invoke_paced, self._add_and_start, deferred)
+
+    def _add_and_start(self, deferred):
+        """Add and start the plugin, then wait for its panes."""
         try:
             plugin = self._load(deferred)
 
@@ -134,12 +181,20 @@ class DeferredPluginLoader(HasTraits):
             logger.exception(f"Loading deferred plugin {deferred.spec} failed")
             plugin = None
 
-        # The live controller queued the plugin's pane mounts while it was
-        # added; these run after them, in order.
-        if plugin is not None:
-            GUI.invoke_later(self._check_panes, deferred, plugin)
+        controller = self.live_task_extensions
+        after_mounts = partial(self._after_mounts, deferred, plugin)
 
-        GUI.invoke_later(self._load_next)
+        if controller is None:
+            invoke_paced(after_mounts)
+        else:
+            controller.call_when_settled(after_mounts)
+
+    def _after_mounts(self, deferred, plugin):
+        """Check the plugin's mounted panes and load the next plugin."""
+        if plugin is not None:
+            self._check_panes(deferred, plugin)
+
+        self._load_next()
 
     def _load(self, deferred):
         """Import, construct, add and start one plugin.
