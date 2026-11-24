@@ -28,6 +28,10 @@ from .chimes import CHIME_ALERT, CHIME_COMPLETION, CHIME_GENTLE
 #: Samples per second: plenty for tones under 4 kHz, and small files.
 SAMPLE_RATE = 22050
 
+#: The loudest chime's peak (of full scale) once normalised: the volume
+#: setting scales it down, so the files themselves are not quiet.
+PEAK = 0.9
+
 #: Milliseconds of rise at a note's start and fall at the file's end.
 ATTACK_MS = 4
 FADE_MS = 12
@@ -108,14 +112,20 @@ def write_wav(path, samples):
 
 
 def main():
-    write_wav(CHIME_GENTLE, synthesise(GENTLE_NOTES, GENTLE_PARTIALS, GENTLE_MS))
-    write_wav(CHIME_ALERT, synthesise(ALERT_NOTES, ALERT_PARTIALS, ALERT_MS))
-    write_wav(
-        CHIME_COMPLETION,
-        synthesise(COMPLETION_NOTES, COMPLETION_PARTIALS, COMPLETION_MS),
-    )
+    chimes = {
+        CHIME_GENTLE: synthesise(GENTLE_NOTES, GENTLE_PARTIALS, GENTLE_MS),
+        CHIME_ALERT: synthesise(ALERT_NOTES, ALERT_PARTIALS, ALERT_MS),
+        CHIME_COMPLETION: synthesise(
+            COMPLETION_NOTES, COMPLETION_PARTIALS, COMPLETION_MS
+        ),
+    }
 
-    for path in (CHIME_GENTLE, CHIME_ALERT, CHIME_COMPLETION):
+    # One gain for all three keeps them in proportion to one another.
+    loudest = max(abs(sample) for samples in chimes.values() for sample in samples)
+    gain = PEAK / loudest
+
+    for path, samples in chimes.items():
+        write_wav(path, [sample * gain for sample in samples])
         print(f"{path.name}: {path.stat().st_size} bytes")
 
 
