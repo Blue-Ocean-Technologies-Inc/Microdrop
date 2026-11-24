@@ -60,6 +60,11 @@ logger = get_logger(__name__)
 HEADER_HEIGHT = 40
 DISC_SIZE = 26
 
+#: A sub-section header's height, indent and disc (px): one level down.
+SUB_HEADER_HEIGHT = 32
+SUB_HEADER_INDENT = 12
+SUB_DISC_SIZE = 20
+
 #: Most height (px) a dragged section takes.
 SECTION_MAX_HEIGHT = 900
 
@@ -74,12 +79,15 @@ class SectionHeader(QtWidgets.QAbstractButton):
     """Glyph disc, title, summary chip and a chevron that turns as the
     section opens. Painted, so it costs one widget."""
 
-    def __init__(self, style, parent=None):
+    def __init__(self, style, parent=None, level=0):
         super().__init__(parent)
 
         self.style_ = style
         self.title = ""
         self.summary = ""
+
+        #: 0 for a section, 1 for a sub-section: smaller and indented.
+        self.level = level
 
         #: Drawn opaque with a rule under it, as the pinned copy at the top
         #: of a scrolling column.
@@ -88,7 +96,7 @@ class SectionHeader(QtWidgets.QAbstractButton):
         #: 0 collapsed, 1 expanded; animated between.
         self._openness = 1.0
 
-        self.setFixedHeight(HEADER_HEIGHT)
+        self.setFixedHeight(SUB_HEADER_HEIGHT if level else HEADER_HEIGHT)
         self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
         self.setSizePolicy(
@@ -123,7 +131,7 @@ class SectionHeader(QtWidgets.QAbstractButton):
         self.update()
 
     def sizeHint(self):
-        return QtCore.QSize(200, HEADER_HEIGHT)
+        return QtCore.QSize(200, self.height())
 
     def paintEvent(self, event):
         palette = self.palette()
@@ -132,7 +140,10 @@ class SectionHeader(QtWidgets.QAbstractButton):
         text_color = palette.color(QtGui.QPalette.ColorRole.Text)
         accent = QtGui.QColor(self.style_.accent)
         readable = readable_accent(accent, palette)
-        rect = self.rect().adjusted(0, 3, 0, -3)
+        sub = bool(self.level)
+        indent = SUB_HEADER_INDENT if sub else 0
+        disc_size = SUB_DISC_SIZE if sub else DISC_SIZE
+        rect = self.rect().adjusted(indent, 3, 0, -3)
 
         if self.pinned:
             painter.fillRect(
@@ -147,11 +158,13 @@ class SectionHeader(QtWidgets.QAbstractButton):
             painter.drawRoundedRect(QtCore.QRectF(rect), 7, 7)
 
         # The glyph on a tinted disc.
-        disc = QtCore.QRectF(6, (self.height() - DISC_SIZE) / 2, DISC_SIZE, DISC_SIZE)
+        disc = QtCore.QRectF(
+            indent + 6, (self.height() - disc_size) / 2, disc_size, disc_size
+        )
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.setBrush(with_alpha(accent, 0.18))
         painter.drawEllipse(disc)
-        painter.setFont(icon_font(17))
+        painter.setFont(icon_font(13 if sub else 17))
         painter.setPen(readable)
         painter.drawText(disc, _ALIGN.AlignCenter, self.style_.glyph)
 
@@ -168,7 +181,11 @@ class SectionHeader(QtWidgets.QAbstractButton):
         painter.restore()
 
         # The title, then the summary chip as room allows.
-        title_font = text_font(self.font(), 1.0, QtGui.QFont.Weight.Bold)
+        title_font = text_font(
+            self.font(),
+            0.0 if sub else 1.0,
+            QtGui.QFont.Weight.DemiBold if sub else QtGui.QFont.Weight.Bold,
+        )
         metrics = QtGui.QFontMetrics(title_font)
         left = int(disc.right()) + 10
         room = int(chevron.left()) - 8 - left
@@ -176,7 +193,7 @@ class SectionHeader(QtWidgets.QAbstractButton):
         title_width = metrics.horizontalAdvance(title)
 
         painter.setFont(title_font)
-        painter.setPen(text_color)
+        painter.setPen(readable if sub else text_color)
         painter.drawText(
             QtCore.QRect(left, 0, title_width + 2, self.height()), _LEFT_MIDDLE, title
         )

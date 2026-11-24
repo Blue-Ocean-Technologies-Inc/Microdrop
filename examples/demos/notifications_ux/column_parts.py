@@ -14,7 +14,7 @@ natural height, none scrolling by itself:
 * ``CardColumn``: notification cards. For Activity, with filter chips, day
   headings (Today / Yesterday / Earlier) and cards built only a batch at a
   time, as the column's scroll nears the end.
-* ``FeedColumn``: the Sci-Bots Feed's first few cards, then "Show N more".
+* The Sci-Bots Feed's sub-sections are in ``feed_column``.
 * ``fit_item_views``: grows a contributed section's lists and tables to all
   their rows, so they need no scroll bar of their own.
 """
@@ -25,13 +25,8 @@ import time
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
 from traits.api import Any, HasTraits, Instance, observe
-from traitsui.api import UItem, View
 
 # Microdrop package imports.
-from examples.demos.notifications_pane.sci_bots_feed_view import (
-    FeedGroupPanel,
-    StatusBannerEditor,
-)
 from notifications.consts import SEVERITY_ERROR, TIME_REFRESH_MS
 
 # Microdrop style imports.
@@ -42,7 +37,6 @@ from .card_list_view import EmptyState, make_card
 from .card_view import NotificationCard
 from .ux_consts import (
     BUILD_BUDGET_MS,
-    FEED_PREVIEW_CARDS,
     FILTER_ACTION,
     FILTER_ALL,
     FILTER_ERRORS,
@@ -51,7 +45,6 @@ from .ux_consts import (
 from .ux_models import UxPaneModel, matches_filter, time_group
 from .view_styles import (
     css,
-    link_button_style,
     muted_text,
     readable_accent,
     text_font,
@@ -423,139 +416,6 @@ class CardColumn(QtWidgets.QWidget):
 
         for card in self._cards.values():
             card.refresh_time()
-
-
-# ---------------------------------------------------------------------------
-# The Sci-Bots Feed
-# ---------------------------------------------------------------------------
-
-#: The feed's status line ("Pushed 1 new post"), as its own view shows it.
-FeedStatusView = View(
-    UItem(
-        "status_text",
-        editor=StatusBannerEditor(error_name="status_is_error"),
-        visible_when="status_text",
-    ),
-)
-
-
-class _FeedBinding(HasTraits):
-    """Rebuilds the feed's cards when its groups change."""
-
-    controller = Any()
-
-    view = Any()
-
-    @observe("controller:model:groups")
-    def _rebuild(self, event):
-        self.view.schedule_rebuild()
-
-
-class FeedColumn(QtWidgets.QWidget):
-    """The feed's status line and its first FEED_PREVIEW_CARDS cards, then
-    "Show N more" for the rest; "Show less" folds them again."""
-
-    content_changed = QtCore.Signal()
-
-    def __init__(self, controller, parent=None):
-        super().__init__(parent)
-
-        self.controller = controller
-
-        #: Whether every group shows, each with its own "Show all".
-        self.show_everything = False
-
-        self._panels = []
-        self._rebuild_queued = False
-
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(6, 0, 8, 6)
-        layout.setSpacing(0)
-
-        self._status_ui = controller.edit_traits(
-            view=FeedStatusView, kind="subpanel", parent=self
-        )
-        layout.addWidget(self._status_ui.control)
-
-        self._groups = QtWidgets.QVBoxLayout()
-        layout.addLayout(self._groups)
-
-        self._toggle = QtWidgets.QPushButton(self)
-        self._toggle.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        self._toggle.clicked.connect(self._toggle_everything)
-        layout.addWidget(self._toggle, 0, QtCore.Qt.AlignmentFlag.AlignLeft)
-
-        self._binding = _FeedBinding(controller=controller, view=self)
-        self.rebuild()
-
-    def schedule_rebuild(self):
-
-        if not self._rebuild_queued:
-            self._rebuild_queued = True
-            QtCore.QTimer.singleShot(0, self.rebuild)
-
-    def rebuild(self):
-        """A panel per group, then the preview cut applied."""
-        self._rebuild_queued = False
-        self._dispose_panels()
-
-        for group in self.controller.model.groups:
-            panel = FeedGroupPanel(group=group, controller=self.controller)
-            self._groups.addWidget(panel.create(self))
-            self._panels.append(panel)
-
-        self._apply_preview()
-
-    def _apply_preview(self):
-        """Folded, only the first cards show, and no group's own "Show
-        all"; unfolded, everything the groups show."""
-        shown = 0
-        total = 0
-
-        for panel in self._panels:
-            visible_in_panel = 0
-
-            # The panel's own widgets, read here: FeedGroupPanel has no
-            # public way to cut its cards short.
-            for card in panel._cards:
-                total += 1
-                keep = self.show_everything or shown < FEED_PREVIEW_CARDS
-
-                card.control.setVisible(keep)
-                shown += keep
-                visible_in_panel += keep
-
-            panel.control.setVisible(bool(visible_in_panel))
-
-            if not self.show_everything:
-                panel._show_all.hide()
-
-        hidden = total - shown
-        self._toggle.setVisible(bool(hidden) or self.show_everything)
-        self._toggle.setText(
-            "Show less" if self.show_everything else f"Show {hidden} more"
-        )
-        self._toggle.setStyleSheet(link_button_style(self.palette(), INFO_COLOR))
-        self.content_changed.emit()
-
-    def _toggle_everything(self):
-        self.show_everything = not self.show_everything
-        self.rebuild()
-
-    def _dispose_panels(self):
-
-        for panel in self._panels:
-            control = panel.control
-            panel.dispose()
-            control.hide()
-            control.deleteLater()
-
-        self._panels = []
-
-    def dispose(self):
-        self._binding.controller = None
-        self._dispose_panels()
-        self._status_ui.dispose()
 
 
 # ---------------------------------------------------------------------------

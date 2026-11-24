@@ -32,8 +32,9 @@ from traitsui.qt.editor import Editor
 from notifications.consts import NotificationSection
 
 # Local imports.
-from .column_parts import CardColumn, FeedColumn, fit_item_views
+from .column_parts import CardColumn, fit_item_views
 from .drawer_view import SECTIONS_OBJECT_NAME, DrawerHeader, _ContentsBinding
+from .feed_column import FeedColumn
 from .section_view import HEADER_HEIGHT, SectionHeader
 from .ux_consts import (
     ATTENTION_SECTION_ID,
@@ -72,7 +73,7 @@ def build_section_contents(section, pane_model, parent):
         )
 
     if section.id == FEED_SECTION_ID:
-        return FeedColumn(section.controller, parent)
+        return FeedColumn(section, pane_model, parent)
 
     contents = section.factory(parent)
     fit_item_views(getattr(contents, "control", contents))
@@ -392,9 +393,15 @@ class ColumnDrawerContents(QtWidgets.QWidget):
     def reveal(self, entry):
         """Scroll to ``entry``'s card, opening its section, and highlight
         it."""
-        section_id = (
-            ATTENTION_SECTION_ID if entry.needs_attention else HISTORY_SECTION_ID
-        )
+        if entry.feed_post_id:
+            section_id = FEED_SECTION_ID
+
+        elif entry.needs_attention:
+            section_id = ATTENTION_SECTION_ID
+
+        else:
+            section_id = HISTORY_SECTION_ID
+
         view = next(
             (view for view in self._sections if view.section.id == section_id), None
         )
@@ -410,10 +417,14 @@ class ColumnDrawerContents(QtWidgets.QWidget):
 
         column = view.contents_widget
 
-        if not isinstance(column, CardColumn):
-            return
+        if isinstance(column, FeedColumn):
+            card = column.frame_for(entry.feed_post_id)
 
-        card = column.card_for(entry)
+        elif isinstance(column, CardColumn):
+            card = column.card_for(entry)
+
+        else:
+            return
 
         if card is not None:
             QtCore.QTimer.singleShot(delay, lambda: self._scroll_to(card))

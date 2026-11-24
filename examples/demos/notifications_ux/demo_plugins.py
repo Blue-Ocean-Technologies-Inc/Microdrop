@@ -36,6 +36,7 @@ from plugin_management.plugin import PluginManagementPlugin
 
 # Local imports.
 from . import fake_panes, scenarios
+from .feed_models import FeedAlertWatcher, UxFeedSection
 from .ux_consts import LAYOUT_COLUMN, LAYOUT_SECTIONS
 from .ux_models import ToastSettings
 
@@ -107,12 +108,11 @@ class SciBotsFeedPlugin(Plugin):
     sections = List(contributes_to=NOTIFICATION_SECTIONS)
 
     def _sections_default(self):
-        section = create_feed_section()
+        """The notifications_pane demo's feed, loaded, in the prototype's
+        section: open, so its sub-sections show what the feed holds."""
+        controller = create_feed_section().controller
 
-        # Collapsed: its chip says what is new; the notifications get the room.
-        section.expanded = False
-
-        return [section]
+        return [UxFeedSection(controller=controller, expanded=True)]
 
 
 class AutoDismissAction(Action):
@@ -177,6 +177,9 @@ class NotificationsDemoPlugin(Plugin):
     #: Answers the cards' buttons.
     _responder = Any()
 
+    #: Turns posts the feed gains into alerts.
+    _feed_watcher = Any()
+
     #: The open Notification settings window, if any.
     _settings_ui = Any()
 
@@ -192,6 +195,12 @@ class NotificationsDemoPlugin(Plugin):
             open_tutorial=self._responder.open_tutorial,
         )
         scenarios.post_history(center, self._experiment_folder())
+
+        self._feed_watcher = FeedAlertWatcher(
+            section=self.application.get_plugin(FEED_PLUGIN_ID).sections[0],
+            pane_model=controller.pane_model,
+            offer=self._notifications.toast_controller.offer,
+        )
 
     @observe("application:application_initialized")
     def _after_launch(self, event):
@@ -334,6 +343,7 @@ class NotificationsDemoPlugin(Plugin):
         notifications.controller.pane_model.is_open = False
         notifications.toast_controller.clear()
         center.clear_everything()
+        notifications.controller.pane_model.feed_alerts = []
 
         # History, as at start-up: no toasts.
         notifications.toast_controller.enabled = False
