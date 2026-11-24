@@ -312,11 +312,19 @@ alarms = VGroup(
         Label("Alarms"),
     ),
     VGroup(
-        Item(
-            "active_alarms_display",
-            style="readonly",
-            label="Active",
-            tooltip="Board alarms raised and not yet cleared",
+        HGroup(
+            Item(
+                "active_alarms_display",
+                style="readonly",
+                label="Active",
+                tooltip="Board alarms raised and not yet cleared",
+            ),
+            UItem(
+                "clear_alarms_button",
+                enabled_when="connected",
+                tooltip="Clear every latched alarm on the motor and signal "
+                "boards; an alarm whose condition persists stays active",
+            ),
         ),
         UItem(
             "alarm_log",

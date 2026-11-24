@@ -29,6 +29,7 @@ from portable_dropbot_controller.consts import (
     SET_LIGHT_ON,
     SET_RGB_LIGHT,
     SET_VOLTAGE,
+    clear_alarms_publisher,
     move_tray_publisher,
 )
 from template_status_and_controls.base_controller import (
@@ -117,6 +118,10 @@ class PortableDropbotStatusAndControlsController(
 
         publish_message(topic=CLEAR_HALT, message="")
         logger.info("Requested Portable Dropbot halt clear")
+
+    @observe("model:clear_alarms_button")
+    def _on_clear_alarms(self, event):
+        clear_alarms_publisher.publish({})
 
     @observe("model:tray_toggle_clicked")
     def _on_tray_toggle_clicked(self, event):
