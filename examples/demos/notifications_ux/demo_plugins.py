@@ -26,7 +26,10 @@ from pyface.tasks.action.api import SGroup, SMenu
 from traits.api import Any, Bool, List, observe
 
 # Microdrop package imports.
-from examples.demos.notifications_pane.sci_bots_feed_demo import create_feed_section
+from examples.demos.notifications_pane.sci_bots_feed_demo import (
+    add_feed_actions,
+    create_feed_section,
+)
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from notifications.consts import NOTIFICATION_SECTIONS, NOTIFICATIONS_PLUGIN_ID
 from plugin_management.plugin import PluginManagementPlugin
@@ -45,6 +48,12 @@ TASK_ID = f"{microdrop_application_PKG}.task"
 #: Milliseconds after the window is up before "plugin updates available"
 #: arrives, as the real update check's answer would.
 UPDATE_CHECK_MS = 2500
+
+#: The feed plugin's id, by which the Demo menu finds its section.
+FEED_PLUGIN_ID = "notifications_ux_demo.sci_bots_feed"
+
+#: The feed action listed first in the Demo menu.
+FEED_CREATOR_ACTION = "Feed creator…"
 
 #: The stand-in panes: (id of the real pane, title, factory).
 STAND_IN_PANES = [
@@ -90,7 +99,7 @@ class StandInPanesPlugin(Plugin):
 class SciBotsFeedPlugin(Plugin):
     """Contributes the Sci-Bots Feed section of the notifications_pane demo."""
 
-    id = "notifications_ux_demo.sci_bots_feed"
+    id = FEED_PLUGIN_ID
     name = "Sci-Bots Feed Plugin (demo)"
 
     sections = List(contributes_to=NOTIFICATION_SECTIONS)
@@ -102,6 +111,17 @@ class SciBotsFeedPlugin(Plugin):
         section.expanded = False
 
         return [section]
+
+
+class _MenuActions:
+    """Takes ``addAction(text, callable)`` calls as a QToolBar does, so the
+    notifications_pane demo's toolbar actions can fill a menu group."""
+
+    def __init__(self):
+        self.actions = []
+
+    def addAction(self, text, callable_):
+        self.actions.append(Action(name=text, on_perform=callable_))
 
 
 class NotificationsDemoPlugin(Plugin):
@@ -175,9 +195,6 @@ class NotificationsDemoPlugin(Plugin):
                 action("Post success", scenarios.post_success),
                 action("Post warning", scenarios.post_warning),
                 action("Post error (with traceback)", scenarios.post_error),
-                id="notifications_ux_demo.single",
-            ),
-            SGroup(
                 action("Post action required", scenarios.post_action_required),
                 action("Post plugin updates available", scenarios.post_plugin_updates),
                 action(
@@ -185,16 +202,14 @@ class NotificationsDemoPlugin(Plugin):
                     lambda: scenarios.post_protocol_finished(self._experiment_folder()),
                 ),
                 action("Post calibration is old", scenarios.post_calibration_old),
-                id="notifications_ux_demo.realistic",
-            ),
-            SGroup(
                 action(f"Burst of {scenarios.BURST_SIZE}", scenarios.post_burst),
                 action(
                     f"Flood from a thread ({scenarios.FLOOD_RECORDS} log records)",
                     scenarios.flood_from_thread,
                 ),
-                id="notifications_ux_demo.many",
+                id="notifications_ux_demo.notifications",
             ),
+            SGroup(*self._feed_actions(), id="notifications_ux_demo.feed"),
             SGroup(
                 action("Toggle theme", self._toggle_theme),
                 action("Reset", self._reset, "Clear everything and start over"),
@@ -203,6 +218,17 @@ class NotificationsDemoPlugin(Plugin):
             id="Demo",
             name="&Demo",
         )
+
+    def _feed_actions(self):
+        """The notifications_pane demo's feed actions, on this prototype's
+        feed section: the feed creator first."""
+        section = self.application.get_plugin(FEED_PLUGIN_ID).sections[0]
+        window = self.application.active_window
+        menu = _MenuActions()
+
+        add_feed_actions(menu, section, getattr(window, "control", None))
+
+        return sorted(menu.actions, key=lambda item: item.name != FEED_CREATOR_ACTION)
 
     def _toggle_theme(self):
         from microdrop_style.helpers import is_dark_mode
