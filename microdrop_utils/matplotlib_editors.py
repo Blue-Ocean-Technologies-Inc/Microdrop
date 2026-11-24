@@ -13,6 +13,9 @@ Generic: the model draws a pyplot-free Figure, this editor only shows it.
 matplotlib is imported only when a canvas is made, so importing a view that
 uses this editor does not load it."""
 
+# Standard library imports.
+import functools
+
 # Enthought library imports.
 from pyface.qt import QtGui, QtWidgets
 from traits.api import Bool, Instance, Int
@@ -25,6 +28,23 @@ from microdrop_style.helpers import is_dark_mode
 #: RGB of the black reference lines ("k--" identity, baselines) that would
 #: vanish on a dark background.
 BLACK_RGB = (0.0, 0.0, 0.0)
+
+
+@functools.cache
+def scroll_through_canvas_class():
+    """The canvas class: matplotlib's Qt canvas, but leaving the mouse wheel
+    to the widgets around it. The shown figures take no wheel input, and a
+    canvas that kept it would stop a scrollable pane from scrolling while
+    the pointer is over its plot."""
+    # Imported here: only a shown figure should load matplotlib's Qt
+    # backend (the frontends that never plot skip it entirely).
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+
+    class ScrollThroughFigureCanvas(FigureCanvasQTAgg):
+        def wheelEvent(self, event):
+            event.ignore()
+
+    return ScrollThroughFigureCanvas
 
 
 def theme_figure(figure, base, text, mid):
@@ -101,14 +121,10 @@ class _MatplotlibFigureEditor(QtEditor):
         if self.value is None:
             return
 
-        # Imported here: only a shown figure should load matplotlib's Qt
-        # backend (the frontends that never plot skip it entirely).
-        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-
         if self.factory.follow_dark_theme and is_dark_mode():
             self._theme_from_palette()
 
-        self.canvas = FigureCanvasQTAgg(self.value)
+        self.canvas = scroll_through_canvas_class()(self.value)
         self.canvas.setMinimumHeight(self.factory.min_height)
         self.control.layout().addWidget(self.canvas)
         self.canvas.draw_idle()
