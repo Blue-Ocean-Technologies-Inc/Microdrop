@@ -21,11 +21,10 @@ from typing import NamedTuple
 # Microdrop style imports.
 from microdrop_style.colors import (
     ACCENT_COLOR,
-    CLOVER,
     GREY,
     INFO_COLOR,
+    PRIMARY_SHADE,
     SECONDARY_SHADE,
-    SPRING_RAIN,
 )
 
 #: Cards a group shows before its "Show all".
@@ -82,7 +81,7 @@ FEED_GROUPS = (
         title="What's new",
         kinds=("release",),
         pinned=False,
-        accent=(CLOVER, SPRING_RAIN),
+        accent=(PRIMARY_SHADE[700], PRIMARY_SHADE[400]),
         glyph="new_releases",
         subtitle=SUBTITLE_LATEST,
         noun=("release", "releases"),

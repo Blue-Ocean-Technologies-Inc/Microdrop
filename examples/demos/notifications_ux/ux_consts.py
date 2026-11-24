@@ -31,7 +31,7 @@ from notifications.consts import (
 from plugin_management.consts import LOAD_STATUS_SECTION_ID
 
 # Microdrop style imports.
-from microdrop_style.colors import ACCENT_COLOR, CLOVER, INFO_COLOR
+from microdrop_style.colors import ACCENT_COLOR, INFO_COLOR, PRIMARY_COLOR
 from microdrop_style.icons.icons import ICON_HISTORY
 from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
 
@@ -202,7 +202,7 @@ NEWS_SECTION_ORDER = 10
 
 #: News's colour (the bell's and the toasts' stripe for new posts), and
 #: the height (px) of its header's brand mark.
-NEWS_ACCENT = CLOVER
+NEWS_ACCENT = PRIMARY_COLOR
 NEWS_LOGO_HEIGHT = 30
 
 #: Who a post is from when it does not say: the feed file is Sci-Bots'.
