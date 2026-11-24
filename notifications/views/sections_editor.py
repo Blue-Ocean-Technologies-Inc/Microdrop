@@ -24,7 +24,7 @@ from traitsui.api import BasicEditorFactory
 from traitsui.qt.editor import Editor
 
 # Local imports.
-from ..consts import SECTION_MAX_HEIGHT, NotificationSection
+from ..consts import NotificationSection
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -122,7 +122,10 @@ class SectionPanel(HasTraits):
             self._contents = QtWidgets.QLabel(f"Could not show this: {error}")
 
         widget = self._contents_widget()
-        widget.setMaximumHeight(SECTION_MAX_HEIGHT)
+
+        if self.section.max_height:
+            widget.setMaximumHeight(self.section.max_height)
+
         self.control.layout().addWidget(widget)
 
     def _contents_widget(self):

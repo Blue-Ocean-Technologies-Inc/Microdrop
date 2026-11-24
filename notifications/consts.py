@@ -209,8 +209,14 @@ class NotificationSection(HasTraits):
     #: Whether the section's contents are shown.
     expanded = Bool(False)
 
+    #: Most pixels the contents take before they scroll; 0 for no cap.
+    max_height = Int()
+
     #: ``factory(parent)`` -> QWidget or TraitsUI UI.
     factory = Callable()
+
+    def _max_height_default(self):
+        return SECTION_MAX_HEIGHT
 
 
 # ---------------------------------------------------------------------------
