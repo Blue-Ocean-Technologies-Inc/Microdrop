@@ -19,6 +19,11 @@ from pyface.qt.QtWidgets import QApplication, QLabel
 # Microdrop package imports.
 from device_viewer.controllers.layer_host import LayerHost
 from device_viewer.interfaces.layer_context import LayerContext
+from device_viewer.models.deferred_sidebar_section import (
+    SECTION_BUILT,
+    SECTION_FAILED,
+    DeferredSidebarSection,
+)
 from device_viewer.views.sidebar.host import (
     build_reveal_button,
     build_sidebar,
@@ -165,3 +170,50 @@ def test_a_layer_host_without_layers_leaves_the_sidebar_as_on_main():
     assert _titles(scroll_area) == BUILT_IN_TITLES
     assert scroll_area.widget().layout().count() == item_count
     assert layer_host.layers == []
+
+
+# --------------------------------------------------------------------------- #
+# Deferred sections (#1064)                                                    #
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def deferred_box():
+    """A deferred section and its box, in a sidebar kept alive meanwhile."""
+    deferred = DeferredSidebarSection(title="Zones")
+    scroll_area = build_sidebar([deferred])
+    (box,) = _boxes(scroll_area)
+
+    yield deferred, box
+
+    scroll_area.deleteLater()
+
+
+def test_a_deferred_section_shows_a_muted_loading_line_under_its_header(deferred_box):
+    deferred, box = deferred_box
+    (line,) = box.content_widgets
+
+    assert box.toggle_button.text() == "Zones"
+    assert line.text() == "Loading Zones…"
+    assert not line.isEnabled()
+
+
+def test_a_built_deferred_section_takes_the_loading_lines_place(deferred_box):
+    deferred, box = deferred_box
+    built = _stub_section("Zones")
+
+    deferred.section = built
+    deferred.state = SECTION_BUILT
+
+    assert box.content_widgets == [built.widget]
+    assert box.content_layout.count() == 1
+    assert box.content_layout.itemAt(0).widget() is built.widget
+
+
+def test_a_failed_deferred_section_shows_why_instead_of_loading(deferred_box):
+    deferred, box = deferred_box
+    (line,) = box.content_widgets
+
+    deferred.error = "no zones"
+    deferred.state = SECTION_FAILED
+
+    assert line.text() == "Zones could not be loaded: no zones"
+    assert line.isEnabled()

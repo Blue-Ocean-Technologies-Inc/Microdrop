@@ -14,7 +14,8 @@
 Handlers run on the Dramatiq worker thread. Direct widget calls are marshalled
 to the GUI thread (``GUI.invoke_later`` or a Qt signal); model trait writes are
 not, so the pane's observers on those traits still fire on the worker thread
-(#754).
+(#754). Camera requests that arrive before the camera panel is built, after the
+first paint, wait for it (see ``deliver_to_camera_widget``).
 """
 
 # Standard library imports.
@@ -23,7 +24,6 @@ import os
 
 # Third-party imports.
 import dramatiq
-from pydantic import ValidationError
 
 # Enthought library imports.
 from pyface.api import GUI
@@ -49,108 +49,20 @@ from ..consts import (
     camera_source_selected_publisher,
     listener_name,
 )
-from ..models.media import (
-    CameraControlsRequest,
-    CameraSelectSourceRequest,
-    CameraSettingsRequest,
-)
 from ..models.messages import DeviceViewerMessageModel
 from ..utils.message_utils import gui_models_to_message_model
+from .camera_requests import (
+    answer_camera_unavailable,
+    deliver_to_camera_widget,
+    parse_camera_controls_request,
+    parse_camera_select_source_request,
+    parse_camera_settings_request,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-
-def parse_camera_controls_request(message):
-    """Parse and validate a DEVICE_VIEWER_CAMERA_SET_CONTROLS payload.
-
-    Returns a ``(request, reply)`` pair: on success ``request`` is the
-    validated ``CameraControlsRequest`` as a plain dict and ``reply`` is
-    None; on failure ``request`` is None and ``reply`` is a ready-to-publish
-    ``CameraControlsApplied`` failure payload (``ok=False``), so the caller
-    can answer a waiting requester without reaching the camera widget. The
-    request_id is recovered from the raw payload when possible, so the
-    requester still gets matched even on a failed validation.
-    """
-    return _parse_camera_request(message, CameraControlsRequest, "camera controls")
-
-
-def parse_camera_settings_request(message):
-    """Parse and validate a DEVICE_VIEWER_CAMERA_APPLY_SETTINGS payload into
-    a ``(request, reply)`` pair like parse_camera_controls_request, the
-    failure reply being a ``CameraSettingsApplied`` payload."""
-    return _parse_camera_request(message, CameraSettingsRequest, "capture settings")
-
-
-def _parse_camera_request(message, validator_class, description):
-    """``(request dict, None)`` for a valid ``validator_class`` payload,
-    else ``(None, {request_id, ok=False, error})``."""
-
-    try:
-        raw = json.loads(message) if message and message.strip() else {}
-    except (json.JSONDecodeError, TypeError) as error:
-        logger.warning(f"Unparseable {description} request: {message!r}")
-
-        return None, {"request_id": "", "ok": False, "error": str(error)}
-
-    request_id = str(raw.get("request_id", "")) if isinstance(raw, dict) else ""
-
-    try:
-        request = validator_class.model_validate(raw)
-    except ValidationError as error:
-        logger.warning(f"Invalid {description} request: {message!r} ({error})")
-
-        # Name the field and the reason ("exposure_ms: Input should be
-        # greater than 0"), not pydantic's "1 validation error for ..." header.
-        first = error.errors()[0]
-        field = ".".join(str(part) for part in first["loc"]) or "request"
-
-        return None, {
-            "request_id": request_id,
-            "ok": False,
-            "error": f"{field}: {first['msg']}",
-        }
-
-    return request.model_dump(), None
-
-
-def parse_camera_select_source_request(message):
-    """Parse and validate a DEVICE_VIEWER_CAMERA_SELECT_SOURCE payload.
-
-    Returns a ``(request, reply)`` pair like parse_camera_controls_request:
-    the validated ``CameraSelectSourceRequest`` as a plain dict and None, or
-    None and a ``CameraSourceSelected`` failure payload lacking only
-    ``active`` (the camera's state, which the caller knows). The request_id
-    and label are recovered from the raw payload when possible.
-    """
-
-    try:
-        raw = json.loads(message) if message and message.strip() else {}
-    except (json.JSONDecodeError, TypeError) as error:
-        logger.warning(f"Unparseable camera select_source request: {message!r}")
-
-        return None, {"request_id": "", "label": "", "ok": False, "error": str(error)}
-
-    raw_fields = raw if isinstance(raw, dict) else {}
-
-    try:
-        request = CameraSelectSourceRequest.model_validate(raw)
-    except ValidationError as error:
-        logger.warning(f"Invalid camera select_source request: {message!r} ({error})")
-
-        first = error.errors()[0]
-        field = ".".join(str(part) for part in first["loc"]) or "request"
-
-        return None, {
-            "request_id": str(raw_fields.get("request_id", "")),
-            "label": str(raw_fields.get("label", "")),
-            "ok": False,
-            "error": f"{field}: {first['msg']}",
-        }
-
-    return request.model_dump(), None
 
 
 @provides(IDramatiqControllerBase)
@@ -375,78 +287,86 @@ class DeviceViewerMessageController(HasTraits):
         camera widget."""
         logger.debug(f"Screen capture triggered: {message}")
 
-        if self.pane.model and self.pane.camera_control_widget:
-            capture_data = None
+        if not self.pane.model:
+            return
 
-            if message and message.strip():
-                try:
-                    capture_data = json.loads(message)
-                except (json.JSONDecodeError, TypeError):
-                    logger.debug(
-                        "Screen capture message is not JSON, using default capture"
-                    )
+        capture_data = None
 
-            self.pane.camera_control_widget.screen_capture_signal.emit(capture_data)
+        if message and message.strip():
+            try:
+                capture_data = json.loads(message)
+            except (json.JSONDecodeError, TypeError):
+                logger.debug(
+                    "Screen capture message is not JSON, using default capture"
+                )
+
+        deliver_to_camera_widget(
+            self.pane, lambda widget: widget.screen_capture_signal.emit(capture_data)
+        )
 
     def _on_set_controls_triggered(self, message):
         """Another plugin's CameraControlsRequest (exposure/focus); applied on
         the GUI thread by the camera widget, which answers the applied
-        signal itself. An invalid request, or one arriving with no camera
-        widget, is answered ok=False here instead, so a waiting requester
+        signal itself. An invalid request, or one whose camera panel failed
+        to build, is answered ok=False here instead, so a waiting requester
         fails fast rather than timing out."""
         request, reply = parse_camera_controls_request(message)
 
-        if reply is None and not self.pane.camera_control_widget:
-            reply = {
-                "request_id": request["request_id"],
-                "ok": False,
-                "error": "Device viewer camera is not available",
-            }
-
         if reply is not None:
             camera_controls_applied_publisher.publish(reply)
+
             return
 
-        self.pane.camera_control_widget.camera_controls_signal.emit(request)
+        deliver_to_camera_widget(
+            self.pane,
+            lambda widget: widget.camera_controls_signal.emit(request),
+            answer_camera_unavailable(
+                camera_controls_applied_publisher,
+                {"request_id": request["request_id"]},
+            ),
+        )
 
     def _on_apply_settings_triggered(self, message):
         """Another plugin's CameraSettingsRequest (a protocol step's capture
         setup); applied on the GUI thread by the camera widget, which
-        answers the applied signal itself. An invalid request, or one
-        arriving with no camera widget, is answered ok=False here instead."""
+        answers the applied signal itself. An invalid request, or one whose
+        camera panel failed to build, is answered ok=False here instead."""
         request, reply = parse_camera_settings_request(message)
-
-        if reply is None and not self.pane.camera_control_widget:
-            reply = {
-                "request_id": request["request_id"],
-                "ok": False,
-                "error": "Device viewer camera is not available",
-            }
 
         if reply is not None:
             camera_settings_applied_publisher.publish(reply)
 
             return
 
-        self.pane.camera_control_widget.camera_settings_signal.emit(request)
+        deliver_to_camera_widget(
+            self.pane,
+            lambda widget: widget.camera_settings_signal.emit(request),
+            answer_camera_unavailable(
+                camera_settings_applied_publisher,
+                {"request_id": request["request_id"]},
+            ),
+        )
 
     def _on_screen_recording_triggered(self, message):
         """Forward a JSON screen-recording command to the camera widget."""
         logger.info(f"Screen recording triggered: {message}")
 
-        if self.pane.model and self.pane.camera_control_widget:
-            if not (message and message.strip()):
-                return
+        if not (self.pane.model and message and message.strip()):
+            return
 
-            try:
-                recording_data = json.loads(message)
-            except (json.JSONDecodeError, TypeError):
-                logger.warning(
-                    f"Screen recording message is not valid JSON, ignoring: {message!r}"
-                )
-                return
+        try:
+            recording_data = json.loads(message)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(
+                f"Screen recording message is not valid JSON, ignoring: {message!r}"
+            )
 
-            self.pane.camera_control_widget.screen_recording_signal.emit(recording_data)
+            return
+
+        deliver_to_camera_widget(
+            self.pane,
+            lambda widget: widget.screen_recording_signal.emit(recording_data),
+        )
 
     def _on_camera_active_triggered(self, message):
         """Forward a camera on/off request to the camera widget. While a
@@ -454,51 +374,62 @@ class DeviceViewerMessageController(HasTraits):
         "false" is ignored and "true" still applies."""
         logger.debug(f"Camera activation triggered: {message}")
 
-        widget = self.pane.camera_control_widget
-
-        if not (self.pane.model and widget):
+        if not self.pane.model:
             return
 
         active = message.lower() == "true"
 
-        if not active and widget.camera_model.camera_leased:
-            logger.info("Camera kept on: leased by a protocol run")
-            return
+        def deliver(widget):
 
-        widget.camera_active_signal.emit(active)
+            if not active and widget.camera_model.camera_leased:
+                logger.info("Camera kept on: leased by a protocol run")
+
+                return
+
+            widget.camera_active_signal.emit(active)
+
+        deliver_to_camera_widget(self.pane, deliver)
 
     def _on_select_source_triggered(self, message):
         """Another plugin's CameraSelectSourceRequest; applied on the GUI
         thread by the camera widget, whose controller answers
         DEVICE_VIEWER_CAMERA_SOURCE_SELECTED and then publishes the camera
         state. An invalid request, or one arriving with no camera widget,
-        is answered ok=False here, so a waiting requester fails fast.
+        is answered ok=False here, so a waiting requester fails fast; so is
+        one whose camera panel failed to build.
 
         Every valid request sets the camera lease: active=True takes it (the
         run holds the camera on against camera_active "false"), anything
         else releases it — so the run-end restore releases it whatever it
-        carries. Set here on receipt rather than on the GUI thread, so a
+        carries. Set on receipt rather than on the GUI thread, so a
         camera_active "false" handled after this request cannot slip in
-        before the selection is applied."""
+        before the selection is applied; a request waiting for the camera
+        panel sets it on delivery, ahead of the requests queued behind it."""
         request, reply = parse_camera_select_source_request(message)
-        widget = self.pane.camera_control_widget
-
-        if reply is None and not widget:
-            reply = {
-                "request_id": request["request_id"],
-                "label": request["label"],
-                "ok": False,
-                "error": "Device viewer camera is not available",
-            }
 
         if reply is not None:
+            widget = self.pane.camera_control_widget
             reply["active"] = bool(widget and widget.camera_model.camera_active)
             camera_source_selected_publisher.publish(reply)
 
             return
 
-        widget.camera_model.camera_leased = request["active"] is True
-        widget.camera_select_source_signal.emit(request)
+        def deliver(widget):
+            widget.camera_model.camera_leased = request["active"] is True
+            widget.camera_select_source_signal.emit(request)
+
+        deliver_to_camera_widget(
+            self.pane,
+            deliver,
+            answer_camera_unavailable(
+                camera_source_selected_publisher,
+                {
+                    "request_id": request["request_id"],
+                    "label": request["label"],
+                    "active": False,
+                },
+            ),
+        )
 
     def _on_drops_detected_triggered(self, message):
         detected_channels = json.loads(message).get("detected_channels") or []

@@ -25,13 +25,13 @@ from ...consts import CAMERA_PROPERTIES_LOADING_TEXT
 from ..alpha_view.alpha_table import alpha_table_view
 from ..camera_control_view.properties_window import CameraPropertiesWindow
 from ..camera_control_view.widget import CameraControlWidget
-from .section import SidebarSection, stack_widgets
+from .section import SizedSidebarSection, stack_widgets
 
 #: The Camera Properties button's text, once the properties are in.
 CAMERA_PROPERTIES_LABEL = "Camera Properties"
 
 
-class CameraControlsSection(SidebarSection):
+class CameraControlsSection(SizedSidebarSection):
     """The Camera Controls section and the parts the pane drives directly."""
 
     #: Camera feed, capture, and recording controls.
@@ -45,8 +45,13 @@ class CameraControlsSection(SidebarSection):
     #: they are still being looked up.
     camera_properties_button = Instance(QPushButton)
 
-    #: Layer opacity table UI; the pane sizes it from preferences.
+    #: Layer opacity table UI, sized from preferences.
     alpha_view_ui = Instance(UI)
+
+    def apply_sizes(self, preferences):
+        control = self.alpha_view_ui.control
+        control.setMinimumHeight(preferences.ALPHA_VIEW_MIN_HEIGHT)
+        control.setMaximumWidth(preferences.DEVICE_VIEWER_SIDEBAR_WIDTH)
 
     @observe(
         "camera_properties_button, "
