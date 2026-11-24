@@ -309,7 +309,7 @@ class NotificationCard(QtWidgets.QFrame):
 
         bold = self.toast or entry.unread or entry.needs_attention
         self._title.setFont(
-            role_font(CARD_TITLE, None if bold else QtGui.QFont.Weight.Normal)
+            role_font(CARD_TITLE, None if bold else QtGui.QFont.Weight.Medium)
         )
         self._title.setText(entry.title)
 

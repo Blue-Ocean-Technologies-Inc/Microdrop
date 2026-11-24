@@ -8,11 +8,8 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The drawer's type roles, in one place: which face, size and weight each
-kind of text takes. Headings (the drawer title, section and News
-sub-section headers) are in the brand's heading face, Orbitron; everything
-else, card titles included, in its body face, Lato. Either falls back to
-the application's font until its files are installed.
+"""The drawer's type roles, in one place: the size and weight each kind of
+text takes, all in the application's own font.
 
 Sizes keep one hierarchy: drawer title > section > sub-section, and the
 cards below them.
@@ -24,36 +21,25 @@ from collections import namedtuple
 # Enthought library imports.
 from pyface.qt import QtGui
 
-# Microdrop style imports.
-from microdrop_style.brand_fonts import body_family, heading_family
-
-#: Which face a role takes.
-HEADING = "heading"
-BODY = "body"
-
 _WEIGHT = QtGui.QFont.Weight
 
-#: A role: its face, size (points) and weight. Orbitron runs larger and
-#: wider than Lato at one size, so its headings sit a step below the
-#: nominal scale, and need no extra letter spacing. Weights are ones the
-#: files have: Orbitron's named instances (Medium, SemiBold), Lato's
-#: Regular and Bold, so nothing is synthesised.
-FontRole = namedtuple("FontRole", "face points weight")
+#: A role: its size (points) and weight.
+FontRole = namedtuple("FontRole", "points weight")
 
-DRAWER_TITLE = FontRole(HEADING, 12, _WEIGHT.DemiBold)
-SECTION_TITLE = FontRole(HEADING, 10.5, _WEIGHT.DemiBold)
-SUBSECTION_TITLE = FontRole(HEADING, 9.5, _WEIGHT.Medium)
-CARD_TITLE = FontRole(BODY, 10.5, _WEIGHT.Bold)
-BODY_TEXT = FontRole(BODY, 10, _WEIGHT.Normal)
-META = FontRole(BODY, 9, _WEIGHT.Normal)
-CHIP = FontRole(BODY, 9, _WEIGHT.Bold)
-BUTTON = FontRole(BODY, 10, _WEIGHT.Bold)
+DRAWER_TITLE = FontRole(13, _WEIGHT.DemiBold)
+SECTION_TITLE = FontRole(11.5, _WEIGHT.DemiBold)
+SUBSECTION_TITLE = FontRole(10.5, _WEIGHT.DemiBold)
+CARD_TITLE = FontRole(10.5, _WEIGHT.Bold)
+BODY_TEXT = FontRole(10, _WEIGHT.Normal)
+META = FontRole(9, _WEIGHT.Normal)
+CHIP = FontRole(9, _WEIGHT.DemiBold)
+BUTTON = FontRole(10, _WEIGHT.DemiBold)
 
 
 def role_font(role, weight=None):
-    """The QFont for ``role``, at ``weight`` instead of its own if given."""
-    family = heading_family() if role.face == HEADING else body_family()
-    font = QtGui.QFont(family)
+    """The application's font for ``role``, at ``weight`` instead of its
+    own if given."""
+    font = QtGui.QFont(QtGui.QGuiApplication.font())
 
     font.setPointSizeF(role.points)
     font.setWeight(weight if weight is not None else role.weight)
