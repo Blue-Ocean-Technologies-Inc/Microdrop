@@ -8,10 +8,10 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The Sci-Bots Feed in the drawer's one-column layout: its status line,
-then one sub-section per group (Top stories, What's new,
-Newsletters, ...), each a header one level below the main ones that
-collapses and expands, showing the group's newest post and "Show N more".
+"""A news section's feed in the drawer's column: its status line, then one
+sub-section per group (Top stories, What's new, Newsletters, ...), each a
+header one level below the main ones that collapses and expands, showing
+the group's newest post and "Show N more".
 
 Built here from the feed model's groups with the feed's own post cards
 (``FeedPostCard``); the sub-headers look like the feed's own group headers
@@ -48,7 +48,7 @@ from microdrop_style.icons.icons import ICON_CHEVRON_RIGHT, ICON_EXPAND_MORE
 
 # Local imports.
 from .card_parts import NEW_DOT_SIZE, NewDot
-from .feed_models import UxFeedSection
+from .publishers import NewsSection
 from .ux_consts import (
     FEED_GROUP_PREVIEW,
     HIGHLIGHT_MS,
@@ -477,7 +477,7 @@ class _FeedBinding(HasTraits):
     """Rebuilds the sub-sections when the feed's groups change, and the
     "new" marks when the alerts do."""
 
-    section = Instance(UxFeedSection)
+    section = Instance(NewsSection)
 
     pane_model = Instance(UxPaneModel)
 
@@ -526,7 +526,8 @@ class FeedColumn(QtWidgets.QWidget):
         return [
             entry.feed_post_id
             for entry in self.pane_model.feed_alerts
-            if entry.unread or entry.is_new
+            if entry.feed_section_id == self.section.id
+            and (entry.unread or entry.is_new)
         ]
 
     def schedule_rebuild(self):

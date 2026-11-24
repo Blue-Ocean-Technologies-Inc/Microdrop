@@ -82,9 +82,15 @@ class UxNotification(Notification):
     #: What the user did with it, e.g. "Calibrate"; empty until then.
     acted = Str()
 
-    #: For a new Sci-Bots Feed post's stand-in: the post's id. Such an
-    #: entry is never listed in the centre; it toasts and counts on the bell.
+    #: For a new news post's stand-in: the post's id. Such an entry is
+    #: never listed in the centre; it toasts and counts on the bell.
     feed_post_id = Str()
+
+    #: The stand-in's news section, and its publisher's look.
+    feed_section_id = Str()
+    feed_accent = Str()
+    feed_logo = Str()
+    feed_monogram = Str()
 
     #: Whether it stays on screen as a toast until dismissed or acted on.
     sticky = Property(Bool, observe="severity, action, needs_attention")
@@ -381,7 +387,7 @@ class UxPaneModel(NotificationsPaneModel):
     #: Fired with the entry whose second button the user pressed.
     run_secondary_action = Event(Instance(Notification))
 
-    #: Stand-ins for new Sci-Bots Feed posts, oldest first: unread until
+    #: Stand-ins for new news posts, oldest first: unread until
     #: the feed has been seen in the open drawer, new until it closes.
     feed_alerts = List(Instance(Notification))
 

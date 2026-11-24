@@ -62,8 +62,8 @@ def run(open_drawer):
 
     from .demo_plugins import (
         DemoPluginManagementPlugin,
+        NewsPlugin,
         NotificationsDemoPlugin,
-        SciBotsFeedPlugin,
         StandInPanesPlugin,
     )
     from .ux_plugin import UxNotificationsPlugin
@@ -102,7 +102,7 @@ def run(open_drawer):
         LoggerUIPlugin(),
         DemoPluginManagementPlugin(),
         StandInPanesPlugin(),
-        SciBotsFeedPlugin(),
+        NewsPlugin(),
         NotificationsDemoPlugin(open_drawer=open_drawer),
     ]
 

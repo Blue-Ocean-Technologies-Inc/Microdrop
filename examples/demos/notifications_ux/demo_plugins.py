@@ -8,9 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The prototype's fake plugins: stand-in panes, the Sci-Bots Feed section,
-the Demo menu and the session's notifications; and plugin management with
-its launch-time network and plugin-group steps left out.
+"""The prototype's fake plugins: stand-in panes, the news sections, the
+Demo menu and the session's notifications; and plugin management with its
+launch-time network and plugin-group steps left out.
 """
 
 # Standard library imports.
@@ -26,17 +26,15 @@ from pyface.tasks.action.api import SGroup, SMenu
 from traits.api import Any, Bool, Instance, List, observe
 
 # Microdrop package imports.
-from examples.demos.notifications_pane.sci_bots_feed_demo import (
-    add_feed_actions,
-    create_feed_section,
-)
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from notifications.consts import NOTIFICATION_SECTIONS, NOTIFICATIONS_PLUGIN_ID
 from plugin_management.plugin import PluginManagementPlugin
 
 # Local imports.
 from . import fake_panes, scenarios
-from .feed_models import FeedAlertWatcher, UxFeedSection
+from .news_actions import NewsFeedActions
+from .publishers import FeedAlertWatcher, NewsPublisher, default_publishers
+from .ux_consts import NEWS_SECTION_ORDER
 from .ux_models import ToastSettings
 
 # Logger import.
@@ -51,11 +49,8 @@ TASK_ID = f"{microdrop_application_PKG}.task"
 #: arrives, as the real update check's answer would.
 UPDATE_CHECK_MS = 2500
 
-#: The feed plugin's id, by which the Demo menu finds its section.
-FEED_PLUGIN_ID = "notifications_ux_demo.sci_bots_feed"
-
-#: The feed action listed first in the Demo menu.
-FEED_CREATOR_ACTION = "Feed creator…"
+#: The news plugin's id, by which the demo finds the news sections.
+NEWS_PLUGIN_ID = "notifications_ux_demo.news"
 
 #: The stand-in panes: (id of the real pane, title, factory).
 STAND_IN_PANES = [
@@ -98,20 +93,25 @@ class StandInPanesPlugin(Plugin):
                 central.hide()
 
 
-class SciBotsFeedPlugin(Plugin):
-    """Contributes the Sci-Bots Feed section of the notifications_pane demo."""
+class NewsPlugin(Plugin):
+    """Contributes one news section per publisher, in order."""
 
-    id = FEED_PLUGIN_ID
-    name = "Sci-Bots Feed Plugin (demo)"
+    id = NEWS_PLUGIN_ID
+    name = "News Plugin (demo)"
+
+    #: Who publishes news, in the drawer's order.
+    publishers = List(Instance(NewsPublisher))
 
     sections = List(contributes_to=NOTIFICATION_SECTIONS)
 
-    def _sections_default(self):
-        """The notifications_pane demo's feed, loaded, in the prototype's
-        section: open, so its sub-sections show what the feed holds."""
-        controller = create_feed_section().controller
+    def _publishers_default(self):
+        return default_publishers()
 
-        return [UxFeedSection(controller=controller, expanded=True)]
+    def _sections_default(self):
+        return [
+            publisher.make_section(NEWS_SECTION_ORDER + position)
+            for position, publisher in enumerate(self.publishers)
+        ]
 
 
 class AutoDismissAction(Action):
@@ -132,17 +132,6 @@ class AutoDismissAction(Action):
         self.checked = self.settings.auto_dismiss
 
 
-class _MenuActions:
-    """Takes ``addAction(text, callable)`` calls as a QToolBar does, so the
-    notifications_pane demo's toolbar actions can fill a menu group."""
-
-    def __init__(self):
-        self.actions = []
-
-    def addAction(self, text, callable_):
-        self.actions.append(Action(name=text, on_perform=callable_))
-
-
 class NotificationsDemoPlugin(Plugin):
     """The Demo menu, the session's start-up notifications, and what the
     cards' buttons pretend to do."""
@@ -158,8 +147,11 @@ class NotificationsDemoPlugin(Plugin):
     #: Answers the cards' buttons.
     _responder = Any()
 
-    #: Turns posts the feed gains into alerts.
-    _feed_watcher = Any()
+    #: Turn posts the news feeds gain into alerts: one per section.
+    _feed_watchers = List()
+
+    #: Each news section's Demo submenu actions.
+    _news_actions = List()
 
     #: The open Notification settings window, if any.
     _settings_ui = Any()
@@ -177,11 +169,18 @@ class NotificationsDemoPlugin(Plugin):
         )
         scenarios.post_history(center, self._experiment_folder())
 
-        self._feed_watcher = FeedAlertWatcher(
-            section=self.application.get_plugin(FEED_PLUGIN_ID).sections[0],
-            pane_model=controller.pane_model,
-            offer=self._notifications.toast_controller.offer,
-        )
+        self._feed_watchers = [
+            FeedAlertWatcher(
+                section=section,
+                pane_model=controller.pane_model,
+                offer=self._notifications.toast_controller.offer,
+            )
+            for section in self._news_sections
+        ]
+        self._news_actions = [
+            NewsFeedActions(section=section, window=self._window_control)
+            for section in self._news_sections
+        ]
 
     @observe("application:application_initialized")
     def _after_launch(self, event):
@@ -245,7 +244,10 @@ class NotificationsDemoPlugin(Plugin):
                 ),
                 id="notifications_ux_demo.notifications",
             ),
-            SGroup(*self._feed_actions(), id="notifications_ux_demo.feed"),
+            SGroup(
+                *[actions.menu() for actions in self._news_actions],
+                id="notifications_ux_demo.news",
+            ),
             SGroup(
                 AutoDismissAction(settings=self._toast_settings),
                 action("Notification settings…", self._open_settings),
@@ -260,16 +262,14 @@ class NotificationsDemoPlugin(Plugin):
             name="&Demo",
         )
 
-    def _feed_actions(self):
-        """The notifications_pane demo's feed actions, on this prototype's
-        feed section: the feed creator first."""
-        section = self.application.get_plugin(FEED_PLUGIN_ID).sections[0]
+    @property
+    def _news_sections(self):
+        return self.application.get_plugin(NEWS_PLUGIN_ID).sections
+
+    def _window_control(self):
         window = self.application.active_window
-        menu = _MenuActions()
 
-        add_feed_actions(menu, section, getattr(window, "control", None))
-
-        return sorted(menu.actions, key=lambda item: item.name != FEED_CREATOR_ACTION)
+        return getattr(window, "control", None)
 
     @property
     def _pane_model(self):

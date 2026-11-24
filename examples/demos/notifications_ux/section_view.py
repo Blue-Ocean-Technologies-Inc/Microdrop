@@ -33,8 +33,8 @@ from .ux_consts import (
 )
 from .view_styles import (
     icon_font,
-    logo_badge,
     muted_text,
+    publisher_badge,
     readable_accent,
     text_font,
     with_alpha,
@@ -83,7 +83,8 @@ class SectionHeader(QtWidgets.QAbstractButton):
         ``expanded``."""
         self.title, self.summary = title, summary
         target = 1.0 if expanded else 0.0
-        self.setToolTip(f"{'Collapse' if expanded else 'Expand'} {title.lower()}")
+        name = self.style_.name or title
+        self.setToolTip(f"{'Collapse' if expanded else 'Expand'} {name}")
 
         if animate and target != self._openness:
             self._turn.stop()
@@ -124,11 +125,18 @@ class SectionHeader(QtWidgets.QAbstractButton):
             painter.setBrush(with_alpha(text_color, 0.06))
             painter.drawRoundedRect(QtCore.QRectF(rect), 7, 7)
 
-        # The logo on its light disc, or the glyph on a tinted disc.
+        # A publisher's badge, or the glyph on a tinted disc.
         disc = QtCore.QRectF(6, (self.height() - DISC_SIZE) / 2, DISC_SIZE, DISC_SIZE)
+        style = self.style_
 
-        if self.style_.logo:
-            badge = logo_badge(self.style_.logo, DISC_SIZE, self.devicePixelRatioF())
+        if style.logo or style.monogram:
+            badge = publisher_badge(
+                style.logo,
+                style.monogram,
+                style.accent,
+                DISC_SIZE,
+                self.devicePixelRatioF(),
+            )
             painter.drawPixmap(disc.topLeft(), badge)
 
         else:

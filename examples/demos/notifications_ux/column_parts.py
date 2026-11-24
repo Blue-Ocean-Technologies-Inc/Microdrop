@@ -14,7 +14,7 @@ natural height, none scrolling by itself:
 * ``CardColumn``: notification cards. For Activity, with filter chips, day
   headings (Today / Yesterday / Earlier) and cards built only a batch at a
   time, as the column's scroll nears the end.
-* The Sci-Bots Feed's sub-sections are in ``feed_column``.
+* A news section's feed and its sub-sections are in ``feed_column``.
 * ``fit_item_views``: grows a contributed section's lists and tables to all
   their rows, so they need no scroll bar of their own.
 """

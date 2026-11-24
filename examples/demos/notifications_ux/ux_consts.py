@@ -23,8 +23,6 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, Field
 
 # Microdrop package imports.
-from examples.demos.notifications_pane.sci_bots_feed_section import FEED_SECTION_ID
-from microdrop_application.consts import scibots_icon_path
 from notifications.consts import (
     DRAWER_WIDTH,
     NOTIFICATION_POST,
@@ -33,7 +31,7 @@ from notifications.consts import (
 from plugin_management.consts import LOAD_STATUS_SECTION_ID
 
 # Microdrop style imports.
-from microdrop_style.colors import ACCENT_COLOR, INFO_COLOR, PRIMARY_COLOR
+from microdrop_style.colors import ACCENT_COLOR, INFO_COLOR
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
@@ -138,11 +136,19 @@ DRAWER_GRIP_WIDTH = 6
 # ---------------------------------------------------------------------------
 ATTENTION_SECTION_ID = f"{PKG}.attention"
 
-#: The drawer's section titles, kept short: Needs attention, the Sci-Bots
-#: Feed's section, and the one listing every other notification.
+#: The drawer's own section titles, kept short: Needs attention, and the one
+#: listing every other notification. A news section is titled by its
+#: publisher's short name.
 ATTENTION_SECTION_TITLE = "Needs attention"
-FEED_SECTION_TITLE = "News"
 HISTORY_SECTION_TITLE = "Activity"
+
+#: The first news section's order (after Plugins); the next publishers'
+#: follow it. A news section's id starts with NEWS_SECTION_PREFIX.
+NEWS_SECTION_ORDER = 10
+NEWS_SECTION_PREFIX = f"{PKG}.news."
+
+#: A news section's glyph when its publisher has no logo or monogram.
+NEWS_GLYPH = "newspaper"
 HISTORY_SECTION_ID = f"{PKG}.history"
 
 #: Sections sort by order: Needs attention first, the history last.
@@ -199,17 +205,16 @@ CARD_BODY_LINES = 2
 #: where WARNING_COLOR's yellow is not.
 ATTENTION_ACCENT = "#E8710A"
 
-#: A section's look: its glyph (a Material Symbols ligature), accent colour,
-#: and a logo shown instead of the glyph, if any.
-SectionStyle = namedtuple("SectionStyle", "glyph accent logo", defaults=("",))
-
-#: The Sci-Bots mark: News's icon and the new-post toasts'.
-SCIBOTS_LOGO = str(scibots_icon_path)
+#: A section's look: its glyph (a Material Symbols ligature) and accent
+#: colour; a logo (a picture's path) or a monogram shown instead of the
+#: glyph, if any; and the full name its header's tooltip gives.
+SectionStyle = namedtuple(
+    "SectionStyle", "glyph accent logo monogram name", defaults=("", "", "")
+)
 
 SECTION_STYLES = {
     ATTENTION_SECTION_ID: SectionStyle("priority_high", ATTENTION_ACCENT),
     LOAD_STATUS_SECTION_ID: SectionStyle("extension", ACCENT_COLOR),
-    FEED_SECTION_ID: SectionStyle("newspaper", PRIMARY_COLOR, SCIBOTS_LOGO),
     HISTORY_SECTION_ID: SectionStyle("notifications", INFO_COLOR),
 }
 

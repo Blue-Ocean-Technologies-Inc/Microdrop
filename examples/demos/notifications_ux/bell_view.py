@@ -29,7 +29,7 @@ from microdrop_status_bar.consts import ICON_PRIORITY_RIGHTMOST
 from notifications.consts import SEVERITY_COLORS
 
 # Microdrop style imports.
-from microdrop_style.colors import INFO_COLOR, PRIMARY_COLOR, WHITE
+from microdrop_style.colors import INFO_COLOR, WHITE
 from microdrop_style.icons.icons import ICON_NOTIFICATIONS, ICON_NOTIFICATIONS_ACTIVE
 
 # Local imports.
@@ -244,11 +244,12 @@ class UxBellIndicator(HasTraits):
 
         count = self.pane_model.bell_count
         severity = self.pane_model.bell_severity
-        color = (
-            PRIMARY_COLOR
-            if severity == FEED_SEVERITY
-            else SEVERITY_COLORS.get(severity)
-        )
+        color = SEVERITY_COLORS.get(severity)
+
+        # Only news posts counted: the newest one's publisher's colour.
+        if severity == FEED_SEVERITY:
+            unread = [entry for entry in self.pane_model.feed_alerts if entry.unread]
+            color = unread[-1].feed_accent if unread else INFO_COLOR
 
         quiet = self.pane_model.toasts.quiet
 

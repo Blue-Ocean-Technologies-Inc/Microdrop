@@ -38,20 +38,23 @@ PRIMARY_FILL_HOVER = PRIMARY_SHADE[500]
 PRIMARY_FILL_PRESSED = PRIMARY_SHADE[800]
 
 
-#: Logo badges made so far, by (path, size, device pixel ratio).
+#: Publisher badges made so far, by what they show, size and pixel ratio.
 _BADGES = {}
 
 
-def logo_badge(path, size, ratio=1.0):
-    """The logo at ``path`` on a light disc ``size`` px across: the light
-    disc keeps a mark with dark parts legible on the dark theme too."""
-    key = (str(path), size, ratio)
+def publisher_badge(logo, monogram, accent, size, ratio=1.0):
+    """A publisher's badge ``size`` px across: its logo (a picture's path)
+    on a light disc, which keeps a mark with dark parts legible on the dark
+    theme too; or, without a logo, ``monogram`` in white on an ``accent``
+    disc."""
+    key = (logo, monogram, accent, size, ratio)
     badge = _BADGES.get(key)
 
     if badge is not None:
         return badge
 
     pixels = int(round(size * ratio))
+    disc = QtCore.QRectF(0, 0, pixels, pixels)
     badge = QtGui.QPixmap(pixels, pixels)
     badge.fill(QtCore.Qt.GlobalColor.transparent)
 
@@ -59,18 +62,31 @@ def logo_badge(path, size, ratio=1.0):
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
     painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
     painter.setPen(QtCore.Qt.PenStyle.NoPen)
-    painter.setBrush(QtGui.QColor(PRIMARY_SHADE[50]))
-    painter.drawEllipse(QtCore.QRectF(0, 0, pixels, pixels))
 
-    inset = pixels * 0.14
-    logo = QtGui.QPixmap(str(path))
-    painter.drawPixmap(
-        QtCore.QRectF(inset, inset, pixels - 2 * inset, pixels - 2 * inset),
-        logo,
-        QtCore.QRectF(logo.rect()),
-    )
+    if logo:
+        painter.setBrush(QtGui.QColor(PRIMARY_SHADE[50]))
+        painter.drawEllipse(disc)
+
+        inset = pixels * 0.14
+        picture = QtGui.QPixmap(logo)
+        painter.drawPixmap(
+            disc.adjusted(inset, inset, -inset, -inset),
+            picture,
+            QtCore.QRectF(picture.rect()),
+        )
+
+    else:
+        painter.setBrush(QtGui.QColor(accent))
+        painter.drawEllipse(disc)
+
+        font = QtGui.QFont()
+        font.setPixelSize(max(int(pixels * 0.4), 6))
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QtGui.QColor(WHITE))
+        painter.drawText(disc, QtCore.Qt.AlignmentFlag.AlignCenter, monogram)
+
     painter.end()
-
     badge.setDevicePixelRatio(ratio)
     _BADGES[key] = badge
 

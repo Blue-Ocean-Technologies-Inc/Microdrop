@@ -34,16 +34,14 @@ from notifications.models.notification import Notification
 from notifications.views.formatting import format_exact_time, format_preview
 
 # Microdrop style imports.
-from microdrop_style.colors import INFO_COLOR, PRIMARY_COLOR
+from microdrop_style.colors import INFO_COLOR
 from microdrop_style.icons.icons import ICON_CLOSE
 
 # Local imports.
 from .card_parts import ClampedLabel, NewDot, meta_text
 from .ux_consts import (
     CARD_BODY_LINES,
-    FEED_SEVERITY,
     HIGHLIGHT_MS,
-    SCIBOTS_LOGO,
     HelpAction,
 )
 from .view_styles import (
@@ -54,9 +52,9 @@ from .view_styles import (
     icon_font,
     is_dark,
     link_button_style,
-    logo_badge,
     muted_text,
     primary_button_style,
+    publisher_badge,
     quiet_button_style,
     rounded_path,
     text_font,
@@ -83,18 +81,13 @@ _PALETTE_EVENTS = (
 )
 
 
-#: A new feed post's colour: the feed's brand green.
-FEED_COLOR = PRIMARY_COLOR
-
-
-def _style_key(entry):
-    """The glyph's colour rule: the severity's, or the feed's."""
-    return FEED_SEVERITY if entry.feed_post_id else entry.severity
-
-
 def _accent(entry):
-    """The stripe's colour: the severity's, or the feed's green."""
-    return FEED_COLOR if entry.feed_post_id else SEVERITY_COLORS[entry.severity]
+    """The stripe's colour: the severity's, or a news post's publisher's."""
+
+    if entry.feed_post_id:
+        return entry.feed_accent
+
+    return SEVERITY_COLORS[entry.severity]
 
 
 #: The cards' shared style sheet, by palette.
@@ -121,7 +114,7 @@ def card_style_sheet(palette):
     muted = muted_text(palette)
     glyphs = " ".join(
         f"QLabel#cardGlyph_{severity} {{ color: {color}; }}"
-        for severity, color in {**SEVERITY_COLORS, FEED_SEVERITY: FEED_COLOR}.items()
+        for severity, color in SEVERITY_COLORS.items()
     )
     sheet = " ".join(
         [
@@ -215,7 +208,7 @@ class NotificationCard(QtWidgets.QFrame):
         outer.setSpacing(10)
 
         self._glyph = QtWidgets.QLabel(self)
-        self._glyph.setObjectName(f"cardGlyph_{_style_key(self.entry)}")
+        self._glyph.setObjectName(f"cardGlyph_{self.entry.severity}")
         self._glyph.setFont(icon_font(GLYPH_SIZE))
         self._glyph.setFixedWidth(GLYPH_SIZE + 2)
         self._glyph.setAlignment(_ALIGN.AlignHCenter | _ALIGN.AlignTop)
@@ -316,7 +309,13 @@ class NotificationCard(QtWidgets.QFrame):
 
         if entry.feed_post_id:
             self._glyph.setPixmap(
-                logo_badge(SCIBOTS_LOGO, GLYPH_SIZE + 2, self.devicePixelRatioF())
+                publisher_badge(
+                    entry.feed_logo,
+                    entry.feed_monogram,
+                    entry.feed_accent,
+                    GLYPH_SIZE + 2,
+                    self.devicePixelRatioF(),
+                )
             )
 
         else:
