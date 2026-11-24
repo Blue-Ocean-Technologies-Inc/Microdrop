@@ -29,13 +29,21 @@ from dropbot_controller.consts import (
 )
 
 # Local imports.
+from .board_health import ALARM_BOARDS as ALARM_BOARDS
 from .board_health import HV_ENABLE_STATUS_OFF as HV_ENABLE_STATUS_OFF
 from .board_health import HV_ENABLE_STATUS_ON as HV_ENABLE_STATUS_ON
 from .board_health import HV_STATE_HALTED_BIT as HV_STATE_HALTED_BIT
 from .board_health import AlarmRaised as AlarmRaised
 from .board_health import AlarmReportEntry as AlarmReportEntry
+from .board_health import AlarmsCleared as AlarmsCleared
+from .board_health import BoardAlarmsCleared as BoardAlarmsCleared
+from .board_health import ClearAlarmsRequest as ClearAlarmsRequest
 from .board_health import FirmwareVersionsUpdated as FirmwareVersionsUpdated
 from .board_health import alarm_raised_publisher as alarm_raised_publisher
+from .board_health import (
+    alarms_cleared_publisher as alarms_cleared_publisher,
+)
+from .board_health import clear_alarms_publisher as clear_alarms_publisher
 from .board_health import firmware_versions_publisher as firmware_versions_publisher
 from .chip import CHIP_DETECT_RULE_ANY_POGO as CHIP_DETECT_RULE_ANY_POGO
 from .chip import CHIP_DETECT_RULE_BOTH_POGOS as CHIP_DETECT_RULE_BOTH_POGOS
@@ -333,8 +341,10 @@ from .settings import (
     PORTABLE_DROPBOT_PREFERENCES_PATH as PORTABLE_DROPBOT_PREFERENCES_PATH,
 )
 from .topics import ALARM_RAISED as ALARM_RAISED
+from .topics import ALARMS_CLEARED as ALARMS_CLEARED
 from .topics import CALIBRATION_UPDATED as CALIBRATION_UPDATED
 from .topics import CHIP_LOCK_FAILED as CHIP_LOCK_FAILED
+from .topics import CLEAR_ALARMS as CLEAR_ALARMS
 from .topics import CLEAR_HALT as CLEAR_HALT
 from .topics import CONNECT_TO_PORT as CONNECT_TO_PORT
 from .topics import DISCONNECT as DISCONNECT

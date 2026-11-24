@@ -8,17 +8,25 @@
 #
 # Thanks for using Microdrop open source!
 
-"""HV halt and enable status bits, and the alarm and firmware-version
-message contracts."""
+"""HV halt and enable status bits, and the alarm, alarm-clear and
+firmware-version message contracts."""
+
+# Standard library imports.
+from typing import Annotated, Literal
 
 # Third-party imports.
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
 # Local imports.
-from .topics import ALARM_RAISED, FIRMWARE_VERSIONS_UPDATED
+from .topics import (
+    ALARM_RAISED,
+    ALARMS_CLEARED,
+    CLEAR_ALARMS,
+    FIRMWARE_VERSIONS_UPDATED,
+)
 
 #: STATUS hv_state bit3: the firmware latched a halt (an HV deviation,
 #: chip-load saturation or short-circuit halt; vendor data_report.HV_HALTED).
@@ -27,6 +35,8 @@ HV_STATE_HALTED_BIT = 0x08
 #: refusals, see the vendor's self_test.HV_ENABLE_STATUS_TEXT.
 HV_ENABLE_STATUS_ON = 0
 HV_ENABLE_STATUS_OFF = 1
+#: The boards that latch alarms, as the driver's clear_alarm names them.
+ALARM_BOARDS = ("motor", "signal")
 
 # --------------------------------------------------------------------- #
 # Board health message contracts (topic + schema, one unit)              #
@@ -56,6 +66,43 @@ class AlarmRaised(BaseModel):
 
 alarm_raised_publisher = ValidatedTopicPublisher(
     topic=ALARM_RAISED, validator_class=AlarmRaised
+)
+
+
+class ClearAlarmsRequest(BaseModel):
+    """Clear latched alarms on `boards`: the listed `codes` (5 digits, e.g.
+    04012), or every alarm active on each board when `codes` is empty."""
+
+    boards: list[Literal[ALARM_BOARDS]] = list(ALARM_BOARDS)
+    codes: list[Annotated[str, Field(pattern=r"^\d{5}$")]] = []
+
+
+clear_alarms_publisher = ValidatedTopicPublisher(
+    topic=CLEAR_ALARMS, validator_class=ClearAlarmsRequest
+)
+
+
+class BoardAlarmsCleared(BaseModel):
+    """One board's clear: `cleared` codes are gone on the re-read; `failed`
+    codes were refused or are still active (their condition persists);
+    `still_active` is the re-read, code -> title. `error` says the alarms
+    could not be read, or the board did not answer at all."""
+
+    board: str
+    cleared: list[str] = []
+    failed: list[str] = []
+    still_active: dict[str, str] = {}
+    error: str = ""
+
+
+class AlarmsCleared(BaseModel):
+    """The outcome of a CLEAR_ALARMS request, one entry per board asked."""
+
+    results: list[BoardAlarmsCleared] = []
+
+
+alarms_cleared_publisher = ValidatedTopicPublisher(
+    topic=ALARMS_CLEARED, validator_class=AlarmsCleared
 )
 
 

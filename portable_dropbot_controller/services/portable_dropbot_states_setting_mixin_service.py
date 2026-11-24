@@ -10,17 +10,22 @@
 
 # Third-party imports.
 from dropbot_portable.self_test import HV_ENABLE_STATUS_TEXT
+from pydantic import ValidationError
 
 # Enthought library imports.
 from traits.api import HasTraits, Str, provides
 
 # Local imports.
+from ..board_alarms import clear_board_alarms, summarize_alarms_cleared
 from ..consts import (
     FLUORESCENCE_LED_RAW_MAX,
     HV_ENABLE_STATUS_OFF,
     HV_ENABLE_STATUS_ON,
     LIGHT_INTENSITY_RAW_MAX,
     RGB_LIGHT_STATES,
+    AlarmsCleared,
+    ClearAlarmsRequest,
+    alarms_cleared_publisher,
 )
 from ..interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
@@ -130,6 +135,40 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
             logger.info(f"Portable Dropbot halt clear --> {result.describe()}")
 
         self._publish_status_snapshot()
+
+    def on_clear_alarms_request(self, message):
+        """Clear latched board alarms (CLEAR_ALARM), each board under the
+        proxy lock: its active alarms (or the requested codes) are cleared,
+        then re-read. An alarm whose condition persists is reported as
+        still active on ALARMS_CLEARED, never raised."""
+
+        try:
+            request = ClearAlarmsRequest.model_validate_json(str(message) or "{}")
+        except ValidationError as error:
+            self._publish_error("alarm clear", error.errors()[0]["msg"])
+
+            return
+
+        results = []
+
+        for board in request.boards:
+            ok, result = self._proxy_call(
+                f"{board} alarm clear",
+                lambda: clear_board_alarms(self.proxy, board, request.codes),
+            )
+
+            if not ok:
+                result = {"board": board, "error": str(result or "not connected")}
+
+            results.append(result)
+
+        outcome = AlarmsCleared(results=results)
+
+        alarms_cleared_publisher.publish(outcome.model_dump())
+        logger.info(
+            f"Portable Dropbot alarm clear --> "
+            f"{summarize_alarms_cleared(outcome.results)}"
+        )
 
     def on_set_voltage_request(self, message):
         self.voltage = int(float(str(message)))

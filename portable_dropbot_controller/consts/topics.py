@@ -69,6 +69,9 @@ MAGNET_APPLIED = "portable_dropbot/signals/magnet_applied"
 TEMPERATURE_REACHED = "portable_dropbot/signals/temperature_reached"
 #: Driver alarm pushes (AlarmRaised): raises AND clears, one report each.
 ALARM_RAISED = "portable_dropbot/signals/alarm"
+#: Outcome of a CLEAR_ALARMS request (AlarmsCleared): per board, the codes
+#: cleared, the codes that failed and the alarms still active after.
+ALARMS_CLEARED = "portable_dropbot/signals/alarms_cleared"
 ERROR_RAISED = "portable_dropbot/signals/error"
 #: A smart chip lock or a pad retract that did not finish (ChipLockFailed).
 CHIP_LOCK_FAILED = "portable_dropbot/signals/chip_lock_failed"
@@ -89,6 +92,9 @@ DISCONNECT = "portable_dropbot/requests/disconnect"
 #: Clear a latched firmware halt (HALT_CLEAR); empty message. HV stays off
 #: until realtime mode enables it again.
 CLEAR_HALT = "portable_dropbot/requests/clear_halt"
+#: Clear latched board alarms (ClearAlarmsRequest; empty message = every
+#: active alarm on both boards); answers on ALARMS_CLEARED.
+CLEAR_ALARMS = "portable_dropbot/requests/clear_alarms"
 SET_VOLTAGE = "portable_dropbot/requests/set_voltage"
 SET_FREQUENCY = "portable_dropbot/requests/set_frequency"
 #: Move the chip tray (MoveTrayRequest). A legacy bare "in"/"out"/"toggle"
