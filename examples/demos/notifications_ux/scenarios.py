@@ -58,7 +58,6 @@ FLOOD_DISTINCT = 12
 BURST_SIZE = 20
 
 #: Demo topics the cards' buttons "publish".
-CALIBRATE_TOPIC = "demo/calibrate"
 UPDATE_PLUGINS_TOPIC = "demo/update_plugins"
 RESTART_TOPIC = "demo/restart"
 RETRY_CONNECTION_TOPIC = "demo/retry_connection"
@@ -70,6 +69,11 @@ JOB_MS = 2500
 
 CALIBRATION_DETAIL = (
     "Recalibrate before quantitative runs: capacitance readings drift over time."
+)
+
+#: Calibration has no command yet: the card carries only its how-to.
+CALIBRATION_HELP = HelpAction(
+    label="How to calibrate", tutorial="Calibrating the device"
 )
 
 PLUGIN_UPDATES_DETAIL = (
@@ -209,10 +213,7 @@ def post_calibration_old():
         category="calibration",
         source="dropbot_status_and_controls",
         needs_attention=True,
-        action=PublishAction(label="Calibrate", topic=CALIBRATE_TOPIC).model_dump(),
-        secondary_action=HelpAction(
-            label="How do I calibrate?", tutorial="Calibrating the device"
-        ).model_dump(),
+        secondary_action=CALIBRATION_HELP.model_dump(),
     )
 
 
@@ -289,10 +290,7 @@ def post_history(center, folder):
         source="dropbot_status_and_controls",
         timestamp=now - 600,
         needs_attention=True,
-        action=PublishAction(label="Calibrate", topic=CALIBRATE_TOPIC),
-        secondary_action=HelpAction(
-            label="How do I calibrate?", tutorial="Calibrating the device"
-        ),
+        secondary_action=CALIBRATION_HELP,
     )
     post_earlier_days(center, folder)
 
@@ -486,18 +484,6 @@ class DemoResponder(HasTraits):
 #: Each demo topic's immediate answer and, after JOB_MS, its outcome:
 #: (title, severity, detail[, action]).
 _ANSWERS = {
-    CALIBRATE_TOPIC: (
-        (
-            "Calibrating…",
-            SEVERITY_INFO,
-            "Keep the lid closed; this takes about a minute.",
-        ),
-        (
-            "Calibration done",
-            SEVERITY_SUCCESS,
-            "Capacitance offsets updated for all 90 channels.",
-        ),
-    ),
     UPDATE_PLUGINS_TOPIC: (
         (
             "Updating 2 plugins…",
