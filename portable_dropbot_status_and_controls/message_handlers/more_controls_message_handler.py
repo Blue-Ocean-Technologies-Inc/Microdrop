@@ -21,6 +21,7 @@ from portable_dropbot_controller.consts import (
     HeaterTuneApplied,
     HeaterTuneDone,
     HeaterTuneProgress,
+    HeaterTuneVerifyDone,
 )
 from template_status_and_controls.base_message_handler import (
     BaseMessageHandler,
@@ -108,6 +109,11 @@ class PortableDropbotMoreControlsMessageHandler(BaseMessageHandler):
         # The PID fields show the board's gains: refresh them.
         if applied.gains and applied.channel == self.model.temp_channel:
             publish_message(topic=TEMP_READ_PID, message=str(applied.channel))
+
+    def _on_heater_tune_verify_done_triggered(self, body):
+        self.model.heater_tune.adopt_verify_done(
+            HeaterTuneVerifyDone.model_validate_json(str(body))
+        )
 
     def _on_pmt_updated_triggered(self, body):
         data = json.loads(str(body))
