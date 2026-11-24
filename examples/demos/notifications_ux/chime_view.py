@@ -8,16 +8,22 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The bell's chime: a short sound as the bell rings for a new arrival.
+"""The bell's chime: a sound with each pop-up, so the rule is simply "when
+a notification pops up, it makes a sound".
 
-Driven by the pane model's ``rang`` event, so it hears exactly what the
-toasts decided is news: no start-up history, no repeats, nothing quiet mode
-holds. The tone is the category's choice (none, soft, alert, completion);
-an uncategorised arrival plays soft, or alert for a warning, an error or
-Needs attention. A burst makes one sound, though a stronger tone still
-sounds over a softer one just played. The sound effects are made on first
-use and play asynchronously; with no multimedia module or audio device the
-chime logs one warning and stays silent.
+Driven by the pane model's ``rang`` event (every arrival the bell rings
+for, the drawer open or not) and ``silenced`` (one it does not: start-up
+history, a repeat, one held while quiet). The tone is the category's
+choice (none, soft, alert, completion); an uncategorised arrival plays
+soft, or alert for a warning, an error or Needs attention. Within
+CHIME_OVERLAP_S of a chime only a stronger tone plays, so a burst makes
+one or two sounds. Every decision is logged at debug level and shown in
+the settings as the last sound and the last skip, with why.
+
+The three sounds load together the first time anything arrives after
+start-up or the settings open, not at launch; each tone has its own
+effect, restarted cleanly when played again. Without Qt Multimedia or an
+audio device the chime logs one warning and stays silent.
 """
 
 # Standard library imports.
@@ -25,7 +31,7 @@ import time
 
 # Enthought library imports.
 from pyface.qt import QtCore
-from traits.api import Bool, Dict, Float, HasTraits, Instance, Str, observe
+from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, observe
 
 # Microdrop package imports.
 from notifications.consts import SEVERITY_ERROR, SEVERITY_WARNING
@@ -34,7 +40,8 @@ from notifications.consts import SEVERITY_ERROR, SEVERITY_WARNING
 from microdrop_style.sounds.chimes import CHIME_ALERT, CHIME_COMPLETION, CHIME_GENTLE
 
 # Local imports.
-from .settings_models import TONE_ALERT, TONE_COMPLETION, TONE_SOFT
+from .settings_models import TONE_ALERT, TONE_COMPLETION, TONE_LABELS, TONE_SOFT
+from .ux_consts import SKIP_START_UP
 from .ux_models import UxPaneModel
 
 # Logger import.
@@ -42,18 +49,35 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-#: Least time (s) between two chimes: a burst or a flood makes one sound.
-CHIME_MIN_INTERVAL_S = 1.5
+#: Within this time (s) of a chime only a stronger tone plays: it stops
+#: exact overlaps, not a second notification a moment later.
+CHIME_OVERLAP_S = 0.4
 
+#: Why an arrival the bell rang for made no sound.
+SKIP_SOUND_OFF = "sound off"
+SKIP_TONE_NONE = "category tone none"
+SKIP_OVERLAP = "rate limit"
 
-#: Each tone's sound, weakest first: within the rate limit only a stronger
-#: tone than the last one sounds.
+#: Each tone's sound, weakest first: within CHIME_OVERLAP_S only a
+#: stronger tone than the last one sounds.
 TONE_SOUNDS = {
     TONE_SOFT: CHIME_GENTLE,
     TONE_ALERT: CHIME_ALERT,
     TONE_COMPLETION: CHIME_COMPLETION,
 }
 TONE_STRENGTH = {tone: strength for strength, tone in enumerate(TONE_SOUNDS)}
+
+
+def linear_volume(percent):
+    """The settings' volume (a 0-100 slider, even to the ear) as the linear
+    gain Qt's sound effects take."""
+    from pyface.qt.QtMultimedia import QtAudio
+
+    return QtAudio.convertVolume(
+        percent / 100,
+        QtAudio.VolumeScale.LogarithmicVolumeScale,
+        QtAudio.VolumeScale.LinearVolumeScale,
+    )
 
 
 def tone_for(entry, settings):
@@ -69,16 +93,20 @@ def tone_for(entry, settings):
 
 
 class NotificationChime(HasTraits):
-    """Plays the chime the pane model's ``rang`` calls for, as the toast
-    settings allow."""
+    """Plays the chime the pane model's ``rang`` calls for, as the
+    settings allow, and reports what it did and did not play."""
 
     pane_model = Instance(UxPaneModel)
 
-    #: QSoundEffects by sound path, made on first use.
+    #: QSoundEffects by sound path, one per tone, made on first use.
     _effects = Dict()
 
+    #: Lists the audio outputs: a change (headphones plugged in) remakes
+    #: the effects, so the next sound goes to the new default output.
+    _devices = Any()
+
     #: time.monotonic() of the last chime, and its tone.
-    _last_played = Float(-CHIME_MIN_INTERVAL_S)
+    _last_played = Float(-CHIME_OVERLAP_S)
     _last_tone = Str()
 
     #: Set once sound proved unavailable: warned once, then silent.
@@ -86,30 +114,75 @@ class NotificationChime(HasTraits):
 
     @observe("pane_model:rang")
     def _ring(self, event):
+        entry = event.new
         settings = self.pane_model.toasts.settings
-        tone = tone_for(event.new, settings)
+        tone = tone_for(entry, settings)
         now = time.monotonic()
 
-        if not settings.sound_enabled or tone not in TONE_SOUNDS:
+        self.preload()
+
+        if not settings.sound_enabled:
+            self._skip(entry, SKIP_SOUND_OFF)
+
             return
 
-        recent = now - self._last_played < CHIME_MIN_INTERVAL_S
+        if tone not in TONE_SOUNDS:
+            self._skip(entry, SKIP_TONE_NONE)
+
+            return
+
+        recent = now - self._last_played < CHIME_OVERLAP_S
         stronger = TONE_STRENGTH[tone] > TONE_STRENGTH.get(self._last_tone, -1)
 
         if recent and not stronger:
+            self._skip(entry, SKIP_OVERLAP)
+
             return
 
         self._last_played = now
         self._last_tone = tone
         self.play(TONE_SOUNDS[tone])
 
+        logger.debug(f"Chime for {entry.title!r}: played {tone}")
+        settings.last_sound = (
+            f"Last sound: {TONE_LABELS[tone]} · {entry.title} · {_clock()}"
+        )
+
+    @observe("pane_model:silenced")
+    def _silenced(self, event):
+        entry, reason = event.new
+
+        if reason != SKIP_START_UP:
+            self.preload()
+
+        self._skip(entry, reason)
+
+    @observe("pane_model:toasts:settings:opened")
+    def _settings_opened(self, event):
+        self.preload()
+
     @observe("pane_model:toasts:settings:test_sound")
     def _test(self, event):
         """The chosen tone, at the chosen volume."""
         self.play(TONE_SOUNDS[self.pane_model.toasts.settings.test_tone])
 
+    def _skip(self, entry, reason):
+        logger.debug(f"Chime for {entry.title!r}: skipped ({reason})")
+        self.pane_model.toasts.settings.last_skipped = (
+            f"Last skipped: {reason} · {entry.title} · {_clock()}"
+        )
+
+    def preload(self):
+        """Load every tone's sound now, so a first chime is not also a
+        first load."""
+
+        for path in TONE_SOUNDS.values():
+            self._effect(path)
+
     def play(self, path):
-        """Start ``path`` playing at the settings' volume; returns at once."""
+        """Start ``path`` playing at the settings' volume, from its start if
+        it is still playing; returns at once. Called while the sound still
+        loads, Qt plays it once loaded."""
         effect = self._effect(path)
 
         if effect is None:
@@ -117,7 +190,11 @@ class NotificationChime(HasTraits):
 
             return
 
-        effect.setVolume(self.pane_model.toasts.settings.sound_volume / 100)
+        effect.setVolume(linear_volume(self.pane_model.toasts.settings.sound_volume))
+
+        if effect.isPlaying():
+            effect.stop()
+
         effect.play()
 
         logger.debug(
@@ -141,6 +218,10 @@ class NotificationChime(HasTraits):
 
             return None
 
+        if self._devices is None:
+            self._devices = QtMultimedia.QMediaDevices()
+            self._devices.audioOutputsChanged.connect(self._outputs_changed)
+
         effect = QtMultimedia.QSoundEffect()
         effect.statusChanged.connect(lambda: self._check(effect))
         effect.playingChanged.connect(
@@ -150,6 +231,15 @@ class NotificationChime(HasTraits):
         self._effects[path] = effect
 
         return effect
+
+    def _outputs_changed(self):
+        """New effects for the new default output; the old ones finish."""
+        logger.debug("Chime: audio outputs changed; sounds reload")
+
+        for effect in self._effects.values():
+            effect.deleteLater()
+
+        self._effects = {}
 
     def _check(self, effect):
         """A sound that cannot load or play (e.g. no audio device) turns the
@@ -166,3 +256,7 @@ class NotificationChime(HasTraits):
         if not self._unavailable:
             self._unavailable = True
             logger.warning(f"Notification chime off for this session: {reason}")
+
+
+def _clock():
+    return time.strftime("%H:%M:%S")

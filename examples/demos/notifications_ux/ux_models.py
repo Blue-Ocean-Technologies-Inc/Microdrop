@@ -29,6 +29,7 @@ from traits.api import (
     List,
     Property,
     Str,
+    Tuple,
     Union,
     observe,
 )
@@ -420,6 +421,10 @@ class UxPaneModel(NotificationsPaneModel):
     #: Fired with an arrival the bell rings for: a new toast, a new post,
     #: or, while the drawer is open, an error or Needs attention item.
     rang = Event(Instance(Notification))
+
+    #: Fired with ``(entry, reason)`` for an arrival the bell does not ring
+    #: for: start-up history, a repeat, one held while quiet.
+    silenced = Event(Tuple(Instance(Notification), Str))
 
     #: Stand-ins for new news posts, oldest first: unread until
     #: the feed has been seen in the open drawer, new until it closes.

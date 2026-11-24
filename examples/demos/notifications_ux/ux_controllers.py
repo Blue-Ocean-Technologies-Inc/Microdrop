@@ -27,6 +27,10 @@ from notifications.controllers.notifications_controller import NotificationsCont
 from .ux_consts import (
     NEWS_SECTION_ID,
     QUIET_SUMMARY_SOURCE,
+    SKIP_QUIET,
+    SKIP_READ,
+    SKIP_REPEAT,
+    SKIP_START_UP,
     TOAST_LIMIT,
     TOAST_TICK_MS,
     HelpAction,
@@ -185,27 +189,32 @@ class ToastStackController(HasTraits):
 
     def offer(self, entry):
         """Pop ``entry`` up, hold it while quiet, or count it past the
-        limit, ringing the bell for what is news; while the drawer is open
-        only errors and Needs attention items ring."""
-        toasts = self.pane_model.toasts
+        limit, ringing the bell for each arrival, the drawer open or not;
+        what does not ring is reported as ``silenced``, with why."""
+        model = self.pane_model
+        toasts = model.toasts
         urgent = entry.severity == SEVERITY_ERROR or entry.needs_attention
 
         if not self.enabled:
+            model.silenced = (entry, SKIP_START_UP)
+
             return
 
-        if self.pane_model.is_open:
-            if urgent:
-                self.pane_model.rang = entry
+        if model.is_open:
+            model.rang = entry
 
             return
 
         if not entry.unread:
+            model.silenced = (entry, SKIP_READ)
+
             return
 
         item = toasts.find(entry)
 
         if item is not None and not item.leaving:
             item.remaining_ms = toasts.settings.timeout_ms
+            model.silenced = (entry, SKIP_REPEAT)
 
             return
 
@@ -217,9 +226,11 @@ class ToastStackController(HasTraits):
             if entry not in toasts.held:
                 toasts.held.append(entry)
 
+            model.silenced = (entry, SKIP_QUIET)
+
             return
 
-        self.pane_model.rang = entry
+        model.rang = entry
 
         # Pop-ups off for its category: straight to the bell.
         if kind is not None and not kind.popup and not urgent:
@@ -244,6 +255,8 @@ class ToastStackController(HasTraits):
 
         if item is not None and not item.leaving:
             item.remaining_ms = toasts.settings.timeout_ms
+
+        self.pane_model.silenced = (event.new, SKIP_REPEAT)
 
     @observe("pane_model:toasts:settings:[auto_dismiss, auto_dismiss_seconds]")
     def _apply_settings(self, event):

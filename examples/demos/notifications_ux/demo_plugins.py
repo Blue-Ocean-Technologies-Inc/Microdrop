@@ -336,6 +336,7 @@ class NotificationsDemoPlugin(Plugin):
 
     def _open_settings_window(self, view, context):
         """One window per view, raised if already open."""
+        self._toast_settings.opened = True
         ui = self._settings_uis.get(view.title)
 
         if ui is not None and ui.control is not None:

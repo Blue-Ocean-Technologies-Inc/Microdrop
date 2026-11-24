@@ -152,6 +152,8 @@ GENERAL_GROUPS = [
             ),
             Item("test_sound", show_label=False, enabled_when="sound_enabled"),
         ),
+        Item("last_sound", show_label=False, style="readonly"),
+        Item("last_skipped", show_label=False, style="readonly"),
         label="Sound",
         show_border=True,
     ),

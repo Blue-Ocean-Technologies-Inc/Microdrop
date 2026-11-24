@@ -30,6 +30,7 @@ from traits.api import (
     Button,
     Dict,
     Enum,
+    Event,
     HasTraits,
     Instance,
     Int,
@@ -154,11 +155,19 @@ class NotificationSettings(HasTraits):
 
     #: A chime as the bell rings for a new arrival, and its volume (%).
     sound_enabled = Bool(True)
-    sound_volume = Range(0, 100, 40)
+    sound_volume = Range(0, 100, 80)
 
     #: The tone the Test button plays.
     test_tone = Enum(TONE_SOFT, TONE_ALERT, TONE_COMPLETION)
     test_sound = Button("Test")
+
+    #: What the chime last did, and last did not, and why: shown in the
+    #: settings so a silence can be explained without the log.
+    last_sound = Str("Last sound: none yet")
+    last_skipped = Str("Last skipped: none yet")
+
+    #: Fired as the settings window opens: the sounds load then.
+    opened = Event()
 
     #: The declared categories, by owner, in declaration order.
     groups = List(Instance(NotificationCategoryGroup))
