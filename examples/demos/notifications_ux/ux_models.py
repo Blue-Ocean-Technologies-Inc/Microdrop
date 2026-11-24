@@ -86,6 +86,9 @@ class UxNotification(Notification):
     #: never listed in the centre; it toasts and counts on the bell.
     feed_post_id = Str()
 
+    #: The condition that raised it; resolving that id clears it.
+    condition_id = Str()
+
     #: Whether it stays on screen as a toast until dismissed or acted on.
     sticky = Property(Bool, observe="severity, action, needs_attention")
 
@@ -149,6 +152,7 @@ class UxNotificationCenter(NotificationCenter):
         first_seen=None,
         secondary_action=None,
         needs_attention=False,
+        condition_id="",
     ):
         """List a notification as the product centre does, as an
         UxNotification, and announce it for a toast."""
@@ -165,6 +169,7 @@ class UxNotificationCenter(NotificationCenter):
                 action=action or entry.action,
                 secondary_action=secondary_action or entry.secondary_action,
                 needs_attention=needs_attention or entry.needs_attention,
+                condition_id=condition_id or entry.condition_id,
                 count=entry.count + count,
                 last_seen=timestamp,
                 acted="",
@@ -192,6 +197,7 @@ class UxNotificationCenter(NotificationCenter):
             action=action,
             secondary_action=secondary_action,
             needs_attention=needs_attention,
+            condition_id=condition_id,
             count=count,
         )
         self._entries_by_key[key] = entry
@@ -215,7 +221,16 @@ class UxNotificationCenter(NotificationCenter):
             action=message.action,
             secondary_action=getattr(message, "secondary_action", None),
             needs_attention=getattr(message, "needs_attention", False),
+            condition_id=getattr(message, "condition_id", ""),
         )
+
+    def resolve(self, condition_id, resolution):
+        """The condition ``condition_id`` cleared: its cards leave Needs
+        attention, read, their buttons replaced by ``resolution``."""
+
+        for entry in self.attention_entries:
+            if entry.condition_id == condition_id:
+                entry.trait_set(needs_attention=False, unread=False, acted=resolution)
 
     def update_all(self, entries, **traits):
         """Set ``traits`` on ``entries`` quietly, then announce it once, as

@@ -81,10 +81,34 @@ class UxNotificationMessage(NotificationMessage):
     #: Clear all, and its toast stays until acted on or dismissed.
     needs_attention: bool = False
 
+    #: Names the condition that raised it, e.g. "dropbot.chip_missing": a
+    #: NOTIFICATION_RESOLVE with this id clears the card once the condition
+    #: does, with no button pressed.
+    condition_id: str = ""
+
 
 #: Posts on the product topic; the prototype's handler reads the additions.
 ux_notification_publisher = ValidatedTopicPublisher(
     topic=NOTIFICATION_POST, validator_class=UxNotificationMessage
+)
+
+#: A condition cleared (NotificationResolveRequest): its cards leave Needs
+#: attention, marked with what cleared it.
+NOTIFICATION_RESOLVE = "ui/notifications/resolve"
+
+
+class NotificationResolveRequest(BaseModel):
+    """A condition that raised Needs attention cards has cleared."""
+
+    #: The cards' ``condition_id``.
+    condition_id: str = Field(min_length=1)
+
+    #: What cleared it, shown on the cards, e.g. "Chip detected".
+    resolution: str = "Resolved"
+
+
+ux_resolve_publisher = ValidatedTopicPublisher(
+    topic=NOTIFICATION_RESOLVE, validator_class=NotificationResolveRequest
 )
 
 # ---------------------------------------------------------------------------

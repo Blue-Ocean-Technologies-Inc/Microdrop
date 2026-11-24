@@ -21,16 +21,22 @@ import logging
 
 # Enthought library imports.
 from pyface.api import GUI
-from traits.api import Any, Instance
+from traits.api import Any, Instance, List
 
 # Microdrop package imports.
+from message_router.consts import ACTOR_TOPIC_ROUTES
+from notifications.consts import ACTOR_TOPIC_DICT, LISTENER_NAME
 from notifications.controllers.load_failure_notifier import PluginLoadFailureNotifier
 from notifications.controllers.message_handler import NotificationsMessageHandler
 from notifications.plugin import NotificationsPlugin
 from notifications.services.log_forwarder import NotificationLogHandler
 
 # Local imports.
-from .ux_consts import UxNotificationMessage
+from .ux_consts import (
+    NOTIFICATION_RESOLVE,
+    NotificationResolveRequest,
+    UxNotificationMessage,
+)
 from .ux_controllers import ToastStackController, UxNotificationsController
 from .ux_models import AttentionSection, HistorySection
 
@@ -49,11 +55,23 @@ class UxMessageHandler(NotificationsMessageHandler):
 
         GUI.invoke_later(center.post_message, notification)
 
+    def _on_resolve_triggered(self, message):
+        request = NotificationResolveRequest.model_validate_json(message)
+        center = self.controller.pane_model.center
+
+        GUI.invoke_later(center.resolve, request.condition_id, request.resolution)
+
 
 class UxNotificationsPlugin(NotificationsPlugin):
     """NotificationsPlugin with toasts and the prototype's drawer and bell."""
 
     controller = Instance(UxNotificationsController)
+
+    #: The product's routes, plus conditions clearing.
+    actor_topic_routing = List(
+        [{LISTENER_NAME: [*ACTOR_TOPIC_DICT[LISTENER_NAME], NOTIFICATION_RESOLVE]}],
+        contributes_to=ACTOR_TOPIC_ROUTES,
+    )
 
     #: Pops new notifications up and times them.
     toast_controller = Instance(ToastStackController)
