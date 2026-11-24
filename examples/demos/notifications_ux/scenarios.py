@@ -20,6 +20,7 @@ responder logs and posts what would have happened.
 import threading
 import time
 import traceback
+from datetime import datetime, timedelta
 
 # Enthought library imports.
 from pyface.api import GUI
@@ -293,6 +294,142 @@ def post_history(center, folder):
             label="How do I calibrate?", tutorial="Calibrating the device"
         ),
     )
+    post_earlier_days(center, folder)
+
+
+def _days_ago(days, hour, minute):
+    """Seconds since the epoch, ``days`` ago at ``hour``:``minute``."""
+    day = datetime.now() - timedelta(days=days)
+
+    return day.replace(hour=hour, minute=minute, second=0).timestamp()
+
+
+def post_earlier_days(center, folder):
+    """Yesterday's and older entries, so Activity spans its day headings."""
+
+    for days, hour, minute, title, fields in EARLIER_ENTRIES:
+        center.post(title, timestamp=_days_ago(days, hour, minute), **fields)
+
+    center.post(
+        "Protocol finished",
+        detail="31 steps in 9 min 2 s. The report is in the experiment folder.",
+        severity=SEVERITY_SUCCESS,
+        category="protocol",
+        source="pluggable_protocol_tree",
+        timestamp=_days_ago(1, 16, 40),
+        action=OpenPathAction(label="Show folder", path=folder),
+        key=("earlier", "protocol finished"),
+    )
+
+
+#: (days ago, hour, minute, title, post keywords), for post_earlier_days.
+EARLIER_ENTRIES = [
+    (
+        1,
+        11,
+        5,
+        "DropBot disconnected unexpectedly",
+        {
+            "detail": "The USB link dropped during step 14; the run was paused.",
+            "severity": SEVERITY_WARNING,
+            "category": "hardware",
+            "source": "dropbot_controller",
+        },
+    ),
+    (
+        1,
+        9,
+        20,
+        "Calibration done",
+        {
+            "detail": "Capacitance offsets updated for all 90 channels.",
+            "severity": SEVERITY_SUCCESS,
+            "category": "calibration",
+            "source": "dropbot_status_and_controls",
+        },
+    ),
+    (
+        3,
+        15,
+        2,
+        "Could not save the experiment log",
+        {
+            "detail": "PermissionError: the experiment folder is read-only.",
+            "severity": SEVERITY_ERROR,
+            "category": "protocol",
+            "source": "pluggable_protocol_tree",
+            "action": PublishAction(label="Retry", topic="demo/retry_save"),
+        },
+    ),
+    (
+        4,
+        10,
+        30,
+        "MicroDrop updated to v1.47.0",
+        {
+            "detail": "See What's new in the Sci-Bots Feed.",
+            "severity": SEVERITY_INFO,
+            "category": "general",
+            "source": "app_updates",
+        },
+    ),
+]
+
+
+# ---------------------------------------------------------------------------
+# A protocol run, quiet
+# ---------------------------------------------------------------------------
+
+#: How long the simulated run lasts (s), and what it posts when (s in).
+PROTOCOL_RUN_S = 15
+
+RUN_EVENTS = [
+    (1.5, {"title": "Step 1 finished", "severity": SEVERITY_SUCCESS}),
+    (3.5, {"title": "Captured frame 1", "severity": SEVERITY_INFO}),
+    (
+        5.5,
+        {"title": "Low liquid level on electrode 18", "severity": SEVERITY_WARNING},
+    ),
+    (7.5, {"title": "Step 2 finished", "severity": SEVERITY_SUCCESS}),
+    (
+        9.5,
+        {
+            "title": "Short detected on electrode 31",
+            "severity": SEVERITY_ERROR,
+            "detail": "Electrode 31 was disabled; the run goes on without it.",
+        },
+    ),
+    (11.5, {"title": "Video saved", "severity": SEVERITY_INFO}),
+]
+
+
+def simulate_protocol_run(center, toasts):
+    """A PROTOCOL_RUN_S run, quiet: its info, success and warning posts are
+    held, its error pops up, and one summary toast follows."""
+
+    if toasts.quiet:
+        return
+
+    center.post(
+        "Protocol started",
+        detail="Quiet until it ends: only errors and actions pop up.",
+        severity=SEVERITY_INFO,
+        category="protocol",
+        source="pluggable_protocol_tree",
+        key=("run", "started", time.time()),
+    )
+    toasts.trait_set(quiet_reason="Protocol", quiet=True)
+
+    for seconds, fields in RUN_EVENTS:
+        GUI.invoke_after(
+            int(seconds * 1000),
+            _publish,
+            category="protocol",
+            source="pluggable_protocol_tree",
+            **fields,
+        )
+
+    GUI.invoke_after(PROTOCOL_RUN_S * 1000, setattr, toasts, "quiet", False)
 
 
 # ---------------------------------------------------------------------------
