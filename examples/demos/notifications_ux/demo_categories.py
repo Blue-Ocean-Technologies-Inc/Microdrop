@@ -20,6 +20,7 @@ from .settings_models import (
     TONE_ALERT,
     TONE_COMPLETION,
     TONE_NONE,
+    TONE_SOFT,
     NotificationCategorySpec,
 )
 
@@ -46,7 +47,7 @@ PROTOCOL_CATEGORIES = [
         group=PROTOCOL_GROUP,
         label="Protocol started",
         description="A run begins.",
-        tone=TONE_NONE,
+        tone=TONE_SOFT,
     ),
     NotificationCategorySpec(
         id=PROTOCOL_FINISHED,
@@ -85,7 +86,7 @@ DROPBOT_CATEGORIES = [
         group="DropBot",
         label="Maintenance reminders",
         description="Calibration and self tests that are due.",
-        tone=TONE_NONE,
+        tone=TONE_SOFT,
     ),
 ]
 
@@ -101,7 +102,7 @@ PLUGINS_CATEGORIES = [
         group="Plugins",
         label="Updates available",
         description="Newer versions of installed plugins, and updating them.",
-        tone=TONE_NONE,
+        tone=TONE_SOFT,
     ),
     NotificationCategorySpec(
         id=PLUGINS_LOAD_FAILED,
@@ -124,6 +125,6 @@ NEWS_CATEGORIES = [
         group="News",
         label="New posts",
         description="A newsletter, announcement or release note arrives.",
-        tone=TONE_NONE,
+        tone=TONE_SOFT,
     ),
 ]
