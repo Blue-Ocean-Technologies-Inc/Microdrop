@@ -15,9 +15,6 @@ import os
 import pickle
 from pathlib import Path
 
-# Third-party imports.
-from PySide6.QtCore import Qt
-
 # Enthought library imports.
 from envisage.ui.tasks.api import TasksApplication
 from envisage.ui.tasks.tasks_application import DEFAULT_STATE_FILENAME
@@ -52,6 +49,7 @@ from microdrop_utils.application_home import configure_application_home
 from microdrop_utils.deferred_plugins import DeferredPlugin
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.isolating_plugin_manager import IsolatingPluginManager
+from microdrop_utils.splash_screen import MicrodropSplashScreen
 from microdrop_utils.system_config import is_rpi
 from microdrop_utils.tasks_runtime_helpers import describe_dock_widgets
 
@@ -241,47 +239,8 @@ class MicrodropApplication(TasksApplication):
         return ImageResource(str(icon_path))
 
     def _splash_screen_default(self):
-        splash_image_path = (
-            Path(__file__).parent.parent
-            / "microdrop_style"
-            / "icons"
-            / "Microdrop_Primary_Logo_FHD.png"
-        )
-
-        class _TopMostSplashScreen(SplashScreen):
-            """SplashScreen forced to stay on top of every other window.
-
-            A bare ``QSplashScreen`` is frameless and top-level but does NOT carry
-            ``WindowStaysOnTopHint``, so while the app boots it can get buried behind
-            the task window. We add the hint (and raise/activate on show) so the splash
-            always sits at the top level of the application until it's closed.
-            """
-
-            def _create_control(self, parent):
-                control = super()._create_control(parent)
-                # The FHD artwork (1920x1080) overflows small screens
-                # (the portable device is 1280x800) and, being always
-                # on top, locks the user out of everything under it —
-                # cap it at 60% of the available screen and re-centre.
-                available = control.screen().availableGeometry()
-                target = available.size() * 0.6
-                pixmap = control.pixmap()
-                if pixmap.width() > target.width() or pixmap.height() > target.height():
-                    control.setPixmap(
-                        pixmap.scaled(
-                            target, Qt.KeepAspectRatio, Qt.SmoothTransformation
-                        )
-                    )
-                    control.move(available.center() - control.rect().center())
-                control.setWindowFlags(control.windowFlags() | Qt.WindowStaysOnTopHint)
-                control.raise_()
-                control.activateWindow()
-                return control
-
-        return _TopMostSplashScreen(
-            image=ImageResource(str(splash_image_path)),
-            text="Microdrop-Next-Gen v.beta",
-        )
+        """Fallback for launchers that did not open the splash themselves."""
+        return MicrodropSplashScreen()
 
     #### Trait property getter/setters ########################################
 
