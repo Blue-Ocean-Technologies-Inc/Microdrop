@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "_readme": "SAMPLE content for the notifications prototype's Blue Ocean Technologies news section. Placeholders only: there is no real Blue Ocean Technologies feed yet. Same format as notifications_pane/sci_bots_feed.json.",
+  "posts": [
+    {
+      "title": "Sample: MicroDrop is developed by Blue Ocean Technologies",
+      "kind": "post",
+      "date": "2026-11",
+      "summary": "Placeholder post. MicroDrop, open-source software for digital microfluidics, is developed by Blue Ocean Technologies.",
+      "url": "https://github.com/Blue-Ocean-Technologies-Inc/Microdrop"
+    },
+    {
+      "title": "Sample: MicroDrop releases are published on GitHub",
+      "kind": "announcement",
+      "date": "2026-11",
+      "summary": "Placeholder post. Each MicroDrop release and its notes are listed on the repository's Releases page.",
+      "url": "https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases"
+    },
+    {
+      "title": "Sample: Report a problem or suggest a feature",
+      "kind": "post",
+      "date": "2026-11",
+      "summary": "Placeholder post. Problems and ideas for MicroDrop are tracked as issues in its GitHub repository.",
+      "url": "https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/issues"
+    }
+  ]
+}
