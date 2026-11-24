@@ -21,6 +21,7 @@ root_packages =
     microdrop_utils
     mock_dropbot_controller
     mock_dropbot_status
+    notifications
     opendrop_controller
     opendrop_status_and_controls
     peripheral_device_controller_base
@@ -63,6 +64,7 @@ modules =
     microdrop_status_bar
     mock_dropbot_controller
     mock_dropbot_status
+    notifications
     opendrop_controller
     opendrop_status_and_controls
     peripheral_device_controller_base
