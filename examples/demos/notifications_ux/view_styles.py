@@ -18,24 +18,28 @@ A candidate for ``microdrop_style`` once ported.
 from pyface.qt import QtCore, QtGui
 
 # Microdrop style imports.
-from microdrop_style.colors import PRIMARY_SHADE, WHITE
+from microdrop_style.colors import WHITE
 from microdrop_style.fonts.fontnames import ICON_FONT_FAMILY
+
+# Local imports.
+from . import colour_roles
 
 _ROLE = QtGui.QPalette.ColorRole
 
 #: Window lightness below which a palette is dark.
 DARK_LIGHTNESS = 128
 
-#: Least contrast ratio of accent-coloured text against a card.
-ACCENT_TEXT_CONTRAST = 3.2
+#: Least contrast ratio of accent-coloured text against a card: WCAG's
+#: for normal text.
+ACCENT_TEXT_CONTRAST = colour_roles.TEXT_CONTRAST
 
 #: Corner radius (px) of cards, toasts and section headers.
 CARD_RADIUS = 8
 
 #: The primary buttons' fill, and while hovered or pressed.
-PRIMARY_FILL = PRIMARY_SHADE[600]
-PRIMARY_FILL_HOVER = PRIMARY_SHADE[500]
-PRIMARY_FILL_PRESSED = PRIMARY_SHADE[800]
+PRIMARY_FILL = colour_roles.PRIMARY_FILL[colour_roles.LIGHT]
+PRIMARY_FILL_HOVER = colour_roles.PRIMARY_FILL_HOVER[colour_roles.LIGHT]
+PRIMARY_FILL_PRESSED = colour_roles.PRIMARY_FILL_PRESSED[colour_roles.LIGHT]
 
 
 #: Logo pictures scaled so far, by path, height and pixel ratio.
@@ -133,7 +137,71 @@ def card_border(palette):
 
 def muted_text(palette):
     """Secondary text: times, sources, hints."""
-    return mix(palette.color(_ROLE.Text), palette.color(_ROLE.Window), 0.42)
+    return mix(
+        palette.color(_ROLE.Text), palette.color(_ROLE.Window), colour_roles.MUTED_MIX
+    )
+
+
+def role_color(palette, role):
+    """A colour role's ``(light, dark)`` pair for the theme of ``palette``."""
+    return QtGui.QColor(
+        role[colour_roles.DARK if is_dark(palette) else colour_roles.LIGHT]
+    )
+
+
+def _theme(palette):
+    return colour_roles.DARK if is_dark(palette) else colour_roles.LIGHT
+
+
+def readable_text(color, palette, on_card=False):
+    """``color`` made readable as text (WCAG 4.5:1) on a card, or on every
+    surface of the drawer (its translucent part at its worst included)."""
+    surfaces = colour_roles.surfaces(_theme(palette))
+    names = (
+        ["card"] if on_card else ["drawer", "drawer over black", "drawer over white"]
+    )
+    color = QtGui.QColor(color).name()
+
+    for name in names:
+        color = colour_roles.readable_on(color, surfaces[name])
+
+    return QtGui.QColor(color)
+
+
+#: How strongly a chip's accent tints its background.
+CHIP_TINT = 0.16
+
+
+def chip_text(accent, palette):
+    """``accent`` readable on its own tinted chip, on the drawer at its
+    worst."""
+    surfaces = colour_roles.surfaces(_theme(palette))
+    accent = QtGui.QColor(accent).name()
+    color = accent
+
+    for name in ("drawer", "drawer over black", "drawer over white", "card"):
+        chip = colour_roles.blend(accent, surfaces[name], CHIP_TINT)
+        color = colour_roles.readable_on(color, chip)
+
+    return QtGui.QColor(color)
+
+
+def link_color(palette):
+    """The one colour of clickable text that is not a primary button."""
+    return role_color(palette, colour_roles.LINK)
+
+
+#: Whether sub-section titles are drawn in their accent ("coloured") or in
+#: the text colour with the accent on their glyph, chip and rule ("quiet").
+_coloured_titles = [False]
+
+
+def set_coloured_titles(coloured):
+    _coloured_titles[0] = bool(coloured)
+
+
+def coloured_titles():
+    return _coloured_titles[0]
 
 
 def _luminance(color):
@@ -230,9 +298,9 @@ def quiet_button_style(palette, selector="QPushButton"):
 
 
 def outlined_button_style(palette, selector="QPushButton"):
-    """An outlined button in the primary colour: a card's one control when
-    it is guidance rather than a command, e.g. "How to calibrate"."""
-    color = css(readable_accent(PRIMARY_FILL, palette))
+    """An outlined button in the link colour: a card's one control when it
+    is guidance rather than a command, e.g. "How to calibrate"."""
+    color = css(readable_accent(link_color(palette), palette))
 
     return (
         f"{selector} {{"
@@ -275,7 +343,7 @@ def glyph_pixmap(glyph, pixel_size, color, ratio=1.0):
 def outlined_button_icon(glyph, palette, ratio=1.0):
     """``glyph`` in the outlined button's colour."""
     return QtGui.QIcon(
-        glyph_pixmap(glyph, 16, readable_accent(PRIMARY_FILL, palette), ratio)
+        glyph_pixmap(glyph, 16, readable_accent(link_color(palette), palette), ratio)
     )
 
 
