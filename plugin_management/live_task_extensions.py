@@ -32,12 +32,18 @@ the handler inline when the change is already on the main thread, so it would
 neither defer nor coalesce. ``GUI.invoke_later`` is the deferral primitive.)
 """
 
+# Enthought library imports.
 from pyface.api import GUI
 from traits.api import Any, Bool, Dict, HasTraits, List, Property
 
+# Microdrop utils imports.
 from microdrop_utils.tasks_runtime_helpers import (
-    add_dock_pane_live, rebuild_menu_bar_live, remove_dock_pane_live,
+    add_dock_pane_live,
+    rebuild_menu_bar_live,
+    remove_dock_pane_live,
 )
+
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -71,9 +77,19 @@ class LiveTaskExtensionsController(HasTraits):
         return bool(self._pane_id_by_factory)
 
     def on_changed(self, added, removed):
-        """Record a TASK_EXTENSIONS delta and schedule one deferred reconcile."""
+        """Record a TASK_EXTENSIONS delta and schedule one deferred reconcile.
+
+        An extension withdrawn before the reconcile that would mount it (a
+        plugin rolled back right after being added) cancels out instead of
+        being mounted for a plugin that is gone."""
+        for extension in removed:
+            if extension in self._pending_added:
+                self._pending_added.remove(extension)
+            else:
+                self._pending_removed.append(extension)
+
         self._pending_added.extend(added)
-        self._pending_removed.extend(removed)
+
         if not self._scheduled:
             self._scheduled = True
             GUI.invoke_later(self._reconcile)
