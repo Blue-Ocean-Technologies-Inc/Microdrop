@@ -41,9 +41,9 @@ from microdrop_style.icons.icons import ICON_CLOSE
 from .card_parts import ClampedLabel, NewDot, meta_text
 from .ux_consts import (
     CARD_BODY_LINES,
-    FEED_GLYPH,
     FEED_SEVERITY,
     HIGHLIGHT_MS,
+    SCIBOTS_LOGO,
     HelpAction,
 )
 from .view_styles import (
@@ -54,6 +54,7 @@ from .view_styles import (
     icon_font,
     is_dark,
     link_button_style,
+    logo_badge,
     muted_text,
     primary_button_style,
     quiet_button_style,
@@ -313,9 +314,13 @@ class NotificationCard(QtWidgets.QFrame):
         entry = self.entry
         palette = self.palette()
 
-        self._glyph.setText(
-            FEED_GLYPH if entry.feed_post_id else SEVERITY_GLYPHS[entry.severity]
-        )
+        if entry.feed_post_id:
+            self._glyph.setPixmap(
+                logo_badge(SCIBOTS_LOGO, GLYPH_SIZE + 2, self.devicePixelRatioF())
+            )
+
+        else:
+            self._glyph.setText(SEVERITY_GLYPHS[entry.severity])
 
         bold = self.toast or entry.unread or entry.needs_attention
         self._title.setFont(

@@ -367,7 +367,7 @@ EARLIER_ENTRIES = [
         30,
         "MicroDrop updated to v1.47.0",
         {
-            "detail": "See What's new in the Sci-Bots Feed.",
+            "detail": "See What's new under News.",
             "severity": SEVERITY_INFO,
             "category": "general",
             "source": "app_updates",

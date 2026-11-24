@@ -24,7 +24,7 @@ from examples.demos.notifications_pane.sci_bots_feed_section import (
 from notifications.consts import SEVERITY_INFO
 
 # Local imports.
-from .ux_consts import CATEGORY_FEED
+from .ux_consts import CATEGORY_FEED, FEED_SECTION_TITLE
 from .ux_models import UxNotification, UxPaneModel
 
 #: The kicker before a feed post's kind on its toast: "Sci-Bots · Newsletter".
@@ -34,6 +34,8 @@ FEED_KICKER = "Sci-Bots"
 class UxFeedSection(SciBotsFeedSection):
     """The feed section, with its sub-sections' state kept for the session
     and a "N new" chip while new posts are unseen or marked new."""
+
+    title = FEED_SECTION_TITLE
 
     #: Group ids whose sub-section is collapsed.
     collapsed_groups = Set(Str)
