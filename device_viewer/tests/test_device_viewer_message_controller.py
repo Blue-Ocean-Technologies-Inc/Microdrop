@@ -39,6 +39,7 @@ from device_viewer.consts import (
 from microdrop_utils.datetime_helpers import TimestampedMessage
 
 CONTROLLER_MODULE = "device_viewer.controllers.device_viewer_message_controller"
+REQUESTS_MODULE = "device_viewer.controllers.camera_requests"
 
 
 class _StubPane(TraitsDockPane):
@@ -52,8 +53,14 @@ class _StubPane(TraitsDockPane):
     #: Values passed to apply_phase_navigation_mode, in call order.
     applied_phase_navigation_modes = List()
 
+    #: (on_built, on_failed) pairs waiting on the camera panel, in order.
+    waiting_on_camera = List()
+
     def apply_phase_navigation_mode(self, enabled):
         self.applied_phase_navigation_modes.append(enabled)
+
+    def when_camera_controls_built(self, on_built, on_failed=None):
+        self.waiting_on_camera.append((on_built, on_failed))
 
 
 @pytest.fixture
@@ -247,8 +254,45 @@ def test_invalid_select_source_request_is_answered_not_ok(
     assert reply["active"] is True
 
 
-def test_select_source_without_a_camera_widget_is_answered_not_ok(
-    controller_and_actor_factory, select_source_replies
+@pytest.fixture
+def camera_panel_not_built():
+    """GUI.invoke_later runs at once, as the GUI thread would do later."""
+    with patch(f"{REQUESTS_MODULE}.GUI.invoke_later") as invoke_later:
+        invoke_later.side_effect = lambda function, *args: function(*args)
+
+        yield
+
+
+def _build_camera_panel(pane, camera_widget):
+    for on_built, _on_failed in pane.waiting_on_camera:
+        on_built(camera_widget)
+
+
+def test_requests_before_the_camera_panel_wait_for_it_in_order(
+    controller_and_actor_factory,
+    camera_widget,
+    select_source_replies,
+    camera_panel_not_built,
+):
+    controller, _ = controller_and_actor_factory
+
+    _select(controller, True)
+    _dispatch(controller, DEVICE_VIEWER_CAMERA_ACTIVE, "false")
+
+    assert camera_widget.camera_select_source_signal.emitted == []
+
+    _build_camera_panel(controller.pane, camera_widget)
+
+    # The lease the selection takes keeps the camera on against the "false"
+    # queued behind it, as it would had the panel been there.
+    assert camera_widget.camera_model.camera_leased is True
+    assert len(camera_widget.camera_select_source_signal.emitted) == 1
+    assert camera_widget.camera_active_signal.emitted == []
+    select_source_replies.assert_not_called()
+
+
+def test_select_source_is_answered_not_ok_when_the_camera_panel_fails(
+    controller_and_actor_factory, select_source_replies, camera_panel_not_built
 ):
     controller, _ = controller_and_actor_factory
 
@@ -258,13 +302,18 @@ def test_select_source_without_a_camera_widget_is_answered_not_ok(
         json.dumps({"label": "Cam A", "request_id": "r4"}),
     )
 
+    select_source_replies.assert_not_called()
+
+    ((_on_built, on_failed),) = controller.pane.waiting_on_camera
+    on_failed("no camera backend")
+
     select_source_replies.assert_called_once_with(
         {
             "request_id": "r4",
             "label": "Cam A",
-            "ok": False,
-            "error": "Device viewer camera is not available",
             "active": False,
+            "ok": False,
+            "error": "Device viewer camera: no camera backend",
         }
     )
 

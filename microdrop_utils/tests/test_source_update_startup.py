@@ -17,8 +17,10 @@ import logging
 import os
 import shutil
 import sys
+import time
 from collections import namedtuple
 from pathlib import Path
+from types import SimpleNamespace
 
 # Third-party imports.
 import pytest
@@ -49,6 +51,16 @@ RerunCall = namedtuple("RerunCall", "argv env")
 
 def _head(repo):
     return run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def _fake_module_time(monkeypatch, sleep):
+    """Give the module under test a ``time`` whose ``sleep`` is ``sleep``.
+
+    Only the module's own lookup is replaced: ``time.sleep`` itself is shared
+    by the whole process, and ``subprocess`` polls with it while git runs."""
+    monkeypatch.setattr(
+        source_update_startup, "time", SimpleNamespace(**{**vars(time), "sleep": sleep})
+    )
 
 
 class FakeChild:
@@ -119,7 +131,7 @@ def calls(monkeypatch):
         lambda path, default, filename=None: default,
     )
     monkeypatch.setattr(source_update_startup, "_restart_app", fake_restart)
-    monkeypatch.setattr(source_update_startup.time, "sleep", lambda seconds: None)
+    _fake_module_time(monkeypatch, lambda seconds: None)
 
     return recorded
 
@@ -269,7 +281,7 @@ def _refuse_checkout(monkeypatch, output):
         raise SourceVersionError("`git checkout` exited with code 1", output)
 
     monkeypatch.setattr(source_update_startup, "switch_to", refuse)
-    monkeypatch.setattr(source_update_startup.time, "sleep", sleeps.append)
+    _fake_module_time(monkeypatch, sleeps.append)
 
     return attempts, sleeps
 

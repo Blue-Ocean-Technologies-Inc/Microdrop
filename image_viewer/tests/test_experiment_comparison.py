@@ -15,6 +15,8 @@ the plotted set following the viewer's live experiment."""
 # Standard library imports.
 import json
 import math
+import os
+from pathlib import Path
 
 # Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME
@@ -278,6 +280,80 @@ def test_switching_the_live_experiment_keeps_the_set_and_its_order(tmp_path):
     restored.restore(payloads)
 
     assert [experiment.live for experiment in restored.experiments] == [False, True]
+
+
+def test_a_restore_lists_each_folder_once_however_it_is_spelled(tmp_path, monkeypatch):
+    plotted, live, other = _plotted_pair(tmp_path)
+    model = ImportedExperimentsModel(analysis=plotted.analysis)
+    monkeypatch.chdir(tmp_path)
+    gone = str(tmp_path / "gone")
+    payloads = [
+        {"directory": other.directory, "label": "Other"},
+        {"directory": str(tmp_path / "today" / ".." / "yesterday")},
+        {"directory": gone},
+        {"directory": "today", "label": "Live"},
+        {"directory": gone},
+        {"directory": other.directory + os.sep},
+    ]
+
+    model.restore(payloads)
+
+    # The duplicates and the missing folder left out; the live folder
+    # spelled relatively is still live, in place, as spelled.
+    assert [experiment.as_payload() for experiment in model.experiments] == [
+        {"directory": other.directory, "label": "Other", "align_to_run_start": True},
+        {"directory": "today", "label": "Live", "align_to_run_start": True},
+    ]
+    assert [experiment.live for experiment in model.experiments] == [False, True]
+    assert model.experiments[1].session is live
+
+
+def test_a_restore_with_no_experiment_shown_marks_none_live(tmp_path):
+    _live, live_paths = _experiment(tmp_path, "today", "10", [_roi("Drop")], {})
+    model = ImportedExperimentsModel(
+        analysis=RoiAnalysisModel(session=AnalysisSession(), filtered_paths=live_paths)
+    )
+    today = str(tmp_path / "today")
+
+    model.restore([{"directory": today}, {"directory": today + os.sep}])
+
+    assert [experiment.directory for experiment in model.experiments] == [today]
+    assert not model.experiments[0].live
+
+
+def test_restoring_resolves_each_folder_once(tmp_path, monkeypatch):
+    """Not each folder against every other: the plotted set grows with
+    every experiment shown, and a restore runs at launch."""
+    count = 40
+    directories = []
+
+    for index in range(count):
+        folder = tmp_path / f"experiment_{index:02d}"
+        folder.mkdir()
+        directories.append(str(folder))
+
+    model = ImportedExperimentsModel(analysis=RoiAnalysisModel())
+    payloads = [{"directory": directory} for directory in directories]
+    resolves = []
+    resolve = Path.resolve
+
+    def counted_resolve(path, *args, **kwargs):
+        resolves.append(path)
+
+        return resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", counted_resolve)
+
+    # Restored with no experiment shown, as the pane mounts; then the
+    # viewer shows the last one, which goes live in place.
+    model.restore(payloads)
+    mount_resolves = len(resolves)
+    model.analysis.session = load_session(directories[-1])
+
+    assert mount_resolves <= count + 1
+    assert len(resolves) - mount_resolves <= count + 1
+    assert len(model.experiments) == count
+    assert model.live_experiment is model.experiments[-1]
 
 
 def test_an_experiment_shown_outside_the_set_joins_it_last(tmp_path):

@@ -23,6 +23,10 @@ from pyface.qt.QtWidgets import (
 # Microdrop utils imports.
 from microdrop_utils.pyside_helpers import CollapsibleVStackBox
 
+# Local imports.
+from ...models.deferred_sidebar_section import DeferredSidebarSection
+from .deferred_content import build_deferred_section_box
+
 
 def build_sidebar(sections):
     """Stack the sections, in order, as collapsible boxes in a scroll area.
@@ -50,8 +54,16 @@ def build_sidebar(sections):
 
 
 def build_section_box(section):
-    """Wrap a section in its collapsible box, collapsed if it asks to be."""
-    box = CollapsibleVStackBox(section.title, control_widgets=section.widget)
+    """Wrap a section in its collapsible box, collapsed if it asks to be.
+
+    A deferred section's box shows its loading line until it is built.
+    """
+
+    if isinstance(section, DeferredSidebarSection):
+        box = build_deferred_section_box(section)
+    else:
+        box = CollapsibleVStackBox(section.title, control_widgets=section.widget)
+
     box.set_expanded(not section.collapsed)
 
     return box

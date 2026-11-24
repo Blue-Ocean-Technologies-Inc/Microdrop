@@ -70,9 +70,13 @@ logger = get_logger(__name__)
 PLOTTED_EXPERIMENT_FIELDS = ("directory", "label", "align_to_run_start")
 
 
-def _same_folder(first, second):
-    """Whether two folder spellings name the same folder."""
-    return Path(first).resolve() == Path(second).resolve()
+def _folder_identity(directory):
+    """What a folder spelling names: two spellings name the same folder
+    when theirs are equal. Hashable, so a set of them answers "listed
+    already?" without resolving every listed folder again — resolving
+    is a filesystem call, and the plotted set grows with every
+    experiment shown."""
+    return Path(directory).resolve()
 
 
 def _style_traits_for(roi, traits):
@@ -326,20 +330,23 @@ class ImportedExperimentsModel(HasTraits):
         read is kept as it is). A folder listed twice, or gone, is left
         out."""
         session = self.analysis.session
+        live_folder = _folder_identity(session.directory) if session.directory else None
         read = {
             experiment.directory: experiment
             for experiment in self.experiments
             if not experiment.live
         }
         experiments = []
+        listed_folders = set()
 
         for payload in payloads:
             directory = payload["directory"]
+            folder = _folder_identity(directory)
 
-            if any(_same_folder(directory, other.directory) for other in experiments):
+            if folder in listed_folders:
                 continue
 
-            if session.directory and _same_folder(directory, session.directory):
+            if folder == live_folder:
                 experiment = ImportedExperiment(live=True, session=session, **payload)
             elif directory in read:
                 experiment = read[directory]
@@ -348,6 +355,7 @@ class ImportedExperimentsModel(HasTraits):
 
             if experiment is not None:
                 experiments.append(experiment)
+                listed_folders.add(folder)
 
         if session.directory and not any(other.live for other in experiments):
             experiments.append(
@@ -392,7 +400,11 @@ class ImportedExperimentsModel(HasTraits):
         if folder.name == CAPTURES_DIR_NAME:
             folder = folder.parent
 
-        if any(_same_folder(folder, other.directory) for other in self.experiments):
+        plotted_folders = {
+            _folder_identity(other.directory) for other in self.experiments
+        }
+
+        if _folder_identity(folder) in plotted_folders:
             return f"{folder.name} is already plotted."
 
         experiment = load_imported_experiment(folder)
