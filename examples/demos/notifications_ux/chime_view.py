@@ -25,7 +25,7 @@ import time
 
 # Enthought library imports.
 from pyface.qt import QtCore
-from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, observe
+from traits.api import Bool, Dict, Float, HasTraits, Instance, Str, observe
 
 # Microdrop package imports.
 from notifications.consts import SEVERITY_ERROR, SEVERITY_WARNING
@@ -84,9 +84,6 @@ class NotificationChime(HasTraits):
     #: Set once sound proved unavailable: warned once, then silent.
     _unavailable = Bool(False)
 
-    #: The QtMultimedia module, once imported.
-    _multimedia = Any()
-
     @observe("pane_model:rang")
     def _ring(self, event):
         settings = self.pane_model.toasts.settings
@@ -115,9 +112,19 @@ class NotificationChime(HasTraits):
         """Start ``path`` playing at the settings' volume; returns at once."""
         effect = self._effect(path)
 
-        if effect is not None:
-            effect.setVolume(self.pane_model.toasts.settings.sound_volume / 100)
-            effect.play()
+        if effect is None:
+            logger.debug(f"Chime {path.name}: no sound effect")
+
+            return
+
+        effect.setVolume(self.pane_model.toasts.settings.sound_volume / 100)
+        effect.play()
+
+        logger.debug(
+            f"Chime {path.name}: play() with status {effect.status().name},"
+            f" loaded {effect.isLoaded()}, volume {effect.volume():.2f},"
+            f" muted {effect.isMuted()}, playing {effect.isPlaying()}"
+        )
 
     def _effect(self, path):
         effect = self._effects.get(path)
@@ -136,6 +143,9 @@ class NotificationChime(HasTraits):
 
         effect = QtMultimedia.QSoundEffect()
         effect.statusChanged.connect(lambda: self._check(effect))
+        effect.playingChanged.connect(
+            lambda: logger.debug(f"Chime {path.name}: playing {effect.isPlaying()}")
+        )
         effect.setSource(QtCore.QUrl.fromLocalFile(str(path)))
         self._effects[path] = effect
 
@@ -144,8 +154,11 @@ class NotificationChime(HasTraits):
     def _check(self, effect):
         """A sound that cannot load or play (e.g. no audio device) turns the
         chime off for the session."""
+        status = effect.status()
 
-        if effect.status() == effect.Status.Error:
+        logger.debug(f"Chime {effect.source().fileName()}: status {status.name}")
+
+        if status == effect.Status.Error:
             self._give_up(f"could not play {effect.source().toLocalFile()}")
 
     def _give_up(self, reason):
