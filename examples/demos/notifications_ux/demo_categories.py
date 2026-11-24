@@ -19,6 +19,8 @@ NOTIFICATION_CATEGORIES.
 from .settings_models import (
     TONE_ALERT,
     TONE_COMPLETION,
+    TONE_CONNECTED,
+    TONE_DISCONNECTED,
     TONE_NONE,
     TONE_SOFT,
     NotificationCategorySpec,
@@ -69,21 +71,46 @@ PROTOCOL_CATEGORIES = [
 # ---------------------------------------------------------------------------
 # DropBot (dropbot_status_and_controls/consts.py)
 # ---------------------------------------------------------------------------
-DROPBOT_CONNECTION = "dropbot.connection"
+DROPBOT_GROUP = "DropBot"
+DROPBOT_CONNECTED = "dropbot.connected"
+DROPBOT_DISCONNECTED = "dropbot.disconnected"
+DROPBOT_CHIP_INSERTED = "dropbot.chip_inserted"
+DROPBOT_CHIP_REMOVED = "dropbot.chip_removed"
 DROPBOT_MAINTENANCE = "dropbot.maintenance"
 
 DROPBOT_CATEGORIES = [
     NotificationCategorySpec(
-        id=DROPBOT_CONNECTION,
-        group="DropBot",
-        label="Connection",
-        description="The DropBot connects, disconnects or cannot be reached.",
-        tone=TONE_ALERT,
+        id=DROPBOT_CONNECTED,
+        group=DROPBOT_GROUP,
+        label="Connected",
+        description="The DropBot connects, or connects again.",
+        tone=TONE_CONNECTED,
+    ),
+    NotificationCategorySpec(
+        id=DROPBOT_DISCONNECTED,
+        group=DROPBOT_GROUP,
+        label="Disconnected or connection lost",
+        description="The DropBot disconnects or cannot be reached.",
+        tone=TONE_DISCONNECTED,
         critical=True,
     ),
     NotificationCategorySpec(
+        id=DROPBOT_CHIP_INSERTED,
+        group=DROPBOT_GROUP,
+        label="Chip inserted",
+        description="A chip is detected in the DropBot.",
+        tone=TONE_CONNECTED,
+    ),
+    NotificationCategorySpec(
+        id=DROPBOT_CHIP_REMOVED,
+        group=DROPBOT_GROUP,
+        label="Chip removed",
+        description="The chip is taken out; it needs attention while a run waits.",
+        tone=TONE_DISCONNECTED,
+    ),
+    NotificationCategorySpec(
         id=DROPBOT_MAINTENANCE,
-        group="DropBot",
+        group=DROPBOT_GROUP,
         label="Maintenance reminders",
         description="Calibration and self tests that are due.",
         tone=TONE_SOFT,

@@ -38,6 +38,7 @@ from plugin_management.plugin import PluginManagementPlugin
 from . import fake_panes, scenarios
 from .demo_categories import (
     DROPBOT_CATEGORIES,
+    DROPBOT_GROUP,
     NEWS_CATEGORIES,
     PLUGINS_CATEGORIES,
     PLUGINS_LOAD_FAILED,
@@ -238,12 +239,6 @@ class NotificationsDemoPlugin(Plugin):
                 action("Post success", scenarios.post_success),
                 action("Post warning", scenarios.post_warning),
                 action("Post error (with traceback)", scenarios.post_error),
-                action("Post action required", scenarios.post_action_required),
-                action(
-                    "Chip detected",
-                    scenarios.post_chip_detected,
-                    "Clears the chip card: its condition resolves",
-                ),
                 action("Post plugin updates available", scenarios.post_plugin_updates),
                 action(
                     "Post protocol finished",
@@ -268,6 +263,29 @@ class NotificationsDemoPlugin(Plugin):
                 ),
                 id="notifications_ux_demo.notifications",
             ),
+            SMenu(
+                SGroup(
+                    action("DropBot connected", scenarios.post_dropbot_connected),
+                    action("DropBot disconnected", scenarios.post_dropbot_disconnected),
+                    action(
+                        "Flap connection (3×)",
+                        scenarios.flap_connection,
+                        "Lost and back three times a second apart: one entry",
+                    ),
+                    id="notifications_ux_demo.device.connection",
+                ),
+                SGroup(
+                    action("Chip inserted", scenarios.post_chip_inserted),
+                    action(
+                        "Chip removed",
+                        self._chip_removed,
+                        "Needs attention while a protocol run is going",
+                    ),
+                    id="notifications_ux_demo.device.chip",
+                ),
+                id="notifications_ux_demo.device",
+                name="Device",
+            ),
             SGroup(*self._news_actions.actions(), id="notifications_ux_demo.news"),
             SGroup(
                 SettingToggleAction(
@@ -285,6 +303,11 @@ class NotificationsDemoPlugin(Plugin):
                     "Protocol notification settings…",
                     self._open_protocol_settings,
                     "The protocol tree's own page: only its kinds of notification",
+                ),
+                action(
+                    "DropBot notification settings…",
+                    self._open_dropbot_settings,
+                    "The DropBot plugin's own page: only its kinds of notification",
                 ),
                 id="notifications_ux_demo.settings",
             ),
@@ -333,6 +356,22 @@ class NotificationsDemoPlugin(Plugin):
         self._open_settings_window(
             *group_settings_view(self._toast_settings, PROTOCOL_GROUP)
         )
+
+    def _open_dropbot_settings(self):
+        """Only the DropBot's categories, on the same objects."""
+        from .settings_view import group_settings_view
+
+        self._open_settings_window(
+            *group_settings_view(self._toast_settings, DROPBOT_GROUP)
+        )
+
+    def _chip_removed(self):
+        """A protocol run waits on the chip while the toasts are quiet for
+        it: the simulated runs set that."""
+        toasts = self._pane_model.toasts
+        run_waiting = toasts.quiet and toasts.quiet_reason == PROTOCOL_GROUP
+
+        scenarios.post_chip_removed(run_waiting)
 
     def _open_settings_window(self, view, context):
         """One window per view, raised if already open."""

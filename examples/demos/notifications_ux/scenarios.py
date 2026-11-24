@@ -40,12 +40,14 @@ from notifications.consts import (
 
 # Local imports.
 from .demo_categories import (
-    DROPBOT_CONNECTION,
+    DROPBOT_CHIP_INSERTED,
+    DROPBOT_CHIP_REMOVED,
+    DROPBOT_CONNECTED,
+    DROPBOT_DISCONNECTED,
     DROPBOT_MAINTENANCE,
     PLUGINS_UPDATES,
     PROTOCOL_FINISHED,
     PROTOCOL_GROUP,
-    PROTOCOL_NEEDS_INPUT,
     PROTOCOL_STARTED,
     PROTOCOL_STEP_COMPLETED,
 )
@@ -53,7 +55,6 @@ from .ux_consts import (
     HelpAction,
     SnoozeAction,
     ux_notification_publisher,
-    ux_resolve_publisher,
 )
 from .ux_models import UxNotificationCenter
 
@@ -182,7 +183,7 @@ def post_error():
         detail=_traceback_of(ConnectionError, "COM5: the device did not answer in 3 s"),
         severity=SEVERITY_ERROR,
         category="hardware",
-        category_id=DROPBOT_CONNECTION,
+        category_id=DROPBOT_DISCONNECTED,
         source="dropbot_controller",
         action=PublishAction(label="Retry", topic=RETRY_CONNECTION_TOPIC).model_dump(),
         secondary_action=HelpAction(
@@ -191,42 +192,114 @@ def post_error():
     )
 
 
-#: The condition behind "Insert a chip": it clears when the chip is
-#: detected, with no button to press.
+# ---------------------------------------------------------------------------
+# The device: its connection and its chip
+# ---------------------------------------------------------------------------
+# Each is one entry per device (a thread), updated in place as the state
+# changes; the state found at start-up posts nothing. A lost connection, or
+# a chip taken out while a run needs it, is a Needs attention card that
+# resolves itself when the state comes back: the new state replaces the
+# card's in place. (A separate resolve message would race the state's post
+# through the router and could take its toast away first.)
+
+#: The demo's device, as its status pane names it.
+DEVICE_NAME = "DropBot v3"
+DEVICE_PORT = "COM5"
+DEVICE_CHIP = "90-pin chip"
+
+#: The conditions behind the device's attention cards.
+DISCONNECTED_CONDITION = "dropbot.disconnected"
 CHIP_MISSING_CONDITION = "dropbot.chip_missing"
 
+#: Each state's thread: one entry per device.
+CONNECTION_THREAD = f"dropbot.connection.{DEVICE_PORT}"
+CHIP_THREAD = f"dropbot.chip.{DEVICE_PORT}"
 
-def post_action_required():
+#: Seconds between the flapping connection's changes, and how many.
+FLAP_S = 1.0
+FLAP_CHANGES = 6
+
+_DEVICE_FIELDS = {"category": "hardware", "source": "dropbot_status_and_controls"}
+
+
+def post_dropbot_connected():
+    """The DropBot connected: its entry, the disconnected card while it
+    was lost, becomes the connected state in place, which resolves it; its
+    toast, if showing, updates in place."""
     _publish(
-        title="Insert a chip to continue",
-        detail=(
-            "The protocol is paused at step 3: no chip is detected in the "
-            "DropBot. Insert one and close the lid; it goes on once the chip "
-            "is detected."
-        ),
+        title="DropBot connected",
+        detail=f"{DEVICE_NAME} on {DEVICE_PORT}",
+        severity=SEVERITY_SUCCESS,
+        category_id=DROPBOT_CONNECTED,
+        thread_id=CONNECTION_THREAD,
+        **_DEVICE_FIELDS,
+    )
+
+
+def post_dropbot_disconnected():
+    """The DropBot was lost: a Needs attention card until it is back."""
+    _publish(
+        title="DropBot disconnected",
+        detail=f"{DEVICE_NAME} on {DEVICE_PORT} stopped answering.",
         severity=SEVERITY_WARNING,
-        category="hardware",
-        category_id=PROTOCOL_NEEDS_INPUT,
-        source="dropbot_status_and_controls",
+        category_id=DROPBOT_DISCONNECTED,
+        thread_id=CONNECTION_THREAD,
         needs_attention=True,
-        condition_id=CHIP_MISSING_CONDITION,
+        condition_id=DISCONNECTED_CONDITION,
+        action=PublishAction(
+            label="Reconnect", topic=RETRY_CONNECTION_TOPIC
+        ).model_dump(),
+        secondary_action=HelpAction(
+            label="How do I reconnect?", tutorial="Connecting a DropBot"
+        ).model_dump(),
+        **_DEVICE_FIELDS,
+    )
+
+
+def flap_connection():
+    """Lost and back FLAP_CHANGES times, FLAP_S apart: one entry, one toast
+    updated in place."""
+
+    for change in range(FLAP_CHANGES):
+        post = post_dropbot_disconnected if change % 2 == 0 else post_dropbot_connected
+        GUI.invoke_after(int(change * FLAP_S * 1000), post)
+
+
+def post_chip_inserted():
+    """A chip is in: its entry, the removed card while a run waited,
+    becomes the inserted state in place, which resolves it."""
+    _publish(
+        title="Chip inserted",
+        detail=f"{DEVICE_CHIP} detected",
+        severity=SEVERITY_SUCCESS,
+        category_id=DROPBOT_CHIP_INSERTED,
+        thread_id=CHIP_THREAD,
+        **_DEVICE_FIELDS,
+    )
+
+
+def post_chip_removed(run_waiting):
+    """The chip is out. While a run needs it (``run_waiting``) that is a
+    Needs attention card until a chip is back; idle, an ordinary entry."""
+    detail = (
+        "The protocol is paused: no chip is detected. Insert one and close "
+        "the lid; it goes on once the chip is detected."
+        if run_waiting
+        else "No chip in the DropBot."
+    )
+
+    _publish(
+        title="Chip removed",
+        detail=detail,
+        severity=SEVERITY_WARNING,
+        category_id=DROPBOT_CHIP_REMOVED,
+        thread_id=CHIP_THREAD,
+        needs_attention=run_waiting,
+        condition_id=CHIP_MISSING_CONDITION if run_waiting else "",
         secondary_action=HelpAction(
             label="How to insert a chip", tutorial="Inserting a chip"
         ).model_dump(),
-    )
-
-
-def post_chip_detected():
-    """The chip is in: its card resolves, and the detection is logged."""
-    ux_resolve_publisher.publish(
-        {"condition_id": CHIP_MISSING_CONDITION, "resolution": "Chip detected"}
-    )
-    _publish(
-        title="Chip detected",
-        detail="The protocol continues from step 3.",
-        severity=SEVERITY_SUCCESS,
-        category="hardware",
-        source="dropbot_status_and_controls",
+        **_DEVICE_FIELDS,
     )
 
 
@@ -430,7 +503,7 @@ EARLIER_ENTRIES = [
             "detail": "The USB link dropped during step 14; the run was paused.",
             "severity": SEVERITY_WARNING,
             "category": "hardware",
-            "category_id": DROPBOT_CONNECTION,
+            "category_id": DROPBOT_DISCONNECTED,
             "source": "dropbot_controller",
         },
     ),
@@ -618,6 +691,10 @@ class DemoResponder(HasTraits):
                 JOB_MS, partial(self._post, *then, category_id=category_id)
             )
 
+        # A reconnect that works is the device's own state change.
+        if topic == RETRY_CONNECTION_TOPIC:
+            GUI.invoke_after(JOB_MS, post_dropbot_connected)
+
     def open_path(self, path):
         """An OpenPathAction: no window opens in the demo."""
         logger.info(f"Demo: would open {path} in the file browser")
@@ -648,7 +725,6 @@ _ANSWER_CATEGORIES = {
     SELF_TEST_TOPIC: DROPBOT_MAINTENANCE,
     UPDATE_PLUGINS_TOPIC: PLUGINS_UPDATES,
     RESTART_TOPIC: PLUGINS_UPDATES,
-    RETRY_CONNECTION_TOPIC: DROPBOT_CONNECTION,
 }
 
 #: Each demo topic's immediate answer and, after JOB_MS, its outcome:
@@ -685,11 +761,7 @@ _ANSWERS = {
             SEVERITY_INFO,
             "Trying COM5, then every other port.",
         ),
-        (
-            "DropBot connected on COM6",
-            SEVERITY_SUCCESS,
-            "Firmware 2.4.1, 120 channels.",
-        ),
+        None,
     ),
     RESTART_TOPIC: (
         ("MicroDrop would restart now", SEVERITY_INFO, "Not in the demo."),
