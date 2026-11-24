@@ -8,9 +8,15 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Sample notifications and a simulated plugin loading list for the demo."""
+"""Sample notifications and a simulated plugin loading list for the demo.
+
+The log entries are real records from past sessions (scrubbed, in
+``sample_log_records``), sent through the app's own log handler; the
+protocol and calibration ones stand in for what plugins post on the topic.
+"""
 
 # Standard library imports.
+import logging
 import time
 from pathlib import Path
 
@@ -20,14 +26,13 @@ from traitsui.api import TableEditor, UItem, VGroup, View
 
 # Microdrop package imports.
 from notifications.consts import (
-    SEVERITY_ERROR,
     SEVERITY_INFO,
     SEVERITY_SUCCESS,
-    SEVERITY_WARNING,
     NotificationSection,
     OpenPathAction,
     PublishAction,
 )
+from notifications.services.log_forwarder import NotificationLogHandler
 
 # Microdrop utils imports.
 from microdrop_utils.plugin_load_status import (
@@ -36,6 +41,13 @@ from microdrop_utils.plugin_load_status import (
     PluginLoadStatus,
 )
 from microdrop_utils.traitsui_qt_helpers import ObjectColumn
+
+# Local imports.
+from .log_records import LoggedRecord, log_record
+from .sample_log_records import SAMPLE_LOG_RECORDS
+
+#: Seconds over which a sample's repeats are spread, before its time.
+REPEAT_SPREAD_S = 60
 
 #: The simulated plugins, in load order; the one marked True fails.
 DEMO_PLUGINS = [
@@ -63,8 +75,11 @@ FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)"""
 
 
 def post_samples(center):
-    """One entry of every kind the pane shows."""
+    """Real logged warnings and errors, through the app's own log handler,
+    and two notifications of the kind plugins post on the topic."""
     now = time.time()
+
+    post_log_samples(center, now)
 
     center.post(
         "Protocol finished",
@@ -72,44 +87,39 @@ def post_samples(center):
         severity=SEVERITY_SUCCESS,
         category="protocol",
         source="pluggable_protocol_tree",
-        timestamp=now - 300,
+        timestamp=now - 240,
         action=OpenPathAction(label="Show folder", path=str(Path.home())),
     )
-    center.post(
-        "Chip inserted",
-        severity=SEVERITY_INFO,
-        category="hardware",
-        source="dropbot_controller",
-        timestamp=now - 200,
-    )
-
-    for repeat in range(12):
-        center.post(
-            "Capacitance reading out of range on channel 42",
-            severity=SEVERITY_WARNING,
-            category="log",
-            source="dropbot_controller.services.monitor",
-            timestamp=now - 180 + repeat,
-        )
-
     center.post(
         "Calibration is 9 days old",
         detail="Recalibrate before quantitative runs.",
         severity=SEVERITY_INFO,
         category="calibration",
         source="portable_dropbot_status_and_controls",
-        timestamp=now - 120,
+        timestamp=now - 60,
         action=PublishAction(label="Calibrate", topic="demo/calibrate"),
     )
-    error = center.post(
-        "Could not open the heater's serial port COM7",
-        detail=LONG_TRACEBACK,
-        severity=SEVERITY_ERROR,
-        category="log",
-        source="heater_controls_ui.controller",
-        timestamp=now - 60,
-    )
-    error.expanded = True
+
+
+def post_log_samples(center, now):
+    """SAMPLE_LOG_RECORDS through a NotificationLogHandler, so their titles,
+    details and counts are exactly what the app would show."""
+    handler = NotificationLogHandler(center, invoke_after=lambda delay, call: call())
+
+    for sample in SAMPLE_LOG_RECORDS:
+        logged = LoggedRecord(
+            created=0.0,
+            levelno=logging.getLevelName(sample["level"]),
+            name=sample["name"],
+            message=sample["message"],
+            traceback=sample["traceback"],
+        )
+        repeats = sample["repeats"]
+
+        # Repeats spread over the minute before their time.
+        for repeat in range(repeats):
+            created = now - sample["ago_s"] - REPEAT_SPREAD_S * (1 - repeat / repeats)
+            handler.handle(log_record(logged, created=created))
 
 
 class _LoadListView(HasTraits):

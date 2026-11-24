@@ -1,0 +1,12 @@
+{
+  "$schema": "./sci_bots_feed.schema.json",
+  "id": "example-rich-post",
+  "title": "PLACEHOLDER rich-text post — example to push",
+  "date": "2026-11-22",
+  "kind": "product",
+  "source": "Example",
+  "summary": "Sample content: an example post with rich text, pushed from a JSON file.",
+  "summary_html": "<p><b>Sample content</b>: an example post with <i>rich text</i>, pushed from a JSON file.</p><ol><li>Bold and italic</li><li>A <a href=\"https://www.linkedin.com/company/sci-bots-inc./posts/\">link</a></li></ol>",
+  "url": "https://www.linkedin.com/company/sci-bots-inc./posts/",
+  "image": "../messages_view/dropbot.png"
+}

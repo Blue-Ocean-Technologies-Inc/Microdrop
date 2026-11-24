@@ -12,18 +12,24 @@
 
 A bare task window with stand-in dock panes — a protocol list, a camera
 feed drawn by a real QGraphicsVideoItem, a dense report, a log — and the
-real drawer and bell. The drawer opens from the bell over the panes without moving them;
-Esc, the close button or a click elsewhere closes it. It is filled with one
-notification of every kind and a simulated plugin loading list (one plugin
-fails, which posts its own notification). The toolbar posts more, floods
-the log handler from a thread, and switches the theme. Actions publish
-nothing: they say what they would do. Run from ``src/``:
+real drawer and bell. The drawer opens from the bell over the panes
+without moving them; Esc, the close button or a click elsewhere closes it.
+It is filled with one notification of every kind, a simulated plugin
+loading list (one plugin fails, which posts its own notification) and a
+Sci-Bots Feed section read from ``sci_bots_feed.json``. The toolbar posts
+more, floods the log handler from a thread, reloads and pushes to the
+feed, opens the feed creator and switches the theme. Actions publish
+nothing: they say what they would do (the feed's links do open the
+browser). Run from ``src/``:
 
     pixi run python -m examples.demos.notifications_pane.run_notifications_pane_demo
 
 ``--theme dark`` (or ``light``) forces a theme; ``--open`` starts with the
-drawer open; ``--backdrop camera`` docks the camera feed under the drawer
-instead of a dense report, over which the drawer turns opaque.
+drawer open; ``--hidden`` keeps it closed, as in the app (the default; it
+overrides ``--open``): the bell shows the unread count; ``--backdrop
+camera`` docks the camera feed under the drawer instead of a dense report,
+over which the drawer turns opaque; ``--replay-log PATH`` replays a real
+session log into the drawer, unscrubbed.
 """
 
 # Standard library imports.
@@ -63,7 +69,9 @@ from microdrop_utils.plugin_load_status import PluginLoadStatus
 from microdrop_utils.pyface_helpers import StatusBarManager
 
 # Local imports.
+from .log_replay import start_log_replay
 from .sample_notifications import load_next_plugin, plugin_loading_section, post_samples
+from .sci_bots_feed_demo import add_feed_actions, create_feed_section
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -222,7 +230,7 @@ def _flood_log():
     threading.Thread(target=emit, daemon=True).start()
 
 
-def _toolbar(window, controller):
+def _toolbar(window, controller, feed_section):
     center = controller.pane_model.center
     toolbar = window.control.addToolBar("Demo")
     toolbar.setObjectName("notifications_demo.toolbar")
@@ -237,6 +245,7 @@ def _toolbar(window, controller):
         ),
     )
     toolbar.addAction(f"Flood log ({FLOOD_RECORDS} from a thread)", _flood_log)
+    add_feed_actions(toolbar, feed_section, window.control)
     toolbar.addAction(
         "Switch theme",
         lambda: apply_color_scheme("light" if is_dark_mode() else "dark"),
@@ -251,10 +260,22 @@ def main():
     )
     parser.add_argument("--open", action="store_true", help="start with it open")
     parser.add_argument(
+        "--hidden",
+        action="store_true",
+        help="start with it closed, as the app (the default; overrides --open)",
+    )
+    parser.add_argument(
         "--backdrop",
         choices=["report", "camera"],
         default="report",
         help="the pane docked right, under the drawer",
+    )
+    parser.add_argument(
+        "--replay-log",
+        metavar="PATH",
+        help="replay a real microdrop.frontend log's warnings and errors into the "
+        "pane, a whole session in about 20 s. The log is shown as written, NOT "
+        "scrubbed: it may show user names, paths and hosts on screen",
     )
     args = parser.parse_args()
 
@@ -266,7 +287,9 @@ def main():
     center = controller.pane_model.center
     status = PluginLoadStatus()
     section = plugin_loading_section(status)
-    controller.pane_model.sections = [section]
+
+    feed_section = create_feed_section()
+    controller.pane_model.sections = [section, feed_section]
 
     log_handler = NotificationLogHandler(center)
     demo_logger.addHandler(log_handler)
@@ -289,7 +312,7 @@ def main():
     bell.widget.clicked.connect(controller.toggle_pane)
     window.status_bar_manager.status_bar.addPermanentWidget(bell.widget)
 
-    _toolbar(window, controller)
+    _toolbar(window, controller, feed_section)
 
     drawer_host = NotificationsDrawerHost(
         model=controller.pane_model, click_outside_exempt=[bell.widget]
@@ -297,12 +320,17 @@ def main():
     # Closing the window lets go of the drawer: it goes with the window.
     drawer_host.attach(window.control)
 
-    if args.open:
+    if args.open and not args.hidden:
         controller.show_pane()
 
     # Held so the running timer is not garbage collected.
     timer = Timer(
         LOAD_STEP_MS, lambda: load_next_plugin(status, section) or timer.Stop()
+    )
+
+    # Held, as the timer above.
+    _replay = (
+        start_log_replay(args.replay_log, log_handler) if args.replay_log else None
     )
 
     gui.start_event_loop()

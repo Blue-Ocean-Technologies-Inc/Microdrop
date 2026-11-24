@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sci-Bots Feed",
+  "description": "A feed document, or a single post to push.",
+  "$defs": {
+    "FeedDocument": {
+      "description": "A whole feed: what a feed file holds, or a batch of pushed posts.",
+      "properties": {
+        "$schema": {
+          "default": "",
+          "description": "The JSON Schema editors check against.",
+          "title": "$Schema",
+          "type": "string"
+        },
+        "_readme": {
+          "default": "",
+          "description": "A note to the file's authors; not shown.",
+          "title": "Readme",
+          "type": "string"
+        },
+        "version": {
+          "const": 1,
+          "default": 1,
+          "description": "The feed file format.",
+          "title": "Version",
+          "type": "integer"
+        },
+        "posts": {
+          "default": [],
+          "description": "The posts, any order.",
+          "items": {
+            "$ref": "#/$defs/FeedPostMessage"
+          },
+          "title": "Posts",
+          "type": "array"
+        }
+      },
+      "title": "FeedDocument",
+      "type": "object"
+    },
+    "FeedPostMessage": {
+      "description": "One feed post, as pushed or as written in a feed file.",
+      "properties": {
+        "id": {
+          "default": "",
+          "description": "Stable id: a later post with the same id replaces this one. Derived from url and title when absent.",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "description": "One line, the card's heading.",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "kind": {
+          "description": "What the post is.",
+          "enum": [
+            "announcement",
+            "product",
+            "newsletter",
+            "post",
+            "release"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "date": {
+          "description": "An ISO day (\"2026-11-21\") or month (\"2026-09\").",
+          "pattern": "^\\d{4}-\\d{2}(-\\d{2})?$",
+          "title": "Date",
+          "type": "string"
+        },
+        "date_precision": {
+          "default": "day",
+          "description": "Set to \"month\" by a \"2026-09\" date: the card shows \"September 2026\".",
+          "enum": [
+            "day",
+            "month"
+          ],
+          "title": "Date Precision",
+          "type": "string"
+        },
+        "summary": {
+          "default": "",
+          "description": "Plain text; shown when there is no summary_html, and as its tooltip.",
+          "title": "Summary",
+          "type": "string"
+        },
+        "summary_html": {
+          "default": "",
+          "description": "Short rich text: <b>, <i>, <u>, <a href>, <ul>/<ol>/<li>, <p>, <br>. Anything else, images included, is removed before display.",
+          "title": "Summary Html",
+          "type": "string"
+        },
+        "url": {
+          "description": "Where Read more goes: an http or https page, opened in the browser.",
+          "format": "uri",
+          "pattern": "^https?://",
+          "title": "Url",
+          "type": "string"
+        },
+        "image": {
+          "default": "",
+          "description": "Optional picture: a path relative to the feed file, or an https URL. A wide picture shows as a banner.",
+          "title": "Image",
+          "type": "string"
+        },
+        "pinned": {
+          "default": false,
+          "description": "Pinned posts come first, whatever their date.",
+          "title": "Pinned",
+          "type": "boolean"
+        },
+        "source": {
+          "default": "",
+          "description": "Where it came from, e.g. \"LinkedIn\" or \"Newsletter\".",
+          "title": "Source",
+          "type": "string"
+        },
+        "expires": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hidden after this day (ISO date).",
+          "title": "Expires"
+        }
+      },
+      "required": [
+        "title",
+        "kind",
+        "date",
+        "url"
+      ],
+      "title": "FeedPostMessage",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/FeedDocument"
+    },
+    {
+      "$ref": "#/$defs/FeedPostMessage"
+    }
+  ]
+}

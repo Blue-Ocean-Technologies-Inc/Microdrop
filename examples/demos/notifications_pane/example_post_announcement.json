@@ -1,0 +1,12 @@
+{
+  "$schema": "./sci_bots_feed.schema.json",
+  "id": "example-pinned-announcement",
+  "title": "PLACEHOLDER announcement — example to push",
+  "date": "2026-11-20",
+  "kind": "announcement",
+  "source": "LinkedIn",
+  "pinned": true,
+  "summary": "Sample content, not real news. It shows how a pinned announcement looks.",
+  "summary_html": "<p><b>Sample content</b>, not real news. It shows how a <i>pinned</i> announcement looks, and what rich text can do:</p><ul><li>bold and italic text</li><li>a <a href=\"https://www.linkedin.com/company/sci-bots-inc./posts/\">link</a> that opens in the browser</li><li>short lists like this one</li></ul>",
+  "url": "https://www.linkedin.com/company/sci-bots-inc./posts/"
+}
