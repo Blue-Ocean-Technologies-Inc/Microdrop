@@ -1,3 +1,19 @@
+## [v1.50.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.50.0) (2026-11-24)
+
+### Feat
+
+- **portable**: Clear Alarms button in the status pane ([`bd86534`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bd86534ad0a77beea28c82a737cc2bdeda7d0087))
+- **portable**: clear latched board alarms on request ([`4943e50`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4943e50a2b7846da4b4b7d1c48e916f58d42ee57))
+- **portable**: live plot and Verify in the heater auto-tune panel ([`6a2c27a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6a2c27a29bfa1ab1838914b832e69c926920a085))
+- **portable**: heater auto-tune verify run ([`7614f9c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7614f9c33a0da8d48956d5cdec0b85fa3da7706c))
+- **self-tests**: include board diagnostics in saved reports ([`13eedf0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/13eedf068fe05c8e930ce6a4fabe112cbebaf385))
+
+### Fix
+
+- **dialogs**: use pyface's "save as" action for save dialogs ([`ed2019c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ed2019c53593e7789f12ae0649e2c54a6b1b15ca))
+- **utils**: let the mouse wheel scroll past matplotlib plots ([`c1f9b3b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c1f9b3b105a95779bca2b5076112f6bd35e743fa))
+- **portable**: restore motor param field after a declined confirm ([`8abc4b0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8abc4b087865277ab0d733014104a7ef54856c2a))
+
 ## [v1.49.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.49.0) (2026-11-24)
 
 ### Feat
