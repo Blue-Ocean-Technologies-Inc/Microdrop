@@ -27,16 +27,17 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 from traits.api import Any, HasTraits, Instance, observe
 
 # Microdrop package imports.
-from notifications.consts import SEVERITY_ERROR, TIME_REFRESH_MS
+from notifications.consts import SEVERITY_COLORS, SEVERITY_ERROR, TIME_REFRESH_MS
 
 # Microdrop style imports.
-from microdrop_style.colors import INFO_COLOR
+from microdrop_style.colors import GREY, WHITE
 
 # Local imports.
 from .card_list_view import EmptyState, make_card
 from .card_view import NotificationCard
 from .typography import CHIP, role_font
 from .ux_consts import (
+    ATTENTION_ACCENT,
     BUILD_BUDGET_MS,
     FILTER_ACTION,
     FILTER_ALL,
@@ -45,7 +46,9 @@ from .ux_consts import (
 )
 from .ux_models import UxPaneModel, matches_filter, time_group
 from .view_styles import (
+    contrast,
     css,
+    is_dark,
     muted_text,
     readable_accent,
     with_alpha,
@@ -57,6 +60,14 @@ FILTER_CHIPS = [
     (FILTER_ERRORS, "Errors"),
     (FILTER_ACTION, "Needs action"),
 ]
+
+#: Each filter chip's colour, ``(light theme, dark theme)``: All a quiet
+#: slate, Errors the error red, Needs action Needs attention's orange.
+FILTER_CHIP_ACCENTS = {
+    FILTER_ALL: (GREY["dark"], GREY["lighter"]),
+    FILTER_ERRORS: (SEVERITY_COLORS[SEVERITY_ERROR], SEVERITY_COLORS[SEVERITY_ERROR]),
+    FILTER_ACTION: (ATTENTION_ACCENT, ATTENTION_ACCENT),
+}
 
 #: What an empty, filtered Activity says.
 EMPTY_FILTER_TEXT = {
@@ -88,6 +99,7 @@ class FilterChips(QtWidgets.QWidget):
 
         self._group = QtWidgets.QButtonGroup(self)
         self._chips = {}
+        self._counts = {}
 
         for name, label in FILTER_CHIPS:
             chip = QtWidgets.QPushButton(label, self)
@@ -109,21 +121,34 @@ class FilterChips(QtWidgets.QWidget):
             chip.setChecked(name == current)
             chip.setText(f"{label}  {counts.get(name, 0)}")
 
-    def restyle(self):
-        palette = QtWidgets.QApplication.palette()
-        text = palette.color(QtGui.QPalette.ColorRole.Text)
-        accent = readable_accent(INFO_COLOR, palette)
+        self._counts = dict(counts)
+        self.restyle()
 
-        self.setStyleSheet(
-            "QPushButton {"
-            f" color: {css(text)}; background: transparent;"
-            f" border: 1px solid {css(with_alpha(text, 0.22))};"
-            " border-radius: 12px; padding: 3px 12px; }"
-            f" QPushButton:hover {{ background: {css(with_alpha(text, 0.06))}; }}"
-            " QPushButton:checked {"
-            f" color: {css(accent)}; background: {css(with_alpha(INFO_COLOR, 0.16))};"
-            f" border-color: {css(with_alpha(INFO_COLOR, 0.5))}; font-weight: 600; }}"
-        )
+    def restyle(self):
+        """Each chip in its own colour: outlined and tinted, filled when
+        chosen, muted while it counts nothing."""
+        palette = QtWidgets.QApplication.palette()
+        dark = is_dark(palette)
+        muted = muted_text(palette)
+
+        for name, (chip, _label) in self._chips.items():
+            accent = QtGui.QColor(FILTER_CHIP_ACCENTS[name][1 if dark else 0])
+            readable = readable_accent(accent, palette)
+            on_fill = WHITE if contrast(QtGui.QColor(WHITE), accent) >= 3 else "#000000"
+            empty = not self._counts.get(name, 0)
+            text = muted if empty else readable
+            edge = with_alpha(muted if empty else accent, 0.3 if empty else 0.55)
+
+            chip.setStyleSheet(
+                "QPushButton {"
+                f" color: {css(text)}; background: {css(with_alpha(accent, 0.07))};"
+                f" border: 1px solid {css(edge)};"
+                " border-radius: 12px; padding: 3px 12px; }"
+                f" QPushButton:hover {{ background: {css(with_alpha(accent, 0.15))}; }}"
+                " QPushButton:checked {"
+                f" color: {on_fill}; background: {css(accent)};"
+                f" border-color: {css(accent)}; }}"
+            )
 
     def event(self, event):
 
