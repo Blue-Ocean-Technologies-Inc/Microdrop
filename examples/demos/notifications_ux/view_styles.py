@@ -279,6 +279,27 @@ def outlined_button_icon(glyph, palette, ratio=1.0):
     )
 
 
+#: A chip's room around its text (px): above and below, and either side.
+CHIP_PADDING = (2, 9)
+
+
+def style_chip(widget, rules, more=""):
+    """Give ``widget`` (a label or button, its font set) the drawer's one
+    chip shape: a pill exactly as tall as its text needs, its corners half
+    that height. A fixed radius larger than half the height makes Qt draw
+    no rounding at all, which squared off the chips whose text was short.
+    ``rules`` are the chip's colour declarations; ``more`` further rules
+    for its states, e.g. ``QPushButton:checked``."""
+    height = QtGui.QFontMetrics(widget.font()).height() + 2 * CHIP_PADDING[0] + 2
+    selector = widget.metaObject().className()
+
+    widget.setFixedHeight(height)
+    widget.setStyleSheet(
+        f"{selector} {{ {rules} border-radius: {height // 2}px;"
+        f" padding: 0px {CHIP_PADDING[1]}px; }} {more}"
+    )
+
+
 def link_button_style(palette, accent, selector="QPushButton"):
     """A button that reads as a link, e.g. "How do I…?" or "Show more"."""
     color = readable_accent(accent, palette)

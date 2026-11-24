@@ -67,6 +67,7 @@ from .view_styles import (
     link_button_style,
     muted_text,
     scaled_logo,
+    style_chip,
     tinted,
     with_alpha,
 )
@@ -221,10 +222,9 @@ class FeedGroupHeader(QtWidgets.QWidget):
 
         self._chip = QtWidgets.QLabel(self)
         self._chip.setFont(role_font(CHIP))
-        self._chip.setStyleSheet(
-            f"QLabel {{ color: {accent};"
-            f" background: {css(with_alpha(accent, 0.16))};"
-            " border-radius: 9px; padding: 1px 8px; }"
+        style_chip(
+            self._chip,
+            f"color: {accent}; background: {css(with_alpha(accent, 0.16))};",
         )
         header.addWidget(self._chip, 0, 2)
 
@@ -406,7 +406,12 @@ class FeedSubsection(QtWidgets.QWidget):
             bool(hidden) or (self.shows_all and len(posts) > FEED_GROUP_PREVIEW)
         )
         self._more.setText("Show less" if self.shows_all else f"Show {hidden} more")
-        self._more.setStyleSheet(link_button_style(self.palette(), INFO_COLOR))
+        # The group's own accent, as its cards' links.
+        self._more.setStyleSheet(
+            link_button_style(
+                self.palette(), accent_color(self.group.spec, self.palette())
+            )
+        )
         self._cards.removeWidget(self._more)
         self._cards.addWidget(self._more, 0, QtCore.Qt.AlignmentFlag.AlignLeft)
         self.show_new()

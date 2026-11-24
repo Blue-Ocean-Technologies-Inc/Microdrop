@@ -51,6 +51,7 @@ from .view_styles import (
     is_dark,
     muted_text,
     readable_accent,
+    style_chip,
     with_alpha,
 )
 
@@ -139,15 +140,14 @@ class FilterChips(QtWidgets.QWidget):
             text = muted if empty else readable
             edge = with_alpha(muted if empty else accent, 0.3 if empty else 0.55)
 
-            chip.setStyleSheet(
-                "QPushButton {"
-                f" color: {css(text)}; background: {css(with_alpha(accent, 0.07))};"
-                f" border: 1px solid {css(edge)};"
-                " border-radius: 12px; padding: 3px 12px; }"
-                f" QPushButton:hover {{ background: {css(with_alpha(accent, 0.15))}; }}"
+            style_chip(
+                chip,
+                f"color: {css(text)}; background: {css(with_alpha(accent, 0.07))};"
+                f" border: 1px solid {css(edge)};",
+                f"QPushButton:hover {{ background: {css(with_alpha(accent, 0.15))}; }}"
                 " QPushButton:checked {"
                 f" color: {on_fill}; background: {css(accent)};"
-                f" border-color: {css(accent)}; }}"
+                f" border-color: {css(accent)}; }}",
             )
 
     def event(self, event):

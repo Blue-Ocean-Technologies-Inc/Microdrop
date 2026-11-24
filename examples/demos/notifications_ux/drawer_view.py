@@ -52,6 +52,7 @@ from .ux_models import UxPaneModel
 from .view_styles import (
     icon_button_style,
     readable_accent,
+    style_chip,
     with_alpha,
 )
 
@@ -241,10 +242,7 @@ class DrawerHeader(QtWidgets.QWidget):
         tint = with_alpha(INFO_COLOR, 0.16).name(QtGui.QColor.NameFormat.HexArgb)
 
         self._chip.setFont(role_font(CHIP))
-        self._chip.setStyleSheet(
-            f"color: {accent.name()}; background: {tint};"
-            " border-radius: 9px; padding: 1px 8px;"
-        )
+        style_chip(self._chip, f"color: {accent.name()}; background: {tint};")
 
         for button in (self.mark_all_read, self.clear_all, self.close):
             button.setStyleSheet(icon_button_style(palette, 20))
