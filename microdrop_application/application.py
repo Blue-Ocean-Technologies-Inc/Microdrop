@@ -59,6 +59,7 @@ from .helpers import (
     get_microdrop_redis_globals_manager,
     resolve_dock_separator_style,
 )
+from .launch_garbage_collection import LaunchGarbageCollectionPause
 from .preferences import MicrodropPreferences
 from .touch_mode.controller import TouchModeController
 
@@ -197,6 +198,10 @@ class MicrodropApplication(TasksApplication):
     #: follows it to show the Help-mode toggle in the status bar.
     touch_mode_controller = Instance(TouchModeController, ())
 
+    #: Keeps full garbage-collector passes out of the launch, from here
+    #: until the deferred plugins have loaded.
+    launch_gc_pause = Instance(LaunchGarbageCollectionPause)
+
     ###########################################################################
     # Private interface.
     ###########################################################################
@@ -325,6 +330,9 @@ class MicrodropApplication(TasksApplication):
 
     ############################# Initialization #############################
     def traits_init(self):
+        self.launch_gc_pause = LaunchGarbageCollectionPause(application=self)
+        self.launch_gc_pause.pause()
+
         self.current_experiment_directory.mkdir(parents=True, exist_ok=True)
         logger.info(
             "Initialized microdrop application. Current experiment "

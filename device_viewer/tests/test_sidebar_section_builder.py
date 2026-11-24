@@ -29,7 +29,8 @@ from device_viewer.models.deferred_sidebar_section import (
     DeferredSidebarSection,
 )
 
-BUILDER_MODULE = "device_viewer.controllers.sidebar_section_builder"
+#: The deferred sections log their failed builds and callbacks here.
+CONTENT_LOGGER = "microdrop_utils.deferred_content.logger"
 
 
 class EventLoop:
@@ -170,7 +171,7 @@ def test_a_failing_build_is_logged_and_does_not_stop_the_others(loop, built):
     failures = []
     builder.when_built(failing, lambda section: None, failures.append)
 
-    with patch(f"{BUILDER_MODULE}.logger") as logger:
+    with patch(CONTENT_LOGGER) as logger:
         builder.start()
         loop.drain()
 
@@ -186,7 +187,7 @@ def test_a_failed_section_says_why_instead_of_loading(loop, built):
 
     assert failing.status_text == "Loading Zones…"
 
-    with patch(f"{BUILDER_MODULE}.logger"):
+    with patch(CONTENT_LOGGER):
         _builder(loop, failing).build(failing)
 
     assert failing.status_text == "Zones could not be loaded: no zones"
@@ -196,7 +197,7 @@ def test_a_request_to_a_failed_section_fails_at_once(loop, built):
     failing = _deferred("Zones", built, error=ValueError("bad"))
     builder = _builder(loop, failing)
 
-    with patch(f"{BUILDER_MODULE}.logger"):
+    with patch(CONTENT_LOGGER):
         builder.build(failing)
 
     failures = []
@@ -216,7 +217,7 @@ def test_a_raising_callback_does_not_keep_the_others_from_running(loop, built):
     builder.when_built(deferred, raise_error)
     builder.when_built(deferred, lambda section: applied.append(section.title))
 
-    with patch(f"{BUILDER_MODULE}.logger") as logger:
+    with patch(CONTENT_LOGGER) as logger:
         builder.start()
         loop.drain()
 

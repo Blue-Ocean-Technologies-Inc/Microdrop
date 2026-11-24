@@ -76,14 +76,16 @@ class ImageViewerPlugin(Plugin):
 
         from pluggable_protocol_tree.consts import EXPERIMENTS_MENU_ID
 
-        from .analysis.plot_pane import RoiPlotDockPane
         from .dock_pane import ImageViewerDockPane
         from .menus import help_menu_factory, prune_menu_factory
 
         return [
             TaskExtension(
                 task_id=f"{microdrop_application_PKG}.task",
-                dock_pane_factories=[ImageViewerDockPane, RoiPlotDockPane],
+                dock_pane_factories=[
+                    ImageViewerDockPane,
+                    self._roi_plot_dock_pane_factory,
+                ],
                 actions=[
                     SchemaAddition(factory=help_menu_factory, path="MenuBar/Help"),
                     SchemaAddition(
@@ -96,6 +98,13 @@ class ImageViewerPlugin(Plugin):
                 ],
             )
         ]
+
+    def _roi_plot_dock_pane_factory(self, *args, **kwargs):
+        """Build the ROI Intensities pane, importing matplotlib with it rather
+        than with this plugin's task extensions."""
+        from .analysis.plot_pane import RoiPlotDockPane
+
+        return RoiPlotDockPane(*args, **kwargs)
 
     def _preferences_panes_default(self):
         from .preferences import ImageViewerPreferencesPane

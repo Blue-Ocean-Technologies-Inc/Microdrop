@@ -346,16 +346,24 @@ class PluginManagementPlugin(Plugin):
             logger.exception("plugin-group launch restore failed")
 
         # The reactive pane mount for any group enabled above is already
-        # queued on the UI loop (LiveTaskExtensionsController defers its
-        # reconcile with invoke_later), so queue the saved-layout re-apply
-        # behind it: at window creation those panes did not exist yet, so
-        # envisage dropped their saved placement (restore_saved_task_layout).
-        GUI.invoke_later(self._reapply_saved_layout_after_launch_restore)
+        # queued (LiveTaskExtensionsController defers its reconcile), and
+        # mounts one pane per turn.
+        if self._live_task_exts is None:
+            GUI.invoke_later(self._after_launch_restore_mounts)
+        else:
+            self._live_task_exts.call_when_settled(self._after_launch_restore_mounts)
 
-        # Then the deferred plugins, one per turn; their panes take the
+    def _after_launch_restore_mounts(self):
+        """Once the panes of the groups enabled at launch are mounted,
+        re-apply the saved layout and start the deferred plugins."""
+        # At window creation those panes did not exist yet, so envisage
+        # dropped their saved placement (restore_saved_task_layout).
+        self._reapply_saved_layout_after_launch_restore()
+
+        # Then the deferred plugins, one at a time; their panes take the
         # places the layout gave their placeholders. extra_plugins_loaded
         # fires when the last one is in (_announce_extra_plugins_loaded).
-        GUI.invoke_later(self._deferred_loader.start, self._live_task_exts)
+        self._deferred_loader.start(self._live_task_exts)
 
     def _reapply_saved_layout_after_launch_restore(self):
         """Give the user back their saved window layout when the enabled

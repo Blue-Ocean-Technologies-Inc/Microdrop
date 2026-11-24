@@ -21,8 +21,6 @@ import warnings
 
 # Third-party imports.
 import numpy as np
-from scipy.optimize import curve_fit
-from scipy.special import expit
 
 # Enthought library imports.
 from traits.api import Any, Bool, Dict, Float, HasTraits, Str
@@ -241,6 +239,8 @@ def _exponential(t, amplitude, rate, offset):
 
 
 def _fit_exponential(elapsed, values):
+    from scipy.optimize import curve_fit
+
     t_span = float(elapsed[-1] - elapsed[0]) or 1.0
     offset0 = float(values[-1])
     amplitude0 = float(values[0] - offset0)
@@ -274,6 +274,8 @@ def _fit_exponential(elapsed, values):
 
 
 def _sigmoid(t, amplitude, rate, midpoint, offset):
+    from scipy.special import expit
+
     return amplitude * expit(rate * (np.asarray(t, dtype=float) - midpoint)) + offset
 
 
@@ -290,6 +292,9 @@ def _logistic_4p(t, initial, final, midpoint, rate):
 
 
 def _fit_sigmoid(elapsed, values):
+    from scipy.optimize import curve_fit
+    from scipy.special import expit
+
     t_span = float(elapsed[-1] - elapsed[0]) or 1.0
     initial0 = float(values[0])
     final0 = float(values[-1])
@@ -415,6 +420,8 @@ def _custom_seeds(elapsed, values, count):
 def _solve_from(expression, elapsed, values, seed):
     """(R², parameters) for one starting point, or None when it does
     not converge to something finite."""
+    from scipy.optimize import curve_fit
+
     try:
         solved, _ = curve_fit(
             expression, elapsed, values, p0=seed, maxfev=_MAX_FIT_EVALUATIONS

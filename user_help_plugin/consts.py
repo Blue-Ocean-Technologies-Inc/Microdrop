@@ -38,6 +38,10 @@ HELP_LOGS_STORAGE_TUTORIAL_TITLE = "Help, Logs & Saved Files Tutorial"
 TUTORIAL_SIMULATIONS_DOCK_PANE_ID = f"{PKG}.tutorial_simulations_dock_pane"
 TUTORIAL_SIMULATIONS_DOCK_PANE_NAME = "Tutorial Simulations"
 
+#: Shown in the simulations pane until the user picks one, which is what
+#: starts its web view.
+PICK_SIMULATION_HINT = "Pick a simulation from the list to try it."
+
 #: Run in a loaded tutorial page; defines ``microdropShowSim(demo)``.
 SHOW_SIMULATION_SCRIPT_PATH = Path(__file__).parent / "resources" / "show_simulation.js"
 MICRODROP_LAUNCHER_README_URL = "https://github.com/Blue-Ocean-Technologies-Inc/microdrop-launcher/blob/main/README.md"

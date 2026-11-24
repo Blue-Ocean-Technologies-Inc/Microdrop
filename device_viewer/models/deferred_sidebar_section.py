@@ -13,21 +13,29 @@ paint (#1064).
 
 Qt-free: the section holds its place in the sidebar (title, collapsed) from
 the start, and says whether its content is still loading, is in, or failed
-to build.
+to build — the deferred content's state.
 """
 
 # Enthought library imports.
-from traits.api import Callable, Enum, Instance, Property, Str
+from traits.api import Instance, Property
+
+# Microdrop utils imports.
+from microdrop_utils.deferred_content import (
+    CONTENT_BUILT,
+    CONTENT_FAILED,
+    CONTENT_LOADING,
+    DeferredContent,
+)
 
 # Local imports.
 from ..interfaces.descriptors import SidebarSection
 
-SECTION_LOADING = "loading"
-SECTION_BUILT = "built"
-SECTION_FAILED = "failed"
+SECTION_LOADING = CONTENT_LOADING
+SECTION_BUILT = CONTENT_BUILT
+SECTION_FAILED = CONTENT_FAILED
 
 
-class DeferredSidebarSection(SidebarSection):
+class DeferredSidebarSection(DeferredContent, SidebarSection):
     """A sidebar section built later, in place of the one it stands for.
 
     ``widget`` stays None: the sidebar shows ``status_text`` in the
@@ -35,23 +43,11 @@ class DeferredSidebarSection(SidebarSection):
     widget.
     """
 
-    #: Builds and returns the real SidebarSection.
-    build = Callable()
-
-    #: Where the build stands.
-    state = Enum(SECTION_LOADING, SECTION_BUILT, SECTION_FAILED)
-
     #: The built section; None until it is built.
-    section = Instance(SidebarSection)
+    section = Property(Instance(SidebarSection), observe="content")
 
-    #: Why the build failed; empty otherwise.
-    error = Str()
+    def _get_section(self):
+        return self.content
 
-    #: What the box shows in place of the content: loading, or why it failed.
-    status_text = Property(Str, observe="title, state, error")
-
-    def _get_status_text(self):
-        if self.state == SECTION_FAILED:
-            return f"{self.title} could not be loaded: {self.error}"
-
-        return f"Loading {self.title}…"
+    def _set_section(self, section):
+        self.content = section
