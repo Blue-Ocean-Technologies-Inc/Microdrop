@@ -32,27 +32,31 @@ SAMPLE_RATE = 22050
 #: setting scales it down, so the files themselves are not quiet.
 PEAK = 0.9
 
+#: Silence (ms) before each chime: an audio output waking from idle can
+#: swallow the first moments of a sound, and this is all it swallows.
+LEAD_IN_MS = 120
+
 #: Milliseconds of rise at a note's start and fall at the file's end.
 ATTACK_MS = 4
 FADE_MS = 12
 
-#: The gentle chime (info, success, news): one soft A5 with a quiet octave
-#: and twelfth, fading over about a third of a second.
+#: The gentle chime (info, success, news): one soft A5 with its octave,
+#: twelfth and a faint double octave, ringing out over about 0.6 s.
 GENTLE_NOTES = [
     # (start ms, frequency Hz, peak, hold ms, decay time constant ms)
-    (0, 880.0, 0.30, 0, 95),
+    (0, 880.0, 0.30, 20, 190),
 ]
-GENTLE_PARTIALS = [(1.0, 1.0), (2.0, 0.22), (3.0, 0.06)]
-GENTLE_MS = 340
+GENTLE_PARTIALS = [(1.0, 1.0), (2.0, 0.30), (3.0, 0.08), (4.0, 0.03)]
+GENTLE_MS = 600
 
 #: The alert chime (warning, error, Needs attention): a rising C6 to E6
 #: pair, a little louder and brighter, still short.
 ALERT_NOTES = [
-    (0, 1046.5, 0.34, 0, 70),
-    (110, 1318.5, 0.38, 0, 90),
+    (0, 1046.5, 0.34, 15, 120),
+    (140, 1318.5, 0.38, 25, 210),
 ]
-ALERT_PARTIALS = [(1.0, 1.0), (2.0, 0.30), (3.0, 0.10)]
-ALERT_MS = 380
+ALERT_PARTIALS = [(1.0, 1.0), (2.0, 0.35), (3.0, 0.12), (4.0, 0.04)]
+ALERT_MS = 700
 
 #: The completion tone (a protocol finished), like a microwave's: three
 #: even D6 beeps, each held, then rounded off; nearly pure sines, so it
@@ -124,8 +128,10 @@ def main():
     loudest = max(abs(sample) for samples in chimes.values() for sample in samples)
     gain = PEAK / loudest
 
+    lead_in = [0.0] * int(SAMPLE_RATE * LEAD_IN_MS / 1000)
+
     for path, samples in chimes.items():
-        write_wav(path, [sample * gain for sample in samples])
+        write_wav(path, lead_in + [sample * gain for sample in samples])
         print(f"{path.name}: {path.stat().st_size} bytes")
 
 
