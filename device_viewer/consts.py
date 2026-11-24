@@ -515,6 +515,10 @@ HIGH_RESOLUTION_WARNING_THRESHOLD = (1920, 1080)
 # driver would otherwise list them as webcams too.
 NATIVE_CAMERA_PROPERTIES_EXCLUDED = ("ZWO",)
 
+# Shown in the Camera Properties area while the selected camera's properties
+# are still being looked up (DirectShow, in the background).
+CAMERA_PROPERTIES_LOADING_TEXT = "Loading camera properties…"
+
 # Camera pixel formats, as Qt names them without the "Format_" prefix.
 #: Ranked in place of the preferred video format for a libcamera source
 #: (Raspberry Pi CSI camera), which never offers JPEG.

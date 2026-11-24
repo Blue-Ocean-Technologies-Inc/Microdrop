@@ -117,9 +117,16 @@ from .fluorescence import (
     fluorescence_capture_publisher as fluorescence_capture_publisher,
 )
 from .fluorescence import frame_description as frame_description
+from .hardware import ABANDONED_CONNECT_POLL_S as ABANDONED_CONNECT_POLL_S
+from .hardware import ABANDONED_CONNECT_RELEASE_S as ABANDONED_CONNECT_RELEASE_S
+from .hardware import (
+    ABANDONED_CONNECT_WRITE_TIMEOUT_S as ABANDONED_CONNECT_WRITE_TIMEOUT_S,
+)
 from .hardware import CAL_CAPS_CHOICES as CAL_CAPS_CHOICES
 from .hardware import CAL_FREQUENCY as CAL_FREQUENCY
 from .hardware import CAL_VOLTAGE as CAL_VOLTAGE
+from .hardware import CONNECT_AUTODETECT_TIMEOUT_S as CONNECT_AUTODETECT_TIMEOUT_S
+from .hardware import CONNECT_TIMEOUT_S as CONNECT_TIMEOUT_S
 from .hardware import DEFAULT_BAUD_RATE as DEFAULT_BAUD_RATE
 from .hardware import DEFAULT_ELECTRODE_GAIN_PERMILLE as DEFAULT_ELECTRODE_GAIN_PERMILLE
 from .hardware import DEFAULT_FAN_BOARD as DEFAULT_FAN_BOARD
