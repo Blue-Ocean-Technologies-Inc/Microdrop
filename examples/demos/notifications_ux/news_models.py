@@ -27,8 +27,7 @@ from examples.demos.notifications_pane.sci_bots_feed_section import (
     SciBotsFeedSection,
 )
 from examples.demos.notifications_pane.sci_bots_feed_sources import (
-    DEFAULT_FEED_PATH,
-    JsonFileFeedSource,
+    demo_feed_sources,
 )
 from notifications.consts import SEVERITY_INFO
 
@@ -74,10 +73,10 @@ class NewsSection(SciBotsFeedSection):
 
 
 def make_news_section():
-    """The News section, open, its feed loaded: the feed file's posts and
-    MicroDrop's release notes."""
+    """The News section, open, its feed loaded: the feed file's posts (and
+    the local-only ones, if any) and MicroDrop's release notes."""
     controller = SciBotsFeedController(
-        sources=[JsonFileFeedSource(path=str(DEFAULT_FEED_PATH)), ChangelogFeedSource()]
+        sources=[*demo_feed_sources(), ChangelogFeedSource()]
     )
     controller.reload()
 

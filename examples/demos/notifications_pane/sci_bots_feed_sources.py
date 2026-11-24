@@ -25,6 +25,10 @@ from traits.api import File, HasTraits, Interface, provides
 #: The feed file the demo reads.
 DEFAULT_FEED_PATH = Path(__file__).with_name("sci_bots_feed.json")
 
+#: Posts kept on this machine only (``local/`` is never committed), merged
+#: into the demo feed when the file exists: e.g. an unannounced product.
+LOCAL_POSTS_PATH = Path(__file__).with_name("local") / "local_posts.json"
+
 
 class FeedLoadError(Exception):
     """A feed source could not be read; the message is the one-line reason."""
@@ -77,3 +81,14 @@ def resolve_image_path(image, base_dir):
         return image
 
     return str((Path(base_dir) / image).resolve())
+
+
+def demo_feed_sources(path=DEFAULT_FEED_PATH, local_path=LOCAL_POSTS_PATH):
+    """The demo feed's file sources: the local-only posts first, when that
+    file exists (so they win on a shared id), then the feed file."""
+    sources = [JsonFileFeedSource(path=str(path))]
+
+    if Path(local_path).is_file():
+        sources.insert(0, JsonFileFeedSource(path=str(local_path)))
+
+    return sources

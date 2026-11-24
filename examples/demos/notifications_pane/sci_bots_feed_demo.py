@@ -24,7 +24,7 @@ from .feed_creator import open_feed_creator
 from .sci_bots_feed_controller import SciBotsFeedController
 from .sci_bots_feed_releases import ChangelogFeedSource
 from .sci_bots_feed_section import SciBotsFeedSection
-from .sci_bots_feed_sources import DEFAULT_FEED_PATH, JsonFileFeedSource
+from .sci_bots_feed_sources import DEFAULT_FEED_PATH, demo_feed_sources
 
 #: What Push sample post sends: a placeholder with rich text.
 SAMPLE_PUSH_POST = {
@@ -51,10 +51,7 @@ def create_feed_section():
     """The feed section, expanded, loaded from the demo's feed file and the
     recent releases in CHANGELOG.md."""
     controller = SciBotsFeedController(
-        sources=[
-            JsonFileFeedSource(path=str(DEFAULT_FEED_PATH)),
-            ChangelogFeedSource(),
-        ]
+        sources=[*demo_feed_sources(), ChangelogFeedSource()]
     )
     controller.reload()
 

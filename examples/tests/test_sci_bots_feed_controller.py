@@ -30,6 +30,7 @@ from examples.demos.notifications_pane.sci_bots_feed_model import (
 )
 from examples.demos.notifications_pane.sci_bots_feed_sources import (
     JsonFileFeedSource,
+    demo_feed_sources,
 )
 
 #: The injected clock.
@@ -190,6 +191,31 @@ def test_push_file_resolves_images_next_to_it(tmp_path):
     controller.push_file(pushed)
 
     assert controller.model.posts[0].image == str((pushed.parent / "pic.png").resolve())
+
+
+def test_pictures_resolve_next_to_their_feed_file(tmp_path):
+    images = [{"src": "a.png", "caption": "A"}, {"src": "https://x.com/b.png"}]
+    controller, path = _controller(tmp_path, [_post("p", images=images)])
+    post = controller.model.posts[0]
+
+    assert post.images == [
+        (str((path.parent / "a.png").resolve()), "A", ""),
+        ("https://x.com/b.png", "", ""),
+    ]
+    assert post.image == post.images[0][0]
+
+
+def test_local_posts_join_the_demo_feed_only_when_present(tmp_path):
+    feed, local = tmp_path / "feed.json", tmp_path / "local" / "posts.json"
+
+    assert [source.path for source in demo_feed_sources(feed, local)] == [str(feed)]
+
+    local.parent.mkdir()
+    local.write_text("{}", encoding="utf-8")
+
+    paths = [source.path for source in demo_feed_sources(feed, local)]
+
+    assert paths == [str(local), str(feed)]
 
 
 @pytest.mark.parametrize(
