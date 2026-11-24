@@ -1,3 +1,36 @@
+## [v1.49.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.49.0) (2026-11-24)
+
+### Feat
+
+- **notifications**: show notifications in a fixed right-hand drawer ([`67be01e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/67be01ebf59fb42799ad58c38e7dfb40d7259508))
+- **plugin-management**: show plugin loading in the notifications pane ([`0bf530b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0bf530b80e5a9681cea517702d092bfdf439dacc))
+- **notifications**: add the notifications pane and status-bar bell ([`f1a57bf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f1a57bf5ae96416e93cb86557da52746d49f7096))
+- **notifications**: add the notification model, topics and log feed ([`bb19134`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bb19134b8e1d97a6b7661122e2743dd1ebe3b673))
+- **style**: add notification glyphs and a rightmost status-bar slot ([`2ad3202`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2ad32022b64e3805c8c1424080c86b9296ddf1dc))
+
+### Fix
+
+- **device_viewer**: drop the stray Group tabs in camera properties ([`eb7e3a5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eb7e3a5753bf5b7f11fff7df33820f1fb9131ecb))
+
+### Perf
+
+- **device-viewer**: build the device viewer pane on first show ([`7781006`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7781006cc9dc549ffaa929fae620015c300f713b))
+
+### Docs
+
+- **messages**: describe the notifications drawer ([`3776810`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3776810d398ac3f2035af9662fb9fb723c05e9d6))
+- **messages**: document the notifications topics ([`0ba2af6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0ba2af6dc23d34b917419561d6c4897993500c61))
+- **examples**: add a notifications pane demo ([`5c9d73b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5c9d73b261cddb72d64f970c44dc1bf7f0f30895))
+
+### Test
+
+- load pydantic fully before Qt in pytest runs ([`f129ee8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f129ee8ebfc7ad3f6be7eacddbb4f527ffe07475))
+- **image_viewer**: wait for the ROI table, not a fixed second ([`dd2849e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/dd2849e5db0f3fd223cbf799a927766d20b3278d))
+
+### Chore
+
+- **examples**: register the notifications plugin ([`91f5725`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/91f57252a0d046194e297947485206b06b9326fd))
+
 ## [v1.48.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.48.0) (2026-11-24)
 
 ### Feat
