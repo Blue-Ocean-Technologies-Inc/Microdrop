@@ -136,6 +136,9 @@ DRAWER_GRIP_WIDTH = 6
 # Sections
 # ---------------------------------------------------------------------------
 ATTENTION_SECTION_ID = f"{PKG}.attention"
+
+#: The title of the section listing every other notification.
+HISTORY_SECTION_TITLE = "Activity"
 HISTORY_SECTION_ID = f"{PKG}.history"
 
 #: Sections sort by order: Needs attention first, the history last.
@@ -150,6 +153,45 @@ SECTION_MIN_HEIGHT = 72
 
 #: Height (px) of the drag handle under a resizable section.
 SECTION_GRIP_HEIGHT = 9
+
+# ---------------------------------------------------------------------------
+# The drawer's one-column layout
+# ---------------------------------------------------------------------------
+#: The drawer's layouts: one scrolling column of sections, or sections that
+#: each scroll and resize inside a fixed-height drawer.
+LAYOUT_COLUMN = "column"
+LAYOUT_SECTIONS = "sections"
+
+#: Activity's filters: every entry, the errors, or those with a button left
+#: to press.
+FILTER_ALL = "all"
+FILTER_ERRORS = "errors"
+FILTER_ACTION = "action"
+
+#: Activity's cards built at first, and per batch as the scroll nears the
+#: end.
+HISTORY_PAGE = 25
+
+#: Most milliseconds a GUI turn spends building cards; the rest are built
+#: in the turns after, so opening the drawer or scrolling never stalls.
+BUILD_BUDGET_MS = 15
+
+#: Pixels from the end of the column within which the next batch is built.
+LOAD_AHEAD_PX = 600
+
+#: Sci-Bots Feed cards shown in the column before "Show N more".
+FEED_PREVIEW_CARDS = 3
+
+#: Duration (ms) of a revealed card's highlight fading out, and of the
+#: scroll to it.
+HIGHLIGHT_MS = 1600
+REVEAL_SCROLL_MS = 260
+
+# ---------------------------------------------------------------------------
+# Quiet mode
+# ---------------------------------------------------------------------------
+#: Who posts the summary when a quiet run ends.
+QUIET_SUMMARY_SOURCE = "notifications"
 
 #: Lines of a card's text shown before "Show more".
 CARD_BODY_LINES = 2

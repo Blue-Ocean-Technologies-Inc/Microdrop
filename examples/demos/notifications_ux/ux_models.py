@@ -15,11 +15,13 @@ marker, the toasts on screen and the drawer's session layout.
 
 # Standard library imports.
 import time
+from datetime import datetime, timedelta
 
 # Enthought library imports.
 from traits.api import (
     Bool,
     Dict,
+    Enum,
     Event,
     HasTraits,
     Instance,
@@ -52,8 +54,14 @@ from .ux_consts import (
     ATTENTION_SECTION_ID,
     ATTENTION_SECTION_ORDER,
     DRAWER_DEFAULT_WIDTH,
+    FILTER_ACTION,
+    FILTER_ALL,
+    FILTER_ERRORS,
     HISTORY_SECTION_ID,
     HISTORY_SECTION_ORDER,
+    HISTORY_SECTION_TITLE,
+    LAYOUT_COLUMN,
+    LAYOUT_SECTIONS,
     TOAST_TIMEOUT_MS,
     HelpAction,
     SnoozeAction,
@@ -97,6 +105,10 @@ class UxNotificationCenter(NotificationCenter):
 
     #: Fired with an unread entry another occurrence collapsed into.
     repeated = Event(Instance(Notification))
+
+    #: Fired after ``update_all`` changed many entries quietly: whatever
+    #: counts unread or new entries counts again.
+    bulk_changed = Event()
 
     #: Entries the user has to act on, newest first.
     attention_entries = Property(
@@ -202,6 +214,29 @@ class UxNotificationCenter(NotificationCenter):
             needs_attention=getattr(message, "needs_attention", False),
         )
 
+    def update_all(self, entries, **traits):
+        """Set ``traits`` on ``entries`` quietly, then announce it once, as
+        ``bulk_changed``: hundreds of entries, each telling every observer
+        of the counts, made opening the drawer stall. Counts and summaries
+        observe ``bulk_changed`` too; each card follows its entry's own
+        ``changed``."""
+        entries = list(entries)
+
+        if not entries:
+            return
+
+        for entry in entries:
+            entry.trait_setq(**traits)
+
+        self.bulk_changed = True
+
+        for entry in entries:
+            entry.changed = True
+
+    def mark_all_read(self):
+        """Mark every entry seen, in one change."""
+        self.update_all([entry for entry in self.entries if entry.unread], unread=False)
+
     def clear(self):
         """Drop every entry except those still needing attention."""
         kept = self.attention_entries
@@ -262,14 +297,29 @@ class ToastStackModel(HasTraits):
     settings = Instance(ToastSettings, ())
 
     #: Toasts that did not fit, gone straight to the bell since the stack
-    #: was last empty.
-    overflow = Int(0)
+    #: was last empty, oldest first; and how many.
+    overflow_entries = List(Instance(Notification))
+    overflow = Property(Int, observe="overflow_entries.items")
+
+    #: SOURCE OF TRUTH for quiet mode: while True only errors and Needs
+    #: attention items pop up; the rest are held for one summary toast when
+    #: it ends. A protocol run sets it.
+    quiet = Bool(False)
+
+    #: What runs while quiet, for the summary: "Protocol finished · ...".
+    quiet_reason = Str("Protocol")
+
+    #: Entries held while quiet, oldest first.
+    held = List(Instance(Notification))
 
     #: Entries on screen as toasts (leaving ones too, until they land).
     entries_shown = Property(List, observe="items.items")
 
     def _get_entries_shown(self):
         return [item.entry for item in self.items]
+
+    def _get_overflow(self):
+        return len(self.overflow_entries)
 
     def times_out(self, item):
         """Whether ``item`` leaves on its own: an info or success toast,
@@ -300,7 +350,7 @@ class ToastStackModel(HasTraits):
             self.items.remove(item)
 
         if not self.items:
-            self.overflow = 0
+            self.overflow_entries = []
 
 
 class UxPaneModel(NotificationsPaneModel):
@@ -328,6 +378,20 @@ class UxPaneModel(NotificationsPaneModel):
     #: Fired with the entry whose second button the user pressed.
     run_secondary_action = Event(Instance(Notification))
 
+    #: Which layout the drawer shows.
+    drawer_layout = Enum(LAYOUT_COLUMN, LAYOUT_SECTIONS)
+
+    #: Which Activity entries show.
+    history_filter = Enum(FILTER_ALL, FILTER_ERRORS, FILTER_ACTION)
+
+    #: Fired with an entry the open drawer scrolls to and highlights.
+    reveal = Event(Instance(Notification))
+
+    def reveal_entry(self, entry):
+        """Open the drawer on ``entry``."""
+        self.is_open = True
+        self.reveal = entry
+
     def _bell_entries(self):
         shown = self.toasts.entries_shown
 
@@ -344,6 +408,37 @@ class UxPaneModel(NotificationsPaneModel):
         levels = [SEVERITIES.index(entry.severity) for entry in self._bell_entries()]
 
         return SEVERITIES[max(levels)] if levels else ""
+
+
+def matches_filter(entry, name):
+    """Whether ``entry`` shows under Activity's filter ``name``."""
+
+    if name == FILTER_ERRORS:
+        return entry.severity == SEVERITY_ERROR
+
+    # A button still to press on a warning or an error: "Retry", not a
+    # success's "Show folder".
+    if name == FILTER_ACTION:
+        urgent = entry.severity in (SEVERITY_WARNING, SEVERITY_ERROR)
+
+        return urgent and entry.action is not None and not entry.acted
+
+    return True
+
+
+def time_group(seconds, now=None):
+    """The day heading an entry goes under: Today, Yesterday or Earlier."""
+    now = time.time() if now is None else now
+    day = datetime.fromtimestamp(seconds).date()
+    today = datetime.fromtimestamp(now).date()
+
+    if day == today:
+        return "Today"
+
+    if day == today - timedelta(days=1):
+        return "Yesterday"
+
+    return "Earlier"
 
 
 class CardListSection(NotificationSection):
@@ -380,6 +475,7 @@ class AttentionSection(CardListSection):
     entries_name = "attention_entries"
 
     @observe("pane_model.center.entries.items.needs_attention")
+    @observe("pane_model:center:bulk_changed")
     def _follow_entries(self, event):
         count = len(self.pane_model.center.attention_entries)
 
@@ -391,12 +487,13 @@ class HistorySection(CardListSection):
     """Every other notification, filling the rest of the drawer."""
 
     id = HISTORY_SECTION_ID
-    title = "Notifications"
+    title = HISTORY_SECTION_TITLE
     order = HISTORY_SECTION_ORDER
     expanded = True
     entries_name = "history_entries"
 
     @observe("pane_model.center.entries.items.[needs_attention, is_new]")
+    @observe("pane_model:center:bulk_changed")
     def _follow_entries(self, event):
         center = self.pane_model.center
         total = len(center.history_entries)

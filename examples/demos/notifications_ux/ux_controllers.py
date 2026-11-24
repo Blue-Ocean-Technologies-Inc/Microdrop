@@ -20,10 +20,12 @@ from pyface.timer.api import CallbackTimer
 from traits.api import Any, Bool, Callable, Float, HasTraits, Instance, observe
 
 # Microdrop package imports.
+from notifications.consts import SEVERITY_ERROR, SEVERITY_SUCCESS
 from notifications.controllers.notifications_controller import NotificationsController
 
 # Local imports.
 from .ux_consts import (
+    QUIET_SUMMARY_SOURCE,
     TOAST_LIMIT,
     TOAST_TICK_MS,
     HelpAction,
@@ -56,10 +58,11 @@ class UxNotificationsController(NotificationsController):
         """Read everything, and drop the open drawer's "new" marks too."""
         center = self.pane_model.center
 
-        center.mark_all_read()
-
-        for entry in center.entries:
-            entry.is_new = False
+        center.update_all(
+            [entry for entry in center.entries if entry.unread or entry.is_new],
+            unread=False,
+            is_new=False,
+        )
 
     @observe("pane_model:run_secondary_action")
     def _run_secondary_action(self, event):
@@ -84,16 +87,16 @@ class UxNotificationsController(NotificationsController):
         the marks."""
         center = self.pane_model.center
 
-        if self.pane_model.is_open:
-            for entry in center.entries:
-                if entry.unread:
-                    entry.trait_set(is_new=True, unread=False)
+        if self.pane_model.is_open and event.name == "is_open":
+            unread = [entry for entry in center.entries if entry.unread]
+            center.update_all(unread, is_new=True, unread=False)
 
-            return
+        elif self.pane_model.is_open and event.new.unread:
+            event.new.trait_set(is_new=True, unread=False)
 
-        if event.name == "is_open":
-            for entry in center.entries:
-                entry.is_new = False
+        elif event.name == "is_open":
+            marked = [entry for entry in center.entries if entry.is_new]
+            center.update_all(marked, is_new=False)
 
 
 class ToastStackController(HasTraits):
@@ -103,7 +106,9 @@ class ToastStackController(HasTraits):
     drawer is closed, at most TOAST_LIMIT at once; the rest go straight to
     the bell, counted as the stack's overflow. Info and success toasts leave
     after the settings' timeout of not being hovered, if the settings say
-    toasts time out; sticky ones stay.
+    toasts time out; sticky ones stay. While the stack is quiet only errors
+    and Needs attention items pop up; the rest are held, and one summary
+    toast says how many when it ends.
     """
 
     #: The drawer's model: its centre, toasts and open state.
@@ -138,7 +143,7 @@ class ToastStackController(HasTraits):
         for item in toasts.items:
             item.trait_set(into_bell=False, leaving=True)
 
-        toasts.overflow = 0
+        toasts.overflow_entries = []
 
     # ------------------------------------------------------------------ #
     # Arrivals                                                            #
@@ -159,10 +164,18 @@ class ToastStackController(HasTraits):
 
             return
 
+        urgent = entry.severity == SEVERITY_ERROR or entry.needs_attention
+
+        if toasts.quiet and not urgent:
+            if entry not in toasts.held:
+                toasts.held.append(entry)
+
+            return
+
         showing = [item for item in toasts.items if not item.leaving]
 
         if len(showing) >= TOAST_LIMIT:
-            toasts.overflow += 1
+            toasts.overflow_entries.append(entry)
 
             return
 
@@ -189,6 +202,26 @@ class ToastStackController(HasTraits):
                 item.remaining_ms = toasts.settings.timeout_ms
 
         self._start_timer()
+
+    @observe("pane_model:toasts:quiet")
+    def _summarise_quiet_run(self, event):
+        """The quiet run ended: one toast for what was held."""
+        toasts = self.pane_model.toasts
+        held, toasts.held = toasts.held, []
+
+        if event.new or not held:
+            return
+
+        count = len(held)
+        noun = "notification" if count == 1 else "notifications"
+
+        self.pane_model.center.post(
+            f"{toasts.quiet_reason} finished · {count} {noun} while running",
+            detail="\n".join(f"• {entry.title}" for entry in held),
+            severity=SEVERITY_SUCCESS,
+            category="protocol",
+            source=QUIET_SUMMARY_SOURCE,
+        )
 
     @observe("pane_model:is_open")
     def _clear_when_drawer_opens(self, event):
