@@ -385,18 +385,6 @@ EARLIER_ENTRIES = [
         },
     ),
     (
-        1,
-        9,
-        20,
-        "Calibration done",
-        {
-            "detail": "Capacitance offsets updated for all 90 channels.",
-            "severity": SEVERITY_SUCCESS,
-            "category": "calibration",
-            "source": "dropbot_status_and_controls",
-        },
-    ),
-    (
         3,
         15,
         2,
