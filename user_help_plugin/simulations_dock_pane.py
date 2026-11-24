@@ -11,10 +11,13 @@
 """Tutorial Simulations dock pane: every tutorial simulation, one at a time.
 
 A contents tree on the left lists each tutorial with its simulations under
-it; the selected simulation shows on the right. Each tutorial page loads
-once, into one web view, when it is first selected while the pane is
-visible; switching simulations only changes which figure the page shows, so
-every simulation keeps its state.
+it; the selected simulation shows on the right. Nothing is selected until
+the user picks a simulation, so no web view (and no QtWebEngine) starts
+with the pane. Each tutorial page loads once, into one web view, when it is
+first picked while the pane is visible; switching simulations only changes
+which figure the page shows, so every simulation keeps its state. A change
+of the tutorial catalog keeps the pages of the tutorials still listed, and
+a web view is never destroyed while it is still starting.
 
 A web view is a raw Qt widget TraitsUI has no editor for, hence the raw Qt.
 """
@@ -26,10 +29,11 @@ import webbrowser
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
 from pyface.tasks.api import DockPane
-from traits.api import Instance, observe
+from traits.api import Dict, Instance, List, observe
 
 # Local imports.
 from .consts import (
+    PICK_SIMULATION_HINT,
     SHOW_SIMULATION_SCRIPT_PATH,
     TUTORIAL_SIMULATIONS_DOCK_PANE_ID,
     TUTORIAL_SIMULATIONS_DOCK_PANE_NAME,
@@ -71,6 +75,8 @@ class TutorialSimulationsPage(QtWidgets.QWidget):
         self.record = record
         self._web_view = None
         self._page_ready = False
+        self._load_finished = False
+        self._retired = False
         self._simulation_index = 0
 
         self._layout = QtWidgets.QVBoxLayout(self)
@@ -81,6 +87,14 @@ class TutorialSimulationsPage(QtWidgets.QWidget):
         """Show the ``index``-th simulation, now or once the page is ready."""
         self._simulation_index = index
         self._show_current_simulation()
+
+    def retire(self):
+        """Delete the page, once its web view has finished starting:
+        destroying a QtWebEngine view mid-start can bring the app down."""
+        self._retired = True
+
+        if self._web_view is None or self._load_finished:
+            self.deleteLater()
 
     def load(self):
         """Load the tutorial page on first use."""
@@ -130,6 +144,13 @@ class TutorialSimulationsPage(QtWidgets.QWidget):
         return fallback
 
     def _on_load_finished(self, ok):
+        self._load_finished = True
+
+        if self._retired:
+            self.deleteLater()
+
+            return
+
         if not ok:
             logger.error(f"Failed to load tutorial page {self.record.tutorial.path}")
             return
@@ -176,8 +197,19 @@ class TutorialSimulationsDockPane(DockPane):
     #: The contents: a top-level item per tutorial, a child per simulation.
     _contents_tree = Instance(QtWidgets.QTreeWidget)
 
-    #: One page per tutorial, in the same order as the tree's tutorials.
+    #: The hint shown until a simulation is picked, then one page per
+    #: tutorial, found through ``_pages_by_record``.
     _pages = Instance(QtWidgets.QStackedWidget)
+
+    #: Shown in place of a page while no simulation is picked.
+    _pick_hint = Instance(QtWidgets.QLabel)
+
+    #: The page of each listed tutorial's simulations record; a record still
+    #: listed after a catalog change keeps its page and web view.
+    _pages_by_record = Dict()
+
+    #: The records of the tree's tutorial items, in tree order.
+    _tree_records = List()
 
     def create_contents(self, parent):
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal, parent)
@@ -187,9 +219,16 @@ class TutorialSimulationsDockPane(DockPane):
         self._contents_tree.setAnimated(True)
         self._contents_tree.setIndentation(SIMULATION_INDENTATION_PX)
         self._contents_tree.setStyleSheet(CONTENTS_TREE_STYLE_SHEET)
-        self._contents_tree.currentItemChanged.connect(self._show_current)
+        # Selection, not the current item: focus alone (a neighbouring pane
+        # hiding, say) makes the first item current without selecting it,
+        # and must not start a web view.
+        self._contents_tree.itemSelectionChanged.connect(self._show_current)
 
         self._pages = QtWidgets.QStackedWidget(splitter)
+        self._pick_hint = QtWidgets.QLabel(PICK_SIMULATION_HINT, self._pages)
+        self._pick_hint.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self._pick_hint.setWordWrap(True)
+        self._pages.addWidget(self._pick_hint)
 
         splitter.addWidget(self._contents_tree)
         splitter.addWidget(self._pages)
@@ -207,25 +246,33 @@ class TutorialSimulationsDockPane(DockPane):
 
     @observe("visible")
     def _visibility_changed(self, event):
+        # The first show has the catalog read the tutorial pages, which fills
+        # the contents.
+        if event.new:
+            self.model.active = True
+
         self._show_current()
 
     def _fill_contents(self):
-        """Rebuild tree and pages, keeping the shown simulation if it stays."""
+        """Rebuild the tree, keep the pages of the tutorials still listed,
+        and keep the picked simulation if it stays."""
         tree = self._contents_tree
         pages = self._pages
+        records = list(self.model.tutorials)
 
         shown_page = pages.currentWidget()
-        shown_item = tree.currentItem()
-        shown_tutorial = shown_page.record.tutorial.title if shown_page else None
+        shown_item = self._picked_item()
+        shown_record = getattr(shown_page, "record", None)
         shown_simulation = shown_item.text(0) if shown_item else None
+
+        for record in list(self._pages_by_record):
+            if record not in records:
+                page = self._pages_by_record.pop(record)
+                pages.removeWidget(page)
+                page.retire()
 
         tree.blockSignals(True)
         tree.clear()
-
-        while pages.count():
-            page = pages.widget(0)
-            pages.removeWidget(page)
-            page.deleteLater()
 
         heading_font = QtGui.QFont(tree.font())
         heading_font.setBold(True)
@@ -238,8 +285,10 @@ class TutorialSimulationsDockPane(DockPane):
 
         selected = None
 
-        for record in self.model.tutorials:
-            pages.addWidget(TutorialSimulationsPage(record, pages))
+        for record in records:
+            if record not in self._pages_by_record:
+                self._pages_by_record[record] = TutorialSimulationsPage(record, pages)
+                pages.addWidget(self._pages_by_record[record])
 
             tutorial_item = QtWidgets.QTreeWidgetItem(tree, [record.label])
             tutorial_item.setFont(0, heading_font)
@@ -249,35 +298,34 @@ class TutorialSimulationsDockPane(DockPane):
                 item = QtWidgets.QTreeWidgetItem(tutorial_item, [simulation.title])
                 item.setToolTip(0, f"{simulation.title} ({record.tutorial.title})")
 
-                if (
-                    record.tutorial.title == shown_tutorial
-                    and simulation.title == shown_simulation
-                ):
+                if record is shown_record and simulation.title == shown_simulation:
                     selected = item
 
-        if selected is None and tree.topLevelItemCount():
-            selected = tree.topLevelItem(0).child(0)
-
+        self._tree_records = records
         tree.expandAll()
         tree.blockSignals(False)
 
+        # Nothing is picked for the user: a picked simulation starts a web view.
         if selected is not None:
             tree.setCurrentItem(selected)
+        else:
+            pages.setCurrentWidget(self._pick_hint)
 
     def _show_current(self, *args):
-        """Show the selected simulation; a tutorial keeps its last one shown."""
+        """Show the picked simulation; a tutorial keeps its last one shown."""
         if self._contents_tree is None:
             return
 
-        item = self._contents_tree.currentItem()
+        item = self._picked_item()
 
         if item is None:
             return
 
         tutorial_item = item.parent() if item.parent() is not None else item
-        page = self._pages.widget(
+        record = self._tree_records[
             self._contents_tree.indexOfTopLevelItem(tutorial_item)
-        )
+        ]
+        page = self._pages_by_record[record]
 
         self._pages.setCurrentWidget(page)
 
@@ -286,3 +334,9 @@ class TutorialSimulationsDockPane(DockPane):
 
         if self.visible:
             page.load()
+
+    def _picked_item(self):
+        """The tree item the user picked, or None."""
+        items = self._contents_tree.selectedItems()
+
+        return items[0] if items else None

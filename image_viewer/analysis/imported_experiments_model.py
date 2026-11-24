@@ -18,10 +18,16 @@ The set is the pane's own, not any experiment's: the viewer controller
 keeps it in the image viewer preferences (payloads_as_text), so
 switching the viewer's experiment only moves the live mark — the
 experiment it shows joins the set, and the one it leaves stays, read
-back from disk."""
+back from disk.
+
+A saved analysis can take a second to read, and the set grows with every
+experiment shown (#1072), so the app's set reads them on a worker thread
+(``read_in_background``): each is listed at once, loading, and swapped
+for its saved analysis on a paced GUI turn once read (#1086)."""
 
 # Standard library imports.
 import json
+from difflib import SequenceMatcher
 from pathlib import Path
 
 # Enthought library imports.
@@ -51,6 +57,7 @@ from .imported_series import (
     split_imported_key,
 )
 from .plot_series import analysed_series, quantity_label, x_quantity
+from .plotted_experiments_reader import PlottedExperimentsReader
 from .roi_model import AnalysisSession, RoiAnalysisModel, roi_analysis_model
 from .roi_store import (
     ROI_STYLE_FIELDS,
@@ -148,8 +155,12 @@ class ImportedExperiment(HasTraits):
     #: Not live, the images of its run the plot reads (see run_paths).
     paths = List(Str)
 
+    #: Its saved analysis is still being read: its session is empty until
+    #: the read experiment takes its place in the set.
+    loading = Bool(False)
+
     #: What was found to plot, "<n> images, <m> ROIs".
-    summary = Property(Str, observe="paths.items, session")
+    summary = Property(Str, observe="paths.items, session, loading")
 
     #: Whether any of its ROIs (masks aside) is shown: its section eye.
     any_roi_shown = Property(
@@ -209,6 +220,9 @@ class ImportedExperiment(HasTraits):
             self.session.rois.remove(roi)
 
     def _get_summary(self):
+        if self.loading:
+            return "loading…"
+
         images = len(self.paths)
         rois = len(self.session.positive_rois)
 
@@ -287,6 +301,9 @@ class ImportedExperimentsModel(HasTraits):
         Instance(ImportedExperiment), observe="experiments.items.live"
     )
 
+    #: Whether the saved analysis of any of them is still being read.
+    loading = Property(Bool, observe="experiments.items.loading")
+
     #: Pick an experiment folder to plot (the controller opens the
     #: dialog).
     import_experiment_button = Button("Import experiment…")
@@ -307,10 +324,25 @@ class ImportedExperimentsModel(HasTraits):
     #: curve keys ([str, ...])
     delete_roi_request = Event()
 
+    #: Read the saved analyses a restore needs on a worker thread, each
+    #: listed loading meanwhile; off, read in place before it returns.
+    read_in_background = Bool(False)
+
+    #: Reads them, with read_in_background on.
+    _reader = Instance(PlottedExperimentsReader)
+
+    def __reader_default(self):
+        return PlottedExperimentsReader(
+            load=load_imported_experiment, on_read=self._swap_in_read
+        )
+
     def _get_live_experiment(self):
         return next(
             (experiment for experiment in self.experiments if experiment.live), None
         )
+
+    def _get_loading(self):
+        return any(experiment.loading for experiment in self.experiments)
 
     @observe("analysis.session")
     def _follow_live(self, event):
@@ -327,8 +359,8 @@ class ImportedExperimentsModel(HasTraits):
         """Plot the experiments ``payloads`` (as_payload() dicts) list,
         in order: the analysis session's folder live — listed where it
         is, else last — and every other one read from disk (one already
-        read is kept as it is). A folder listed twice, or gone, is left
-        out."""
+        read, or being read, is kept as it is). A folder listed twice,
+        or gone, is left out."""
         session = self.analysis.session
         live_folder = _folder_identity(session.directory) if session.directory else None
         read = {
@@ -338,6 +370,7 @@ class ImportedExperimentsModel(HasTraits):
         }
         experiments = []
         listed_folders = set()
+        to_read = []
 
         for payload in payloads:
             directory = payload["directory"]
@@ -353,6 +386,9 @@ class ImportedExperimentsModel(HasTraits):
             else:
                 experiment = self._experiment_from(payload)
 
+                if experiment is not None and experiment.loading:
+                    to_read.append(experiment)
+
             if experiment is not None:
                 experiments.append(experiment)
                 listed_folders.add(folder)
@@ -364,19 +400,70 @@ class ImportedExperimentsModel(HasTraits):
                 )
             )
 
-        self.experiments = experiments
+        self._show_experiments(experiments)
+
+        if to_read:
+            self._reader.read(to_read)
+
+    def _show_experiments(self, experiments):
+        """Make ``experiments`` the set, replacing only the runs of it that
+        changed: a new list would unhook and hook again every observer of
+        every experiment, which with a long set froze the window on each
+        experiment switch (#1086)."""
+        matcher = SequenceMatcher(
+            None,
+            [id(experiment) for experiment in self.experiments],
+            [id(experiment) for experiment in experiments],
+            autojunk=False,
+        )
+
+        # From the end, so the indices of the runs before stay valid.
+        for tag, start, end, new_start, new_end in reversed(matcher.get_opcodes()):
+            if tag != "equal":
+                self.experiments[start:end] = experiments[new_start:new_end]
 
     def _experiment_from(self, payload):
-        """The ImportedExperiment a payload describes, read from disk, or
-        None when its folder is gone."""
+        """The ImportedExperiment a payload describes, read from disk —
+        or, read in the background, loading until it is — or None when
+        its folder is gone."""
         if not Path(payload["directory"]).is_dir():
             logger.warning(f"Plotted experiment {payload['directory']} is missing")
 
             return None
 
+        if self.read_in_background:
+            return ImportedExperiment(loading=True, **payload)
+
         traits = {name: value for name, value in payload.items() if name != "directory"}
 
         return load_imported_experiment(payload["directory"], **traits)
+
+    def _swap_in_read(self, arrived):
+        """Put each experiment read in place of its loading one (the
+        ``arrived`` pairs), still listed — not gone live, removed or
+        restored away meanwhile — with the label and alignment that one
+        has now. One that could not be read is listed empty."""
+        experiments = list(self.experiments)
+        index_of = {
+            id(experiment): index for index, experiment in enumerate(experiments)
+        }
+
+        for loading, read_experiment in arrived:
+            index = index_of.get(id(loading))
+
+            if index is None:
+                continue
+
+            traits = loading.as_payload()
+
+            if read_experiment is None:
+                read_experiment = ImportedExperiment(**traits)
+            else:
+                read_experiment.trait_set(**traits)
+
+            experiments[index] = read_experiment
+
+        self._show_experiments(experiments)
 
     def keep_live_only(self):
         """Plot the live experiment alone again."""
@@ -503,4 +590,6 @@ class ImportedExperimentsModel(HasTraits):
 #: The experiments the ROI Intensities pane plots beside the shared
 #: analysis model's session, listed by the ROI table and drawn by the
 #: plot.
-imported_experiments_model = ImportedExperimentsModel(analysis=roi_analysis_model)
+imported_experiments_model = ImportedExperimentsModel(
+    analysis=roi_analysis_model, read_in_background=True
+)

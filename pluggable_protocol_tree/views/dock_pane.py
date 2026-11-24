@@ -275,12 +275,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # Quick-actions controller: created here, not in the tree pane, so the
         # action ctx carries THIS dock pane (composition root) — with _pane and
         # logging_controller both live. The pane built only the bar.
-        if pane.quick_action_bar is not None:
-            pane.quick_actions_controller = QuickActionsController(
-                bar=pane.quick_action_bar,
-                dock_pane=self,
-                actions=list(self.quick_actions),
-            )
+        pane.quick_actions_controller = QuickActionsController(
+            bar=pane.quick_action_bar,
+            dock_pane=self,
+            actions=list(self.quick_actions),
+        )
 
         # Execution lifecycle policy lives in handlers, not the view. These run
         # once per run (on_pre_protocol_start / on_post_protocol_end) at high
@@ -493,6 +492,18 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self._sync_handler_ack_times()
         added, removed = result["added"], result["removed"]
         logger.debug(f"protocol columns rebuilt: +{sorted(added)} -{sorted(removed)}")
+
+    def rebuild_quick_actions(self, actions):
+        """Swap the quick-action buttons in place when a contributing plugin
+        is loaded or unloaded at runtime."""
+        self.quick_actions = list(actions)
+
+        # Contents not built yet: create_contents reads quick_actions.
+        if self._pane is None:
+            return
+
+        self._pane.quick_action_bar.set_actions(self.quick_actions)
+        self._pane.quick_actions_controller.set_actions(self.quick_actions)
 
     # --- step-cursor navigation -------------------------------------
     @attempt_func_execution_with_error_dialog

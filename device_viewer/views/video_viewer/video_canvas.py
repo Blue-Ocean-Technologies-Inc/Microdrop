@@ -127,11 +127,19 @@ class VideoPlaybackCanvas(QGraphicsView):
             ],
         )
 
+        # The canvas is built when its pane is first shown, after the model
+        # has picked a recording: show the one it holds, not just the next.
+        self._load_recording(model.current_path)
+        self._on_active_roi_changed()
+
     # ------------------------------------------------------------------ #
     # Model -> player                                                      #
     # ------------------------------------------------------------------ #
     def _on_current_path_changed(self, event):
-        path = event.new
+        self._load_recording(event.new)
+
+    def _load_recording(self, path):
+        """Open ``path`` (or nothing, if empty) and show its first frame."""
         self._player.stop()
         self._sidecar = overlay_sidecar = None
 

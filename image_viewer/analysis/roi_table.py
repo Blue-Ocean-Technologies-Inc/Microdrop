@@ -29,10 +29,13 @@ mutating them only from Qt editor signals (GUI thread). Rebuilds (rows,
 editors, cell identities) on structure/style change; value-refreshes
 (stat cells rewritten in place) on stats/current-image change — both
 scheduled onto the next event-loop turn so nothing mutates the tree
-from inside the emitting Qt signal or traits notification."""
+from inside the emitting Qt signal or traits notification. A row's
+widgets (a section's header row, a ROI's editors) are made once the row
+is first shown (LazyItemWidgets), so a rebuild costs a page of widgets
+however many experiments are plotted."""
 
 # Enthought library imports.
-from pyface.qt.QtCore import QItemSelectionModel, Qt, QTimer
+from pyface.qt.QtCore import QItemSelectionModel, QSize, Qt, QTimer
 from pyface.qt.QtGui import QColor, QFont, QMouseEvent, QPalette
 from pyface.qt.QtWidgets import (
     QAbstractItemView,
@@ -68,6 +71,7 @@ from .consts import (
     ROI_LINE_WIDTH_BOUNDS_PT,
     SHAPE_STATS,
 )
+from .lazy_item_widgets import LazyItemWidgets
 from .plot_series import analysed_paths, shape_reference, stat_value
 from .shape_descriptors import shape_deviation
 
@@ -192,8 +196,9 @@ _TABLE_VALUES = (
     "session:rois:items:absent_until"
 )
 #: The sections change (on the plotted-experiments model), or the ROIs
-#: of one — a full rebuild too.
-_SECTIONS_STRUCTURE = "experiments.items, experiments:items:session:rois.items"
+#: of one — a full rebuild too. One expression, so hooking it walks the
+#: experiments once.
+_SECTIONS_STRUCTURE = "experiments.items.session:rois.items"
 
 #: Whether a section's ROIs are shown — its section eye's glyph.
 _SECTION_EYES = "experiments:items:any_roi_shown"
@@ -263,8 +268,15 @@ class RoiStatsTable(QTreeWidget):
         self._collapsed = set()
 
         #: Each section's eye button, by folder, for its glyph to follow
-        #: the section's ROIs' eyes; refilled on every rebuild.
+        #: the section's ROIs' eyes; refilled as headers are built.
         self._section_eyes = {}
+
+        #: Builds each row's widgets once the row is shown.
+        self._lazy = LazyItemWidgets(self)
+
+        #: (header row, editor row) heights a row is given before its
+        #: widgets are built, so building them never moves the rows below.
+        self._row_heights = None
 
         self.setColumnCount(len(_HEADERS))
         self.header().setStretchLastSection(False)
@@ -362,7 +374,20 @@ class RoiStatsTable(QTreeWidget):
             self._refresh_values()
 
     def _rebuild(self):
+        """Fill the tree again, its updates off meanwhile: nothing is
+        painted, or built, half-filled."""
         self._rebuilding = True
+        self.setUpdatesEnabled(False)
+
+        try:
+            self._fill()
+        finally:
+            self.setUpdatesEnabled(True)
+
+        self._lazy.build_visible()
+        self._rebuilding = False
+
+    def _fill(self):
         experiments = self._imports.experiments
 
         # Kept across the rebuild: a bulk colour change, say, rebuilds
@@ -371,6 +396,7 @@ class RoiStatsTable(QTreeWidget):
         scrolled = self.verticalScrollBar().value()
 
         # The items take their editor widgets with them.
+        self._lazy.forget()
         self.clear()
         self._current_rows = []
         self._section_eyes = {}
@@ -395,17 +421,19 @@ class RoiStatsTable(QTreeWidget):
             else:
                 self._add_stored_section(experiment)
 
-        # Once filled: a section is expanded with its rows in place.
+        # Once filled: a section is expanded with its rows in place. Spans
+        # are set after every row is in, too: each one lays out the whole
+        # tree again if rows were added since the last.
         for index in range(self.topLevelItemCount()):
             section = self.topLevelItem(index)
             key = section.data(0, Qt.ItemDataRole.UserRole)
+            section.setFirstColumnSpanned(True)
             section.setExpanded(key not in self._collapsed)
 
         for item in self._items_of(selected):
             item.setSelected(True)
 
         self.verticalScrollBar().setValue(scrolled)
-        self._rebuilding = False
 
     def _selected_keys(self):
         """The keys of the selected ROI and mask rows."""
@@ -443,9 +471,39 @@ class RoiStatsTable(QTreeWidget):
         section = QTreeWidgetItem(self)
         section.setData(0, Qt.ItemDataRole.UserRole, key)
         section.setFlags(Qt.ItemFlag.ItemIsEnabled)
-        section.setFirstColumnSpanned(True)
 
         return section
+
+    def _defer_header(self, section, experiment, build_header):
+        """Show ``experiment``'s label on its ``section`` row until the
+        row is shown, then ``build_header(experiment)`` in its place."""
+        section.setText(0, experiment.label)
+        section.setFont(0, _bold(section.font(0)))
+        section.setSizeHint(0, QSize(0, self._deferred_row_heights()[0]))
+
+        def build():
+            # The header widget does not hide the text under it.
+            section.setText(0, "")
+            self.setItemWidget(section, 0, build_header(experiment))
+
+        self._lazy.defer(section, build)
+
+    def _deferred_row_heights(self):
+        """(header row, editor row) heights: those of the tallest widget
+        each kind of row holds, measured once."""
+        # Unparented, so never shown, and gone once measured.
+        if self._row_heights is None:
+            eye = QToolButton()
+            eye.setFont(QFont(ICON_FONT_FAMILY, EYE_GLYPH_POINT_SIZE))
+            eye.setText(ICON_DELETE)
+            headers = (eye, QCheckBox(), QLineEdit())
+            editors = (QPushButton(), QComboBox(), QDoubleSpinBox())
+            self._row_heights = tuple(
+                max(widget.sizeHint().height() for widget in widgets)
+                for widgets in (headers, editors)
+            )
+
+        return self._row_heights
 
     def _add_live_section(self, experiment):
         """The section of the live ``experiment`` — None for the session
@@ -463,7 +521,7 @@ class RoiStatsTable(QTreeWidget):
             section.setFont(0, _bold(section.font(0)))
         else:
             section = self._section_item(experiment.directory)
-            self.setItemWidget(section, 0, self._live_header(experiment))
+            self._defer_header(section, experiment, self._live_header)
 
         for roi in _listed_rois(session):
             item = self._roi_item(section, roi, roi.roi_id, live=True)
@@ -485,7 +543,7 @@ class RoiStatsTable(QTreeWidget):
         value cells blank — they would follow the image shown, which is
         never one of its own."""
         section = self._section_item(experiment.directory)
-        self.setItemWidget(section, 0, self._stored_header(experiment))
+        self._defer_header(section, experiment, self._stored_header)
 
         for roi in experiment.session.positive_rois:
             item = self._roi_item(section, roi, experiment.key_of(roi), live=False)
@@ -650,7 +708,7 @@ class RoiStatsTable(QTreeWidget):
         """A measured ROI's background-reference tick — ticked, the
         marked ROIs' mean is what the correction subtracts, editable
         only while ``live`` — and its style editors, editable in every
-        section."""
+        section, made once the row is shown."""
         item.setCheckState(
             _BACKGROUND_REF_COLUMN,
             Qt.CheckState.Checked if roi.is_background_ref else Qt.CheckState.Unchecked,
@@ -664,6 +722,11 @@ class RoiStatsTable(QTreeWidget):
             if live
             else _NOT_LIVE_TOOLTIP,
         )
+        item.setSizeHint(0, QSize(0, self._deferred_row_heights()[1]))
+        self._lazy.defer(item, lambda: self._add_style_editors(item, roi))
+
+    def _add_style_editors(self, item, roi):
+        """The style editors of ``roi``'s row ``item``, in their cells."""
         key = item.data(0, Qt.ItemDataRole.UserRole)
         editors = [
             self._color_button(key, roi),

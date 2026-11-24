@@ -87,3 +87,16 @@ PLUGIN_LOAD_STATE_COLORS = {
 
 #: Monospace text for the load-status panel's traceback area.
 TRACEBACK_STYLE_SHEET = 'font-family: Consolas, "Courier New", monospace;'
+
+#: The plugin load list as a section of the notifications pane: its id
+#: (NOTIFICATIONS_SHOW_PANEL names it), header and place, first.
+LOAD_STATUS_SECTION_ID = f"{PKG}.load_status"
+LOAD_STATUS_SECTION_TITLE = "Plugins"
+LOAD_STATUS_SECTION_ORDER = 0
+
+#: Muted text colour of a deferred pane's placeholder while its plugin loads,
+#: by whether the colour scheme is dark.
+PLACEHOLDER_LOADING_COLORS = {False: GREY["dark"], True: GREY["lighter"]}
+
+#: Text style of a deferred pane's placeholder, before the colour.
+PLACEHOLDER_TEXT_STYLE = "font-size: 13pt; padding: 12px;"

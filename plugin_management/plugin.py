@@ -15,9 +15,13 @@ from the running application gets its dock panes mounted/unmounted and the
 menu bar rebuilt automatically — the UI-side analogue of the message router's
 reactive ACTOR_TOPIC_ROUTES handling), offers the PluginGroupManager service
 and the IExternalPluginsProvider an environment update re-adds plugins with,
-contributes the Tools ▸ Manage Plugins action, and restores each group's
-persisted enabled state on launch.
+contributes the Tools ▸ Manage Plugins action, restores each group's
+persisted enabled state on launch, and then starts the run configuration's
+deferred plugins, whose panes show placeholders until then.
 """
+
+# Standard library imports.
+from functools import partial
 
 # Third-party imports.
 import dramatiq
@@ -32,6 +36,11 @@ from traits.api import Any, Bool, Instance, List, Str, observe
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
+from notifications.consts import (
+    NOTIFICATION_SECTIONS,
+    NOTIFICATIONS_PLUGIN_ID,
+    show_notifications_panel_publisher,
+)
 from user_help_plugin.consts import TUTORIAL_ORDER_MANAGEMENT, TUTORIALS, TutorialEntry
 
 # Microdrop utils imports.
@@ -40,7 +49,12 @@ from microdrop_utils.tasks_runtime_helpers import restore_saved_task_layout
 
 # Local imports.
 from . import package_installer
-from .consts import PKG, PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH, PKG_name
+from .consts import (
+    LOAD_STATUS_SECTION_ID,
+    PKG,
+    PLUGIN_MANAGEMENT_TUTORIAL_HTML_PATH,
+    PKG_name,
+)
 from .i_plugin_group_manager import IPluginGroupManager
 from .update_controller import show_update_dialog
 from .update_model import compute_update_report
@@ -76,6 +90,9 @@ class PluginManagementPlugin(Plugin):
     #: The plugin load-status indicator while the plugin runs.
     status_bar_icons = List(contributes_to=STATUS_BAR_ICONS)
 
+    #: The plugin load list as the notifications pane's top section.
+    notification_sections = List(contributes_to=NOTIFICATION_SECTIONS)
+
     #: Keeps the indicator in step with the application's load records.
     _load_status_indicator = Instance(
         "plugin_management.load_status_view.PluginLoadStatusIndicator"
@@ -86,12 +103,18 @@ class PluginManagementPlugin(Plugin):
         "plugin_management.load_status_controller.PluginLoadStatusController"
     )
 
+    #: Starts the run configuration's deferred plugins after launch.
+    _deferred_loader = Instance(
+        "plugin_management.deferred_loader.DeferredPluginLoader"
+    )
+
     def start(self):
         """Listen for runtime TASK_EXTENSIONS changes so a hot-loaded plugin's
         dock panes get mounted and the menu bar rebuilt reactively (debounced).
         Uses the same registry mechanism connect_extension_point_traits() uses,
         applied as a consumer of the TasksApplication-owned TASK_EXTENSIONS
-        extension point. Also contributes the plugin load-status indicator."""
+        extension point. Also contributes the plugin load-status indicator,
+        with the deferred plugins already counted as pending."""
         super().start()
         self._contribute_load_status_indicator()
 
@@ -145,19 +168,35 @@ class PluginManagementPlugin(Plugin):
 
         status = self.application.plugin_load_status
 
+        # Before the indicator reads the records, so it pulses until the
+        # last deferred plugin is in.
+        self._deferred_loader.mark_pending()
+
         self._load_status_indicator = PluginLoadStatusIndicator(status=status)
         self._load_status_controller = PluginLoadStatusController(
             model=PluginLoadStatusPanelModel(status=status)
         )
 
+        widget = self._load_status_indicator.widget
+        widget.clicked.connect(self._show_load_status)
+
+        self.status_bar_icons.append(widget)
+
+    def _show_load_status(self):
+        """Open the load list: the notifications pane's Plugins section when
+        that plugin runs, else the load-status panel."""
+
+        if self.application.get_plugin(NOTIFICATIONS_PLUGIN_ID) is not None:
+            show_notifications_panel_publisher.publish(
+                {"section_id": LOAD_STATUS_SECTION_ID}
+            )
+
+            return
+
         # The panel is parented to the icon's window, not the icon: the icon's
         # colour style sheet would cascade into every child widget.
         widget = self._load_status_indicator.widget
-        widget.clicked.connect(
-            lambda: self._load_status_controller.show_panel(widget.window())
-        )
-
-        self.status_bar_icons.append(widget)
+        self._load_status_controller.show_panel(widget.window())
 
     def _withdraw_load_status_indicator(self):
         """Close the panel and take the indicator out of the status bar."""
@@ -169,6 +208,11 @@ class PluginManagementPlugin(Plugin):
 
         self._load_status_indicator = None
         self._load_status_controller = None
+
+    def _notification_sections_default(self):
+        from .load_status_section import PluginLoadStatusSection
+
+        return [PluginLoadStatusSection(status=self.application.plugin_load_status)]
 
     # --- group-manager service -----------------------------------------
 
@@ -210,6 +254,7 @@ class PluginManagementPlugin(Plugin):
         return [
             TaskExtension(
                 task_id=self.task_id_to_contribute_view,
+                dock_pane_factories=self._placeholder_pane_factories(),
                 actions=[
                     SchemaAddition(
                         id="plugin_management.tools_actions",
@@ -219,6 +264,52 @@ class PluginManagementPlugin(Plugin):
                 ],
             )
         ]
+
+    def _placeholder_pane_factories(self):
+        """One factory per dock pane a deferred plugin declares.
+
+        The placeholders are created with the window, so its saved layout
+        places them once, and each real pane later takes its placeholder's
+        place.
+        """
+        return [
+            partial(self._create_placeholder_pane, deferred, dock_pane)
+            for deferred in self._deferred_loader.deferred_plugins
+            for dock_pane in deferred.dock_panes
+        ]
+
+    def _create_placeholder_pane(self, deferred, dock_pane, **traits):
+        from .placeholder_pane_model import PlaceholderPaneModel
+        from .placeholder_pane_view import DeferredPanePlaceholder
+
+        model = PlaceholderPaneModel(
+            pane_name=dock_pane.name, record=self._deferred_loader.record_for(deferred)
+        )
+
+        return DeferredPanePlaceholder(
+            id=dock_pane.id,
+            name=dock_pane.name,
+            dock_area=dock_pane.dock_area,
+            visible=dock_pane.visible,
+            model=model,
+            **traits,
+        )
+
+    # --- deferred plugins ---------------------------------------------------
+
+    def __deferred_loader_default(self):
+        from .deferred_loader import DeferredPluginLoader
+
+        return DeferredPluginLoader(
+            application=self.application,
+            deferred_plugins=getattr(self.application, "deferred_plugins", []),
+            load_status=self.application.plugin_load_status,
+        )
+
+    @observe("_deferred_loader:finished")
+    def _announce_extra_plugins_loaded(self, event):
+        """Tell the app every plugin loaded after its initialization is in."""
+        self.application.extra_plugins_loaded = True
 
     def _tools_actions_group(self):
         """Single Manage Plugins action in Tools."""
@@ -255,13 +346,24 @@ class PluginManagementPlugin(Plugin):
             logger.exception("plugin-group launch restore failed")
 
         # The reactive pane mount for any group enabled above is already
-        # queued on the UI loop (LiveTaskExtensionsController defers its
-        # reconcile with invoke_later), so queue the saved-layout re-apply
-        # behind it: at window creation those panes did not exist yet, so
-        # envisage dropped their saved placement (restore_saved_task_layout).
-        GUI.invoke_later(self._reapply_saved_layout_after_launch_restore)
+        # queued (LiveTaskExtensionsController defers its reconcile), and
+        # mounts one pane per turn.
+        if self._live_task_exts is None:
+            GUI.invoke_later(self._after_launch_restore_mounts)
+        else:
+            self._live_task_exts.call_when_settled(self._after_launch_restore_mounts)
 
-        self.application.extra_plugins_loaded = True
+    def _after_launch_restore_mounts(self):
+        """Once the panes of the groups enabled at launch are mounted,
+        re-apply the saved layout and start the deferred plugins."""
+        # At window creation those panes did not exist yet, so envisage
+        # dropped their saved placement (restore_saved_task_layout).
+        self._reapply_saved_layout_after_launch_restore()
+
+        # Then the deferred plugins, one at a time; their panes take the
+        # places the layout gave their placeholders. extra_plugins_loaded
+        # fires when the last one is in (_announce_extra_plugins_loaded).
+        self._deferred_loader.start(self._live_task_exts)
 
     def _reapply_saved_layout_after_launch_restore(self):
         """Give the user back their saved window layout when the enabled

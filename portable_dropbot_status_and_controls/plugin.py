@@ -13,7 +13,8 @@ from functools import partial
 
 # Enthought library imports.
 from envisage.ids import PREFERENCES_CATEGORIES, PREFERENCES_PANES
-from traits.api import Instance, List, observe
+from traits.api import Bool, Instance, List, observe
+from traits.observation.api import trait
 
 # Microdrop package imports.
 from template_status_and_controls.base_plugin import BaseStatusPlugin
@@ -44,6 +45,10 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
         "portable_dropbot_status_and_controls.message_handlers."
         "magnet_engage_message_handler.PortableDropbotMagnetEngageMessageHandler"
     )
+
+    #: True once the window is fullscreened and flick-scrolling: from
+    #: application_initialized at launch, or from start() when started later.
+    _window_set_up = Bool(False)
 
     def _magnet_engage_model_default(self):
         from .models.magnet_engage_model import MagnetEngageModel
@@ -121,6 +126,10 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
             model=self.magnet_engage_model
         )
 
+        # Started after the launch (deferred or hot-loaded): the window is
+        # already open and application_initialized will not fire again.
+        self._set_up_window(self._open_window())
+
     def stop(self):
         if self.magnet_engage_message_handler is not None:
             self.magnet_engage_message_handler.teardown()
@@ -135,8 +144,7 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
             self.application.on_trait_change(self._on_window_created, "active_window")
             return
 
-        self._go_fullscreen_on_rpi(self.application.active_window)
-        self._enable_touch_flick_scrolling_on_rpi(self.application.active_window)
+        self._set_up_window(self.application.active_window)
 
     def _on_window_created(self, window):
         """Called when the application window is created."""
@@ -147,8 +155,48 @@ class PortableDropbotStatusAndControlsPlugin(BaseStatusPlugin):
         self.application.on_trait_change(
             self._on_window_created, "active_window", remove=True
         )
+        self._set_up_window(window)
+
+    def _open_window(self):
+        """The application's open window, or None while the launch has not
+        opened one yet."""
+        window = getattr(self.application, "active_window", None)
+        windows = getattr(self.application, "windows", None) or []
+
+        if window is None and windows:
+            window = windows[0]
+
+        return window
+
+    def _set_up_window(self, window):
+        """Fullscreen the window and make its panes flick-scroll, once."""
+        if window is None or self._window_set_up:
+            return
+
+        self._window_set_up = True
         self._go_fullscreen_on_rpi(window)
         self._enable_touch_flick_scrolling_on_rpi(window)
+
+    @observe("application:active_window:dock_panes.items")
+    def _flick_scroll_panes_mounted_later(self, event):
+        """Panes mounted after the set-up — deferred plugins, or groups
+        enabled from Manage Plugins — flick-scroll too. Grabbing a viewport
+        again replaces its gesture, so re-grabbing every pane is safe."""
+        if self._window_set_up:
+            self._enable_touch_flick_scrolling_on_rpi(self.application.active_window)
+
+    @observe(
+        trait("application", notify=False)
+        .trait("active_window", notify=False)
+        .trait("dock_panes", notify=False)
+        .list_items(notify=False)
+        .trait("contents_built", optional=True)
+    )
+    def _flick_scroll_contents_built_later(self, event):
+        """A pane built on its first show (``LazyContentDockPane``) has its
+        scroll areas only from then on."""
+        if self._window_set_up:
+            self._enable_touch_flick_scrolling_on_rpi(self.application.active_window)
 
     @staticmethod
     def _go_fullscreen_on_rpi(window):

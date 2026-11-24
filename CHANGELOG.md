@@ -1,3 +1,147 @@
+## [v1.49.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.49.0) (2026-11-24)
+
+### Feat
+
+- **notifications**: show notifications in a fixed right-hand drawer ([`67be01e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/67be01ebf59fb42799ad58c38e7dfb40d7259508))
+- **plugin-management**: show plugin loading in the notifications pane ([`0bf530b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0bf530b80e5a9681cea517702d092bfdf439dacc))
+- **notifications**: add the notifications pane and status-bar bell ([`f1a57bf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f1a57bf5ae96416e93cb86557da52746d49f7096))
+- **notifications**: add the notification model, topics and log feed ([`bb19134`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bb19134b8e1d97a6b7661122e2743dd1ebe3b673))
+- **style**: add notification glyphs and a rightmost status-bar slot ([`2ad3202`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2ad32022b64e3805c8c1424080c86b9296ddf1dc))
+
+### Fix
+
+- **device_viewer**: drop the stray Group tabs in camera properties ([`eb7e3a5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eb7e3a5753bf5b7f11fff7df33820f1fb9131ecb))
+
+### Perf
+
+- **device-viewer**: build the device viewer pane on first show ([`7781006`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7781006cc9dc549ffaa929fae620015c300f713b))
+
+### Docs
+
+- **messages**: describe the notifications drawer ([`3776810`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3776810d398ac3f2035af9662fb9fb723c05e9d6))
+- **messages**: document the notifications topics ([`0ba2af6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0ba2af6dc23d34b917419561d6c4897993500c61))
+- **examples**: add a notifications pane demo ([`5c9d73b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5c9d73b261cddb72d64f970c44dc1bf7f0f30895))
+
+### Test
+
+- load pydantic fully before Qt in pytest runs ([`f129ee8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f129ee8ebfc7ad3f6be7eacddbb4f527ffe07475))
+- **image_viewer**: wait for the ROI table, not a fixed second ([`dd2849e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/dd2849e5db0f3fd223cbf799a927766d20b3278d))
+
+### Chore
+
+- **examples**: register the notifications plugin ([`91f5725`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/91f57252a0d046194e297947485206b06b9326fd))
+
+## [v1.48.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.48.0) (2026-11-24)
+
+### Feat
+
+- **utils**: build dock pane contents on first show ([`9f5598c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9f5598c3fbc3d42999ea711e964797bcc2878f7d))
+- **utils**: add a shared paced queue for deferred GUI work ([`d0a0897`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d0a08970b9c4fdd8809f143d3a597d4b680ece02))
+- **device-viewer**: add sidebar sections built after first paint ([`7b2118a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7b2118af6c4046c9f87fe94b1a76a851544364e4))
+- **protocol_tree**: follow quick actions contributed later ([`7292394`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/72923945af15eb8eac3fcbe4a3fc89666f1c6c34))
+- **launch**: load deferred plugins after the main window paints ([`eaf92a7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eaf92a78c09855c6e3d8690218717cb1ca3c7c4d))
+- **tasks**: replace a mounted dock pane in place, without flicker ([`0ff79b4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0ff79b4aeb3a7f7c4cec17ca5ce3a7233c85e5a7))
+- **plugin_management**: show plugin load status in the status bar ([`58fb280`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/58fb2802a8d70e7e5833c9199e0e16bc5fc1d2e2))
+- **launch**: start plugins one at a time and isolate failures ([`653fcdc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/653fcdc307c6c5adce4a98197762f1325d18286b))
+- **portable_dropbot_self_tests**: board diagnostics ([`b78d951`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b78d95181214c912f154f3fd4f0e16569336f4bd))
+- **portable_dropbot_controller**: board diagnostics read ([`33c348d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/33c348db96864e76aa94b13a9b42cd26f04d3033))
+- **portable_dropbot_self_tests**: health test rows ([`af892ae`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/af892ae4aa9dffb88d87b21398a5e9de1a882d56))
+- **portable_dropbot_controller**: self-test heaters off ([`9f753a5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9f753a5a4aae9eb3beccf671c9781df3aabb2a2c))
+- **portable_dropbot_controller**: accept the health tests ([`f210d9c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f210d9cd6158955868d2550722cd85f70e8fe28f))
+- **portable_dropbot_status_and_controls**: heater auto-tune ([`54918e1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/54918e119caa6c73db1e2eefdb732123594f94e2))
+- **portable_dropbot_controller**: run heater auto-tune ([`176e74d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/176e74d99d33e0dadacb9d9474c26c3dc4fa2aa4))
+- **portable_dropbot_controller**: heater tune contracts ([`6135415`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/613541553354c3910651e1bcaa2474e2b714897e))
+- **portable_dropbot_status_and_controls**: heater 2 ([`5a2550d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5a2550d6a6142817907bba4ab96299f9cd47f3ad))
+- **portable_dropbot_controller**: status events ([`a72fd0c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a72fd0c029e1e22bebb9f0ee43b8f88022784a28))
+- **portable_dropbot_self_tests**: dark-mode plots ([`8946cc0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8946cc0ecc39656656a102178cd053e081883c6b))
+- **portable_dropbot_self_tests**: run opens Report ([`1e9fe0b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1e9fe0baac6ae344d17e54dca18c81e41aca0051))
+- **portable_dropbot_self_tests**: tray in or out ([`fca5ccc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fca5cccc8977c536e0f1ea93d590c8b26837395d))
+- **portable_dropbot_controller**: tray in or out ([`812088a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/812088af590f36ebc0a0d3077da0ef06779abbef))
+- **examples**: register the portable self-test hub ([`316e8b8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/316e8b80de1066f192adc2e36821a8363cd3d82d))
+- **portable_dropbot_self_tests**: add the self-test hub panel ([`2981bfd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2981bfdc852ff4b1adf320a4729ba6919db84f59))
+- **microdrop_utils**: add figure and markdown editors ([`84ce55e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/84ce55e3948e3092a6ae80a0d2b2ea9a7d58bacc))
+- **portable_dropbot_controller**: run self tests for the hub ([`a38d403`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a38d4037da5a007e244c29bc29611d03afef0984))
+- **portable_dropbot_self_tests**: add self-test hub contract ([`496d404`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/496d40466d825bcf937e53d075dd2189c12dbc05))
+- **portable_dropbot_controller**: check firmware, lease the port, decode alarms ([`ee3ddc3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ee3ddc34378c4313986969a68b068ca45b9a4285))
+
+### Fix
+
+- **portable**: flick-scroll panes built on first show ([`063e728`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/063e7289a9192182bf520dc4b3c4adc2d2037376))
+- **device-viewer**: sample the histogram only while on screen ([`5e8a87a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5e8a87a9872ed6347b42a4bc9858450a530f0dcc))
+- **camera**: keep the binding when the same camera stays selected ([`4df68b6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4df68b6e1bcbb7d111245493cd35efbb5b8afb63))
+- **user-help**: start no web view until a simulation is picked ([`d0f79f4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d0f79f4f55fae45433091a6dcf6e2211201e6150))
+- **dropbot-status**: give the model its preferences at creation ([`9827d98`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9827d98980348812ccb9411f1fed613a8a65e692))
+- **portable**: never let a connect attempt block exit ([`97c75d1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/97c75d12e038ace27edee30a0ec8341e003b56cf))
+- **image_viewer**: resolve each plotted experiment folder once ([`89a5d0c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/89a5d0c946b44b094e397e9a48ed98a9f5ee6b8a))
+- **portable**: set up the window and flick scrolling on late loads ([`d9717d5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d9717d5ca15bba4c8c310d9d29d777a667040e31))
+- **preferences**: show the panes of plugins loaded after first open ([`5b5e08e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5b5e08ee09179ae5e6e202e5099d76e901b10771))
+- **launcher**: let a deferred plugin be listed by its class name ([`b4fac38`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b4fac384f4c2911a98faec6d48b8ec29da952cfa))
+- **plugin_management**: keep task extensions until a window is active ([`907c50b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/907c50b14d3e9daca030ffd9169a3be6e80f3cb3))
+- **camera**: show the camera properties lookup in the panel ([`0dc3fac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0dc3fac1b4554c35fd5e6744d3c52e6bc46fba18))
+- **camera**: look up DirectShow controls in the background ([`2623626`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2623626b8fd97c78a3acb83bb3f892bcaa25b98c))
+- **camera**: keep DirectShow calls off the GUI thread ([`559a4b3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/559a4b31eb5432f1584b775190a71d0b0548044b))
+- **portable_dropbot_controller**: fast link loss ([`2a466b8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2a466b85bd4925d4cc69abe8f482b6310628d435))
+- **portable_dropbot_controller**: home clears FAULT ([`40e4aee`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/40e4aeeffed885c191400eb29ad90dd98c41ee60))
+- **portable_dropbot_status_and_controls**: motor .28 text ([`4cf815d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4cf815d5b27a6fad59cc32c2b0d3237bc3578210))
+- **portable_dropbot_controller**: report refused electrodes ([`19133fb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/19133fb0ccc7eb0ecea657e842eaf635398cbdbb))
+- **portable_dropbot_controller**: uint16 heater PID ([`ff56b53`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ff56b5355274386c36d3b4381240615e1537b046))
+- **portable_dropbot_controller**: mark stops urgent ([`586eced`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/586eced9fee4949a24d4167d38a1661e16c9950e))
+- **portable_dropbot_controller**: home all on an empty table ([`643cb77`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/643cb7797a4c758ae4f988901e6ce6d99c5a9533))
+- **portable_dropbot_controller**: match vendor motor params and heater ([`7532399`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/753239905492e032fe7a7fe0eda772de6825f09f))
+- **portable_dropbot_controller**: use PMT presets 1-6 and the real park ([`cd6d55a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cd6d55a38050450937bcdc425aa01e6ee3113e85))
+- **portable_dropbot_controller**: decode motion replies like the vendor ([`12fdd47`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/12fdd474eb059013a93e9bd4a2d295df5b19656e))
+
+### Refactor
+
+- **device-viewer**: share the deferred section state ([`df38819`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/df388192c4f037234d3d704f87ebe43b50979af3))
+- **portable_dropbot_controller**: fitting phase in consts ([`0c708a1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0c708a189e20c481982daf6ba7d30089428cb869))
+- **portable_dropbot_self_tests**: use test_title() ([`e221711`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e221711a40cd4a78074e4635cefc8c8cc27bd45c))
+- **portable_dropbot_controller**: split consts into a package ([`999ad78`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/999ad7801e2c7d03bbb36d460501f2ac40cfdea6))
+
+### Perf
+
+- **image-viewer**: build the ROI pane on first show ([`c52b4fc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c52b4fc1edee1f9077826247ae92b940bf5fe058))
+- **device-viewer**: build the Recording Viewer on first show ([`b712fad`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b712fad8a591c36c56adac4ce74907aaceaa732d))
+- **logger-ui**: build the Log pane on first show ([`2d2a98e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2d2a98eaf1d1f876280aad856ebf663187c0dd33))
+- **image-viewer**: build ROI pane sections on paced turns ([`5fc120b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5fc120b649cfd2bba472f9273ab0ba9999a900bd))
+- **image-viewer**: read plotted experiments off the GUI thread ([`f614615`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f614615dbc25bbbf3ce24731b0562859896a3a81))
+- **image-viewer**: build ROI table rows only once they show ([`7a0651f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7a0651f070cef8be03706b3f4fc107d4ef3a3c71))
+- **app**: pause garbage collection for the launch, then freeze ([`fb95bf6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fb95bf606d1d1e73e85efb2c4adfc83d5f2df123))
+- **user-help**: read tutorial pages off the GUI thread, each once ([`de8915c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/de8915c9387585f7b075ff39019bf55ce5f2a1b4))
+- **device-viewer**: pace sidebar section builds ([`eab2504`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/eab2504779fcd8032dac5bcf91ab23b15419a76c))
+- **plugin-management**: import deferred plugins off the GUI thread ([`434eef6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/434eef645270756675ed28a3c34ed82dc5868c40))
+- **plugin-management**: mount live panes one per paced turn ([`751142e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/751142ec71246c33e5d2ff0e5431e77cfe4dd768))
+- **launch**: show the splash before the plugin imports ([`1e724e0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1e724e04eb5b83835960c77a2b1badb079680cbd))
+- **device-viewer**: build the sidebar after the first paint ([`c25cda2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c25cda27f7dc415af5792abb00064f9de4978f40))
+- **launch**: import plotly, paramiko and pyplot at first use ([`8f506b3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8f506b3fe9530665ab3f7cf6bf731ce1df3a061f))
+- **image_viewer**: import scipy and matplotlib at first use ([`ae236c2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ae236c296cfe1907092db0401377e12e0b7fb1e1))
+- **launch**: defer the image viewer, user help and SSH plugins ([`d41904a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d41904a1659609def06aa758a59c1822cd90c180))
+
+### Docs
+
+- **plugins**: describe how late-loaded plugins are picked up ([`449d0a7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/449d0a7c0ba2fb4966bd39336930c49112876d02))
+- **messages**: self-test health tests and diagnostics ([`fe7e2cf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fe7e2cfc81e80b609e7400ad8223eaed80e9fe30))
+- **messages**: document the heater auto-tune flow ([`51d1270`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/51d1270966f7f57b3d1304ada3b61c607d34015a))
+- **messages**: document portable status events ([`36cc59d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/36cc59dc55a1bdf5c8afb3ca4fe600a48ad79475))
+- **messages**: document the portable 1.8.0 alignment ([`2436ad4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2436ad432dbf499368c3efc3bb430875cc82b88d))
+- **preferences**: chip sensor is the default chip-detect rule ([`fa672e6`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fa672e632de4474b34d2892dcb92cdb5507fd8a8))
+- **messages**: document the portable 1.7.0 alignment flows ([`0e2ee43`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0e2ee43ff014f3920a9439baa21587da50ca493d))
+
+### Test
+
+- **microdrop_utils**: fake only the update step's own sleep ([`06060e1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/06060e13bc169824e7d23e2638be16e537531b1e))
+- **portable**: give the listener stub the request-gate hooks ([`9b29fee`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9b29feea6cb9447d7da3709ad33e2c9499df1280))
+
+### Chore
+
+- **image-viewer**: plot many experiments in the comparison demo ([`368d90f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/368d90f99c6497301eda75f0eceb1ab250597bcf))
+- merge the self-test health tests and board diagnostics ([`0c8dacc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0c8dacc3e88561094d21fba080024bdcd84a0ada))
+- merge the portable heater auto-tune ([`99b75ed`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/99b75ed94b183e7f975c1e549fc98626fe7e5aff))
+- merge the portable status events and heater 2 readout ([`a95e8d4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a95e8d41731e7d0a233c975f980f8a7e34f6ffba))
+- merge the vendor 1.8.0 fixes of the 1.7.0 alignment ([`f7ceae8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f7ceae84b68e51e2b78fa762ac64996efc05b491))
+- merge the 1.7.0 bench integration (hub + alignment glue) ([`836a406`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/836a40670adf1a7d3aec5fc028f98267eb3c75c2))
+- merge self-test hub onto the 1.7.0 alignment (local bench branch) ([`4a9fdc1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4a9fdc10fb11950c3c3d80f5a7e34769c710a663))
+
 ## [v1.47.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.47.0) (2026-11-23)
 
 ### Feat

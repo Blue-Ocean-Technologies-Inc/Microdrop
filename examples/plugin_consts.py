@@ -21,7 +21,7 @@ from dropbot_protocol_controls.plugin import DropbotProtocolControlsPlugin
 from dropbot_status_and_controls.plugin import DropbotStatusAndControlsPlugin
 from dropbot_tools_menu.plugin import DropbotToolsMenuPlugin
 from electrode_controller.plugin import ElectrodeControllerPlugin
-from image_viewer.plugin import ImageViewerPlugin
+from image_viewer import consts as image_viewer_consts
 from layout_presets.plugin import LayoutPresetsPlugin
 from logger_ui.plugin import LoggerUIPlugin
 from message_router.plugin import MessageRouterPlugin
@@ -31,6 +31,7 @@ from microdrop_application.plugin import MicrodropPlugin
 from microdrop_status_bar.plugin import StatusBarPlugin
 from mock_dropbot_controller.plugin import MockDropbotControllerPlugin
 from mock_dropbot_status.plugin import MockDropbotStatusPlugin
+from notifications.plugin import NotificationsPlugin
 from opendrop_controller.plugin import OpenDropControllerPlugin
 from opendrop_status_and_controls.plugin import OpendropStatusAndControlsPlugin
 from pluggable_protocol_tree.plugin import PluggableProtocolTreePlugin
@@ -43,9 +44,7 @@ from portable_dropbot_status_and_controls.plugin import (
     PortableDropbotStatusAndControlsPlugin,
 )
 from protocol_quick_action_tools.plugin import ProtocolQuickActionToolsPlugin
-from ssh_controls.plugin import SSHControlsPlugin
-from ssh_controls_ui.plugin import SSHUIPlugin
-from user_help_plugin.plugin import UserHelpPlugin
+from user_help_plugin import consts as user_help_consts
 from video_protocol_controls.plugin import VideoProtocolControlsPlugin
 from volume_threshold_protocol_controls.plugin import (
     VolumeThresholdProtocolControlsPlugin,
@@ -58,6 +57,7 @@ from microdrop_utils.broker_server_helpers import (
     load_dramatiq_worker_settings,
     redis_server_context,
 )
+from microdrop_utils.deferred_plugins import DeferredDockPane, DeferredPlugin
 
 # Logger import.
 from logger.plugin import LoggerPlugin
@@ -95,14 +95,13 @@ FRONTEND_PLUGINS = [
     MicrodropPlugin,
     TasksPlugin,
     StatusBarPlugin,
+    # Early, so its log handler and load-record watcher see what follows.
+    NotificationsPlugin,
     LoggerUIPlugin,
     PluginManagementPlugin,
     AppUpdatesPlugin,
     DeviceViewerPlugin,
-    ImageViewerPlugin,
-    UserHelpPlugin,
     LayoutPresetsPlugin,
-    SSHUIPlugin,
     PluggableProtocolTreePlugin,
     DropbotProtocolControlsPlugin,
     # The Z-Stage/magnet and heater stacks are standalone installable plugin
@@ -116,6 +115,58 @@ FRONTEND_PLUGINS = [
     VolumeThresholdProtocolControlsPlugin,
     VideoProtocolControlsPlugin,
     ZoneProtocolControlsPlugin,
+]
+
+# Frontend plugins started only after the main window has painted, one at a
+# time, by plugin_management. Each is a "module:Class" spec, so its module is
+# not imported before then, plus the dock panes it contributes, which show
+# placeholders until it has loaded, and the modules it imports lazily, which
+# are imported off the GUI thread before it loads. Only plugins nothing else needs
+# at start-up belong here: no protocol columns, quick actions, services or
+# mixins a base plugin looks up in its start(), and no topic they must hear
+# before the window is up (a message published before a listener exists is
+# lost). Run scripts list them after SERVICE_PLUGINS, which load the same
+# way, so the SSH UI never runs without the SSH service.
+DEFERRED_FRONTEND_PLUGINS = [
+    DeferredPlugin(
+        spec="image_viewer.plugin:ImageViewerPlugin",
+        # The ROI Intensities pane's module brings matplotlib with it.
+        preload_modules=[
+            "image_viewer.dock_pane",
+            "image_viewer.menus",
+            "image_viewer.analysis.plot_pane",
+            "image_viewer.message_handler",
+            "image_viewer.preferences",
+        ],
+        dock_panes=[
+            DeferredDockPane(
+                id=image_viewer_consts.DOCK_PANE_ID,
+                name=image_viewer_consts.DOCK_PANE_NAME,
+            ),
+            DeferredDockPane(
+                id=image_viewer_consts.ROI_PLOT_DOCK_PANE_ID,
+                name=image_viewer_consts.ROI_PLOT_DOCK_PANE_NAME,
+            ),
+        ],
+    ),
+    DeferredPlugin(
+        spec="user_help_plugin.plugin:UserHelpPlugin",
+        preload_modules=[
+            "user_help_plugin.menus",
+            "user_help_plugin.simulations_dock_pane",
+        ],
+        dock_panes=[
+            DeferredDockPane(
+                id=user_help_consts.TUTORIAL_SIMULATIONS_DOCK_PANE_ID,
+                name=user_help_consts.TUTORIAL_SIMULATIONS_DOCK_PANE_NAME,
+                dock_area="right",
+            ),
+        ],
+    ),
+    DeferredPlugin(
+        spec="ssh_controls_ui.plugin:SSHUIPlugin",
+        preload_modules=["ssh_controls_ui.menus", "ssh_controls_ui.preferences"],
+    ),
 ]
 
 DROPBOT_FRONTEND_PLUGINS = [
@@ -167,9 +218,11 @@ MOCK_DROPBOT_FRONTEND_PLUGINS = [
     MockDropbotStatusPlugin,
 ]
 
-# Host-bound-by-trust plugins. See the category comment above.
+# Host-bound-by-trust plugins. See the category comment above. Declared like
+# the deferred frontend plugins: a GUI process starts them after its window
+# has painted, a services-only process imports and starts them at once.
 SERVICE_PLUGINS = [
-    SSHControlsPlugin,
+    DeferredPlugin(spec="ssh_controls.plugin:SSHControlsPlugin"),
 ]
 
 # A failure to start one of these, or of the application shell, fails the

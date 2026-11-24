@@ -22,7 +22,12 @@ a fit on the Fit tab to see every experiment's ROIs fitted alike, and
 click B's section to make it live — the demo stands in for the image
 viewer (show_experiment), saving A and loading B as a switch does.
 
-    pixi run python -m image_viewer.demos.experiment_comparison_demo [folder]
+A count after the folder also plots that many unanalysed experiments, as
+the plotted set of a long-used install lists (#1072): they are listed
+loading and read from disk in the background, and the ROI table builds
+the widgets of the rows in view only (#1086).
+
+    pixi run python -m image_viewer.demos.experiment_comparison_demo [folder] [count]
 """
 
 # Standard library imports.
@@ -155,8 +160,24 @@ def show_experiment(event):
     _show(Path(event.new))
 
 
+def _plot_unanalysed(root, count):
+    """Plot ``count`` unanalysed experiment folders after those plotted,
+    restored as the image viewer restores its set at launch."""
+    payloads = [
+        experiment.as_payload() for experiment in imported_experiments_model.experiments
+    ]
+
+    for index in range(count):
+        directory = root / f"Run {index + 1:03d}"
+        (directory / CAPTURES_DIR_NAME).mkdir(parents=True, exist_ok=True)
+        payloads.append({"directory": str(directory)})
+
+    imported_experiments_model.restore(payloads)
+
+
 def main():
     root = Path(sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp())
+    unanalysed = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     rng = np.random.default_rng(7)
     directories = [
         _write_experiment(root, *experiment, rng) for experiment in EXPERIMENTS
@@ -168,6 +189,7 @@ def main():
     app = QApplication.instance() or QApplication(sys.argv)
     _show(primary)
     imported_experiments_model.add_experiment(stored)
+    _plot_unanalysed(root, unanalysed)
     imported_experiments_model.observe(show_experiment, "open_experiment_request")
 
     pane = RoiPlotDockPane()

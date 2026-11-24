@@ -38,7 +38,8 @@ broken or never-enabled plugin can never break startup or discovery.
 | `manage_dialog.py` / `uninstall_dialog.py` | TraitsUI dialog models (checkbox list / dropdown). |
 | `menus.py` | The three `TaskAction`s: Install, Uninstall, Manage. |
 | `plugin.py` | `PluginManagementPlugin` — offers the manager service, contributes the Tools actions, restores enabled groups on launch. |
-| `live_task_extensions.py` | `LiveTaskExtensionsController` — listens to the `TASK_EXTENSIONS` extension point and **reactively, debounced** mounts/unmounts dock panes + rebuilds the menu (via the helpers below) when plugins are loaded/unloaded at runtime. |
+| `live_task_extensions.py` | `LiveTaskExtensionsController` — listens to the `TASK_EXTENSIONS` extension point and **reactively, debounced** mounts/unmounts dock panes + rebuilds the menu (via the helpers below) when plugins are loaded/unloaded at runtime. Changes that arrive before a window shows its task are kept until one does. |
+| `deferred_loader.py` / `placeholder_pane_*.py` | `DeferredPluginLoader` and the placeholder panes of the staged launch (§1.9). |
 | `microdrop_utils/tasks_runtime_helpers.py` | The hand-rolled Qt helpers to mount/unmount a dock pane and rebuild the menu bar on a **live** window (Pyface has no public API for this — see Part 3 §5). |
 
 ### 1.3 Discovery (every launch)
@@ -159,7 +160,9 @@ A relaunch dialog is offered; the package is no longer importable after the rela
 `application.application_initialized`) runs once the app is up: it ADOPTS the
 startup-composed group plugins, then reconciles every group to its persisted
 enabled flag, or to the group's `default_enabled` when the user never toggled it — so
-the Manage Plugins checkboxes match what's actually loaded after a relaunch.
+the Manage Plugins checkboxes match what's actually loaded after a relaunch. Then it starts
+the deferred plugins (§1.9); `application.extra_plugins_loaded` fires once the last of
+those is in.
 
 ### 1.8 The three things Envisage/Pyface don't self-heal
 
@@ -177,7 +180,41 @@ Runtime add/remove of a plugin works, but three layers snapshot at startup and n
    tree consuming `PROTOCOL_COLUMNS`) only sees contributions present at its `start()` —
    **unless** it opts into live notifications with `connect_extension_point_traits()` and
    reacts to the `<name>_items` event. The protocol tree does exactly this so the magnet
-   column appears/disappears when its plugin group loads/unloads (Part 3 §1).
+   column appears/disappears when its plugin group loads/unloads (Part 3 §1), and does the
+   same for `PROTOCOL_QUICK_ACTIONS`. The Preferences dialog, a service the registry
+   caches for the session, instead re-reads `PREFERENCES_PANES`/`PREFERENCES_CATEGORIES`
+   each time it opens and rebuilds its tabs when they changed.
+
+### 1.9 Deferred plugins (staged launch)
+
+A run configuration can defer frontend plugins until the main window has painted. In
+`examples/plugin_consts.py`, `DEFERRED_FRONTEND_PLUGINS` (and `SERVICE_PLUGINS`) are
+`DeferredPlugin` declarations (`microdrop_utils/deferred_plugins.py`): the plugin as a
+lazily imported `"module:Class"` spec, plus the dock panes it contributes
+(`DeferredDockPane`: id, name, default dock area and visibility). The run script hands
+them to the application as `deferred_plugins`; a window-less process imports and starts
+them with the rest.
+
+- **Placeholders.** `PluginManagementPlugin` contributes a placeholder dock pane for every
+  declared pane, with the real pane's id, so the saved layout is applied once, with every
+  pane present. A placeholder says "Loading <name>…", or that its plugin failed.
+- **Loading.** `DeferredPluginLoader` (`deferred_loader.py`) starts after the launch
+  restore, one plugin per event-loop turn: import, construct, `add_plugin`, and start
+  through the isolating plugin manager, so each start is recorded in
+  `plugin_load_status` (every deferred plugin is pending from launch, so the status-bar
+  indicator pulses until the last one is in). A failure, an import failure included, is
+  recorded and skipped.
+- **Swap.** The live controller mounts the plugin's panes; `add_dock_pane_live` replaces a
+  pane already mounted under the same id in place (Qt's `saveState`/`restoreState` keyed
+  by the shared dock-widget object name), so the real pane keeps the placeholder's
+  position, size, tab, floating state and visibility. A declared pane the plugin does not
+  contribute is logged and its placeholder removed.
+
+Only defer a plugin nothing else needs at start-up: no protocol columns or quick actions,
+no service or mixin a base plugin looks up in its `start()`, and no topic it must hear
+before the window is up (a message published before its listener exists is lost). Its
+preferences pane appears the first time Preferences is opened after the plugin has
+loaded; a dialog already open keeps the tabs it opened with.
 
 ---
 
@@ -500,10 +537,15 @@ Pyface internals** — re-verify on any Pyface upgrade.
 `TasksApplication` exposes (`envisage/ui/tasks/tasks_application.py`):
 `application_initialized` (Event, fired after the first windows + GUI loop exist), `active_window`
 (Instance), and `window_created/opened/closing/closed` (Events). We restore enabled groups with
-a single **`@observe("application:active_window")`** (null-guarded) — it fires once the GUI
-window is available and, because the restore is idempotent (only enables flagged groups not
-already loaded), re-firing on a later window switch is a harmless no-op. This replaced an
-earlier `application_initialized` + manual `on_trait_change("active_window")` rewire.
+a single **`@observe("application:application_initialized")`** (§1.7), guarded by
+`_groups_restored` so it runs exactly once. Use the colon form: the dot form also fires when
+the plugin's `application` trait is assigned, at app construction, before the startup
+plugins can be adopted.
+
+`application_initialized` fires once per run. A plugin that can start after it — deferred
+(§1.9) or enabled from Manage Plugins — never sees it, so window set-up done from that
+observer must also run from `start()` when a window is already open, behind a once-only
+guard (`PortableDropbotStatusAndControlsPlugin._set_up_window`).
 
 ### §7 Traits tricks worth knowing
 
@@ -530,7 +572,7 @@ earlier `application_initialized` + manual `on_trait_change("active_window")` re
 | Service offer + lookup | `@provides(IFoo)` interface for decoupling | **Applied** — offer/lookup by `IPluginGroupManager` |
 | Menu/action contributions | No — `TaskExtension`+`SchemaAddition`+`SGroup` | Keep; prefer `TaskAction.self.task` |
 | **Live menu/dock-pane mutation** | **None — Pyface builds once at window creation** | **Hand-rolled (necessary)** |
-| Lifecycle hooks | `@observe("application:active_window")` over the manual rewire | **Applied** |
+| Lifecycle hooks | `@observe("application:application_initialized")`, plus a guarded `start()` path for late plugins | **Applied** |
 | Traits tricks | n/a | Adopt `dispatch="ui"`, `Property`+`@cached_property`, `@provides` where useful |
 
 The architecture deliberately favors a **TOML manifest + lazy `module:Class` imports** over a
