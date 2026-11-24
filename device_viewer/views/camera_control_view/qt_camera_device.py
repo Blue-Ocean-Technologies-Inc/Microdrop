@@ -18,7 +18,8 @@ controller. The controller drives them through ICameraDevice only.
 Where Qt has no API for a camera's controls, this adapter fills in from the
 platform: lens focus over DirectShow on Windows, and image controls
 (brightness, contrast, ...) over DirectShow, v4l2, or a Raspberry Pi CSI
-camera's libcamerasrc element.
+camera's libcamerasrc element. The DirectShow ones are looked up in the
+background, so a bind never waits on a camera driver.
 
 A libcamera camera (a Raspberry Pi CSI camera) needs that no QVideoFrame of
 its previous stream exists when the next QCamera starts: libcamerasrc's
@@ -34,6 +35,7 @@ only as it starts, so a change restarts it once the changes settle.
 import time
 
 # Enthought library imports.
+from pyface.api import GUI
 from pyface.qt.QtCore import QTimer
 from pyface.qt.QtMultimedia import (
     QCamera,
@@ -51,7 +53,9 @@ from traits.api import (
     Float,
     HasTraits,
     Instance,
+    Int,
     List,
+    Str,
     observe,
     provides,
 )
@@ -65,7 +69,7 @@ from microdrop_utils.camera_image_controls import (
 )
 from microdrop_utils.directshow_camera_controls import (
     DirectShowCameraControls,
-    open_directshow_camera_controls,
+    open_directshow_camera_controls_async,
 )
 from microdrop_utils.v4l2_fps_getter import (
     LIBCAMERA_ID_PREFIX,
@@ -116,12 +120,26 @@ class QtCameraDevice(HasTraits):
     #: rebuild is pending (the rebuild builds the camera for it).
     device = Instance(QCameraDevice)
 
-    #: The bound camera's DirectShow controls (Windows); None elsewhere or
-    #: for a camera without any.
+    #: The bound camera's DirectShow controls (Windows); None elsewhere, for
+    #: a camera without any, or while they are looked up.
     directshow_controls = Instance(DirectShowCameraControls)
 
     #: The bound camera's image controls; None for a camera without any.
     image_controls = Instance(ICameraImageControls)
+
+    #: Why the bound camera's native controls are unavailable although it
+    #: has some (a stalled driver), for the user; empty otherwise. Reset by
+    #: every bind.
+    native_controls_problem = Str()
+
+    #: The bound camera's DirectShow controls are being looked up in the
+    #: background: True from the lookup's start until its outcome (controls,
+    #: none, or a stall) is applied, or an unbind drops it.
+    native_controls_loading = Bool(False)
+
+    #: Number of the latest native-controls lookup; the outcome of an
+    #: earlier one is dropped.
+    _native_controls_lookup = Int(0)
 
     #: True from a libcamera camera's stop until its camera, session and
     #: sink are replaced (see the module docstring).
@@ -226,30 +244,52 @@ class QtCameraDevice(HasTraits):
 
         self.camera = None
 
+        # Drops a lookup still running; last, so the end of loading finds
+        # no camera.
+        self._native_controls_lookup += 1
+        self.native_controls_loading = False
+
     def _bind_native_controls(self, selected_device):
         """Bind the platform controls Qt has no API for (see the module
         docstring)."""
         self.directshow_controls = None
         self.image_controls = None
+        self.native_controls_problem = ""
+
+        # A lookup still running for an earlier bind is dropped on arrival.
+        self._native_controls_lookup += 1
+        lookup = self._native_controls_lookup
 
         if self.device is None:
+            self.native_controls_loading = False
+
             return
 
         description = self.device.description()
 
         if any(name in description for name in NATIVE_CAMERA_PROPERTIES_EXCLUDED):
             logger.info(f"No native camera properties for {description}")
+            self.native_controls_loading = False
 
             return
 
-        directshow = open_directshow_camera_controls(self.device.id())
-        self.directshow_controls = directshow
+        # Windows: DirectShow is looked up in the background, and its
+        # outcome handed to the GUI thread.
+        if open_directshow_camera_controls_async(
+            self.device.id(),
+            lambda controls, error: GUI.invoke_later(
+                self._apply_directshow_lookup, lookup, description, controls, error
+            ),
+        ):
+            self.native_controls_loading = True
 
-        if directshow is not None:
-            self.image_controls = directshow
+            return
+
+        self.native_controls_loading = False
+
         # Loaded here, after the camera listing loaded Qt's GStreamer
         # backend (see libcamera_gst_element).
-        elif description.startswith(LIBCAMERA_ID_PREFIX) and (
+        if description.startswith(LIBCAMERA_ID_PREFIX) and (
             libcamera_gst_element.load_libcamera_element_hook()
         ):
             self.image_controls = LibcameraImageControls()
@@ -259,6 +299,25 @@ class QtCameraDevice(HasTraits):
             self.image_controls = V4l2ImageControls(
                 device_path=selected_device.device_path
             )
+
+    def _apply_directshow_lookup(self, lookup, description, controls, error):
+        """Apply the outcome of background DirectShow lookup number
+        ``lookup`` for camera ``description`` (see _bind_native_controls),
+        unless a later bind or an unbind has superseded it."""
+
+        if lookup != self._native_controls_lookup:
+            return
+
+        # A stalled driver costs the camera its properties, not the camera.
+        if error is not None:
+            logger.error(f"No camera properties for {description}: {error}")
+            self.native_controls_problem = _directshow_stall_message(description, error)
+        else:
+            self.directshow_controls = controls
+            self.image_controls = controls
+
+        # Last, so the end of loading finds the outcome in place.
+        self.native_controls_loading = False
 
     # ------------------------------------------------------------------ #
     # Streaming and formats                                                #
@@ -597,7 +656,13 @@ class QtCameraDevice(HasTraits):
         if self.image_controls is None:
             return []
 
-        return self.image_controls.ranges()
+        # A stalled DirectShow driver raises instead of blocking.
+        try:
+            return self.image_controls.ranges()
+        except RuntimeError as error:
+            logger.error(f"Camera image controls not read: {error}")
+
+            return []
 
     def image_control(self, name):
         return self.image_controls.get(name)
@@ -669,3 +734,22 @@ def _qt_camera_device(selected_device):
         return selected_device
 
     return None
+
+
+def _directshow_stall_message(description, error):
+    """The user-facing message for camera ``description``'s DirectShow
+    stall ``error`` (a DirectShowStallError)."""
+    if error.retry_exhausted:
+        retry = "MicroDrop must be restarted to try again."
+    else:
+        retry = (
+            'To try again, reselect the camera or press "Refresh Camera List" '
+            "in the camera panel."
+        )
+
+    return (
+        f"The Windows camera driver (DirectShow) of {description} did not "
+        f"respond while MicroDrop read its focus and image properties.<br><br>"
+        f"The camera itself still works, but its Camera Properties (focus, "
+        f"exposure, brightness, ...) are unavailable.<br><br>{retry}"
+    )
