@@ -8,11 +8,12 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Managed plugin groups stay out of the static startup plugin lists.
+"""Managed groups and deferred plugins stay out of the static startup lists.
 
 The plugin-group manager loads a managed group at launch; listing one of its
 plugins statically as well double-loads it (duplicate service offers and
-panes) and leaves its Manage Plugins checkbox unable to keep it off.
+panes) and leaves its Manage Plugins checkbox unable to keep it off. A
+deferred plugin listed statically as well would load twice the same way.
 
 plugin_consts is read as source rather than imported: importing it pulls in
 every plugin, and doing so after PySide6 is loaded trips a pydantic circular
@@ -41,6 +42,35 @@ def _static_plugin_list_names():
             )
 
     return names
+
+
+def _deferred_plugin_class_names():
+    """The class name of every plugin plugin_consts declares as deferred."""
+    tree = ast.parse(PLUGIN_CONSTS_PATH.read_text(encoding="utf-8"))
+    names = set()
+
+    for node in ast.walk(tree):
+        is_declaration = (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "DeferredPlugin"
+        )
+
+        if not is_declaration:
+            continue
+
+        for keyword in node.keywords:
+            if keyword.arg == "spec":
+                names.add(keyword.value.value.partition(":")[2])
+
+    return names
+
+
+def test_no_deferred_plugin_is_also_started_statically():
+    deferred = _deferred_plugin_class_names()
+
+    assert deferred
+    assert not _static_plugin_list_names() & deferred
 
 
 def test_battery_plugin_is_in_no_static_list():

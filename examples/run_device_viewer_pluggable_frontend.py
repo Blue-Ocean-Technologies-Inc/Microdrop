@@ -8,13 +8,25 @@
 #
 # Thanks for using Microdrop open source!
 
+# Microdrop utils imports.
 from microdrop_utils.app_setup_helpers import microdrop_runner_setup
+
 microdrop_runner_setup()
 
-from examples.run_device_viewer_pluggable import main as run_device_viewer_pluggable
-from examples.plugin_consts import REQUIRED_PLUGINS, FRONTEND_PLUGINS, REQUIRED_CONTEXT, FRONTEND_APPLICATION, \
-    DROPBOT_FRONTEND_PLUGINS, OPENDROP_FRONTEND_PLUGINS, \
-    PORTABLE_DROPBOT_FRONTEND_PLUGINS, SERVICE_PLUGINS
+from examples.plugin_consts import (  # noqa: E402
+    DEFERRED_FRONTEND_PLUGINS,
+    DROPBOT_FRONTEND_PLUGINS,
+    FRONTEND_APPLICATION,
+    FRONTEND_PLUGINS,
+    OPENDROP_FRONTEND_PLUGINS,
+    PORTABLE_DROPBOT_FRONTEND_PLUGINS,
+    REQUIRED_CONTEXT,
+    REQUIRED_PLUGINS,
+    SERVICE_PLUGINS,
+)
+from examples.run_device_viewer_pluggable import (  # noqa: E402
+    main as run_device_viewer_pluggable,
+)
 
 
 def main(args):
@@ -23,7 +35,13 @@ def main(args):
     # You can now access the validated device choice here
     print(f"Starting with device: {args.device}")
 
-    plugins = REQUIRED_PLUGINS + FRONTEND_PLUGINS + SERVICE_PLUGINS
+    plugins = (
+        REQUIRED_PLUGINS
+        + FRONTEND_PLUGINS
+        # Services before the deferred UIs: deferred plugins load in order.
+        + SERVICE_PLUGINS
+        + DEFERRED_FRONTEND_PLUGINS
+    )
 
     if args.device == "dropbot":
         plugins += DROPBOT_FRONTEND_PLUGINS
@@ -36,7 +54,7 @@ def main(args):
         plugins=plugins,
         contexts=REQUIRED_CONTEXT,
         application=FRONTEND_APPLICATION,
-        persist=False
+        persist=False,
     )
 
 
@@ -49,13 +67,15 @@ if __name__ == "__main__":
 
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run the frontend device viewer plugins.")
+    parser = argparse.ArgumentParser(
+        description="Run the frontend device viewer plugins."
+    )
 
     parser.add_argument(
         "--device",
         type=str,
         choices=["dropbot", "opendrop", "portable"],
-        default="dropbot", # Sets a default if the user doesn't provide the flag
-        help="Specify the device to use: 'dropbot' or 'opendrop'"
+        default="dropbot",  # Sets a default if the user doesn't provide the flag
+        help="Specify the device to use: 'dropbot' or 'opendrop'",
     )
     main(parser.parse_args())

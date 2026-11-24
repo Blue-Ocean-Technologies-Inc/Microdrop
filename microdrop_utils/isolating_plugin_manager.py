@@ -132,15 +132,24 @@ class IsolatingPluginManager(PluginManager):
             )
 
         for plugin in plugins:
-            self._start_isolated(plugin)
+            self.start_isolated(plugin)
 
         logger.info(f"Plugin start finished: {self.load_status.summary}")
 
     def _is_essential(self, plugin):
         return plugin.id in self.essential_plugin_ids
 
-    def _start_isolated(self, plugin):
-        """Start ``plugin``; roll it back if it fails and is not essential."""
+    def start_isolated(self, plugin):
+        """Start ``plugin``; roll it back if it fails and is not essential.
+
+        Also starts a plugin added after the launch, e.g. one deferred until
+        the main window painted.
+
+        Returns
+        -------
+        bool
+            True if the plugin started, False if it failed and was withdrawn.
+        """
         essential = self._is_essential(plugin)
         services_before = registered_service_ids(self.application)
 
@@ -167,3 +176,7 @@ class IsolatingPluginManager(PluginManager):
             withdraw_plugin(
                 self.application, plugin, started_services - services_before
             )
+
+            return False
+
+        return True
