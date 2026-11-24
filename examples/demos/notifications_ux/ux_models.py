@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 # Enthought library imports.
 from traits.api import (
     Bool,
-    Button,
+    Dict,
     Enum,
     Event,
     HasTraits,
@@ -28,7 +28,6 @@ from traits.api import (
     Int,
     List,
     Property,
-    Range,
     Str,
     Union,
     observe,
@@ -51,6 +50,7 @@ from notifications.models.notification_center import (
 from notifications.models.notifications_pane_model import NotificationsPaneModel
 
 # Local imports.
+from .settings_models import NotificationSettings
 from .ux_consts import (
     ATTENTION_SECTION_ID,
     ATTENTION_SECTION_ORDER,
@@ -91,6 +91,9 @@ class UxNotification(Notification):
     #: The condition that raised it; resolving that id clears it.
     condition_id = Str()
 
+    #: Its declared notification category; empty when uncategorised.
+    category_id = Str()
+
     #: Whether it stays on screen as a toast until dismissed or acted on.
     sticky = Property(Bool, observe="severity, action, needs_attention")
 
@@ -105,7 +108,16 @@ class UxNotification(Notification):
 
 
 class UxNotificationCenter(NotificationCenter):
-    """The notifications; Needs attention entries survive Clear all."""
+    """The notifications; Needs attention entries survive Clear all, and a
+    category the user keeps out of the drawer is not recorded."""
+
+    #: The user's choices per category.
+    settings = Instance(NotificationSettings)
+
+    #: Category ids for posts that name none, by their free-text category:
+    #: code that predates categories (the product's load-failure notices)
+    #: still lands in one.
+    default_category_ids = Dict(Str, Str)
 
     #: Fired with an entry that is new, or unread again after being read:
     #: what deserves a toast.
@@ -155,11 +167,28 @@ class UxNotificationCenter(NotificationCenter):
         secondary_action=None,
         needs_attention=False,
         condition_id="",
+        category_id="",
+        thread_id="",
     ):
         """List a notification as the product centre does, as an
-        UxNotification, and announce it for a toast."""
+        UxNotification, and announce it for a toast; nothing when its
+        category is kept out of the drawer, unless it is an error or needs
+        attention. Returns the entry, or None."""
+        category_id = category_id or self.default_category_ids.get(category, "")
+        kind = self.settings.category(category_id) if self.settings else None
+        kept = severity == SEVERITY_ERROR or needs_attention
+
+        if kind is not None and not kind.in_drawer and not kept:
+            return None
+
         timestamp = time.time() if timestamp is None else timestamp
-        key = (source, category, severity, title) if key is None else key
+
+        if thread_id:
+            key = ("thread", thread_id)
+
+        elif key is None:
+            key = (source, category, severity, title)
+
         entry = self._entries_by_key.get(key)
 
         if entry is not None:
@@ -172,7 +201,8 @@ class UxNotificationCenter(NotificationCenter):
                 secondary_action=secondary_action or entry.secondary_action,
                 needs_attention=needs_attention or entry.needs_attention,
                 condition_id=condition_id or entry.condition_id,
-                count=entry.count + count,
+                category_id=category_id or entry.category_id,
+                count=entry.count if thread_id else entry.count + count,
                 last_seen=timestamp,
                 acted="",
                 unread=True,
@@ -200,6 +230,7 @@ class UxNotificationCenter(NotificationCenter):
             secondary_action=secondary_action,
             needs_attention=needs_attention,
             condition_id=condition_id,
+            category_id=category_id,
             count=count,
         )
         self._entries_by_key[key] = entry
@@ -224,6 +255,8 @@ class UxNotificationCenter(NotificationCenter):
             secondary_action=getattr(message, "secondary_action", None),
             needs_attention=getattr(message, "needs_attention", False),
             condition_id=getattr(message, "condition_id", ""),
+            category_id=getattr(message, "category_id", ""),
+            thread_id=getattr(message, "thread_id", ""),
         )
 
     def resolve(self, condition_id, resolution):
@@ -269,31 +302,6 @@ class UxNotificationCenter(NotificationCenter):
         super().clear()
 
 
-class ToastSettings(HasTraits):
-    """How toasts behave: the user's choice, a sketch of what a preferences
-    helper would hold once ported."""
-
-    #: Info and success toasts leave on their own; off, every toast stays
-    #: until dismissed or acted on, and no countdown is drawn.
-    auto_dismiss = Bool(True)
-
-    #: Seconds an info or success toast stays, hover not counted.
-    auto_dismiss_seconds = Int(TOAST_TIMEOUT_MS // 1000)
-
-    #: ``auto_dismiss_seconds`` in milliseconds.
-    timeout_ms = Property(Int, observe="auto_dismiss_seconds")
-
-    #: A chime as the bell rings for a new arrival, and its volume (%).
-    sound_enabled = Bool(True)
-    sound_volume = Range(0, 100, 40)
-
-    #: Plays both chimes at the chosen volume.
-    test_sound = Button("Test")
-
-    def _get_timeout_ms(self):
-        return self.auto_dismiss_seconds * 1000
-
-
 class ToastItem(HasTraits):
     """One toast on screen."""
 
@@ -320,8 +328,9 @@ class ToastStackModel(HasTraits):
 
     items = List(Instance(ToastItem))
 
-    #: Whether and when toasts leave on their own.
-    settings = Instance(ToastSettings, ())
+    #: Whether and when toasts leave on their own, the sound, and the
+    #: categories' choices.
+    settings = Instance(NotificationSettings, ())
 
     #: Toasts that did not fit, gone straight to the bell since the stack
     #: was last empty, oldest first; and how many.
@@ -382,6 +391,9 @@ class ToastStackModel(HasTraits):
 
 class UxPaneModel(NotificationsPaneModel):
     """What the drawer, the toasts and the bell show."""
+
+    def traits_init(self):
+        self.center.settings = self.toasts.settings
 
     center = Instance(UxNotificationCenter, ())
 

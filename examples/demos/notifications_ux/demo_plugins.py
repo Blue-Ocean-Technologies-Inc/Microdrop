@@ -23,18 +23,31 @@ from pyface.action.api import Action
 from pyface.action.schema.schema_addition import SchemaAddition
 from pyface.api import GUI
 from pyface.tasks.action.api import SGroup, SMenu
-from traits.api import Any, Bool, Instance, List, Str, observe
+from traits.api import Any, Bool, Dict, Instance, List, Str, observe
 
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
-from notifications.consts import NOTIFICATION_SECTIONS, NOTIFICATIONS_PLUGIN_ID
+from notifications.consts import (
+    CATEGORY_PLUGINS,
+    NOTIFICATION_SECTIONS,
+    NOTIFICATIONS_PLUGIN_ID,
+)
 from plugin_management.plugin import PluginManagementPlugin
 
 # Local imports.
 from . import fake_panes, scenarios
+from .demo_categories import (
+    DROPBOT_CATEGORIES,
+    NEWS_CATEGORIES,
+    PLUGINS_CATEGORIES,
+    PLUGINS_LOAD_FAILED,
+    PROTOCOL_CATEGORIES,
+    PROTOCOL_GROUP,
+)
 from .news_actions import NewsFeedActions
 from .news_models import FeedAlertWatcher, make_news_section
-from .ux_models import ToastSettings
+from .settings_models import NotificationSettings
+from .ux_consts import NOTIFICATION_CATEGORIES
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -100,6 +113,10 @@ class NewsPlugin(Plugin):
 
     sections = List(contributes_to=NOTIFICATION_SECTIONS)
 
+    notification_categories = List(
+        NEWS_CATEGORIES, contributes_to=NOTIFICATION_CATEGORIES
+    )
+
     def _sections_default(self):
         return [make_news_section()]
 
@@ -111,16 +128,18 @@ class SettingToggleAction(Action):
     style = "toggle"
 
     #: The settings it shows and sets, and which switch.
-    settings = Instance(ToastSettings)
+    settings = Instance(NotificationSettings)
     setting = Str()
 
     def perform(self, event=None):
         # A toggle action is already flipped when it is performed.
         setattr(self.settings, self.setting, self.checked)
 
-    @observe("settings.[auto_dismiss, sound_enabled]")
+    @observe("setting, settings.[auto_dismiss, sound_enabled]")
     def _follow_settings(self, event):
-        self.checked = getattr(self.settings, self.setting)
+
+        if self.settings is not None and self.setting:
+            self.checked = getattr(self.settings, self.setting)
 
 
 class NotificationsDemoPlugin(Plugin):
@@ -131,6 +150,13 @@ class NotificationsDemoPlugin(Plugin):
     name = "Notifications Demo Plugin (demo)"
 
     task_extensions = List(contributes_to=TASK_EXTENSIONS)
+
+    #: It stands in for the protocol tree and the DropBot plugins: their
+    #: kinds of notification.
+    notification_categories = List(
+        PROTOCOL_CATEGORIES + DROPBOT_CATEGORIES,
+        contributes_to=NOTIFICATION_CATEGORIES,
+    )
 
     #: Opens the drawer once the window is up (``--open``).
     open_drawer = Bool(False)
@@ -144,14 +170,15 @@ class NotificationsDemoPlugin(Plugin):
     #: The Demo menu's News actions.
     _news_actions = Any()
 
-    #: The open Notification settings window, if any.
-    _settings_ui = Any()
+    #: The open settings windows, by title.
+    _settings_uis = Dict()
 
     def start(self):
         """Post the session's history before the window is up: no toasts."""
         controller = self._notifications.controller
         center = controller.pane_model.center
         self._responder = scenarios.DemoResponder(center=center)
+        center.default_category_ids = {CATEGORY_PLUGINS: PLUGINS_LOAD_FAILED}
 
         controller.trait_set(
             publish=self._responder.publish,
@@ -234,6 +261,11 @@ class NotificationsDemoPlugin(Plugin):
                     self._simulate_run,
                     "Quiet while it runs: only errors and actions pop up",
                 ),
+                action(
+                    f"Run a {scenarios.STEPPED_RUN_STEPS}-step protocol",
+                    self._run_steps,
+                    "Start, one step entry updating in place, finish",
+                ),
                 id="notifications_ux_demo.notifications",
             ),
             SGroup(*self._news_actions.actions(), id="notifications_ux_demo.news"),
@@ -249,6 +281,11 @@ class NotificationsDemoPlugin(Plugin):
                     setting="sound_enabled",
                 ),
                 action("Notification settings…", self._open_settings),
+                action(
+                    "Protocol notification settings…",
+                    self._open_protocol_settings,
+                    "The protocol tree's own page: only its kinds of notification",
+                ),
                 id="notifications_ux_demo.settings",
             ),
             SGroup(
@@ -273,23 +310,42 @@ class NotificationsDemoPlugin(Plugin):
         model = self._pane_model
         scenarios.simulate_protocol_run(model.center, model.toasts)
 
+    def _run_steps(self):
+        scenarios.run_stepped_protocol(
+            self._pane_model.toasts, self._experiment_folder()
+        )
+
     @property
     def _toast_settings(self):
         return self._notifications.controller.pane_model.toasts.settings
 
     def _open_settings(self):
-        """The toast settings, as a future preferences tab would show them;
-        one window at a time."""
-        from .toast_settings_view import ToastSettingsView
+        """The settings, as a future preferences tab would show them."""
+        from .settings_view import settings_view
 
-        if self._settings_ui is not None and self._settings_ui.control is not None:
-            self._settings_ui.control.raise_()
+        self._open_settings_window(*settings_view(self._toast_settings))
+
+    def _open_protocol_settings(self):
+        """Only the protocol's categories, as its own preferences page
+        would show them; the same objects, so both windows agree."""
+        from .settings_view import group_settings_view
+
+        self._open_settings_window(
+            *group_settings_view(self._toast_settings, PROTOCOL_GROUP)
+        )
+
+    def _open_settings_window(self, view, context):
+        """One window per view, raised if already open."""
+        ui = self._settings_uis.get(view.title)
+
+        if ui is not None and ui.control is not None:
+            ui.control.raise_()
 
             return
 
         window = self.application.active_window
-        self._settings_ui = self._toast_settings.edit_traits(
-            view=ToastSettingsView, parent=getattr(window, "control", None)
+        self._settings_uis[view.title] = self._toast_settings.edit_traits(
+            view=view, context=context, parent=getattr(window, "control", None)
         )
 
     def _toggle_theme(self):
@@ -319,6 +375,10 @@ class DemoPluginManagementPlugin(PluginManagementPlugin):
     """Plugin management without its launch-time plugin-group restore (it
     would load the installed heater and magnet plugins) or its update check
     (a network fetch and a dialog): the demo posts that answer instead."""
+
+    notification_categories = List(
+        PLUGINS_CATEGORIES, contributes_to=NOTIFICATION_CATEGORIES
+    )
 
     @observe("application:application_initialized")
     def _restore_groups_on_launch(self, event):

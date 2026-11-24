@@ -21,6 +21,7 @@ import threading
 import time
 import traceback
 from datetime import datetime, timedelta
+from functools import partial
 
 # Enthought library imports.
 from pyface.api import GUI
@@ -38,6 +39,16 @@ from notifications.consts import (
 )
 
 # Local imports.
+from .demo_categories import (
+    DROPBOT_CONNECTION,
+    DROPBOT_MAINTENANCE,
+    PLUGINS_UPDATES,
+    PROTOCOL_FINISHED,
+    PROTOCOL_GROUP,
+    PROTOCOL_NEEDS_INPUT,
+    PROTOCOL_STARTED,
+    PROTOCOL_STEP_COMPLETED,
+)
 from .ux_consts import (
     HelpAction,
     SnoozeAction,
@@ -171,6 +182,7 @@ def post_error():
         detail=_traceback_of(ConnectionError, "COM5: the device did not answer in 3 s"),
         severity=SEVERITY_ERROR,
         category="hardware",
+        category_id=DROPBOT_CONNECTION,
         source="dropbot_controller",
         action=PublishAction(label="Retry", topic=RETRY_CONNECTION_TOPIC).model_dump(),
         secondary_action=HelpAction(
@@ -194,6 +206,7 @@ def post_action_required():
         ),
         severity=SEVERITY_WARNING,
         category="hardware",
+        category_id=PROTOCOL_NEEDS_INPUT,
         source="dropbot_status_and_controls",
         needs_attention=True,
         condition_id=CHIP_MISSING_CONDITION,
@@ -223,6 +236,7 @@ def post_plugin_updates():
         detail=PLUGIN_UPDATES_DETAIL,
         severity=SEVERITY_INFO,
         category="plugins",
+        category_id=PLUGINS_UPDATES,
         source="plugin_management",
         needs_attention=True,
         action=PublishAction(
@@ -240,6 +254,7 @@ def post_protocol_finished(folder):
         ),
         severity=SEVERITY_SUCCESS,
         category="protocol",
+        category_id=PROTOCOL_FINISHED,
         source="pluggable_protocol_tree",
         action=OpenPathAction(label="Show folder", path=folder).model_dump(),
     )
@@ -251,6 +266,7 @@ def post_calibration_old():
         detail=CALIBRATION_DETAIL,
         severity=SEVERITY_WARNING,
         category="calibration",
+        category_id=DROPBOT_MAINTENANCE,
         source="dropbot_status_and_controls",
         needs_attention=True,
         secondary_action=CALIBRATION_HELP.model_dump(),
@@ -270,6 +286,7 @@ def post_self_test_stale():
         detail=SELF_TEST_DETAIL,
         severity=SEVERITY_WARNING,
         category="self_test",
+        category_id=DROPBOT_MAINTENANCE,
         source="dropbot_status_and_controls",
         needs_attention=True,
         action=SELF_TEST_ACTION.model_dump(),
@@ -289,6 +306,11 @@ _BURST_TEXTS = [
 ]
 
 
+#: The burst's categories by source: its protocol steps are step
+#: completions; the rest are uncategorised.
+_BURST_CATEGORIES = {"pluggable_protocol_tree": PROTOCOL_STEP_COMPLETED}
+
+
 def post_burst():
     """BURST_SIZE distinct notifications at once."""
 
@@ -299,6 +321,7 @@ def post_burst():
             severity=severity,
             source=source,
             category="burst",
+            category_id=_BURST_CATEGORIES.get(source, ""),
         )
 
 
@@ -339,6 +362,7 @@ def post_history(center, folder):
         detail="24 steps in 6 min 12 s. The report is in the experiment folder.",
         severity=SEVERITY_SUCCESS,
         category="protocol",
+        category_id=PROTOCOL_FINISHED,
         source="pluggable_protocol_tree",
         timestamp=now - 1500,
         action=OpenPathAction(label="Show folder", path=folder),
@@ -348,6 +372,7 @@ def post_history(center, folder):
         detail=CALIBRATION_DETAIL,
         severity=SEVERITY_WARNING,
         category="calibration",
+        category_id=DROPBOT_MAINTENANCE,
         source="dropbot_status_and_controls",
         timestamp=now - 600,
         needs_attention=True,
@@ -358,6 +383,7 @@ def post_history(center, folder):
         detail=SELF_TEST_DETAIL,
         severity=SEVERITY_WARNING,
         category="self_test",
+        category_id=DROPBOT_MAINTENANCE,
         source="dropbot_status_and_controls",
         timestamp=now - 540,
         needs_attention=True,
@@ -385,6 +411,7 @@ def post_earlier_days(center, folder):
         detail="31 steps in 9 min 2 s. The report is in the experiment folder.",
         severity=SEVERITY_SUCCESS,
         category="protocol",
+        category_id=PROTOCOL_FINISHED,
         source="pluggable_protocol_tree",
         timestamp=_days_ago(1, 16, 40),
         action=OpenPathAction(label="Show folder", path=folder),
@@ -403,6 +430,7 @@ EARLIER_ENTRIES = [
             "detail": "The USB link dropped during step 14; the run was paused.",
             "severity": SEVERITY_WARNING,
             "category": "hardware",
+            "category_id": DROPBOT_CONNECTION,
             "source": "dropbot_controller",
         },
     ),
@@ -442,13 +470,27 @@ EARLIER_ENTRIES = [
 PROTOCOL_RUN_S = 15
 
 RUN_EVENTS = [
-    (1.5, {"title": "Step 1 finished", "severity": SEVERITY_SUCCESS}),
+    (
+        1.5,
+        {
+            "title": "Step 1 finished",
+            "severity": SEVERITY_SUCCESS,
+            "category_id": PROTOCOL_STEP_COMPLETED,
+        },
+    ),
     (3.5, {"title": "Captured frame 1", "severity": SEVERITY_INFO}),
     (
         5.5,
         {"title": "Low liquid level on electrode 18", "severity": SEVERITY_WARNING},
     ),
-    (7.5, {"title": "Step 2 finished", "severity": SEVERITY_SUCCESS}),
+    (
+        7.5,
+        {
+            "title": "Step 2 finished",
+            "severity": SEVERITY_SUCCESS,
+            "category_id": PROTOCOL_STEP_COMPLETED,
+        },
+    ),
     (
         9.5,
         {
@@ -473,6 +515,7 @@ def simulate_protocol_run(center, toasts):
         detail="Quiet until it ends: only errors and actions pop up.",
         severity=SEVERITY_INFO,
         category="protocol",
+        category_id=PROTOCOL_STARTED,
         source="pluggable_protocol_tree",
         key=("run", "started", time.time()),
     )
@@ -488,6 +531,61 @@ def simulate_protocol_run(center, toasts):
         )
 
     GUI.invoke_after(PROTOCOL_RUN_S * 1000, setattr, toasts, "quiet", False)
+
+
+# ---------------------------------------------------------------------------
+# A stepped protocol run
+# ---------------------------------------------------------------------------
+
+#: The stepped run's steps, and seconds between them.
+STEPPED_RUN_STEPS = 6
+STEPPED_RUN_STEP_S = 1.5
+
+
+def run_stepped_protocol(toasts, folder):
+    """STEPPED_RUN_STEPS steps, quiet: "Protocol started", one "Step N of M
+    completed" entry updating in place, then "Protocol finished". The run's
+    own categories come through quiet mode; unrelated info is held."""
+
+    if toasts.quiet:
+        return
+
+    started = time.time()
+    thread_id = f"{PROTOCOL_STEP_COMPLETED}.{started}"
+    fields = {"category": "protocol", "source": "pluggable_protocol_tree"}
+
+    _publish(
+        title="Protocol started",
+        detail=f"sample_prep_v3 · {STEPPED_RUN_STEPS} steps.",
+        category_id=PROTOCOL_STARTED,
+        **fields,
+    )
+    toasts.trait_set(quiet_reason=PROTOCOL_GROUP, quiet=True)
+
+    for step in range(1, STEPPED_RUN_STEPS + 1):
+        GUI.invoke_after(
+            int(step * STEPPED_RUN_STEP_S * 1000),
+            _publish,
+            title=f"Step {step} of {STEPPED_RUN_STEPS} completed",
+            detail=f"sample_prep_v3 · {STEPPED_RUN_STEPS - step} to go.",
+            severity=SEVERITY_SUCCESS,
+            category_id=PROTOCOL_STEP_COMPLETED,
+            thread_id=thread_id,
+            **fields,
+        )
+
+    end_ms = int((STEPPED_RUN_STEPS + 0.5) * STEPPED_RUN_STEP_S * 1000)
+    GUI.invoke_after(
+        end_ms,
+        _publish,
+        title="Protocol finished",
+        detail=f"{STEPPED_RUN_STEPS} steps. The report is in the experiment folder.",
+        severity=SEVERITY_SUCCESS,
+        category_id=PROTOCOL_FINISHED,
+        action=OpenPathAction(label="Show folder", path=folder).model_dump(),
+        **fields,
+    )
+    GUI.invoke_after(end_ms + 500, setattr, toasts, "quiet", False)
 
 
 # ---------------------------------------------------------------------------
@@ -512,10 +610,13 @@ class DemoResponder(HasTraits):
             return
 
         first, then = answer
-        self._post(*first)
+        category_id = _ANSWER_CATEGORIES.get(topic, "")
+        self._post(*first, category_id=category_id)
 
         if then is not None:
-            GUI.invoke_after(JOB_MS, self._post, *then)
+            GUI.invoke_after(
+                JOB_MS, partial(self._post, *then, category_id=category_id)
+            )
 
     def open_path(self, path):
         """An OpenPathAction: no window opens in the demo."""
@@ -531,15 +632,24 @@ class DemoResponder(HasTraits):
             "Help > Tutorials would open on this page, scrolled to the steps.",
         )
 
-    def _post(self, title, severity, detail="", action=None):
+    def _post(self, title, severity, detail="", action=None, category_id=""):
         self.center.post(
             title,
             detail=detail,
             severity=severity,
             source="notifications demo",
             action=action,
+            category_id=category_id,
         )
 
+
+#: The category each demo topic's answers belong to.
+_ANSWER_CATEGORIES = {
+    SELF_TEST_TOPIC: DROPBOT_MAINTENANCE,
+    UPDATE_PLUGINS_TOPIC: PLUGINS_UPDATES,
+    RESTART_TOPIC: PLUGINS_UPDATES,
+    RETRY_CONNECTION_TOPIC: DROPBOT_CONNECTION,
+}
 
 #: Each demo topic's immediate answer and, after JOB_MS, its outcome:
 #: (title, severity, detail[, action]).

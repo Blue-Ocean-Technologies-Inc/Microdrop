@@ -33,6 +33,7 @@ from examples.demos.notifications_pane.sci_bots_feed_sources import (
 from notifications.consts import SEVERITY_INFO
 
 # Local imports.
+from .demo_categories import NEWS_NEW_POSTS
 from .ux_consts import (
     CATEGORY_FEED,
     NEWS_DEFAULT_SOURCE,
@@ -110,6 +111,12 @@ class FeedAlertWatcher(HasTraits):
 
         self._known_ids |= {post.id for post in posts}
 
+        kind = self.pane_model.toasts.settings.category(NEWS_NEW_POSTS)
+
+        # Kept out of the drawer: new posts make no alert.
+        if kind is not None and not kind.in_drawer:
+            return
+
         for post in new:
             source = post.source_label or NEWS_DEFAULT_SOURCE
             entry = UxNotification(
@@ -120,6 +127,7 @@ class FeedAlertWatcher(HasTraits):
                 category=CATEGORY_FEED,
                 source=f"{source} · {post.kind.title()}",
                 feed_post_id=post.id,
+                category_id=NEWS_NEW_POSTS,
             )
             self.pane_model.feed_alerts.append(entry)
 

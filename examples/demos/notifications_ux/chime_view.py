@@ -12,9 +12,12 @@
 
 Driven by the pane model's ``rang`` event, so it hears exactly what the
 toasts decided is news: no start-up history, no repeats, nothing quiet mode
-holds. A burst makes one sound. The sound effects are made on first use and
-play asynchronously; with no multimedia module or audio device the chime
-logs one warning and stays silent.
+holds. The tone is the category's choice (none, soft, alert, completion);
+an uncategorised arrival plays soft, or alert for a warning, an error or
+Needs attention. A burst makes one sound, though a stronger tone still
+sounds over a softer one just played. The sound effects are made on first
+use and play asynchronously; with no multimedia module or audio device the
+chime logs one warning and stays silent.
 """
 
 # Standard library imports.
@@ -22,15 +25,16 @@ import time
 
 # Enthought library imports.
 from pyface.qt import QtCore
-from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, observe
+from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, Str, observe
 
 # Microdrop package imports.
 from notifications.consts import SEVERITY_ERROR, SEVERITY_WARNING
 
 # Microdrop style imports.
-from microdrop_style.sounds.chimes import CHIME_ALERT, CHIME_GENTLE
+from microdrop_style.sounds.chimes import CHIME_ALERT, CHIME_COMPLETION, CHIME_GENTLE
 
 # Local imports.
+from .settings_models import TONE_ALERT, TONE_COMPLETION, TONE_SOFT
 from .ux_models import UxPaneModel
 
 # Logger import.
@@ -41,16 +45,27 @@ logger = get_logger(__name__)
 #: Least time (s) between two chimes: a burst or a flood makes one sound.
 CHIME_MIN_INTERVAL_S = 1.5
 
-#: Delay (ms) between the two chimes the settings' Test button plays.
-TEST_GAP_MS = 700
+
+#: Each tone's sound, weakest first: within the rate limit only a stronger
+#: tone than the last one sounds.
+TONE_SOUNDS = {
+    TONE_SOFT: CHIME_GENTLE,
+    TONE_ALERT: CHIME_ALERT,
+    TONE_COMPLETION: CHIME_COMPLETION,
+}
+TONE_STRENGTH = {tone: strength for strength, tone in enumerate(TONE_SOUNDS)}
 
 
-def chime_for(entry):
-    """The alert chime for a warning, an error or Needs attention; the
-    gentle one for the rest, news included."""
+def tone_for(entry, settings):
+    """The tone ``entry`` plays: its category's, else by its severity."""
+    kind = settings.category(entry.category_id)
+
+    if kind is not None:
+        return kind.tone
+
     urgent = entry.severity in (SEVERITY_WARNING, SEVERITY_ERROR)
 
-    return CHIME_ALERT if urgent or entry.needs_attention else CHIME_GENTLE
+    return TONE_ALERT if urgent or entry.needs_attention else TONE_SOFT
 
 
 class NotificationChime(HasTraits):
@@ -62,8 +77,9 @@ class NotificationChime(HasTraits):
     #: QSoundEffects by sound path, made on first use.
     _effects = Dict()
 
-    #: time.monotonic() of the last chime.
+    #: time.monotonic() of the last chime, and its tone.
     _last_played = Float(-CHIME_MIN_INTERVAL_S)
+    _last_tone = Str()
 
     #: Set once sound proved unavailable: warned once, then silent.
     _unavailable = Bool(False)
@@ -74,19 +90,26 @@ class NotificationChime(HasTraits):
     @observe("pane_model:rang")
     def _ring(self, event):
         settings = self.pane_model.toasts.settings
+        tone = tone_for(event.new, settings)
         now = time.monotonic()
 
-        if not settings.sound_enabled or now - self._last_played < CHIME_MIN_INTERVAL_S:
+        if not settings.sound_enabled or tone not in TONE_SOUNDS:
+            return
+
+        recent = now - self._last_played < CHIME_MIN_INTERVAL_S
+        stronger = TONE_STRENGTH[tone] > TONE_STRENGTH.get(self._last_tone, -1)
+
+        if recent and not stronger:
             return
 
         self._last_played = now
-        self.play(chime_for(event.new))
+        self._last_tone = tone
+        self.play(TONE_SOUNDS[tone])
 
     @observe("pane_model:toasts:settings:test_sound")
     def _test(self, event):
-        """Both chimes, gentle then alert, at the chosen volume."""
-        self.play(CHIME_GENTLE)
-        QtCore.QTimer.singleShot(TEST_GAP_MS, lambda: self.play(CHIME_ALERT))
+        """The chosen tone, at the chosen volume."""
+        self.play(TONE_SOUNDS[self.pane_model.toasts.settings.test_tone])
 
     def play(self, path):
         """Start ``path`` playing at the settings' volume; returns at once."""

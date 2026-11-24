@@ -209,13 +209,22 @@ class ToastStackController(HasTraits):
 
             return
 
-        if toasts.quiet and not urgent:
+        # While quiet, the quiet run's own categories still come through.
+        kind = toasts.settings.category(entry.category_id)
+        own = kind is not None and kind.group == toasts.quiet_reason
+
+        if toasts.quiet and not urgent and not own:
             if entry not in toasts.held:
                 toasts.held.append(entry)
 
             return
 
         self.pane_model.rang = entry
+
+        # Pop-ups off for its category: straight to the bell.
+        if kind is not None and not kind.popup and not urgent:
+            return
+
         showing = [item for item in toasts.items if not item.leaving]
 
         if len(showing) >= TOAST_LIMIT:

@@ -20,6 +20,7 @@ their own, after the contributed ones.
 import logging
 
 # Enthought library imports.
+from envisage.api import ExtensionPoint
 from pyface.api import GUI
 from traits.api import Any, Instance, List
 
@@ -32,7 +33,9 @@ from notifications.plugin import NotificationsPlugin
 from notifications.services.log_forwarder import NotificationLogHandler
 
 # Local imports.
+from .settings_models import NotificationCategorySpec
 from .ux_consts import (
+    NOTIFICATION_CATEGORIES,
     NOTIFICATION_RESOLVE,
     NotificationResolveRequest,
     UxNotificationMessage,
@@ -67,6 +70,11 @@ class UxNotificationsPlugin(NotificationsPlugin):
 
     controller = Instance(UxNotificationsController)
 
+    #: The kinds of notification the plugins post.
+    categories = ExtensionPoint(
+        List(Instance(NotificationCategorySpec)), id=NOTIFICATION_CATEGORIES
+    )
+
     #: The product's routes, plus conditions clearing.
     actor_topic_routing = List(
         [{LISTENER_NAME: [*ACTOR_TOPIC_DICT[LISTENER_NAME], NOTIFICATION_RESOLVE]}],
@@ -97,6 +105,7 @@ class UxNotificationsPlugin(NotificationsPlugin):
         self.controller = UxNotificationsController()
         pane_model = self.controller.pane_model
         center = pane_model.center
+        pane_model.toasts.settings.declare(self.categories)
         self._own_sections = [
             AttentionSection(pane_model=pane_model),
             HistorySection(pane_model=pane_model),

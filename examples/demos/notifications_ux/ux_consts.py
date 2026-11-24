@@ -86,6 +86,19 @@ class UxNotificationMessage(NotificationMessage):
     #: does, with no button pressed.
     condition_id: str = ""
 
+    #: The declared notification category it belongs to, e.g.
+    #: "protocol.step_completed"; empty, it behaves as an uncategorised one.
+    category_id: str = ""
+
+    #: Posts with the same thread id update one entry in place (its title
+    #: and detail, counted once), e.g. a run's step progress.
+    thread_id: str = ""
+
+
+#: Extension point: NotificationCategorySpecs, the kinds of notification
+#: each plugin posts, for the user to tune per kind.
+NOTIFICATION_CATEGORIES = f"{PKG}.categories"
+
 
 #: Posts on the product topic; the prototype's handler reads the additions.
 ux_notification_publisher = ValidatedTopicPublisher(
