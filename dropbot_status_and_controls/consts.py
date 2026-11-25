@@ -98,3 +98,8 @@ CONNECTION_TUTORIAL_ANCHOR = "connection"
 CHIP_STATUS_TUTORIAL_ANCHOR = "chip-status"
 VOLUME_TUTORIAL_ANCHOR = "volume"
 SELF_TESTS_TUTORIAL_ANCHOR = "part-tools"
+
+#: The tutorial's sections on the halted and no-power dialogs, the help
+#: links of the entries those dialogs leave in the notifications drawer.
+HALTED_DIALOG_TUTORIAL_ANCHOR = "dlg-halted"
+NO_POWER_DIALOG_TUTORIAL_ANCHOR = "dlg-nopower"

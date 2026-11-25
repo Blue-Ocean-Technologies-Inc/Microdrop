@@ -8,15 +8,44 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import os
 
+# Third-party imports.
 from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QVBoxLayout, QPushButton, QMessageBox, QDialog, QTextBrowser, QWidget
+from PySide6.QtWidgets import (
+    QDialog,
+    QMessageBox,
+    QPushButton,
+    QTextBrowser,
+    QVBoxLayout,
+    QWidget,
+)
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
+from microdrop_application.dialogs.dialog_records import record_dialog
 from microdrop_application.dialogs.pyface_wrapper import error
+from notifications.consts import SEVERITY_ERROR, help_target
+
+# Local imports.
+from .consts import (
+    DROPBOT_STATUS_TUTORIAL_ID,
+    HALTED_DIALOG_TUTORIAL_ANCHOR,
+    NO_POWER_DIALOG_TUTORIAL_ANCHOR,
+    PKG,
+)
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: The no-power dialog's text, as its entry in the notifications drawer.
+NO_POWER_TITLE = "ERROR: No Power"
+NO_POWER_TEXT = (
+    "DropBot currently has no power supply connected.\n"
+    "Plug in the power supply cable, then click Retry to reconnect."
+)
 
 # Path to images bundled with this plugin
 _IMAGES_DIR = os.path.join(os.path.dirname(__file__), "images")
@@ -41,21 +70,26 @@ class DialogView(QWidget):
 
     @Slot(dict)
     def on_show_halted_popup(self, data):
-        reason = data.get('reason', '')
-        message = data.get('message', '')
-        title = data.get('title', 'DropBot Halted')
+        reason = data.get("reason", "")
+        message = data.get("message", "")
+        title = data.get("title", "DropBot Halted")
 
         body = f"DropBot has halted {reason}." if reason else "DropBot has halted."
+
         error(
             parent=None,
             title=title,
             message=body + "<br><br>" + message,
+            source=PKG,
+            help_target=help_target(
+                DROPBOT_STATUS_TUTORIAL_ID, HALTED_DIALOG_TUTORIAL_ANCHOR
+            ),
         )
 
     @Slot(dict)
     def on_show_shorts_popup(self, data):
-        title = data.get('title', 'Shorts Detected')
-        text = data.get('text', '')
+        title = data.get("title", "Shorts Detected")
+        text = data.get("text", "")
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle(title)
         msg_box.setText(text)
@@ -64,8 +98,19 @@ class DialogView(QWidget):
 
     @Slot()
     def on_show_no_power(self):
+        # A custom dialog, so recorded here as the wrapper records its own.
+        record_dialog(
+            SEVERITY_ERROR,
+            NO_POWER_TITLE,
+            NO_POWER_TEXT,
+            source=PKG,
+            help_target=help_target(
+                DROPBOT_STATUS_TUTORIAL_ID, NO_POWER_DIALOG_TUTORIAL_ANCHOR
+            ),
+        )
+
         self.no_power_dialog = QDialog()
-        self.no_power_dialog.setWindowTitle("ERROR: No Power")
+        self.no_power_dialog.setWindowTitle(NO_POWER_TITLE)
         self.no_power_dialog.setFixedSize(400, 300)
 
         layout = QVBoxLayout()
@@ -80,12 +125,14 @@ class DialogView(QWidget):
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>ERROR: No Power</title>
+            <title>{NO_POWER_TITLE}</title>
         </head>
         <body>
             <h3>DropBot currently has no power supply connected.</h3>
-            <strong>Plug in power supply cable<br></strong> <img src='{power_img_path}' width="104" height="90">
-            <strong><br>Click the "Retry" button after plugging in the power cable to attempt reconnection</strong>
+            <strong>Plug in power supply cable<br></strong>
+            <img src='{power_img_path}' width="104" height="90">
+            <strong><br>Click the "Retry" button after plugging in the power
+            cable to attempt reconnection</strong>
         </body>
         </html>
         """
