@@ -240,7 +240,8 @@ def cli():
         plugins += SERVICE_PLUGINS
 
     # After the service plugins, which a GUI process defers too: deferred
-    # plugins load in list order, so a UI never runs before its service.
+    # plugins of equal priority load in list order, so a UI never runs
+    # before its service.
     if "frontend" in selected:
         plugins += DEFERRED_FRONTEND_PLUGINS
 

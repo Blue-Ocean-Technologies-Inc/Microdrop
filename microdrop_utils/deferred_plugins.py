@@ -16,15 +16,26 @@ before the window is up, and declares the dock panes the plugin will
 contribute, so placeholders with the final pane ids can be laid out with the
 window, and may name the modules the plugin imports lazily, so they can be
 imported off the GUI thread. The plugin-management loader imports, starts and
-mounts them one at a time. Qt-free; it lives in ``microdrop_utils`` because
-the run scripts, the application and ``plugin_management`` all read it.
+mounts them one at a time, in ``load_order``. Qt-free; it lives in
+``microdrop_utils`` because the run scripts, the application and
+``plugin_management`` all read it.
 """
 
 # Standard library imports.
 import importlib
 
 # Enthought library imports.
-from traits.api import Bool, Enum, HasTraits, Instance, List, Property, Str
+from traits.api import Bool, Enum, HasTraits, Instance, Int, List, Property, Str
+
+#: The priority of a deferred plugin the user should see before the others
+#: have loaded, e.g. the News section of the drawer open at start-up.
+PRIORITY_FIRST = 100
+
+
+def load_order(deferred_plugins):
+    """``deferred_plugins`` in the order they load: higher ``priority``
+    first, the declaration order otherwise."""
+    return sorted(deferred_plugins, key=lambda deferred: -deferred.priority)
 
 
 class DeferredDockPane(HasTraits):
@@ -57,6 +68,14 @@ class DeferredPlugin(HasTraits):
     #: factories). The loader imports them with the plugin's own module on a
     #: worker thread, so the GUI thread does not.
     preload_modules = List(Str)
+
+    #: Plugins load highest priority first, those of equal priority in the
+    #: order declared (``load_order``). Their order in the application
+    #: decides service and extension precedence, and a plugin needing
+    #: another (a UI its service) is declared after it, so raise it only
+    #: for a plugin that needs, and contributes ahead of, no other deferred
+    #: plugin.
+    priority = Int(0)
 
     #: The class part of ``spec``, the plugin's name until it is imported.
     class_name = Property(Str, observe="spec")

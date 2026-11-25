@@ -60,7 +60,11 @@ from microdrop_utils.broker_server_helpers import (
     load_dramatiq_worker_settings,
     redis_server_context,
 )
-from microdrop_utils.deferred_plugins import DeferredDockPane, DeferredPlugin
+from microdrop_utils.deferred_plugins import (
+    PRIORITY_FIRST,
+    DeferredDockPane,
+    DeferredPlugin,
+)
 
 # Logger import.
 from logger.plugin import LoggerPlugin
@@ -167,9 +171,13 @@ DEFERRED_FRONTEND_PLUGINS = [
         ],
     ),
     # The News section of the notifications drawer, and MicroDrop's release
-    # notes (instead of the What's New dialog at launch).
+    # notes (instead of the What's New dialog at launch). Loaded first: the
+    # drawer open at start-up leads with it. It contributes only its drawer
+    # section and its kind of notification, and needs no other deferred
+    # plugin, so loading it first changes no service or extension precedence.
     DeferredPlugin(
         spec="news.plugin:NewsPlugin",
+        priority=PRIORITY_FIRST,
         preload_modules=[
             "news.services.news_feed",
             "news.controllers.news_alerts",

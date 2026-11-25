@@ -10,8 +10,9 @@
 
 """Start the run configuration's deferred plugins once the window is up.
 
-The plugins load one after another, each in steps that leave the event loop
-free in between, so the window repaints and takes input while they load:
+The plugins load one after another, highest ``priority`` first and otherwise
+as declared (``load_order``), each in steps that leave the event loop free
+in between, so the window repaints and takes input while they load:
 
 1. A worker thread imports the plugin's module and the modules it declares
    it imports lazily (``DeferredPlugin.module_names``); the GUI thread runs
@@ -45,7 +46,7 @@ from pyface.api import GUI
 from traits.api import Bool, Event, Float, HasTraits, Instance, List
 
 # Microdrop utils imports.
-from microdrop_utils.deferred_plugins import DeferredPlugin
+from microdrop_utils.deferred_plugins import DeferredPlugin, load_order
 from microdrop_utils.gui_pacing import invoke_paced
 from microdrop_utils.isolating_plugin_manager import withdraw_plugin
 from microdrop_utils.plugin_load_status import PluginLoadStatus, summarize_exception
@@ -81,7 +82,7 @@ class DeferredPluginLoader(HasTraits):
     #: ``IsolatingPluginManager``.
     application = Instance(IApplication)
 
-    #: The plugins to load, in order.
+    #: The plugins to load, as declared; they load in ``load_order``.
     deferred_plugins = List(Instance(DeferredPlugin))
 
     #: Where every plugin's load is recorded.
@@ -122,7 +123,7 @@ class DeferredPluginLoader(HasTraits):
             return
 
         self.live_task_extensions = live_task_extensions
-        self._queue = list(self.deferred_plugins)
+        self._queue = load_order(self.deferred_plugins)
         self._started_at = time.perf_counter()
         self.running = True
 
