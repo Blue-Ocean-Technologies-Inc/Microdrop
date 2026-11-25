@@ -18,6 +18,7 @@ from traitsui.api import Action, Handler, Item, VGroup, View
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import error, information
+from notifications.consts import LOG_RECORDED_EXTRA
 from pluggable_protocol_tree.models.channel_picker_model import ChannelPickerModel
 from pluggable_protocol_tree.services.device_electrodes import (
     active_device_svg_path,
@@ -58,7 +59,10 @@ class StepPatternHandler(Handler):
         try:
             electrodes = load_device_electrodes(svg_path)
         except Exception as exc:
-            logger.error(f"Could not read device SVG {svg_path}: {exc}")
+            logger.error(
+                f"Could not read device SVG {svg_path}: {exc}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             error(
                 parent=parent,
                 title="Pick channels",

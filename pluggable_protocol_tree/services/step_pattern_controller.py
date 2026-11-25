@@ -20,6 +20,7 @@ from traits.api import Callable, HasTraits, Instance
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import error, information
+from notifications.consts import LOG_RECORDED_EXTRA
 from pluggable_protocol_tree.consts import ELECTRODE_TO_CHANNEL_KEY
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.models.step_pattern_model import StepPatternModel
@@ -75,7 +76,7 @@ class StepPatternController(HasTraits):
             with self.manager.named_edit("Fill Pattern"):
                 return self._apply(model, step_paths)
         except Exception as exc:
-            logger.exception(f"Fill Pattern failed: {exc}")
+            logger.exception(f"Fill Pattern failed: {exc}", extra=LOG_RECORDED_EXTRA)
             error(parent=parent, title="Fill Pattern", message=f"{exc}")
 
             return []
