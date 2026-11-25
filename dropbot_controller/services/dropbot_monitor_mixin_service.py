@@ -23,6 +23,9 @@ from apscheduler.triggers.interval import IntervalTrigger
 # Enthought library imports.
 from traits.api import Bool, HasTraits, Instance, Str, provides
 
+# Microdrop package imports.
+from notifications.consts import LOG_RECORDED_EXTRA
+
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -317,7 +320,10 @@ class DropbotMonitorMixinService(HasTraits):
                 publish_message(topic=NO_DROPBOT_AVAILABLE, message=str(e))
 
             except dropbot.proxy.NoPower as e:
-                logger.critical("DropBot has no power.", exc_info=True)
+                # The no-power dialog lists it in the notifications drawer.
+                logger.critical(
+                    "DropBot has no power.", exc_info=True, extra=LOG_RECORDED_EXTRA
+                )
                 publish_message(topic=NO_POWER, message=str(e))
                 self._no_power = True
 
