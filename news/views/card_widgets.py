@@ -16,6 +16,9 @@ picture preview window."""
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
 
+# Microdrop utils imports.
+from microdrop_utils.zoomable_picture_view import ZoomablePictureView
+
 # Local imports.
 from .card_style import (
     CORNER_RADIUS,
@@ -25,7 +28,6 @@ from .card_style import (
     PREVIEW_SCREEN_SHARE,
     THUMBNAIL_SIZE,
     cropped,
-    fitted,
     is_dark,
     picture_pair_cells,
     placeholder_fill,
@@ -414,7 +416,10 @@ class PicturePair(QtWidgets.QWidget):
 
 
 def show_picture_preview(pixmap, caption, parent):
-    """``pixmap`` larger, in a small window closed by a click or Esc."""
+    """``pixmap`` larger, in a resizable window that zooms and pans (see
+    ``ZoomablePictureView``), closed by Esc, its close button, or a lone
+    click while the whole picture shows. ``pixmap`` is the picture as
+    loaded, at its full resolution; only the cards show scaled copies."""
     dialog = QtWidgets.QDialog(parent)
     dialog.setWindowTitle(caption or "Picture")
     dialog.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -423,15 +428,18 @@ def show_picture_preview(pixmap, caption, parent):
         QtGui.QGuiApplication.primaryScreen()
     )
     room = screen.availableGeometry().size() * PREVIEW_SCREEN_SHARE
-    label = QtWidgets.QLabel(dialog)
-    label.setPixmap(
-        fitted(pixmap, room.width(), room.height(), dialog.devicePixelRatioF())
-    )
-    label.mouseReleaseEvent = lambda event: dialog.accept()
+    view = ZoomablePictureView(pixmap, dialog)
+    view.dismiss_requested.connect(dialog.close)
 
     layout = QtWidgets.QVBoxLayout(dialog)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.addWidget(label)
+    layout.addWidget(view)
+
+    dialog.resize(
+        pixmap.deviceIndependentSize()
+        .toSize()
+        .scaled(room, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
+    )
     dialog.show()
 
     return dialog
