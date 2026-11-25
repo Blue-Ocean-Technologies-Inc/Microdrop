@@ -22,7 +22,7 @@ from traits.api import HasTraits, Instance, observe
 from microdrop_utils.plugin_load_status import LOAD_FAILED, PluginLoadStatus
 
 # Local imports.
-from ..consts import CATEGORY_PLUGINS, SEVERITY_ERROR
+from ..consts import CATEGORY_ID_PLUGIN_LOAD_FAILED, CATEGORY_PLUGINS, SEVERITY_ERROR
 from ..models.notification_center import NotificationCenter
 
 #: Who the failure notifications come from.
@@ -70,6 +70,7 @@ class PluginLoadFailureNotifier(HasTraits):
             detail=_detail(record),
             severity=SEVERITY_ERROR,
             category=CATEGORY_PLUGINS,
+            category_id=CATEGORY_ID_PLUGIN_LOAD_FAILED,
             source=LOAD_FAILURE_SOURCE,
             key=_key(record),
         )

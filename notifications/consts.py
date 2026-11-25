@@ -9,7 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """The notifications plugin's contract: its topics and their payloads, the
-pane's section extension point, and the log-forwarding settings.
+drawer's section and category extension points, and the log-forwarding
+settings.
 
 Any plugin posts a notification by importing only this module::
 
@@ -29,12 +30,13 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 # Enthought library imports.
-from traits.api import Bool, Callable, HasTraits, Int, Str
+from traits.api import Bool, Callable, HasTraits, Instance, Int, List, Str, Tuple
 
 # Microdrop style imports.
 from microdrop_style.colors import (
     ERROR_COLOR,
     INFO_COLOR,
+    SLATE,
     SUCCESS_COLOR,
     WARNING_COLOR,
 )
@@ -80,7 +82,7 @@ SEVERITY_COLORS = {
     SEVERITY_ERROR: ERROR_COLOR,
 }
 
-#: Categories the app posts under; any other string is accepted too.
+#: Free-text groupings the app posts under; any other string is accepted too.
 CATEGORY_GENERAL = "general"
 CATEGORY_LOG = "log"
 CATEGORY_PLUGINS = "plugins"
@@ -95,11 +97,16 @@ NOTIFICATION_POST = "ui/notifications/post"
 #: (ShowNotificationsPanelRequest).
 NOTIFICATIONS_SHOW_PANEL = "ui/notifications/show_panel"
 
-LISTENER_NAME = f"{PKG}_listener"
-ACTOR_TOPIC_DICT = {LISTENER_NAME: [NOTIFICATION_POST, NOTIFICATIONS_SHOW_PANEL]}
+#: A condition that raised Needs attention cards has cleared
+#: (NotificationResolveRequest).
+NOTIFICATION_RESOLVE = "ui/notifications/resolve"
 
-#: The payload models build their validators on first use, not on import:
-#: every plugin imports this module at launch, few post at once.
+LISTENER_NAME = f"{PKG}_listener"
+ACTOR_TOPIC_DICT = {
+    LISTENER_NAME: [NOTIFICATION_POST, NOTIFICATIONS_SHOW_PANEL, NOTIFICATION_RESOLVE]
+}
+
+#: Payload validators build on first use: every plugin imports this at launch.
 _DEFERRED_BUILD = ConfigDict(defer_build=True)
 
 
@@ -137,8 +144,42 @@ NotificationAction = Annotated[
 ]
 
 
+class HelpAction(BaseModel):
+    """A link-styled second button opening help on what to do. With no
+    first button it is the card's one control."""
+
+    model_config = _DEFERRED_BUILD
+
+    kind: Literal["help"] = "help"
+
+    #: The link's text.
+    label: str = "How do I…?"
+
+    #: What help to open, e.g. a tutorial's title; whoever opens help
+    #: decides how. While nothing can open help the link is disabled.
+    target: str = Field(min_length=1)
+
+
+class SnoozeAction(BaseModel):
+    """A quiet second button moving the card out of Needs attention, into
+    Activity, still to do."""
+
+    model_config = _DEFERRED_BUILD
+
+    kind: Literal["snooze"] = "snooze"
+
+    label: str = "Later"
+
+
+#: What a notification's second button does, as data.
+SecondaryAction = Annotated[
+    Union[HelpAction, SnoozeAction], Field(discriminator="kind")
+]
+
+
 class NotificationMessage(BaseModel):
-    """One notification, as posted on NOTIFICATION_POST."""
+    """One notification, as posted on NOTIFICATION_POST. Every field past
+    ``action`` is optional; a message without them behaves as before."""
 
     model_config = _DEFERRED_BUILD
 
@@ -162,6 +203,25 @@ class NotificationMessage(BaseModel):
 
     action: NotificationAction | None = None
 
+    #: The second, quieter button: a help link or "Later".
+    secondary_action: SecondaryAction | None = None
+
+    #: The user has to do something: listed under Needs attention, kept by
+    #: Clear all, and its toast stays until acted on or dismissed.
+    needs_attention: bool = False
+
+    #: The declared category (NOTIFICATION_CATEGORIES) it belongs to, e.g.
+    #: "protocol.step_completed"; empty, it is uncategorised.
+    category_id: str = ""
+
+    #: Posts with the same thread id update one entry in place, its state
+    #: replaced whole and counted once, e.g. a run's step progress.
+    thread_id: str = ""
+
+    #: The condition that raised it, e.g. "dropbot.chip_missing": a
+    #: NOTIFICATION_RESOLVE naming it clears the card, no button pressed.
+    condition_id: str = ""
+
 
 class ShowNotificationsPanelRequest(BaseModel):
     """Show the notifications pane, expanding ``section_id`` if given."""
@@ -171,27 +231,177 @@ class ShowNotificationsPanelRequest(BaseModel):
     section_id: str = ""
 
 
+class NotificationResolveRequest(BaseModel):
+    """The condition behind Needs attention cards has cleared: they leave
+    Needs attention, read, marked with ``resolution``."""
+
+    model_config = _DEFERRED_BUILD
+
+    #: The cards' ``condition_id``.
+    condition_id: str = Field(min_length=1)
+
+    #: What cleared it, shown on the cards, e.g. "Chip detected".
+    resolution: str = "Resolved"
+
+
 notification_publisher = ValidatedTopicPublisher(
     topic=NOTIFICATION_POST, validator_class=NotificationMessage
 )
 show_notifications_panel_publisher = ValidatedTopicPublisher(
     topic=NOTIFICATIONS_SHOW_PANEL, validator_class=ShowNotificationsPanelRequest
 )
+notification_resolve_publisher = ValidatedTopicPublisher(
+    topic=NOTIFICATION_RESOLVE, validator_class=NotificationResolveRequest
+)
 
 # ---------------------------------------------------------------------------
-# Extension point: sections shown above the notifications, e.g. the plugin
-# loading list. Contributors import only this module.
+# Extension point: the kinds of notification each plugin posts, for the
+# user to choose per kind: kept in the drawer, popping up, and its tone.
+# ---------------------------------------------------------------------------
+NOTIFICATION_CATEGORIES = f"{PKG}.categories"
+
+#: The tones a category can play, weakest first.
+TONE_NONE = "none"
+TONE_SOFT = "soft"
+TONE_CONNECTED = "connected"
+TONE_DISCONNECTED = "disconnected"
+TONE_ALERT = "alert"
+TONE_COMPLETION = "completion"
+TONES = (
+    TONE_NONE,
+    TONE_SOFT,
+    TONE_CONNECTED,
+    TONE_DISCONNECTED,
+    TONE_ALERT,
+    TONE_COMPLETION,
+)
+
+#: How each tone is named in the settings.
+TONE_LABELS = {
+    TONE_NONE: "None",
+    TONE_SOFT: "Soft",
+    TONE_CONNECTED: "Connected",
+    TONE_DISCONNECTED: "Disconnected",
+    TONE_ALERT: "Alert",
+    TONE_COMPLETION: "Completion",
+}
+
+
+class NotificationCategorySpec(BaseModel):
+    """A kind of notification, as its owner declares it in its consts.py,
+    with the defaults the user may change.
+
+    A plugin contributes its specs with
+    ``List(SPECS, contributes_to=NOTIFICATION_CATEGORIES)`` and names one in
+    a message's ``category_id``.
+    """
+
+    model_config = _DEFERRED_BUILD
+
+    #: Unique id messages name, e.g. "protocol.step_completed".
+    id: str = Field(min_length=1)
+
+    #: The owner, as the settings group it: "Protocol".
+    group: str = Field(min_length=1)
+
+    #: What it is, short: "Step completed".
+    label: str = Field(min_length=1)
+
+    #: One line on when it is posted.
+    description: str = ""
+
+    #: Defaults: kept in the drawer, popping up, and the tone it plays.
+    drawer: bool = True
+    popup: bool = True
+    tone: Literal[TONES] = TONE_NONE
+
+    #: Always kept in the drawer: the user cannot turn that off.
+    critical: bool = False
+
+
+#: This plugin's own kinds of notification.
+CATEGORY_ID_LOG = f"{PKG}.log"
+CATEGORY_ID_PLUGIN_LOAD_FAILED = f"{PKG}.plugin_load_failed"
+CATEGORIES_GROUP = "MicroDrop"
+
+NOTIFICATIONS_CATEGORIES = [
+    NotificationCategorySpec(
+        id=CATEGORY_ID_LOG,
+        group=CATEGORIES_GROUP,
+        label="Warnings and errors in the log",
+        description="Anything the app logs as a warning or an error.",
+        popup=True,
+        tone=TONE_ALERT,
+    ),
+    NotificationCategorySpec(
+        id=CATEGORY_ID_PLUGIN_LOAD_FAILED,
+        group=CATEGORIES_GROUP,
+        label="Plugin load failures",
+        description="A plugin could not start.",
+        tone=TONE_ALERT,
+        critical=True,
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# Extension point: sections of the drawer's column, between Needs attention
+# and Activity, e.g. the plugin loading list. Contributors import only this
+# module.
 # ---------------------------------------------------------------------------
 NOTIFICATION_SECTIONS = f"{PKG}.sections"
 
+#: The drawer's own sections: what needs the user, then everything else.
+#: NOTIFICATIONS_SHOW_PANEL may name them too.
+ATTENTION_SECTION_ID = f"{PKG}.attention"
+HISTORY_SECTION_ID = f"{PKG}.history"
+
+#: A contributed section's look when it sets none: a slate puzzle piece.
+DEFAULT_SECTION_GLYPH = "widgets"
+DEFAULT_SECTION_ACCENT = (SLATE["light"], SLATE["dark"])
+
+
+class SectionAlert(HasTraits):
+    """Something new in a section, e.g. a news post: it pops up as a toast,
+    counts on the bell and is marked new, but is never listed in Activity.
+
+    The contributor appends it to its section's ``alerts``; the drawer keeps
+    ``unread`` and ``is_new`` current, for the contributor's own "new"
+    marks. A click on its toast opens the drawer on the section and asks
+    the section for the alert's widget (``NotificationSection.alert_widget``)
+    to scroll to.
+    """
+
+    #: Unique within the section, e.g. the post's id.
+    key = Str()
+
+    title = Str()
+    detail = Str()
+
+    #: Who it is from, shown on its toast.
+    source = Str()
+
+    #: The toast's stripe ``(light theme, dark theme)``; the section's
+    #: accent when empty.
+    accent = Tuple()
+
+    #: The declared category it belongs to, for its pop-up and tone.
+    category_id = Str()
+
+    #: Not seen yet in the open drawer with its section expanded.
+    unread = Bool(True)
+
+    #: Seen in the drawer open now: marked new until it closes.
+    is_new = Bool(False)
+
 
 class NotificationSection(HasTraits):
-    """A collapsible section at the top of the notifications pane.
+    """A collapsible section of the drawer's scrolling column.
 
     Its contents are built the first time the section is expanded, by
     ``factory(parent)``, which returns a QWidget or a TraitsUI ``UI`` (from
     ``edit_traits(kind="subpanel", parent=parent)``); a UI is disposed with
-    the pane.
+    the drawer's contents. They show at their natural height: lists and
+    tables in them grow to all their rows, the column scrolls instead.
     """
 
     #: Unique id; NOTIFICATIONS_SHOW_PANEL names a section by it.
@@ -200,7 +410,7 @@ class NotificationSection(HasTraits):
     #: The section header, e.g. "Plugins".
     title = Str()
 
-    #: One line beside the title, kept current by the contributor.
+    #: One line beside the title, in a chip; kept current by the contributor.
     summary = Str()
 
     #: Sections sort by this, lowest first.
@@ -215,54 +425,43 @@ class NotificationSection(HasTraits):
     #: ``factory(parent)`` -> QWidget or TraitsUI UI.
     factory = Callable()
 
+    #: The header's glyph (a Material Symbols ligature).
+    glyph = Str(DEFAULT_SECTION_GLYPH)
+
+    #: The header's accent ``(light theme, dark theme)``: its glyph disc,
+    #: its chip, and its alerts' toasts.
+    accent = Tuple(DEFAULT_SECTION_ACCENT)
+
+    #: A wide brand mark (a picture's path) shown instead of the glyph.
+    logo = Str()
+
+    #: What is new in the section: see SectionAlert.
+    alerts = List(Instance(SectionAlert))
+
     def _max_height_default(self):
         return SECTION_MAX_HEIGHT
 
+    def alert_widget(self, contents, alert):
+        """The widget inside ``contents`` (what ``factory`` built) showing
+        ``alert``, opened up as need be, for the drawer to scroll to and
+        highlight; None if there is none. Override to support reveal."""
+        return None
+
 
 # ---------------------------------------------------------------------------
-# Drawer, entries and status-bar bell
+# Entries
 # ---------------------------------------------------------------------------
-#: Object name of the drawer widget, for style sheets and tests.
-DRAWER_OBJECT_NAME = f"{PKG}.drawer"
-
-#: Width (px) of the open drawer; a narrower window gets a drawer as wide as
-#: itself.
-DRAWER_WIDTH = 400
-
-#: Space (px) between the drawer's edges and its contents.
-DRAWER_PADDING_PX = 6
-
-#: Opacity (0-1) of the drawer's background behind the cards, which lets
-#: what lies beneath show faintly; 1.0 makes it opaque. The header, the
-#: sections and the cards are always opaque.
-DRAWER_OPACITY = 0.92
-
-#: Repaints per second of what lies beneath the drawer (a camera feed, a
-#: live plot) past which the open drawer turns opaque until closed: a
-#: translucent drawer is repainted with whatever is beneath it.
-DRAWER_BACKDROP_PAINTS_PER_S = 4
-
-#: Whether a click in the main window outside the drawer closes it. The
-#: click is then used up, so it never also actuates what lies beneath.
-DRAWER_CLOSES_ON_CLICK_OUTSIDE = True
-
-#: Duration (ms) of the drawer's slide in from the right; 0 opens it at once.
-DRAWER_SLIDE_MS = 160
-
 #: Entries kept for the session; the oldest go first.
 MAX_ENTRIES = 300
+
+#: Width (px) of the drawer when first opened; the user drags its edge.
+DRAWER_WIDTH = 400
 
 #: Characters of a notification's first line shown as its title.
 TITLE_MAX_CHARS = 160
 
-#: How often (ms) the shown list repaints its relative times ("2 min ago").
-TIME_REFRESH_MS = 30_000
-
-#: Most pixels an expanded detail takes before it scrolls.
-DETAIL_MAX_HEIGHT = 240
-
-#: Most pixels an expanded section takes before it scrolls.
-SECTION_MAX_HEIGHT = 300
+#: Most pixels a contributed section's contents take before they scroll.
+SECTION_MAX_HEIGHT = 0
 
 # ---------------------------------------------------------------------------
 # Log records forwarded as notifications

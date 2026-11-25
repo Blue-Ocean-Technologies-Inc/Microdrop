@@ -8,9 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The drawer's requests turned into changes: read, clear, dismiss, run an
-entry's action, and open or close the drawer. Qt-free: the drawer follows
-the model's ``is_open``."""
+"""The drawer's requests turned into changes: read, clear, dismiss, a card's
+buttons, and opening or closing the drawer. Qt-free: the views follow the
+model."""
 
 # Enthought library imports.
 from traits.api import Callable, HasTraits, Instance, observe
@@ -19,7 +19,14 @@ from traits.api import Callable, HasTraits, Instance, observe
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
-from ..consts import PKG, SEVERITY_ERROR, OpenPathAction, PublishAction
+from ..consts import (
+    PKG,
+    SEVERITY_ERROR,
+    HelpAction,
+    OpenPathAction,
+    PublishAction,
+    SnoozeAction,
+)
 from ..models.notifications_pane_model import NotificationsPaneModel
 
 # Logger import.
@@ -39,6 +46,10 @@ class NotificationsController(HasTraits):
 
     #: ``open_path(path)`` for an OpenPathAction.
     open_path = Callable()
+
+    #: ``open_help(target)`` for a HelpAction; None while nothing can open
+    #: help, which disables the help links.
+    open_help = Callable()
 
     def _open_path_default(self):
         # Imported on first use: it brings webbrowser with it.
@@ -63,52 +74,110 @@ class NotificationsController(HasTraits):
         self.pane_model.is_open = True
 
     # ------------------------------------------------------------------ #
-    # Reactions                                                           #
+    # The header's buttons                                                #
     # ------------------------------------------------------------------ #
 
     @observe("pane_model:mark_all_read_button")
     def _mark_all_read(self, event):
-        self.pane_model.center.mark_all_read()
+        """Read everything, and drop the open drawer's "new" marks too."""
+        center = self.pane_model.center
+        marked = [entry for entry in center.entries if entry.unread or entry.is_new]
+
+        center.update_all(marked, unread=False, is_new=False)
 
     @observe("pane_model:clear_all_button")
     def _clear_all(self, event):
         self.pane_model.center.clear()
 
+    @observe("pane_model:close_button")
+    def _close(self, event):
+        self.pane_model.is_open = False
+
     @observe("pane_model:dismiss")
     def _dismiss(self, event):
         self.pane_model.center.dismiss(event.new)
 
+    # ------------------------------------------------------------------ #
+    # A card's buttons                                                    #
+    # ------------------------------------------------------------------ #
+
     @observe("pane_model:run_action")
     def _run_action(self, event):
-        action = event.new.action
+        """Do what the button says; the card then counts as handled: read,
+        out of Needs attention, its buttons replaced by what was done."""
+        entry = event.new
+        action = entry.action
+
+        # Handled first, so its toast has left before any answer arrives.
+        entry.trait_set(acted=action.label, needs_attention=False, unread=False)
 
         if isinstance(action, PublishAction):
             # The topic is the poster's, so it has no validated publisher here.
             self.publish(topic=action.topic, message=action.message)
 
         elif isinstance(action, OpenPathAction):
-            try:
-                self.open_path(action.path)
+            self._open(action.path)
 
-            # Shown where the user pressed the button; the log forwarder
-            # skips this plugin's own records.
-            except OSError as error:
-                logger.error(f"Could not open {action.path}: {error}")
-                self.pane_model.center.post(
-                    f"Could not open {action.path}",
-                    detail=str(error),
-                    severity=SEVERITY_ERROR,
-                    source=PKG,
-                )
+    @observe("pane_model:run_secondary_action")
+    def _run_secondary_action(self, event):
+        entry = event.new
+        action = entry.secondary_action
 
-    @observe("pane_model:close_button")
-    def _close(self, event):
-        self.pane_model.is_open = False
+        # Help: read, yet still to do, so it stays in Needs attention until
+        # dismissed or its condition clears.
+        if isinstance(action, HelpAction) and self.open_help is not None:
+            entry.unread = False
+            self.open_help(action.target)
 
+        # Later: out of Needs attention, into Activity, still to do.
+        elif isinstance(action, SnoozeAction):
+            entry.trait_set(needs_attention=False, unread=False)
+
+    @observe("open_help")
+    def _follow_help_handler(self, event):
+        self.pane_model.help_available = self.open_help is not None
+
+    def _open(self, path):
+
+        try:
+            self.open_path(path)
+
+        # Shown where the user pressed the button; the log forwarder skips
+        # this plugin's own records.
+        except OSError as error:
+            logger.error(f"Could not open {path}: {error}")
+            self.pane_model.center.post(
+                f"Could not open {path}",
+                detail=str(error),
+                severity=SEVERITY_ERROR,
+                source=PKG,
+            )
+
+    # ------------------------------------------------------------------ #
+    # Reading                                                             #
+    # ------------------------------------------------------------------ #
+
+    # Events and plain traits, not a count: a count changed again while its
+    # change is announced can leave later observers stale (#1134).
     @observe("pane_model:is_open")
-    @observe("pane_model:center:unread_count")
+    @observe("pane_model:center:[arrived, repeated]")
     def _read_while_open(self, event):
-        """What arrives while the drawer is open counts as seen."""
+        """Opening the drawer marks the unread entries seen, and new until it
+        closes; what arrives while it is open is new too. Closing it drops
+        the marks."""
+        center = self.pane_model.center
+        is_open = self.pane_model.is_open
 
-        if self.pane_model.is_open:
-            self.pane_model.center.mark_all_read()
+        if event.name != "is_open":
+            if is_open and event.new.unread:
+                event.new.trait_set(is_new=True, unread=False)
+
+            return
+
+        if is_open:
+            unread = [entry for entry in center.entries if entry.unread]
+            center.update_all(unread, is_new=True, unread=False)
+
+        else:
+            marked = [entry for entry in center.entries if entry.is_new]
+            center.update_all(marked, is_new=False)

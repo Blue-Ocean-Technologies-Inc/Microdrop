@@ -35,6 +35,7 @@ from pyface.api import GUI
 
 # Local imports.
 from ..consts import (
+    CATEGORY_ID_LOG,
     CATEGORY_LOG,
     LOG_BUFFER_LIMIT,
     LOG_CHUNK_PAUSE_MS,
@@ -143,6 +144,7 @@ def post_arguments(item):
         "detail": detail,
         "severity": severity,
         "category": CATEGORY_LOG,
+        "category_id": CATEGORY_ID_LOG,
         "source": snapshot["name"],
         "timestamp": snapshot["created"],
         "key": snapshot["key"],
