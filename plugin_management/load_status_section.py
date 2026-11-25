@@ -52,16 +52,14 @@ class PluginLoadStatusSection(NotificationSection):
         return self.build_contents
 
     def build_contents(self, parent):
-        """The load-status panel's view, embedded, first failure selected."""
-        from .load_status_view import PluginLoadStatusView
+        """The records' table and the selected plugin's details, first
+        failure selected."""
+        from .load_status_table import PluginLoadStatusSectionContents
 
         model = PluginLoadStatusPanelModel(status=self.status)
-        ui = model.edit_traits(
-            view=PluginLoadStatusView, kind="subpanel", parent=parent
-        )
         model.select_first_failure()
 
-        return ui
+        return PluginLoadStatusSectionContents(model, parent)
 
     @observe("status.summary")
     def _follow_summary(self, event):
