@@ -29,15 +29,64 @@ from traits.api import (
 )
 
 # Local imports.
-from ..consts import DRAWER_WIDTH, SEVERITIES, NotificationSection
+from ..consts import DRAWER_WIDTH, SEVERITIES, SEVERITY_ERROR, NotificationSection
 from .notification import Notification
 from .notification_center import NotificationCenter
-from .own_sections import FILTERS
+from .own_sections import ATTENTION_ACCENT, FILTERS
 from .toasts import ToastStackModel
 
 #: The bell's "severity" while it counts only section alerts (new posts):
 #: below info, drawn in the newest alert's accent.
 ALERT_SEVERITY = "alert"
+
+
+def bell_summary(entries, shown):
+    """What the bell shows: ``(count, severity, accent, attention, new)``.
+
+    Needs attention entries are outstanding work: each counts until it is
+    resolved, acted on or dismissed, read or not. Every other entry (a
+    section's alert included, unless it is not ``counted``) counts while
+    unread and not on screen as a toast (``shown``: their ids), so a toast
+    landing in the bell adds to the count.
+
+    The colour: red when an unread error counts; else the Needs attention
+    orange (ALERT_SEVERITY with ATTENTION_ACCENT) while anything needs
+    attention; else the worst unread severity; else the last section
+    alert's accent; "" when nothing counts.
+    """
+    attention = [entry for entry in entries if entry.needs_attention]
+    new = [
+        entry
+        for entry in entries
+        if not entry.needs_attention
+        and entry.unread
+        and id(entry) not in shown
+        and getattr(entry.alert, "counted", True)
+    ]
+    unread_errors = [
+        entry
+        for entry in [*attention, *new]
+        if entry.unread and entry.severity == SEVERITY_ERROR and not entry.section_id
+    ]
+    levels = [SEVERITIES.index(e.severity) for e in new if not e.section_id]
+    alerts = [entry for entry in new if entry.section_id]
+
+    if unread_errors:
+        severity, accent = SEVERITY_ERROR, ()
+
+    elif attention:
+        severity, accent = ALERT_SEVERITY, ATTENTION_ACCENT
+
+    elif levels:
+        severity, accent = SEVERITIES[max(levels)], ()
+
+    elif alerts:
+        severity, accent = ALERT_SEVERITY, alerts[-1].accent
+
+    else:
+        severity, accent = "", ()
+
+    return len(attention) + len(new), severity, accent, len(attention), len(new)
 
 
 class NotificationsPaneModel(HasTraits):
@@ -98,10 +147,13 @@ class NotificationsPaneModel(HasTraits):
     #: unread until seen in the open drawer, new until it closes.
     section_alerts = List(Instance(Notification))
 
-    #: The bell's count: unread entries and alerts not on screen as toasts,
-    #: so a toast landing in the bell ticks it up. Plain traits, recounted
-    #: here (#1134).
+    #: The bell's count (``bell_summary``): the Needs attention entries not
+    #: yet resolved, read or not, and the other unread entries and alerts
+    #: not on screen as toasts; and those two parts, for its tooltip.
+    #: Plain traits, recounted here (#1134).
     bell_count = Int(0)
+    bell_attention = Int(0)
+    bell_new = Int(0)
 
     #: The most urgent severity counted; ALERT_SEVERITY when only alerts
     #: are, then in ``bell_accent``; "" when nothing is.
@@ -139,28 +191,19 @@ class NotificationsPaneModel(HasTraits):
     # ------------------------------------------------------------------ #
 
     @observe("center:[unread_count, unread_severity, bulk_changed]")
+    @observe("center:entries.items")
+    @observe("center:entries:items:needs_attention")
     @observe("toasts:items.items")
     @observe("section_alerts.items.unread")
     def _recount_bell(self, event):
         shown = set(map(id, self.toasts.entries_shown()))
         entries = [*self.center.entries, *self.section_alerts]
-        counted = [
-            e
-            for e in entries
-            if e.unread and id(e) not in shown and getattr(e.alert, "counted", True)
-        ]
-        levels = [SEVERITIES.index(e.severity) for e in counted if not e.section_id]
-        alerts = [e for e in counted if e.section_id]
-
-        if levels:
-            severity, accent = SEVERITIES[max(levels)], ()
-
-        elif alerts:
-            severity, accent = ALERT_SEVERITY, alerts[-1].accent
-
-        else:
-            severity, accent = "", ()
+        count, severity, accent, attention, new = bell_summary(entries, shown)
 
         self.trait_set(
-            bell_count=len(counted), bell_severity=severity, bell_accent=accent
+            bell_count=count,
+            bell_severity=severity,
+            bell_accent=accent,
+            bell_attention=attention,
+            bell_new=new,
         )

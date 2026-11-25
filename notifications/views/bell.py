@@ -232,6 +232,20 @@ class NotificationBellIcon(QtWidgets.QWidget):
         super().mousePressEvent(event)
 
 
+def bell_tooltip_counts(model):
+    """The bell's counts in words, e.g. "2 need attention · 3 new"."""
+    parts = []
+
+    if model.bell_attention:
+        verb = "needs" if model.bell_attention == 1 else "need"
+        parts.append(f"{model.bell_attention} {verb} attention")
+
+    if model.bell_new:
+        parts.append(f"{model.bell_new} new")
+
+    return " \u00b7 ".join(parts) or "nothing new"
+
+
 class NotificationBellIndicator(HasTraits):
     """Keeps the bell in step with the model's bell count."""
 
@@ -249,9 +263,12 @@ class NotificationBellIndicator(HasTraits):
         widget = NotificationBellIcon()
         widget.theme_changed.connect(self._queue_refresh)
 
+        # Its first paint shows what was posted before it was built.
+        self._queue_refresh()
+
         return widget
 
-    @observe("pane_model.[bell_count, bell_severity]")
+    @observe("pane_model.[bell_count, bell_severity, bell_attention, bell_new]")
     @observe("pane_model:toasts:quiet")
     def _queue_refresh(self, event=None):
         """Show the count once the current changes are done, never in the
@@ -280,11 +297,7 @@ class NotificationBellIndicator(HasTraits):
 
         self._shown = count
 
-        if count:
-            tooltip = f"Notifications: {count} new. Click to show them."
-
-        else:
-            tooltip = "Notifications: nothing new. Click to show them."
+        tooltip = f"Notifications: {bell_tooltip_counts(model)}. Click to show them."
 
         if quiet:
             tooltip += (
