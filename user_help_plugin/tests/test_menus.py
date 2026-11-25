@@ -41,6 +41,8 @@ from ..plugin import UserHelpPlugin, tutorial_sort_key
 
 PAGE = Path(__file__).resolve()
 
+PLUGIN_MODULE = "user_help_plugin.plugin"
+
 #: The Help plugin's own pages, as the Tutorials submenu orders them.
 OWN_TUTORIAL_TITLES = [GETTING_STARTED_TUTORIAL_TITLE, HELP_LOGS_STORAGE_TUTORIAL_TITLE]
 
@@ -79,8 +81,30 @@ def _entry(title, **traits):
     return TutorialEntry(title=title, path=PAGE, **traits)
 
 
+class _Recorder:
+    def __init__(self):
+        self.payloads = []
+
+    def publish(self, payload):
+        self.payloads.append(payload)
+
+
 @pytest.fixture
-def help_plugin(monkeypatch):
+def availability(monkeypatch):
+    """The plugin's announcements, recorded instead of sent, and no listener
+    made: no Redis is needed."""
+    recorder = _Recorder()
+    monkeypatch.setattr(f"{PLUGIN_MODULE}.help_availability_publisher", recorder)
+    monkeypatch.setattr(
+        f"{PLUGIN_MODULE}.generate_class_method_dramatiq_listener_actor",
+        lambda **kwargs: None,
+    )
+
+    return recorder.payloads
+
+
+@pytest.fixture
+def help_plugin(monkeypatch, availability):
     """A started Help plugin in an otherwise empty application."""
     # An envisage Application installs its preferences as the process-wide
     # default node; restore it so later PreferencesHelper tests don't share it.
@@ -93,6 +117,19 @@ def help_plugin(monkeypatch):
     yield plugin
 
     application.stop()
+
+
+def test_help_is_announced_at_start_and_withdrawn_at_stop(monkeypatch, availability):
+    monkeypatch.setattr(package_globals, "_default_preferences", None)
+    application = Application(plugins=[UserHelpPlugin()])
+
+    application.start()
+
+    assert availability == [{"available": True}]
+
+    application.stop()
+
+    assert availability == [{"available": True}, {"available": False}]
 
 
 def test_help_group_holds_the_tutorials_submenu():
