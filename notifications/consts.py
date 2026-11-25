@@ -474,18 +474,13 @@ LOG_MIN_LEVEL = logging.WARNING
 #: Routine lines logged above INFO, and failures the plugin load records
 #: already report (as a "failed to load" notification), go here.
 LOG_IGNORE_RULES = (
-    # Logged at CRITICAL on every launch.
-    ("microdrop_application.application", r"Application Initialized"),
     # A saved layout naming a pane whose plugin loads later or is disabled.
     ("pyface.ui.qt.tasks.main_window_layout", r"Cannot retrieve dock widget"),
-    # Start-up order: the device viewer publishes before its SVG is in.
-    ("device_viewer.models.main_model", r"Unable to push svg filename"),
-    (
-        "device_viewer.controllers.device_viewer_publish_controller",
-        r"Unable to publish device view model yet|Publishing calibration message",
-    ),
     # Recorded in the plugin load status, which posts them itself.
     ("microdrop_utils.isolating_plugin_manager", r"Plugin \S+ failed to start"),
+    ("microdrop_utils.deferred_content", r".* could not be built"),
+    ("plugin_management.deferred_loader", r"Deferred plugin \S+ failed to import"),
+    ("plugin_management.deferred_loader", r"Deferred plugin \S+ could not be added"),
 )
 
 #: Records arriving within this many milliseconds reach the pane together.
