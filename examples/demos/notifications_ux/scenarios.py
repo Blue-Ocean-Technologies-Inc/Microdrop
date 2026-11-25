@@ -544,7 +544,7 @@ EARLIER_ENTRIES = [
         30,
         "MicroDrop updated to v1.47.0",
         {
-            "detail": "See What's new under News.",
+            "detail": "See Releases under News.",
             "severity": SEVERITY_INFO,
             "category": "general",
             "source": "app_updates",

@@ -10,8 +10,8 @@
 
 
 """The News section's contents in the drawer's column: the feed's status
-line, then one sub-section per group (Top stories, What's new,
-Newsletters, Announcements, Updates), at natural height."""
+line, then one sub-section per group (Top stories, Releases,
+Sci-Bots Dispense, Announcements, Updates), at natural height."""
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtWidgets

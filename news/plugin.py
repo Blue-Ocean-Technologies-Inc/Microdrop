@@ -21,7 +21,7 @@ What has been seen is kept in ``news_state.json`` in the notifications data
 folder (``notifications.consts.notifications_data_dir``).
 
 While this plugin is loaded, MicroDrop does not open its What's New dialog
-at launch: the release notes are the What's new sub-section and its toast.
+at launch: the release notes are the Releases sub-section and its toast.
 
 Add a post by editing ``news/resources/feed.json`` by hand; it is validated
 by ``news/resources/feed.schema.json``, which describes every field.

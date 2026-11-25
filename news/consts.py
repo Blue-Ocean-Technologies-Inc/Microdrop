@@ -66,11 +66,11 @@ NEWS_SECTION_LOGO = str(BLUE_OCEAN_SCI_BOTS_MARKS)
 #: Who a post is from when it does not say: the feed file is Sci-Bots'.
 NEWS_DEFAULT_SOURCE = "Sci-Bots"
 
-#: The feed group holding MicroDrop's release notes ("What's new").
+#: The feed group holding MicroDrop's release notes ("Releases").
 RELEASES_GROUP_ID = "releases"
 
 #: Titles of a launch's two toasts: the release, and the other new posts.
-RELEASE_TOAST_TEMPLATE = "MicroDrop v{version} · what's new"
+RELEASE_TOAST_TEMPLATE = "MicroDrop v{version} · release notes"
 SUMMARY_TOAST_TEMPLATE = "{count} new posts from {source}"
 
 #: The summary toast names this many of the new posts' titles.
