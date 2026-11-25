@@ -10,7 +10,7 @@
 
 # Enthought library imports.
 from envisage.api import PREFERENCES_CATEGORIES, PREFERENCES_PANES
-from traits.api import List
+from traits.api import Any, List
 
 # Microdrop package imports.
 from template_status_and_controls.base_plugin import BaseStatusPlugin
@@ -22,6 +22,7 @@ from .consts import (
     DROPBOT_STATUS_TUTORIAL_HTML_PATH,
     PKG,
     PKG_name,
+    listener_name,
 )
 
 
@@ -36,6 +37,46 @@ class DropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
     #: Help > Tutorials entries for this plugin's pane.
     tutorials = List(contributes_to=TUTORIALS)
+
+    #: The status model, its preferences, the dialog signals and the message
+    #: listener, made at start: the listener's routes are registered at
+    #: launch, so it must exist before any routed message arrives, not wait
+    #: for the pane. The pane builds its view against these.
+    status_preferences = Any()
+    status_model = Any()
+    dialog_signals = Any()
+    message_handler = Any()
+
+    def start(self):
+        """Make the Qt-free status model and its message listener; the model
+        gets its preferences first, as a message handled on a worker thread
+        reads them (#1091)."""
+        from .message_handler import (
+            DialogSignals,
+            DropbotStatusAndControlsMessageHandler,
+        )
+        from .model import DropbotStatusAndControlsModel
+        from .preferences import DropbotStatusAndControlsPreferences
+
+        self.status_preferences = DropbotStatusAndControlsPreferences(
+            preferences=self.application.preferences_helper.preferences
+        )
+        self.status_model = DropbotStatusAndControlsModel(
+            preferences=self.status_preferences
+        )
+        self.dialog_signals = DialogSignals()
+        self.message_handler = DropbotStatusAndControlsMessageHandler(
+            model=self.status_model,
+            dialog_signals=self.dialog_signals,
+            name=listener_name,
+        )
+
+    def stop(self):
+        """Release the message listener, so a restart can register it anew."""
+
+        if self.message_handler is not None:
+            self.message_handler.teardown()
+            self.message_handler = None
 
     def _get_dock_pane_class(self):
         from .dock_pane import DropbotStatusAndControlsDockPane
