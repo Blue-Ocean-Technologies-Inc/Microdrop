@@ -809,7 +809,7 @@ notification_publisher.publish({
 })
 ```
 
-Every field after `action` is optional and defaults to "not set", so messages posted before they existed validate unchanged. `action` is data, never a callable: `{"kind": "publish", "label", "topic", "message"}` publishes `message` on `topic`, `{"kind": "open_path", "label", "path"}` opens a file or folder. `secondary_action` is `{"kind": "help", "label", "target"}` (a link; with no `action` the card's one outlined button; disabled with a tooltip while nothing in the app can open help) or `{"kind": "snooze", "label"}` ("Later": out of Needs attention, into Activity). Pressing `action` marks the card handled: read, out of Needs attention, its buttons replaced by the label.
+Every field after `action` is optional and defaults to "not set", so messages posted before they existed validate unchanged. `action` is data, never a callable: `{"kind": "publish", "label", "topic", "message"}` publishes `message` on `topic`, `{"kind": "open_path", "label", "path"}` opens a file or folder. `secondary_action` is `{"kind": "help", "label", "target"}` (a link; with no `action` the card's one outlined button). Its `target` names a tutorial, `"<tutorial id>"` or `"<tutorial id>#<section id>"` (`help_target` builds it, e.g. `"dropbot_status#part-tools"`); pressing it publishes OPEN_TUTORIAL. It is disabled, with a tooltip, until the help plugin announces on HELP_AVAILABILITY that tutorials can be opened or `{"kind": "snooze", "label"}` ("Later": out of Needs attention, into Activity). Pressing `action` marks the card handled: read, out of Needs attention, its buttons replaced by the label.
 
 **Receiving** — `NotificationsMessageHandler._on_post_triggered` validates on the worker thread and hands the message to `NotificationCenter.post_message` with `GUI.invoke_later`. A notification with the same `(source, category, severity, title)` as a listed one collapses into it (count + 1, latest text and time, moved to the top, unread again); one with a `thread_id` replaces its thread's entry state whole, counted once. A category the user keeps out of the drawer is not recorded, unless it is an error or needs attention. The session keeps `MAX_ENTRIES` (300); the oldest go first; Clear all keeps Needs attention. Nothing persists across launches.
 
@@ -858,4 +858,16 @@ dropbot/signals/self_tests_progress  SESSION_END {status}
 Every post: as the calibration reminder (warning, Needs attention, `pop_up` False, the same category), `thread_id` `dropbot_tools_menu.self_test_reminder`, `condition_id` `dropbot_tools_menu.self_test_needed`, help link "What does it check?" (target "DropBot self tests"). While a DropBot is connected (`DropbotToolsMenuPlugin.dropbot_connected`), the card also has the button "Run self test", publishing RUN_SELF_TESTS_REQUEST; without one it is help-only and says to connect a DropBot first. The card is re-posted quietly through its thread whenever the connection changes.
 
 - RUN_SELF_TESTS_REQUEST "ui/dropbot_tools_menu/run_self_tests" — run all the DropBot self tests exactly as Tools › Dropbot › Run all on-board self-tests does (`run_self_tests`: nothing but a "disconnected" dialog without a DropBot; the "insert the test board" dialog first; then RUN_ALL_TESTS with the user data folder for the report). Handled on the frontend by `dropbot_tools_menu` (its listener, then `GUI.invoke_later`). Payload `RunSelfTestsRequest` (no fields; `{}`), via `run_self_tests_request_publisher`. The time is kept once for any board: the frontend has no stable id for the connected DropBot.
+
+### Anyone → user_help_plugin: opening a tutorial by id
+
+- OPEN_TUTORIAL "ui/help/open_tutorial" — open a tutorial as Help › Tutorials does (the same `tutorial_action`), scrolled to a section when `anchor` names one (an `id` in the page). An unknown id logs a warning and opens Getting Started. Payload `OpenTutorialRequest{tutorial_id, anchor=None}`, via `open_tutorial_publisher`. A tutorial's id is its page's file name without `.html` (`tutorial_id(path)`, `TutorialEntry.id`), e.g. `dropbot_status`. Handled on the frontend by `UserHelpPlugin` (its listener `user_help_plugin_listener`, then `GUI.invoke_later`).
+- HELP_AVAILABILITY "ui/help/availability" — `HelpAvailability{available}`: True once `UserHelpPlugin` has started (after its listener exists), False when it stops; via `help_availability_publisher`. The notifications drawer follows it: help links are enabled only while it is True. The help plugin is deferred, so links stay disabled for the few seconds after the window paints.
+
+```
+card help link ─► NotificationsController.open_help(target)
+                 └─ open_tutorial(target): parse_help_target ─► OPEN_TUTORIAL {tutorial_id, anchor}
+UserHelpPlugin listener ─► GUI.invoke_later(open_tutorial) ─► tutorial_action(entry, anchor).perform()
+                           (QtWebEngine dialog; the system browser where QtWebEngine cannot load)
+```
 

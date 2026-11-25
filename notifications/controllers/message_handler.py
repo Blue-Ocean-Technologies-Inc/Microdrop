@@ -22,6 +22,9 @@ import dramatiq
 from pyface.api import GUI
 from traits.api import HasTraits, Instance, Str
 
+# Microdrop package imports.
+from user_help_plugin.consts import HelpAvailability, open_tutorial_publisher
+
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
     basic_listener_actor_routine,
@@ -35,6 +38,7 @@ from ..consts import (
     NotificationMessage,
     NotificationResolveRequest,
     ShowNotificationsPanelRequest,
+    parse_help_target,
 )
 from .notifications_controller import NotificationsController
 
@@ -86,3 +90,18 @@ class NotificationsMessageHandler(HasTraits):
         center = self.controller.pane_model.center
 
         GUI.invoke_later(center.resolve, request.condition_id, request.resolution)
+
+    def _on_availability_triggered(self, message):
+        """The help plugin started or stopped: the help links follow."""
+        availability = HelpAvailability.model_validate_json(message)
+        opener = open_tutorial if availability.available else None
+
+        GUI.invoke_later(setattr, self.controller, "open_help", opener)
+
+
+def open_tutorial(target):
+    """Ask the help plugin to open the tutorial a HelpAction ``target``
+    names (``tutorial id#section``)."""
+    tutorial_id, anchor = parse_help_target(target)
+
+    open_tutorial_publisher.publish({"tutorial_id": tutorial_id, "anchor": anchor})

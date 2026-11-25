@@ -34,6 +34,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from traits.api import Bool, Callable, Event, HasTraits, Instance, Int, List, Str, Tuple
 from traits.etsconfig.api import ETSConfig
 
+# Microdrop package imports.
+from user_help_plugin.consts import HELP_AVAILABILITY
+
 # Microdrop style imports.
 from microdrop_style.colors import (
     ERROR_COLOR,
@@ -105,7 +108,13 @@ NOTIFICATION_RESOLVE = "ui/notifications/resolve"
 
 LISTENER_NAME = f"{PKG}_listener"
 ACTOR_TOPIC_DICT = {
-    LISTENER_NAME: [NOTIFICATION_POST, NOTIFICATIONS_SHOW_PANEL, NOTIFICATION_RESOLVE]
+    LISTENER_NAME: [
+        NOTIFICATION_POST,
+        NOTIFICATIONS_SHOW_PANEL,
+        NOTIFICATION_RESOLVE,
+        # The help links follow whether tutorials can be opened.
+        HELP_AVAILABILITY,
+    ]
 }
 
 #: Payload validators build on first use: every plugin imports this at launch.
@@ -157,9 +166,26 @@ class HelpAction(BaseModel):
     #: The link's text.
     label: str = "How do I…?"
 
-    #: What help to open, e.g. a tutorial's title; whoever opens help
-    #: decides how. While nothing can open help the link is disabled.
+    #: The tutorial to open: ``"<tutorial id>"`` or ``"<tutorial id>#<section
+    #: id>"``, e.g. "dropbot_status#self-tests" (``help_target`` builds it).
+    #: The id is the tutorial page's (``user_help_plugin.consts.tutorial_id``),
+    #: the section an ``id`` in its HTML. The link is disabled while no
+    #: tutorial can be opened (the help plugin not loaded yet).
     target: str = Field(min_length=1)
+
+
+def help_target(tutorial_id, anchor=None):
+    """A HelpAction ``target`` naming ``tutorial_id``, at the section
+    ``anchor`` if given."""
+    return f"{tutorial_id}#{anchor}" if anchor else tutorial_id
+
+
+def parse_help_target(target):
+    """``(tutorial_id, anchor)`` from a HelpAction ``target``; the anchor is
+    None when it names none."""
+    tutorial_id, _hash, anchor = target.partition("#")
+
+    return tutorial_id.strip(), anchor.strip() or None
 
 
 class SnoozeAction(BaseModel):
