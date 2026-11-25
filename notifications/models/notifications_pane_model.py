@@ -30,7 +30,13 @@ from traits.api import (
 from traits.observation.api import ListChangeEvent
 
 # Local imports.
-from ..consts import DRAWER_WIDTH, SEVERITIES, SEVERITY_ERROR, NotificationSection
+from ..consts import (
+    ATTENTION_SECTION_ID,
+    DRAWER_WIDTH,
+    SEVERITIES,
+    SEVERITY_ERROR,
+    NotificationSection,
+)
 from .notification import Notification
 from .notification_center import NotificationCenter
 from .own_sections import ATTENTION_ACCENT, FILTERS
@@ -101,9 +107,14 @@ def outside_press_passes_through(opened_by_app, used_while_open):
 
 def next_section_to_build(queued, opened_by_app):
     """Which of the ``queued`` sections (oldest first) the drawer builds
-    next: in a drawer the app opened, the first shown expanded at start
-    (News), even if it arrived after the others; else the oldest."""
+    next: Needs attention, then in a drawer the app opened the first shown
+    expanded at start (News), even if it arrived after the others; else the
+    oldest."""
     urgent = [section for section in queued if section.expanded_at_start]
+    attention = [section for section in queued if section.id == ATTENTION_SECTION_ID]
+
+    if attention:
+        return attention[0]
 
     if opened_by_app and urgent:
         return urgent[0]
