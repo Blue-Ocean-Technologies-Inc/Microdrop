@@ -25,7 +25,7 @@ from functools import partial
 
 # Enthought library imports.
 from pyface.api import GUI
-from traits.api import HasTraits, Instance
+from traits.api import Callable, HasTraits, Instance
 
 # Microdrop package imports.
 from examples.demos.notifications_pane.sample_notifications import post_log_samples
@@ -34,9 +34,13 @@ from notifications.consts import (
     SEVERITY_INFO,
     SEVERITY_SUCCESS,
     SEVERITY_WARNING,
+    HelpAction,
     OpenPathAction,
     PublishAction,
+    SnoozeAction,
+    notification_publisher,
 )
+from notifications.models.notification_center import NotificationCenter
 
 # Local imports.
 from .demo_categories import (
@@ -51,12 +55,6 @@ from .demo_categories import (
     PROTOCOL_STARTED,
     PROTOCOL_STEP_COMPLETED,
 )
-from .ux_consts import (
-    HelpAction,
-    SnoozeAction,
-    ux_notification_publisher,
-)
-from .ux_models import UxNotificationCenter
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -74,6 +72,10 @@ FLOOD_DISTINCT = 12
 #: Notifications in a burst.
 BURST_SIZE = 20
 
+#: Every demo topic starts so; the responder answers them, and forwards
+#: any other topic for real.
+DEMO_TOPIC_PREFIX = "demo/"
+
 #: Demo topics the cards' buttons "publish".
 SELF_TEST_TOPIC = "demo/self_test"
 UPDATE_PLUGINS_TOPIC = "demo/update_plugins"
@@ -89,9 +91,7 @@ CALIBRATION_DETAIL = (
 )
 
 #: Calibration has no command yet: the card carries only its how-to.
-CALIBRATION_HELP = HelpAction(
-    label="How to calibrate", tutorial="Calibrating the device"
-)
+CALIBRATION_HELP = HelpAction(label="How to calibrate", target="Calibrating the device")
 
 #: Days without a self test before it is stale, and how long the demo's
 #: last one was.
@@ -108,7 +108,7 @@ SELF_TEST_DETAIL = (
 
 #: The stale self test's buttons: a real command, and what it checks.
 SELF_TEST_ACTION = PublishAction(label="Run self test", topic=SELF_TEST_TOPIC)
-SELF_TEST_HELP = HelpAction(label="What does it check?", tutorial="DropBot self tests")
+SELF_TEST_HELP = HelpAction(label="What does it check?", target="DropBot self tests")
 
 PLUGIN_UPDATES_DETAIL = (
     "heater-microdrop-plugin 1.4.0 → 1.5.0\n"
@@ -119,7 +119,7 @@ PLUGIN_UPDATES_DETAIL = (
 
 def _publish(**fields):
     """Post a notification through the topic, as any plugin would."""
-    ux_notification_publisher.publish(fields)
+    notification_publisher.publish(fields)
 
 
 def _traceback_of(error_type, message):
@@ -171,9 +171,7 @@ def post_warning():
         severity=SEVERITY_WARNING,
         category="hardware",
         source="dropbot_controller",
-        secondary_action=HelpAction(
-            tutorial="Droplet detection and volume"
-        ).model_dump(),
+        secondary_action=HelpAction(target="Droplet detection and volume").model_dump(),
     )
 
 
@@ -187,7 +185,7 @@ def post_error():
         source="dropbot_controller",
         action=PublishAction(label="Retry", topic=RETRY_CONNECTION_TOPIC).model_dump(),
         secondary_action=HelpAction(
-            label="How do I connect?", tutorial="Connecting a DropBot"
+            label="How do I connect?", target="Connecting a DropBot"
         ).model_dump(),
     )
 
@@ -250,7 +248,7 @@ def post_dropbot_disconnected():
             label="Reconnect", topic=RETRY_CONNECTION_TOPIC
         ).model_dump(),
         secondary_action=HelpAction(
-            label="How do I reconnect?", tutorial="Connecting a DropBot"
+            label="How do I reconnect?", target="Connecting a DropBot"
         ).model_dump(),
         **_DEVICE_FIELDS,
     )
@@ -297,7 +295,7 @@ def post_chip_removed(run_waiting):
         needs_attention=run_waiting,
         condition_id=CHIP_MISSING_CONDITION if run_waiting else "",
         secondary_action=HelpAction(
-            label="How to insert a chip", tutorial="Inserting a chip"
+            label="How to insert a chip", target="Inserting a chip"
         ).model_dump(),
         **_DEVICE_FIELDS,
     )
@@ -670,10 +668,21 @@ class DemoResponder(HasTraits):
     """Stands in for what a card's buttons would do: logs it and posts the
     outcome a real handler would."""
 
-    center = Instance(UxNotificationCenter)
+    center = Instance(NotificationCenter)
+
+    #: ``forward(topic=..., message=...)``: publishes a topic that is not a
+    #: demo topic, for real.
+    forward = Callable()
 
     def publish(self, topic, message=""):
-        """A PublishAction's topic, answered as its handler would."""
+        """A PublishAction's topic, answered as its handler would; any
+        other topic is published for real."""
+
+        if not topic.startswith(DEMO_TOPIC_PREFIX) and self.forward is not None:
+            self.forward(topic=topic, message=message)
+
+            return
+
         logger.info(f"Demo: a card's button would publish {topic}")
         answer = _ANSWERS.get(topic)
 
@@ -700,11 +709,11 @@ class DemoResponder(HasTraits):
         logger.info(f"Demo: would open {path} in the file browser")
         self._post("Would open the folder in the file browser", SEVERITY_INFO, path)
 
-    def open_tutorial(self, tutorial):
-        """A HelpAction: names the tutorial it would open."""
-        logger.info(f"Demo: would open the tutorial {tutorial!r}")
+    def open_help(self, target):
+        """A HelpAction: names the help it would open."""
+        logger.info(f"Demo: would open help on {target!r}")
         self._post(
-            f"Would open the tutorial: {tutorial}",
+            f"Would open help: {target}",
             SEVERITY_INFO,
             "Help > Tutorials would open on this page, scrolled to the steps.",
         )

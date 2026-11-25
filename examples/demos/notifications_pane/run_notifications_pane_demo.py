@@ -58,7 +58,7 @@ from notifications.consts import SEVERITY_INFO
 from notifications.controllers.load_failure_notifier import PluginLoadFailureNotifier
 from notifications.controllers.notifications_controller import NotificationsController
 from notifications.services.log_forwarder import NotificationLogHandler
-from notifications.views.bell_indicator import NotificationBellIndicator
+from notifications.views.bell import NotificationBellIndicator
 from notifications.views.drawer_host import NotificationsDrawerHost
 
 # Microdrop style imports.
@@ -308,7 +308,7 @@ def main():
     )
 
     window.status_bar_manager = StatusBarManager(messages=["Notifications demo"])
-    bell = NotificationBellIndicator(center=center)
+    bell = NotificationBellIndicator(pane_model=controller.pane_model)
     bell.widget.clicked.connect(controller.toggle_pane)
     window.status_bar_manager.status_bar.addPermanentWidget(bell.widget)
 

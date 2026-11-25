@@ -8,13 +8,13 @@
 #
 # Thanks for using Microdrop open source!
 
-"""A high-fidelity prototype of MicroDrop's notifications, in the real app.
+"""MicroDrop's notifications in an isolated shell of the real app.
 
 The real MicroDrop application, task window, menus, status bar, theme and
 message layer, with the minimum real plugins for that shell, the real
-notifications plugin with the prototype's views (toasts, bell badge, a
-resizable drawer of designed sections, cards with buttons), and fake plugins
-for panes and notifications. A Demo menu posts scenarios. Run from ``src/``:
+notifications plugin, and fake plugins for panes, a News section (through
+the plugin's public section API) and notifications. A Demo menu posts
+scenarios. Run from ``src/``:
 
     pixi run python -m examples.demos.notifications_ux.run_notifications_ux_demo
 
@@ -51,6 +51,7 @@ def run(open_drawer):
     from microdrop_application.application import MicrodropApplication
     from microdrop_application.plugin import MicrodropPlugin
     from microdrop_status_bar.plugin import StatusBarPlugin
+    from notifications.plugin import NotificationsPlugin
 
     from microdrop_style.helpers import style_app
 
@@ -60,13 +61,8 @@ def run(open_drawer):
     )
     from microdrop_utils.deferred_plugins import DeferredPlugin
 
-    from .demo_plugins import (
-        DemoPluginManagementPlugin,
-        NewsPlugin,
-        NotificationsDemoPlugin,
-        StandInPanesPlugin,
-    )
-    from .ux_plugin import UxNotificationsPlugin
+    from .demo_plugins import DemoPluginManagementPlugin, NewsPlugin, StandInPanesPlugin
+    from .dev_plugin import NotificationsDevPlugin
 
     from logger.plugin import LoggerPlugin
 
@@ -98,12 +94,14 @@ def run(open_drawer):
         MicrodropPlugin(),
         TasksPlugin(),
         StatusBarPlugin(),
-        UxNotificationsPlugin(),
+        NotificationsPlugin(),
         LoggerUIPlugin(),
         DemoPluginManagementPlugin(),
         StandInPanesPlugin(),
         NewsPlugin(),
-        NotificationsDemoPlugin(open_drawer=open_drawer),
+        NotificationsDevPlugin(
+            seed_history=True, pretend_open_path=True, open_drawer=open_drawer
+        ),
     ]
 
     deferred_plugins = [

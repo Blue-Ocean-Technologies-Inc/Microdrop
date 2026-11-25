@@ -10,13 +10,13 @@
 
 """The notification categories the demo's stand-in plugins declare.
 
-Each block is what its owner's ``consts.py`` would hold once ported: the
-category ids its messages name, and the specs it contributes to
-NOTIFICATION_CATEGORIES.
+Each block is what its owner's ``consts.py`` will hold: the category ids
+its messages name, and the specs it contributes to NOTIFICATION_CATEGORIES.
+Until then the demo's plugins contribute them.
 """
 
-# Local imports.
-from .settings_models import (
+# Microdrop package imports.
+from notifications.consts import (
     TONE_ALERT,
     TONE_COMPLETION,
     TONE_CONNECTED,
@@ -121,7 +121,6 @@ DROPBOT_CATEGORIES = [
 # Plugins (plugin_management/consts.py)
 # ---------------------------------------------------------------------------
 PLUGINS_UPDATES = "plugins.updates"
-PLUGINS_LOAD_FAILED = "plugins.load_failed"
 
 PLUGINS_CATEGORIES = [
     NotificationCategorySpec(
@@ -130,14 +129,6 @@ PLUGINS_CATEGORIES = [
         label="Updates available",
         description="Newer versions of installed plugins, and updating them.",
         tone=TONE_SOFT,
-    ),
-    NotificationCategorySpec(
-        id=PLUGINS_LOAD_FAILED,
-        group="Plugins",
-        label="Load failures",
-        description="A plugin could not start.",
-        tone=TONE_ALERT,
-        critical=True,
     ),
 ]
 

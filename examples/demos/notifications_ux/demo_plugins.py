@@ -8,9 +8,10 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The prototype's fake plugins: stand-in panes, the news sections, the
-Demo menu and the session's notifications; and plugin management with its
-launch-time network and plugin-group steps left out.
+"""The isolated demo's fake plugins: stand-in panes, the News section
+(contributed through the notifications plugin's public section API), and
+plugin management with its launch-time network and plugin-group steps left
+out. The Demo menu itself is ``dev_plugin``.
 """
 
 # Standard library imports.
@@ -19,48 +20,28 @@ from functools import partial
 # Enthought library imports.
 from envisage.api import TASK_EXTENSIONS, Plugin
 from envisage.ui.tasks.api import TaskExtension
-from pyface.action.api import Action
-from pyface.action.schema.schema_addition import SchemaAddition
-from pyface.api import GUI
-from pyface.tasks.action.api import SGroup, SMenu
-from traits.api import Any, Bool, Dict, Instance, List, Str, observe
+from pyface.action.schema.api import SchemaAddition
+from pyface.tasks.action.api import SGroup
+from traits.api import Any, List, observe
 
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
-from notifications.consts import (
-    CATEGORY_PLUGINS,
-    NOTIFICATION_SECTIONS,
-    NOTIFICATIONS_PLUGIN_ID,
-)
+from notifications.consts import NOTIFICATION_CATEGORIES, NOTIFICATION_SECTIONS
 from plugin_management.plugin import PluginManagementPlugin
 
 # Local imports.
-from . import fake_panes, scenarios
-from .demo_categories import (
-    DROPBOT_CATEGORIES,
-    DROPBOT_GROUP,
-    NEWS_CATEGORIES,
-    PLUGINS_CATEGORIES,
-    PLUGINS_LOAD_FAILED,
-    PROTOCOL_CATEGORIES,
-    PROTOCOL_GROUP,
-)
+from . import fake_panes
+from .demo_categories import NEWS_CATEGORIES, PLUGINS_CATEGORIES
 from .news_actions import NewsFeedActions
-from .news_models import FeedAlertWatcher, make_news_section
-from .settings_models import NotificationSettings
-from .ux_consts import NOTIFICATION_CATEGORIES
+from .news_models import make_news_section
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-#: The task the fake panes and the Demo menu join.
+#: The task the fake panes and the News actions join.
 TASK_ID = f"{microdrop_application_PKG}.task"
-
-#: Milliseconds after the window is up before "plugin updates available"
-#: arrives, as the real update check's answer would.
-UPDATE_CHECK_MS = 2500
 
 #: The news plugin's id, by which the demo finds the news sections.
 NEWS_PLUGIN_ID = "notifications_ux_demo.news"
@@ -107,7 +88,8 @@ class StandInPanesPlugin(Plugin):
 
 
 class NewsPlugin(Plugin):
-    """Contributes the News section."""
+    """Contributes the News section through the notifications plugin's
+    public section API, and its feed actions to the Demo menu."""
 
     id = NEWS_PLUGIN_ID
     name = "News Plugin (demo)"
@@ -118,302 +100,34 @@ class NewsPlugin(Plugin):
         NEWS_CATEGORIES, contributes_to=NOTIFICATION_CATEGORIES
     )
 
-    def _sections_default(self):
-        return [make_news_section()]
-
-
-class SettingToggleAction(Action):
-    """A checkable menu item kept in step with one switch of the toast
-    settings."""
-
-    style = "toggle"
-
-    #: The settings it shows and sets, and which switch.
-    settings = Instance(NotificationSettings)
-    setting = Str()
-
-    def perform(self, event=None):
-        # A toggle action is already flipped when it is performed.
-        setattr(self.settings, self.setting, self.checked)
-
-    @observe("setting, settings.[auto_dismiss, sound_enabled, coloured_header_titles]")
-    def _follow_settings(self, event):
-
-        if self.settings is not None and self.setting:
-            self.checked = getattr(self.settings, self.setting)
-
-
-class NotificationsDemoPlugin(Plugin):
-    """The Demo menu, the session's start-up notifications, and what the
-    cards' buttons pretend to do."""
-
-    id = "notifications_ux_demo.scenarios"
-    name = "Notifications Demo Plugin (demo)"
-
     task_extensions = List(contributes_to=TASK_EXTENSIONS)
-
-    #: It stands in for the protocol tree and the DropBot plugins: their
-    #: kinds of notification.
-    notification_categories = List(
-        PROTOCOL_CATEGORIES + DROPBOT_CATEGORIES,
-        contributes_to=NOTIFICATION_CATEGORIES,
-    )
-
-    #: Opens the drawer once the window is up (``--open``).
-    open_drawer = Bool(False)
-
-    #: Answers the cards' buttons.
-    _responder = Any()
-
-    #: Turns posts the News feed gains into alerts.
-    _feed_watcher = Any()
 
     #: The Demo menu's News actions.
     _news_actions = Any()
 
-    #: The open settings windows, by title.
-    _settings_uis = Dict()
-
-    def start(self):
-        """Post the session's history before the window is up: no toasts."""
-        controller = self._notifications.controller
-        center = controller.pane_model.center
-        self._responder = scenarios.DemoResponder(center=center)
-        center.default_category_ids = {CATEGORY_PLUGINS: PLUGINS_LOAD_FAILED}
-
-        controller.trait_set(
-            publish=self._responder.publish,
-            open_path=self._responder.open_path,
-            open_tutorial=self._responder.open_tutorial,
-        )
-        scenarios.post_history(center, self._experiment_folder())
-
-        news = self.application.get_plugin(NEWS_PLUGIN_ID).sections[0]
-        self._feed_watcher = FeedAlertWatcher(
-            section=news,
-            pane_model=controller.pane_model,
-            offer=self._notifications.toast_controller.offer,
-        )
-        self._news_actions = NewsFeedActions(section=news, window=self._window_control)
-
-    @observe("application:application_initialized")
-    def _after_launch(self, event):
-        GUI.invoke_after(UPDATE_CHECK_MS, scenarios.post_plugin_updates)
-
-        if self.open_drawer:
-            GUI.invoke_after(400, self._notifications.controller.show_pane)
-
-    @property
-    def _notifications(self):
-        return self.application.get_plugin(NOTIFICATIONS_PLUGIN_ID)
-
-    def _experiment_folder(self):
-        return str(self.application.current_experiment_directory)
-
-    # ------------------------------------------------------------------ #
-    # The Demo menu                                                       #
-    # ------------------------------------------------------------------ #
+    def _sections_default(self):
+        return [make_news_section()]
 
     def _task_extensions_default(self):
-        return [
-            TaskExtension(
-                task_id=TASK_ID,
-                actions=[
-                    SchemaAddition(
-                        id="notifications_ux_demo.menu",
-                        factory=self._demo_menu,
-                        path="MenuBar",
-                        after="Help",
-                    )
-                ],
-            )
-        ]
-
-    def _demo_menu(self):
-        def action(name, callable_, tooltip=""):
-            return Action(name=name, on_perform=callable_, tooltip=tooltip)
-
-        return SMenu(
-            SGroup(
-                action("Post info", scenarios.post_info),
-                action("Post success", scenarios.post_success),
-                action("Post warning", scenarios.post_warning),
-                action("Post error (with traceback)", scenarios.post_error),
-                action("Post plugin updates available", scenarios.post_plugin_updates),
-                action(
-                    "Post protocol finished",
-                    lambda: scenarios.post_protocol_finished(self._experiment_folder()),
-                ),
-                action("Post calibration is old", scenarios.post_calibration_old),
-                action("Post self test is stale", scenarios.post_self_test_stale),
-                action(f"Burst of {scenarios.BURST_SIZE}", scenarios.post_burst),
-                action(
-                    f"Flood from a thread ({scenarios.FLOOD_RECORDS} log records)",
-                    scenarios.flood_from_thread,
-                ),
-                action(
-                    f"Simulate protocol run ({scenarios.PROTOCOL_RUN_S} s)",
-                    self._simulate_run,
-                    "Quiet while it runs: only errors and actions pop up",
-                ),
-                action(
-                    f"Run a {scenarios.STEPPED_RUN_STEPS}-step protocol",
-                    self._run_steps,
-                    "Start, one step entry updating in place, finish",
-                ),
-                id="notifications_ux_demo.notifications",
-            ),
-            SMenu(
-                SGroup(
-                    action("DropBot connected", scenarios.post_dropbot_connected),
-                    action("DropBot disconnected", scenarios.post_dropbot_disconnected),
-                    action(
-                        "Flap connection (3×)",
-                        scenarios.flap_connection,
-                        "Lost and back three times a second apart: one entry",
-                    ),
-                    id="notifications_ux_demo.device.connection",
-                ),
-                SGroup(
-                    action("Chip inserted", scenarios.post_chip_inserted),
-                    action(
-                        "Chip removed",
-                        self._chip_removed,
-                        "Needs attention while a protocol run is going",
-                    ),
-                    id="notifications_ux_demo.device.chip",
-                ),
-                id="notifications_ux_demo.device",
-                name="Device",
-            ),
-            SGroup(*self._news_actions.actions(), id="notifications_ux_demo.news"),
-            SGroup(
-                SettingToggleAction(
-                    name="Toasts time out automatically",
-                    settings=self._toast_settings,
-                    setting="auto_dismiss",
-                ),
-                SettingToggleAction(
-                    name="Play a sound for new notifications",
-                    settings=self._toast_settings,
-                    setting="sound_enabled",
-                ),
-                SettingToggleAction(
-                    name="Coloured header titles",
-                    settings=self._toast_settings,
-                    setting="coloured_header_titles",
-                ),
-                action("Notification settings…", self._open_settings),
-                action(
-                    "Protocol notification settings…",
-                    self._open_protocol_settings,
-                    "The protocol tree's own page: only its kinds of notification",
-                ),
-                action(
-                    "DropBot notification settings…",
-                    self._open_dropbot_settings,
-                    "The DropBot plugin's own page: only its kinds of notification",
-                ),
-                id="notifications_ux_demo.settings",
-            ),
-            SGroup(
-                action("Toggle theme", self._toggle_theme),
-                action("Reset", self._reset, "Clear everything and start over"),
-                id="notifications_ux_demo.session",
-            ),
-            id="Demo",
-            name="&Demo",
+        addition = SchemaAddition(
+            id="notifications_ux_demo.news",
+            factory=self._news_group,
+            path="MenuBar/Demo",
         )
+
+        return [TaskExtension(task_id=TASK_ID, actions=[addition])]
+
+    def _news_group(self):
+        self._news_actions = NewsFeedActions(
+            section=self.sections[0], window=self._window_control
+        )
+
+        return SGroup(*self._news_actions.actions(), id="notifications_ux_demo.news")
 
     def _window_control(self):
         window = self.application.active_window
 
         return getattr(window, "control", None)
-
-    @property
-    def _pane_model(self):
-        return self._notifications.controller.pane_model
-
-    def _simulate_run(self):
-        model = self._pane_model
-        scenarios.simulate_protocol_run(model.center, model.toasts)
-
-    def _run_steps(self):
-        scenarios.run_stepped_protocol(
-            self._pane_model.toasts, self._experiment_folder()
-        )
-
-    @property
-    def _toast_settings(self):
-        return self._notifications.controller.pane_model.toasts.settings
-
-    def _open_settings(self):
-        """The settings, as a future preferences tab would show them."""
-        from .settings_view import settings_view
-
-        self._open_settings_window(*settings_view(self._toast_settings))
-
-    def _open_protocol_settings(self):
-        """Only the protocol's categories, as its own preferences page
-        would show them; the same objects, so both windows agree."""
-        from .settings_view import group_settings_view
-
-        self._open_settings_window(
-            *group_settings_view(self._toast_settings, PROTOCOL_GROUP)
-        )
-
-    def _open_dropbot_settings(self):
-        """Only the DropBot's categories, on the same objects."""
-        from .settings_view import group_settings_view
-
-        self._open_settings_window(
-            *group_settings_view(self._toast_settings, DROPBOT_GROUP)
-        )
-
-    def _chip_removed(self):
-        """A protocol run waits on the chip while the toasts are quiet for
-        it: the simulated runs set that."""
-        toasts = self._pane_model.toasts
-        run_waiting = toasts.quiet and toasts.quiet_reason == PROTOCOL_GROUP
-
-        scenarios.post_chip_removed(run_waiting)
-
-    def _open_settings_window(self, view, context):
-        """One window per view, raised if already open."""
-        self._toast_settings.opened = True
-        ui = self._settings_uis.get(view.title)
-
-        if ui is not None and ui.control is not None:
-            ui.control.raise_()
-
-            return
-
-        window = self.application.active_window
-        self._settings_uis[view.title] = self._toast_settings.edit_traits(
-            view=view, context=context, parent=getattr(window, "control", None)
-        )
-
-    def _toggle_theme(self):
-        from microdrop_style.helpers import is_dark_mode
-
-        preferences = self.application.preferences_helper
-        preferences.color_scheme = "light" if is_dark_mode() else "dark"
-
-    def _reset(self):
-        notifications = self._notifications
-        center = notifications.controller.pane_model.center
-
-        notifications.controller.pane_model.is_open = False
-        notifications.toast_controller.clear()
-        center.clear_everything()
-        notifications.controller.pane_model.feed_alerts = []
-
-        # History, as at start-up: no toasts.
-        notifications.toast_controller.enabled = False
-        scenarios.post_history(center, self._experiment_folder())
-        notifications.toast_controller.enabled = True
-
-        GUI.invoke_after(UPDATE_CHECK_MS, scenarios.post_plugin_updates)
 
 
 class DemoPluginManagementPlugin(PluginManagementPlugin):

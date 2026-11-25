@@ -37,16 +37,16 @@ from examples.demos.notifications_pane.sci_bots_feed_view import (
     HEADER_RULE_SIZE,
     StatusBannerEditor,
 )
-
-# Microdrop style imports.
-from microdrop_style.colors import INFO_COLOR
-from microdrop_style.icons.icons import ICON_CHEVRON_RIGHT, ICON_EXPAND_MORE
-from microdrop_style.icons.logos import MICRODROP_MARK
-
-# Local imports.
-from .card_parts import NEW_DOT_SIZE, NewDot
-from .news_models import NewsSection
-from .typography import (
+from notifications.views.card_parts import NEW_DOT_SIZE, NewDot
+from notifications.views.theme import (
+    chip_text,
+    chip_tint,
+    link_button_style,
+    link_color,
+    muted_text,
+    readable_text,
+)
+from notifications.views.typography import (
     BODY_TEXT,
     BUTTON,
     CARD_TITLE,
@@ -55,36 +55,34 @@ from .typography import (
     SUBSECTION_TITLE,
     role_font,
 )
-from .ux_consts import (
-    FEED_GROUP_PREVIEW,
-    HIGHLIGHT_MS,
-    SECTION_ANIMATION_MS,
-)
-from .ux_models import UxPaneModel
-from .view_styles import (
-    chip_text,
-    chip_tint,
-    coloured_titles,
+from notifications.views.view_consts import SECTION_ANIMATION_MS
+
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_CHEVRON_RIGHT, ICON_EXPAND_MORE
+from microdrop_style.icons.logos import MICRODROP_MARK
+from microdrop_style.palette_helpers import (
     css,
     icon_font,
-    link_button_style,
-    link_color,
-    muted_text,
-    readable_text,
     scaled_logo,
     style_chip,
     tinted,
     with_alpha,
 )
 
+# Microdrop utils imports.
+from microdrop_utils.clamped_label import ElidedLabel
+
+# Local imports.
+from .news_models import NewsSection
+
+#: A sub-section's posts before its "Show N more".
+FEED_GROUP_PREVIEW = 1
+
 #: The largest widget height Qt allows.
 _UNBOUNDED = 16_777_215
 
 #: Indent (px) of a sub-section's posts under its header.
 SUB_BODY_INDENT = 4
-
-#: Corner radius (px) of a highlighted post.
-HIGHLIGHT_RADIUS = 10
 
 #: The feed's status line ("Pushed 1 new post"), as its own view shows it.
 FeedStatusView = View(
@@ -94,30 +92,6 @@ FeedStatusView = View(
         visible_when="status_text",
     ),
 )
-
-
-class _Highlight(QtWidgets.QWidget):
-    """A tint over a post, fading: "this is the one"."""
-
-    def __init__(self, parent):
-        super().__init__(parent)
-
-        self.strength = 0.0
-
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-    def paintEvent(self, event):
-
-        if self.strength <= 0:
-            return
-
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(with_alpha(INFO_COLOR, 0.3 * self.strength))
-        painter.drawRoundedRect(
-            QtCore.QRectF(self.rect()), HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS
-        )
 
 
 #: Pixel size of a sub-section header's glyph or mark, beside its title.
@@ -141,44 +115,6 @@ def group_detail(group):
         return format_post_date(group.posts[0])
 
     return ""
-
-
-class _ElidedLabel(QtWidgets.QLabel):
-    """One line cut with an ellipsis when short of room. The detail
-    (right-aligned) takes only spare room, so it is cut first; the title
-    (``title=True``) asks for its whole width and is cut only when the
-    detail has none left."""
-
-    def __init__(self, text, parent=None, title=False):
-        super().__init__(text, parent)
-
-        self._alignment = (
-            QtCore.Qt.AlignmentFlag.AlignLeft
-            if title
-            else QtCore.Qt.AlignmentFlag.AlignRight
-        ) | QtCore.Qt.AlignmentFlag.AlignVCenter
-
-        self.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Preferred
-            if title
-            else QtWidgets.QSizePolicy.Policy.Ignored,
-            QtWidgets.QSizePolicy.Policy.Preferred,
-        )
-
-    def minimumSizeHint(self):
-        metrics = QtGui.QFontMetrics(self.font())
-
-        return QtCore.QSize(metrics.horizontalAdvance("W…"), metrics.height())
-
-    def paintEvent(self, event):
-        painter = QtGui.QPainter(self)
-        metrics = QtGui.QFontMetrics(self.font())
-        text = metrics.elidedText(
-            self.text(), QtCore.Qt.TextElideMode.ElideRight, self.width()
-        )
-
-        painter.setPen(self.palette().color(self.foregroundRole()))
-        painter.drawText(self.rect(), self._alignment, text)
 
 
 class FeedGroupHeader(QtWidgets.QWidget):
@@ -220,12 +156,8 @@ class FeedGroupHeader(QtWidgets.QWidget):
 
         header.addWidget(glyph, 0, 0)
 
-        title = _ElidedLabel(group.spec.title, self, title=True)
+        title = ElidedLabel(group.spec.title, self, title=True)
         title.setFont(role_font(SUBSECTION_TITLE))
-        # Quiet titles in the text colour; coloured ones in the accent.
-        if coloured_titles():
-            color = readable_text(accent, self.palette())
-            title.setStyleSheet(f"QLabel {{ color: {css(color)}; }}")
         header.addWidget(title, 0, 1)
 
         self._chip = QtWidgets.QLabel(self)
@@ -237,7 +169,7 @@ class FeedGroupHeader(QtWidgets.QWidget):
         )
         header.addWidget(self._chip, 0, 2)
 
-        detail = _ElidedLabel(group_detail(group), self)
+        detail = ElidedLabel(group_detail(group), self)
         detail.setForegroundRole(QtGui.QPalette.ColorRole.PlaceholderText)
         detail.setFont(role_font(META))
         header.addWidget(detail, 0, 3)
@@ -309,34 +241,16 @@ class PostFrame(QtWidgets.QWidget):
         )
         layout.addWidget(self.card.create(self))
 
-        self._highlight = _Highlight(self)
         self._dot = NewDot(self)
         self._dot.hide()
-
-        self._fade = QtCore.QVariantAnimation(self)
-        self._fade.setDuration(HIGHLIGHT_MS)
-        self._fade.setStartValue(1.0)
-        self._fade.setEndValue(0.0)
-        self._fade.setEasingCurve(QtCore.QEasingCurve.Type.InQuad)
-        self._fade.valueChanged.connect(self._set_strength)
 
     def set_new(self, new):
         self._dot.setVisible(new)
         self._dot.raise_()
 
-    def flash(self):
-        self._fade.stop()
-        self._fade.start()
-
-    def _set_strength(self, value):
-        self._highlight.strength = value
-        self._highlight.update()
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
 
-        self._highlight.setGeometry(self.rect())
-        self._highlight.raise_()
         self._dot.move(self.width() - NEW_DOT_SIZE - 12, 8)
         self._dot.raise_()
 
@@ -535,15 +449,13 @@ class _FeedBinding(HasTraits):
 
     section = Instance(NewsSection)
 
-    pane_model = Instance(UxPaneModel)
-
     view = Any()
 
     @observe("section:controller:model:groups")
     def _rebuild(self, event):
         self.view.schedule_rebuild()
 
-    @observe("pane_model:feed_alerts.items.[unread, is_new]")
+    @observe("section:alerts:items:[unread, is_new]")
     def _show_new(self, event):
         self.view.show_new()
 
@@ -551,11 +463,10 @@ class _FeedBinding(HasTraits):
 class FeedColumn(QtWidgets.QWidget):
     """The feed's status line over its sub-sections, at natural height."""
 
-    def __init__(self, section, pane_model, parent=None):
+    def __init__(self, section, parent=None):
         super().__init__(parent)
 
         self.section = section
-        self.pane_model = pane_model
         self.controller = section.controller
         self._subsections = []
         self._rebuild_queued = False
@@ -573,17 +484,12 @@ class FeedColumn(QtWidgets.QWidget):
         self._groups.setSpacing(2)
         layout.addLayout(self._groups)
 
-        self._binding = _FeedBinding(section=section, pane_model=pane_model, view=self)
+        self._binding = _FeedBinding(section=section, view=self)
         self.rebuild()
 
     def new_ids(self):
-        """Ids of the posts marked new: arrived and not seen, or seen in
-        the drawer open now."""
-        return [
-            entry.feed_post_id
-            for entry in self.pane_model.feed_alerts
-            if entry.unread or entry.is_new
-        ]
+        """Ids of the posts marked new."""
+        return self.section.new_post_ids()
 
     def schedule_rebuild(self):
 
@@ -631,6 +537,5 @@ class FeedColumn(QtWidgets.QWidget):
 
     def dispose(self):
         self._binding.section = None
-        self._binding.pane_model = None
         self._dispose_subsections()
         self._status_ui.dispose()

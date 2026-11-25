@@ -8,13 +8,15 @@
 #
 # Thanks for using Microdrop open source!
 
-"""News, Qt-free: Blue Ocean Technologies' and Sci-Bots' combined feed as
-the drawer's News section, and the watcher turning a newly arrived post
-into an alert (a toast, a bell count, a "new" mark) like a notification's.
+"""News, Qt-free: Blue Ocean Technologies' and Sci-Bots' combined feed as a
+drawer section, contributed through the notifications plugin's public
+section API alone (``notifications.consts``): its look, its contents
+factory, ``alert_widget`` for reveals, and a SectionAlert for each post
+that arrives, which the drawer pops up, counts on the bell and marks new.
 """
 
 # Enthought library imports.
-from traits.api import Any, HasTraits, Instance, Int, Set, Str, observe
+from traits.api import Int, Set, Str, observe
 
 # Microdrop package imports.
 from examples.demos.notifications_pane.sci_bots_feed_controller import (
@@ -30,18 +32,24 @@ from examples.demos.notifications_pane.sci_bots_feed_section import (
 from examples.demos.notifications_pane.sci_bots_feed_sources import (
     demo_feed_sources,
 )
-from notifications.consts import SEVERITY_INFO
+from notifications.consts import SectionAlert
+
+# Microdrop style imports.
+from microdrop_style.colors import PRIMARY_SHADE
+from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
 
 # Local imports.
 from .demo_categories import NEWS_NEW_POSTS
-from .ux_consts import (
-    CATEGORY_FEED,
-    NEWS_DEFAULT_SOURCE,
-    NEWS_SECTION_ID,
-    NEWS_SECTION_ORDER,
-    NEWS_SECTION_TITLE,
-)
-from .ux_models import UxNotification, UxPaneModel
+
+NEWS_SECTION_ID = "notifications_ux_demo.news"
+NEWS_SECTION_TITLE = "News"
+NEWS_SECTION_ORDER = 10
+
+#: News's header accent, ``(light theme, dark theme)``.
+NEWS_ACCENT = ("#227938", PRIMARY_SHADE[400])
+
+#: Who a post is from when it does not say: the feed file is Sci-Bots'.
+NEWS_DEFAULT_SOURCE = "Sci-Bots"
 
 
 class NewsSection(SciBotsFeedSection):
@@ -52,17 +60,69 @@ class NewsSection(SciBotsFeedSection):
     id = NEWS_SECTION_ID
     title = NEWS_SECTION_TITLE
     order = NEWS_SECTION_ORDER
+    glyph = "newspaper"
+    accent = NEWS_ACCENT
+    logo = str(BLUE_OCEAN_SCI_BOTS_LOGO)
+
+    #: At natural height, like every section of the column.
+    max_height = 0
 
     #: Group ids whose sub-section is collapsed.
     collapsed_groups = Set(Str)
 
-    #: Group ids whose sub-section shows all its posts, not only the
-    #: newest.
+    #: Group ids whose sub-section shows all its posts, not only the newest.
     expanded_groups = Set(Str)
 
-    #: Posts arrived and not yet seen in the drawer, or seen and still
-    #: marked new.
+    #: Posts arrived and not yet seen, or seen and still marked new.
     new_count = Int()
+
+    #: Ids of the posts known so far: those at start-up count as seen.
+    _known_ids = Set(Str)
+
+    def traits_init(self):
+        self._known_ids = {post.id for post in self.controller.model.posts}
+
+    def build_contents(self, parent):
+        """The feed's sub-sections, at natural height."""
+        from .feed_column import FeedColumn
+
+        return FeedColumn(self, parent)
+
+    def alert_widget(self, contents, alert):
+        """The post's frame, its sub-section opened up."""
+        return contents.frame_for(alert.key)
+
+    def new_post_ids(self):
+        """Ids of the posts marked new."""
+        return {alert.key for alert in self.alerts if alert.unread or alert.is_new}
+
+    @observe("controller:model:posts")
+    def _alert_new_posts(self, event):
+        """An alert per post the feed gains: a push, the creator's Send, or a
+        reload bringing one not seen before. An updated post does not."""
+        posts = self.controller.model.posts
+        new = [post for post in posts if post.id not in self._known_ids]
+
+        self._known_ids |= {post.id for post in posts}
+
+        for post in new:
+            source = post.source_label or NEWS_DEFAULT_SOURCE
+            group = group_for(post)
+
+            self.alerts.append(
+                SectionAlert(
+                    key=post.id,
+                    title=post.title,
+                    detail=post.summary,
+                    source=f"{source} · {post.kind.title()}",
+                    accent=group.accent if group is not None else (),
+                    category_id=NEWS_NEW_POSTS,
+                )
+            )
+
+    @observe("alerts.items.[unread, is_new]")
+    def _count_new(self, event):
+        self.new_count = len(self.new_post_ids())
 
     @observe("controller.model.summary, new_count")
     def _follow_summary(self, event):
@@ -74,69 +134,11 @@ class NewsSection(SciBotsFeedSection):
 
 
 def make_news_section():
-    """The News section, open, its feed loaded: the feed file's posts (and
-    the local-only ones, if any) and MicroDrop's release notes."""
+    """The News section, open, its feed loaded: the feed file's posts and
+    MicroDrop's release notes."""
     controller = SciBotsFeedController(
         sources=[*demo_feed_sources(), ChangelogFeedSource()]
     )
     controller.reload()
 
     return NewsSection(controller=controller, expanded=True)
-
-
-class FeedAlertWatcher(HasTraits):
-    """Alerts for each post the News feed gains: a push, the creator's
-    Send, or a reload that brings a post not seen before. An updated post
-    does not alert."""
-
-    #: The News section; its controller's model lists the posts.
-    section = Instance(NewsSection)
-
-    #: The drawer's model, whose ``feed_alerts`` hold the alerts.
-    pane_model = Instance(UxPaneModel)
-
-    #: ``offer(entry)``: the toast controller's, to pop an alert up.
-    offer = Any()
-
-    #: Ids of the posts known so far: those at start-up count as seen.
-    _known_ids = Set(Str)
-
-    def traits_init(self):
-        self._known_ids = {post.id for post in self.section.controller.model.posts}
-
-    @observe("section:controller:model:posts")
-    def _alert_new_posts(self, event):
-        posts = self.section.controller.model.posts
-        new = [post for post in posts if post.id not in self._known_ids]
-
-        self._known_ids |= {post.id for post in posts}
-
-        kind = self.pane_model.toasts.settings.category(NEWS_NEW_POSTS)
-
-        # Kept out of the drawer: new posts make no alert.
-        if kind is not None and not kind.in_drawer:
-            return
-
-        for post in new:
-            source = post.source_label or NEWS_DEFAULT_SOURCE
-            entry = UxNotification(
-                key=(CATEGORY_FEED, post.id),
-                title=post.title,
-                detail=post.summary,
-                severity=SEVERITY_INFO,
-                category=CATEGORY_FEED,
-                source=f"{source} · {post.kind.title()}",
-                feed_post_id=post.id,
-                feed_group_id=getattr(group_for(post), "id", ""),
-                category_id=NEWS_NEW_POSTS,
-            )
-            self.pane_model.feed_alerts.append(entry)
-
-            if self.offer is not None:
-                self.offer(entry)
-
-    @observe("pane_model:feed_alerts.items.[unread, is_new]")
-    def _count_new(self, event):
-        self.section.new_count = sum(
-            entry.unread or entry.is_new for entry in self.pane_model.feed_alerts
-        )
