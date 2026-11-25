@@ -516,8 +516,10 @@ class DeviceViewerSyncController(HasTraits):
         if self.free_mode:
             reason += "In Free-mode"
 
+        # Why actuation will not happen, for the console: info, below what
+        # the notifications drawer shows (an expected state, not a fault).
         if reason:
-            logger.warning(
+            logger.info(
                 "PROTOCOL TREE (Device Sync): Cannot publish actuations; "
                 f"reason: {reason}"
             )
