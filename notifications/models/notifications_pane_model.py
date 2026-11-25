@@ -27,6 +27,7 @@ from traits.api import (
     Tuple,
     observe,
 )
+from traits.observation.api import ListChangeEvent
 
 # Local imports.
 from ..consts import DRAWER_WIDTH, SEVERITIES, SEVERITY_ERROR, NotificationSection
@@ -112,8 +113,9 @@ class NotificationsPaneModel(HasTraits):
 
     #: Whether the app opened the drawer (at start-up), not the user: it
     #: then leaves the keyboard focus where it is, closes on Esc anywhere in
-    #: its window, and builds its sections one per paced GUI turn. Off again
-    #: once it closes.
+    #: its window, builds its sections one per paced GUI turn, and expands
+    #: the ``expanded_at_start`` ones, late arrivals too. Off again once it
+    #: closes.
     opened_by_app = Bool(False)
 
     #: The drawer's width (px), for the session.
@@ -197,6 +199,40 @@ class NotificationsPaneModel(HasTraits):
 
         if not event.new:
             self.opened_by_app = False
+
+    # ------------------------------------------------------------------ #
+    # Opened by the app                                                   #
+    # ------------------------------------------------------------------ #
+
+    @observe("opened_by_app")
+    def _expand_at_start(self, event):
+        """The app's opening shows the sections that ask for it expanded."""
+
+        if event.new:
+            self._expand_sections_at_start(self.sections)
+
+    @observe("sections.items")
+    def _expand_arrivals_at_start(self, event):
+        """A section arriving in the drawer the app opened (News, from a
+        deferred plugin) shows as if it had been there at the opening; the
+        sections already there keep what the user made of them."""
+
+        if not self.opened_by_app:
+            return
+
+        if isinstance(event, ListChangeEvent):
+            arrived = event.added
+
+        else:
+            arrived = [s for s in event.new if s not in event.old]
+
+        self._expand_sections_at_start(arrived)
+
+    def _expand_sections_at_start(self, sections):
+
+        for section in sections:
+            if section.expanded_at_start:
+                section.expanded = True
 
     # ------------------------------------------------------------------ #
     # The bell's count                                                    #

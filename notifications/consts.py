@@ -485,6 +485,12 @@ class NotificationSection(HasTraits):
     #: Whether the section's contents are shown.
     expanded = Bool(False)
 
+    #: Whether the drawer the app opens at start-up shows the section
+    #: expanded, also when it arrives after the drawer opened; for what the
+    #: user should see first, e.g. News. A drawer the user opened, or one the
+    #: user has expanded or collapsed the section in, keeps ``expanded``.
+    expanded_at_start = Bool(False)
+
     #: Most pixels the contents take before they scroll; 0 for no cap.
     max_height = Int()
 

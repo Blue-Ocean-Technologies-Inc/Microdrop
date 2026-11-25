@@ -45,6 +45,7 @@ class NewsSection(NotificationSection):
     accent = NEWS_SECTION_ACCENT
     logo = NEWS_SECTION_LOGO
     expanded = True
+    expanded_at_start = True
 
     #: At natural height, like every section of the column.
     max_height = 0

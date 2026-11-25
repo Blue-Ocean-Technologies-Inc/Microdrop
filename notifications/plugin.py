@@ -22,9 +22,9 @@ window the first time it is asked for.
 
 Once the main window has first painted, the saved settings are read and,
 unless they (or OPEN_AT_START_ENV) say not to, the drawer opens on paced
-GUI turns, the Plugins section expanded while plugins still load: something
-to watch while the rest of the app loads, never in the way of the window
-taking input.
+GUI turns, the sections that ask for it (News) expanded: something to
+read as the rest of the app loads, never in the way of the window taking
+input.
 
 Other plugins post through ``notifications.consts``, add sections through
 NOTIFICATION_SECTIONS and declare their kinds of notification through
@@ -44,7 +44,6 @@ from traits.observation.api import trait
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
-from plugin_management.consts import LOAD_STATUS_SECTION_ID
 
 # Microdrop utils imports.
 from microdrop_utils.gui_pacing import invoke_paced
@@ -301,18 +300,13 @@ class NotificationsPlugin(Plugin):
             import_module(name, __package__)
 
     def _open_at_start(self):
-        """Open the drawer without the focus, the Plugins section expanded
-        while plugins still load; not once the user has opened it, nor
-        off the window."""
+        """Open the drawer without the focus, its ``expanded_at_start``
+        sections expanded (see ``opened_by_app``); not once the user has
+        opened it, nor off the window."""
         opened_before = self._drawer_host is not None
 
         if self.controller is None or self._window is None or opened_before:
             return
-
-        status = getattr(self.application, "plugin_load_status", None)
-
-        if status is not None and status.loading_count:
-            self.controller.pane_model.expand_section(LOAD_STATUS_SECTION_ID)
 
         self.controller.show_pane(by_app=True)
 
