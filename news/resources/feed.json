@@ -25,6 +25,21 @@
       ]
     },
     {
+      "id": "dropbot-chip-top-plates-sale",
+      "title": "Save $75 on DropBot chip top plates",
+      "kind": "announcement",
+      "date": "2026-11",
+      "source": "Sci-Bots",
+      "summary": "A pack of five DropBot chip top plates is now $175, down from $250. Available in 0.7 mm and 0.5 mm thickness.",
+      "url": "https://sci-bots.com/en-ca/products/dropbot-chip-top-plates",
+      "images": [
+        {
+          "src": "images/dropbot_chip_top_plates.jpg",
+          "alt": "A pack of DropBot chip top plates"
+        }
+      ]
+    },
+    {
       "title": "MicroTAS 2026 and DMF for Multiplexed Sepsis Biomarkers",
       "kind": "newsletter",
       "date": "2026-09",
