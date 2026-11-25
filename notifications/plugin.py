@@ -62,6 +62,7 @@ from .consts import (
 from .controllers.notifications_controller import NotificationsController
 from .controllers.toast_controller import ToastStackController
 from .models.settings import opens_at_start
+from .models.settings_window import SettingsWindowState
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -133,6 +134,9 @@ class NotificationsPlugin(Plugin):
 
     #: The open settings windows, by title.
     _settings_uis = Dict()
+
+    #: The settings window's size, tab and sections, kept for the session.
+    _settings_window = Instance(SettingsWindowState, ())
 
     #: Keeps the settings in their file; made once they are loaded.
     _settings_store = Any()
@@ -360,7 +364,7 @@ class NotificationsPlugin(Plugin):
         from .views.view_consts import SETTINGS_OBJECT_NAME
 
         settings = self.controller.pane_model.center.settings
-        view, context = settings_view(settings)
+        view, context = settings_view(settings, self._settings_window)
         ui = self._settings_uis.get(view.title)
 
         settings.opened = True
