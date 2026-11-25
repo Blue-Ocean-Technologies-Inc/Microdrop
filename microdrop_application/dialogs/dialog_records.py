@@ -21,7 +21,7 @@ never (a question is not an event). Each of the four takes three keywords:
   success dialog.
 - ``source``: who raised it, shown on the entry; DIALOG_SOURCE if not given.
 - ``help_target``: a HelpAction target (``notifications.consts.help_target``)
-  giving the entry its "How do Iâ€¦?" link.
+  giving the entry its "How do I…?" link.
 
 The entry is posted before the dialog opens, so it is listed even while the
 modal dialog holds the event loop. Without the notifications plugin the
@@ -52,8 +52,16 @@ from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-#: A tag, as rich dialog text has them.
-_TAG_PATTERN = re.compile(r"<\s*/?\s*[a-zA-Z][^>]*>")
+#: The tags rich dialog text is written with. Only these are markup, so
+#: plain text such as "a < b and c > d" or "<path>" stays as it is.
+_RICH_TEXT_TAGS = (
+    "a|b|big|blockquote|body|br|center|code|div|em|font|h[1-6]|head|hr|html"
+    "|i|img|li|nobr|ol|p|pre|qt|s|small|span|strong|style|sub|sup|table|td"
+    "|th|tr|tt|u|ul"
+)
+
+#: A tag, as rich dialog text has them: "<" right before a known tag name.
+_TAG_PATTERN = re.compile(rf"</?(?:{_RICH_TEXT_TAGS})(?:\s[^<>]*)?/?>", re.I)
 
 #: Tags ending a line.
 _LINE_BREAK_PATTERN = re.compile(r"<\s*(br|/p|/div|/li|/h[1-6]|/tr)\s*/?\s*>", re.I)
@@ -112,7 +120,7 @@ def dialog_notification(
     detail = "\n\n".join(part for part in (text, plain_text(detail)) if part)
 
     if len(detail) > DIALOG_DETAIL_MAX_CHARS:
-        detail = f"{detail[: DIALOG_DETAIL_MAX_CHARS - 1]}â€¦"
+        detail = f"{detail[: DIALOG_DETAIL_MAX_CHARS - 1]}…"
 
     payload = {
         "title": title,
