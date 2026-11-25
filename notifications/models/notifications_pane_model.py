@@ -178,6 +178,9 @@ class NotificationsPaneModel(HasTraits):
     run_action = Event(Instance(Notification))
     run_secondary_action = Event(Instance(Notification))
 
+    #: Fired with the path of a detail link the user clicked.
+    open_link = Event(Str)
+
     #: Fired with an entry the open drawer scrolls to and highlights.
     reveal = Event(Instance(Notification))
 

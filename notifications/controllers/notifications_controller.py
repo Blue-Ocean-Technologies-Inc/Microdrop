@@ -27,6 +27,7 @@ from ..consts import (
     PublishAction,
     SnoozeAction,
 )
+from ..models.notification import link_folder
 from ..models.notifications_pane_model import NotificationsPaneModel
 
 # Logger import.
@@ -137,6 +138,12 @@ class NotificationsController(HasTraits):
         # Later: out of Needs attention, into Activity, still to do.
         elif isinstance(action, SnoozeAction):
             entry.trait_set(needs_attention=False, unread=False)
+
+    @observe("pane_model:open_link")
+    def _open_link(self, event):
+        """A detail link opens its folder in the file manager: a file's link
+        the folder holding it, so a link never runs a file."""
+        self._open(str(link_folder(event.new)))
 
     @observe("open_help")
     def _follow_help_handler(self, event):

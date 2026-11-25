@@ -8,8 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Small pieces of a notification card: its meta line, its "new" marker,
-its footer of buttons, and the style sheet all cards share."""
+"""Small pieces of a notification card: its meta line and tooltip, its
+detail with links, its footer of buttons, and the style sheet all cards
+share."""
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
@@ -30,12 +31,16 @@ from microdrop_style.panel_theme import (
     primary_button_style,
     quiet_button_style,
     role_color,
+    theme_palette,
 )
 from microdrop_style.typography import BUTTON, role_font
 
+# Microdrop utils imports.
+from microdrop_utils.clamped_label import ClampedLabel
+
 # Local imports.
-from .formatting import format_time
-from .view_consts import CARD_RADIUS, DETAIL_MAX_HEIGHT
+from .formatting import format_exact_time, format_time
+from .view_consts import CARD_RADIUS, DETAIL_MAX_HEIGHT, HIGHLIGHT_MS
 
 #: Width (px) of the severity stripe down a card's left edge.
 STRIPE_WIDTH = 4
@@ -166,6 +171,37 @@ def paint_card(painter, rect, palette, stripe, hovered, flash, progress):
     painter.end()
 
 
+class FlashFade(QtCore.QObject):
+    """A card's highlight: its strength ``value``, 0-1, fading out over
+    HIGHLIGHT_MS after ``start()``, the card repainted as it fades. Its
+    animation is made on the first start."""
+
+    def __init__(self, card):
+        super().__init__(card)
+
+        self.value = 0.0
+        self._card = card
+        self._fade = None
+
+    def start(self):
+        """Light the highlight up, then fade it out."""
+
+        if self._fade is None:
+            self._fade = QtCore.QVariantAnimation(self)
+            self._fade.setDuration(HIGHLIGHT_MS)
+            self._fade.setStartValue(1.0)
+            self._fade.setEndValue(0.0)
+            self._fade.setEasingCurve(QtCore.QEasingCurve.Type.InQuad)
+            self._fade.valueChanged.connect(self._set)
+
+        self._fade.stop()
+        self._fade.start()
+
+    def _set(self, value):
+        self.value = value
+        self._card.update()
+
+
 class TracebackView(QtWidgets.QPlainTextEdit):
     """An expanded traceback: monospace, unwrapped, as tall as its lines up
     to DETAIL_MAX_HEIGHT."""
@@ -191,6 +227,52 @@ class TracebackView(QtWidgets.QPlainTextEdit):
 
         self.setFixedHeight(min(lines * line_height + 24, DETAIL_MAX_HEIGHT))
         self.show()
+
+
+def card_tooltip(entry):
+    """A card's tooltip: who posted it, when, and how often."""
+    lines = [entry.source or entry.category, format_exact_time(entry.last_seen)]
+
+    if entry.count > 1:
+        first = format_exact_time(entry.first_seen)
+        lines.append(f"{entry.count} times since {first}")
+
+    return "\n".join(line for line in lines if line)
+
+
+class CardBody(ClampedLabel):
+    """A card's detail, cut to its lines, its links (DetailLink) in the
+    panel's link colour. A link's path is its tooltip; a click on it gives
+    the path with ``link_clicked``."""
+
+    link_clicked = QtCore.Signal(str)
+
+    def __init__(self, parent=None, lines=2):
+        super().__init__(parent, lines)
+
+        self.setObjectName("cardBody")
+        self._paths = []
+
+        self.linkActivated.connect(self._activate)
+        self.linkHovered.connect(lambda href: self.setToolTip(self._path(href)))
+
+    def show_detail(self, text, lines, links=()):
+        """Show ``text`` cut to ``lines`` (0: all of it), with ``links``."""
+        self._paths = [link.path for link in links]
+        self.set_links([link.text for link in links], css(link_color(theme_palette())))
+        self.set_full_text(text, lines=lines)
+
+    def _path(self, href):
+        """The path of the link whose href is ``href`` (its index)."""
+        index = int(href) if href.isdigit() else -1
+
+        return self._paths[index] if 0 <= index < len(self._paths) else ""
+
+    def _activate(self, href):
+        path = self._path(href)
+
+        if path:
+            self.link_clicked.emit(path)
 
 
 class CardFooter(QtWidgets.QWidget):
@@ -232,6 +314,15 @@ class CardFooter(QtWidgets.QWidget):
         button.hide()
 
         return button
+
+    def show_controls(self):
+        """Show the footer while any of its controls shows; buttons get room
+        above them."""
+        buttons = not self.primary.isHidden() or not self.secondary.isHidden()
+
+        self.setVisible(buttons or not self.more.isHidden())
+        self.layout().setContentsMargins(0, 6 if buttons else 0, 0, 0)
+        self.arrange()
 
     def arrange(self):
         """Lay the shown controls out for the footer's width."""

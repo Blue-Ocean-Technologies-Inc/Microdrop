@@ -61,6 +61,9 @@ def make_card(entry, pane_model, parent):
         lambda entry: setattr(pane_model, "run_secondary_action", entry)
     )
     card.expand_clicked.connect(_toggle_expanded)
+    card.link_clicked.connect(
+        lambda entry, path: setattr(pane_model, "open_link", path)
+    )
 
     return card
 

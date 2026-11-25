@@ -11,13 +11,15 @@
 """One notification as a card, in the drawer or as a toast::
 
     ▌ (!)  Title, bold while unread                    •  ✕
-    ▌      Source · 3 min ago · ×2
-    ▌      Two lines of the detail, then an ellipsis…
+    ▌      Source · 3 min ago · ×2               ┌───────┐
+    ▌      Two lines of the detail, with a       │ thumb │
+    ▌      file name as a link, then an ellip…   └───────┘
     ▌      [ Primary ]  How do I…?                 Show more
 
-A card with help and nothing to press shows the help as its one control,
-an outlined button. While nothing can open help, help is disabled and says
-so. Runs standalone against just an entry::
+The thumbnail shows only when the entry has one; a click on it presses the
+primary button. A card with help and nothing to press shows the help as its
+one control, an outlined button. While nothing can open help, help is
+disabled and says so. Runs standalone against just an entry::
 
     NotificationCard(Notification(title="Hello", detail="World")).show()
 
@@ -38,7 +40,6 @@ from microdrop_style.panel_theme import (
 from microdrop_style.typography import BODY_TEXT, CARD_TITLE, META, role_font
 
 # Microdrop utils imports.
-from microdrop_utils.clamped_label import ClampedLabel
 from microdrop_utils.new_marker import NewDot
 
 # Local imports.
@@ -46,20 +47,21 @@ from ..consts import SEVERITY_GLYPHS, HelpAction
 from ..models.notification import Notification
 from .card_parts import (
     STRIPE_WIDTH,
+    CardBody,
     CardFooter,
+    FlashFade,
     TracebackView,
     card_style_sheet,
+    card_tooltip,
     meta_text,
     paint_card,
     palette_key,
     restyle_by_name,
     stripe_color,
 )
-from .formatting import format_exact_time, format_preview
-from .view_consts import (
-    CARD_BODY_LINES,
-    HIGHLIGHT_MS,
-)
+from .card_thumbnail import CardThumbnail
+from .formatting import format_preview
+from .view_consts import CARD_BODY_LINES, THUMBNAIL_SIZE, TOAST_THUMBNAIL_SIZE
 
 #: Pixel size of the severity glyph.
 GLYPH_SIZE = 20
@@ -109,6 +111,9 @@ class NotificationCard(QtWidgets.QFrame):
     #: A click on a toast's body.
     body_clicked = QtCore.Signal(object)
 
+    #: A link in the detail, with its path.
+    link_clicked = QtCore.Signal(object, str)
+
     def __init__(self, entry, parent=None, toast=False, help_available=True):
         super().__init__(parent)
 
@@ -122,10 +127,8 @@ class NotificationCard(QtWidgets.QFrame):
         self._hovered = False
         self._palette_key = None
 
-        #: The highlight's strength, 0-1, fading after ``flash()``; its
-        #: animation is made on the first flash.
-        self._flash = 0.0
-        self._flash_fade = None
+        #: The highlight, fading after ``flash()``.
+        self._flash = FlashFade(self)
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
         # Its height for its width, every pass: a Maximum policy capped it
@@ -187,18 +190,34 @@ class NotificationCard(QtWidgets.QFrame):
         top.addWidget(self._dismiss, 0, _ALIGN.AlignTop)
         column.addLayout(top)
 
+        # The meta line and the detail, the thumbnail (made when there is
+        # one) at their right: the card is as tall as the taller.
+        self._beside = QtWidgets.QHBoxLayout()
+        self._beside.setContentsMargins(0, 0, 0, 0)
+        self._beside.setSpacing(10)
+        self._thumbnail = None
+        column.addLayout(self._beside)
+
+        text = QtWidgets.QVBoxLayout()
+        text.setContentsMargins(0, 0, 0, 0)
+        text.setSpacing(2)
+        self._beside.addLayout(text, 1)
+
         self._meta = QtWidgets.QLabel(self)
         self._meta.setObjectName("cardMeta")
         self._meta.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Fixed
         )
-        column.addWidget(self._meta)
-        column.addSpacing(4)
+        text.addWidget(self._meta)
+        text.addSpacing(4)
 
-        self._body = ClampedLabel(self, CARD_BODY_LINES)
-        self._body.setObjectName("cardBody")
+        self._body = CardBody(self, CARD_BODY_LINES)
         self._body.overflow_changed.connect(self._show_more_link)
-        column.addWidget(self._body)
+        self._body.link_clicked.connect(
+            lambda path: self.link_clicked.emit(self.entry, path)
+        )
+        text.addWidget(self._body)
+        text.addStretch(1)
 
         # Made the first time a traceback is expanded.
         self._traceback = None
@@ -249,11 +268,12 @@ class NotificationCard(QtWidgets.QFrame):
         self.refresh_time()
         self._show_body()
         self._show_buttons()
+        self._show_thumbnail()
 
         self._acted.setVisible(bool(entry.acted))
         self._acted.setText(f"✓  {entry.acted}")
 
-        self.setToolTip(self._tooltip())
+        self.setToolTip(card_tooltip(entry))
         self.update()
 
     def set_help_available(self, available):
@@ -274,17 +294,7 @@ class NotificationCard(QtWidgets.QFrame):
 
     def flash(self):
         """Highlight the card, fading out: "this is the one"."""
-
-        if self._flash_fade is None:
-            self._flash_fade = QtCore.QVariantAnimation(self)
-            self._flash_fade.setDuration(HIGHLIGHT_MS)
-            self._flash_fade.setStartValue(1.0)
-            self._flash_fade.setEndValue(0.0)
-            self._flash_fade.setEasingCurve(QtCore.QEasingCurve.Type.InQuad)
-            self._flash_fade.valueChanged.connect(self._set_flash)
-
-        self._flash_fade.stop()
-        self._flash_fade.start()
+        self._flash.start()
 
     def set_progress(self, progress):
         """Draw a toast's countdown at ``progress`` (0-1), or none."""
@@ -297,19 +307,17 @@ class NotificationCard(QtWidgets.QFrame):
         """Stop following the entry."""
         self._binding.entry = None
 
-    def _set_flash(self, value):
-        self._flash = value
-        self.update()
-
     def _show_body(self):
         entry = self.entry
         traceback = entry.monospace_detail
         expanded = entry.expanded and not self.toast
 
         self._body.setVisible(bool(entry.detail) and not (traceback and expanded))
-        self._body.set_full_text(
+        self._body.show_detail(
             format_preview(entry) if traceback else entry.detail,
             lines=0 if expanded else CARD_BODY_LINES,
+            # A toast's body opens the drawer: its links are the drawer's.
+            links=() if self.toast else entry.links,
         )
 
         if traceback and expanded:
@@ -341,7 +349,7 @@ class NotificationCard(QtWidgets.QFrame):
 
         more.setVisible(not self.toast and expandable)
         more.setText("Show less" if self.entry.expanded else "Show more")
-        self._arrange_footer()
+        self._footer.show_controls()
 
         # The hand only where a click does something.
         self.setCursor(
@@ -388,27 +396,22 @@ class NotificationCard(QtWidgets.QFrame):
 
         secondary.setIcon(icon if help_only else QtGui.QIcon())
         restyle_by_name(secondary, name)
-        self._arrange_footer()
+        self._footer.show_controls()
 
-    def _arrange_footer(self):
-        """The footer shows while any of its controls does; buttons get
-        room above them."""
-        footer = self._footer
-        buttons = not footer.primary.isHidden() or not footer.secondary.isHidden()
+    def _show_thumbnail(self):
+        """The entry's picture beside the text, its box made the first time
+        there is one; a click on it presses the card's button."""
 
-        footer.setVisible(buttons or not footer.more.isHidden())
-        footer.layout().setContentsMargins(0, 6 if buttons else 0, 0, 0)
-        footer.arrange()
+        if self.entry.thumbnail and self._thumbnail is None:
+            size = TOAST_THUMBNAIL_SIZE if self.toast else THUMBNAIL_SIZE
+            self._thumbnail = CardThumbnail(size, self)
+            self._thumbnail.clicked.connect(
+                lambda: self.action_clicked.emit(self.entry)
+            )
+            self._beside.addWidget(self._thumbnail, 0, _ALIGN.AlignTop)
 
-    def _tooltip(self):
-        entry = self.entry
-        lines = [entry.source or entry.category, format_exact_time(entry.last_seen)]
-
-        if entry.count > 1:
-            first = format_exact_time(entry.first_seen)
-            lines.append(f"{entry.count} times since {first}")
-
-        return "\n".join(line for line in lines if line)
+        if self._thumbnail is not None:
+            self._thumbnail.show_entry(self.entry)
 
     # ------------------------------------------------------------------ #
     # Style                                                               #
@@ -458,7 +461,7 @@ class NotificationCard(QtWidgets.QFrame):
             palette,
             stripe_color(self.entry, palette),
             hovered=self._hovered and not self.toast,
-            flash=self._flash,
+            flash=self._flash.value,
             progress=self.progress,
         )
 

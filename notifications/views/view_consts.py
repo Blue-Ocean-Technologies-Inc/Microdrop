@@ -115,6 +115,11 @@ CARD_BODY_LINES = 2
 #: Corner radius (px) of cards and toasts.
 CARD_RADIUS = 8
 
+#: A card's thumbnail box (width, height px), 4:3, in the drawer and in a
+#: toast; the picture is cover-cropped to it, never scaled up.
+THUMBNAIL_SIZE = (72, 54)
+TOAST_THUMBNAIL_SIZE = (64, 48)
+
 #: Activity's cards built at first, and per batch as the scroll nears the
 #: end.
 HISTORY_PAGE = 25
