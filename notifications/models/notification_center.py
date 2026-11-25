@@ -208,8 +208,19 @@ class NotificationCenter(HasTraits):
         return self._update(entry, title, severity, timestamp, count, state, thread_id)
 
     def post_message(self, message):
-        """List a validated ``NotificationMessage``."""
+        """List a validated ``NotificationMessage``; one naming an occurrence
+        collapses only into an entry of that same occurrence."""
         title, detail = title_and_detail(message.title, message.detail)
+        key = None
+
+        if message.occurrence:
+            key = (
+                message.source,
+                message.category,
+                message.severity,
+                title,
+                message.occurrence,
+            )
 
         return self.post(
             title,
@@ -219,6 +230,7 @@ class NotificationCenter(HasTraits):
             source=message.source,
             timestamp=message.timestamp,
             action=message.action,
+            key=key,
             secondary_action=message.secondary_action,
             needs_attention=message.needs_attention,
             condition_id=message.condition_id,

@@ -43,6 +43,7 @@ from ..consts import (
     LOG_FLUSH_INTERVAL_MS,
     LOG_IGNORE_RULES,
     LOG_MIN_LEVEL,
+    LOG_RECORDED_ATTR,
     MAX_ENTRIES,
     PKG,
     SEVERITY_ERROR,
@@ -242,6 +243,11 @@ class NotificationLogHandler(logging.Handler):
             self._invoke_after(LOG_CHUNK_PAUSE_MS, self._post_pending_chunk)
 
     def _buffer_record(self, record):
+
+        # Its event is listed already, e.g. by the dialog shown for it.
+        if getattr(record, LOG_RECORDED_ATTR, False):
+            return
+
         snapshot = snapshot_record(record)
 
         if is_ignored(snapshot["name"], snapshot["message"], self._ignore_rules):
