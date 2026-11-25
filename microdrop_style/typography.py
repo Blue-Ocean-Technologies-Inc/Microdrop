@@ -9,14 +9,21 @@
 # Thanks for using Microdrop open source!
 
 """The drawer's type roles, in one place: the size and weight each kind of
-text takes, all in the application's own font. Sizes keep one hierarchy:
-drawer title > section > sub-section, and the cards below them."""
+text takes. Sizes keep one hierarchy: drawer title > section > sub-section,
+and the cards below them.
+
+The roles are the panel's own type scale: its font family by name, at fixed
+sizes, never the application's font or text size, so the panel looks the
+same in any application (only the screen's pixel density scales it)."""
 
 # Standard library imports.
 from collections import namedtuple
 
 # Enthought library imports.
 from pyface.qt import QtGui
+
+# Local imports.
+from .fonts.fontnames import TEXT_FONT_FAMILY
 
 _WEIGHT = QtGui.QFont.Weight
 
@@ -34,9 +41,9 @@ BUTTON = FontRole(10, _WEIGHT.DemiBold)
 
 
 def role_font(role, weight=None):
-    """The application's font for ``role``, at ``weight`` instead of its
-    own if given."""
-    font = QtGui.QFont(QtGui.QGuiApplication.font())
+    """The panel's font for ``role``, at ``weight`` instead of its own if
+    given."""
+    font = QtGui.QFont(TEXT_FONT_FAMILY)
 
     font.setPointSizeF(role.points)
     font.setWeight(weight if weight is not None else role.weight)

@@ -8,5 +8,8 @@
 #
 # Thanks for using Microdrop open source!
 
+#: The text font, bundled and loaded at startup (``style_app``).
+TEXT_FONT_FAMILY = "Inter"
+
 ICON_FONT_FAMILY = "Material Symbols Outlined"
 MDI_ICON_FONT_FAMILY = "Material Design Icons"
