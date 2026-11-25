@@ -27,6 +27,8 @@ from microdrop_utils.plugin_load_status import PluginLoadStatus
 
 # Local imports.
 from .consts import (
+    LOAD_STATUS_SECTION_ACCENT,
+    LOAD_STATUS_SECTION_GLYPH,
     LOAD_STATUS_SECTION_ID,
     LOAD_STATUS_SECTION_ORDER,
     LOAD_STATUS_SECTION_TITLE,
@@ -40,6 +42,8 @@ class PluginLoadStatusSection(NotificationSection):
     id = LOAD_STATUS_SECTION_ID
     title = LOAD_STATUS_SECTION_TITLE
     order = LOAD_STATUS_SECTION_ORDER
+    glyph = LOAD_STATUS_SECTION_GLYPH
+    accent = LOAD_STATUS_SECTION_ACCENT
 
     #: The load records — the application's ``plugin_load_status``.
     status = Instance(PluginLoadStatus, ())
