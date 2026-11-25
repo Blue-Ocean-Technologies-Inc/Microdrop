@@ -32,6 +32,7 @@ from device_viewer.consts import (
 )
 from dropbot_controller.consts import (
     CAPACITANCE_UPDATED,
+    DROPBOT_CONNECTED,
     DROPBOT_DISCONNECTED,
     REALTIME_MODE_UPDATED,
 )
@@ -243,6 +244,7 @@ ACTOR_TOPIC_DICT = {
         ADVANCED_MODE_CHANGE,
         PROTOCOL_TREE_SET_CELL,
         PROTOCOL_TREE_ADD_STEP,
+        DROPBOT_CONNECTED,
         DROPBOT_DISCONNECTED,
     ],
     LOGGING_LISTENER_NAME: [

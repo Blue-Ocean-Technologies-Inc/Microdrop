@@ -123,13 +123,14 @@ class DeviceViewerPublishController(HasTraits):
 
     @observe("_disable_state_messages")
     def _disable_state_messages_change_log(self, event):
+        # A state, toggled in normal use (route playback, restore): no fault.
         if event.new:
-            logger.warning(
+            logger.debug(
                 "Device viewer will not be processing device view model state "
                 "change since state messages are disabled."
             )
         else:
-            logger.info("Device viewer will process device view model state changes")
+            logger.debug("Device viewer will process device view model state changes")
 
     # ---------------------------------------------------- state message
     @observe("message_buffer")
@@ -192,8 +193,9 @@ class DeviceViewerPublishController(HasTraits):
             # restoring the user-toggled channels.
             return
 
+        # Start-up order: the model changes before its device SVG is in.
         if not self.model.electrodes.svg_model:
-            logger.warning(
+            logger.debug(
                 "Unable to publish device view model yet. Need svg_model to "
                 "fully initialize."
             )
@@ -291,14 +293,18 @@ class DeviceViewerPublishController(HasTraits):
             reason += "actuates); "
 
         if not self.model.realtime_mode:
-            reason += "Realtime mode; "
+            reason += "Realtime mode off; "
 
         if not self.model.connected:
             reason += "Device Not connected; "
 
-        logger.critical(
-            f"DEVICE VIEWER: Cannot publish electrodes state change; reasons: {reason}"
-        )
+        # Why actuation will not happen, for the console: info, below what
+        # the notifications drawer shows (an expected state, not a fault).
+        if reason:
+            logger.info(
+                f"DEVICE VIEWER: Cannot publish electrodes state change; "
+                f"reasons: {reason}"
+            )
 
     # ------------------------------------------------------- geometry
     def _publish_geometry_if_changed(self):
@@ -370,7 +376,6 @@ class DeviceViewerPublishController(HasTraits):
             # In pF/mm^2
             FILLER_CAPACITANCE_KEY: self.model.filler_capacitance_over_area,
         }
-        logger.warning(f"Publishing calibration message: {message}")
         publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
         logger.info(f"Published calibration message: {message}")
 

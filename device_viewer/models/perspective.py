@@ -82,8 +82,9 @@ class PerspectiveModel(HasTraits):
     def update_transformation(self, event=None):
         """Map the reference rect onto the transformed reference rect."""
 
+        # Until all four corners are placed (or loaded): nothing to map yet.
         if not len(self.transformed_reference_rect) == 4:
-            logger.warning(
+            logger.debug(
                 "Need 4 points in transformed reference rectangle: "
                 "Transformation not updated."
             )
