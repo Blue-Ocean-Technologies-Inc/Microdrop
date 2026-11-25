@@ -50,26 +50,29 @@ class DropbotStatusAndControlsDockPane(RealtimeModeIconMixin, BaseStatusDockPane
     # ------------------------------------------------------------------ #
 
     def _create_model(self):
-        # The model gets its preferences here, before the message listener
-        # exists: a message handled on a worker thread reads them.
-        self.dropbot_status_preferences = DropbotStatusAndControlsPreferences(
-            preferences=self.task.window.application.preferences_helper.preferences
-        )
+        # The plugin made the model and its listener at start, before any
+        # routed message could arrive; the pane shows that model.
+        plugin = self._status_plugin()
+        self.dropbot_status_preferences = plugin.status_preferences
+        self._dialog_signals = plugin.dialog_signals
 
-        return DropbotStatusAndControlsModel(
-            preferences=self.dropbot_status_preferences
-        )
+        return plugin.status_model
 
     def _create_controller(self):
         return ControlsController(self.model)
 
     def _create_message_handler(self) -> DropbotStatusAndControlsMessageHandler:
-        self._dialog_signals = DialogSignals()
-        return DropbotStatusAndControlsMessageHandler(
-            model=self.model,
-            dialog_signals=self._dialog_signals,
-            name=listener_name,
-        )
+        return self._status_plugin().message_handler
+
+    def _status_plugin(self):
+        return self.task.window.application.get_plugin(self.status_bar_plugin_id)
+
+    def destroy(self):
+        # The listener is the plugin's, released when it stops: a pane
+        # closed and remade must not leave its routed messages unhandled.
+        self.message_handler = None
+
+        super().destroy()
 
     def _setup_extras(self):
         """Wire up the dialog popups."""
