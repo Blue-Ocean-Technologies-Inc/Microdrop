@@ -166,6 +166,16 @@ DEFERRED_FRONTEND_PLUGINS = [
             ),
         ],
     ),
+    # The News section of the notifications drawer, and MicroDrop's release
+    # notes (instead of the What's New dialog at launch).
+    DeferredPlugin(
+        spec="news.plugin:NewsPlugin",
+        preload_modules=[
+            "news.services.news_feed",
+            "news.controllers.news_alerts",
+            "news.services.seen_state",
+        ],
+    ),
     DeferredPlugin(
         spec="ssh_controls_ui.plugin:SSHUIPlugin",
         preload_modules=["ssh_controls_ui.menus", "ssh_controls_ui.preferences"],

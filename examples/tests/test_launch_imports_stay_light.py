@@ -51,6 +51,9 @@ LAUNCH_MODULES = (
     "notifications.services.chime",
     "notifications.services.log_forwarder",
     "notifications.views.bell",
+    # Read at launch to decide on the What's New dialog; the news plugin
+    # itself is deferred.
+    "news.consts",
 )
 
 #: Packages none of them may import. Bare ``scipy`` is not listed: pint, which
