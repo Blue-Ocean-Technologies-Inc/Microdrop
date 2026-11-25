@@ -149,6 +149,8 @@ class NotificationCenter(HasTraits):
         thread_id="",
         pop_up=True,
         priority=0,
+        thumbnail="",
+        links=(),
     ):
         """List a notification, collapsing it into an equal-keyed entry, or
         updating its thread's entry in place.
@@ -183,6 +185,8 @@ class NotificationCenter(HasTraits):
             "category_id": category_id,
             "pop_up": pop_up,
             "priority": priority,
+            "thumbnail": thumbnail,
+            "links": list(links),
         }
         entry = self._entries_by_key.get(key)
 
@@ -222,6 +226,8 @@ class NotificationCenter(HasTraits):
             thread_id=message.thread_id,
             pop_up=message.pop_up,
             priority=message.priority,
+            thumbnail=message.thumbnail,
+            links=message.links,
         )
 
     def find(self, key):
@@ -345,6 +351,8 @@ class NotificationCenter(HasTraits):
                 category_id=state["category_id"] or entry.category_id,
                 pop_up=state["pop_up"],
                 priority=max(state["priority"], entry.priority),
+                thumbnail=state["thumbnail"] or entry.thumbnail,
+                links=state["links"] or entry.links,
             )
 
         entry.trait_set(

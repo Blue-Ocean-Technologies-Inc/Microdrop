@@ -26,9 +26,10 @@ import logging
 import time
 from pathlib import Path
 from typing import Annotated, Literal, Union
+from urllib.parse import urlparse
 
 # Third-party imports.
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 # Enthought library imports.
 from traits.api import Bool, Callable, Event, HasTraits, Instance, Int, List, Str, Tuple
@@ -205,6 +206,31 @@ SecondaryAction = Annotated[
 ]
 
 
+def local_path(value):
+    """``value`` if it is a local path (or empty); raises ValueError for a
+    URL or a ``data:`` blob. One letter before a colon is a Windows drive."""
+
+    if len(urlparse(value).scheme) > 1:
+        raise ValueError(f"not a local path: {value[:60]!r}")
+
+    return value
+
+
+class DetailLink(BaseModel):
+    """A span of a notification's ``detail`` shown as a link opening a
+    local folder: a folder's path opens it, a file's path opens the folder
+    holding it. A file is never opened or run by a link."""
+
+    model_config = _DEFERRED_BUILD
+
+    #: The span: its first occurrence in the detail, e.g. a file name.
+    #: Text only, so the detail stays plain text wherever it is shown.
+    text: str = Field(min_length=1)
+
+    #: The local file or folder, also shown as the link's tooltip.
+    path: Annotated[str, AfterValidator(local_path)] = Field(min_length=1)
+
+
 class NotificationMessage(BaseModel):
     """One notification, as posted on NOTIFICATION_POST. Every field past
     ``action`` is optional; a message without them behaves as before."""
@@ -259,6 +285,15 @@ class NotificationMessage(BaseModel):
     #: Within Needs attention, higher sorts first (ties newest first), e.g.
     #: a calibration that is missing above one that is only stale.
     priority: int = 0
+
+    #: A small picture beside the text: a local image file's path, never a
+    #: URL or the picture's data. A file that is missing, or not a readable
+    #: image (e.g. a video), shows a placeholder glyph of its kind instead.
+    #: Clicking it does what the card's button does.
+    thumbnail: Annotated[str, AfterValidator(local_path)] = ""
+
+    #: Spans of ``detail`` shown as links to local folders (DetailLink).
+    links: list[DetailLink] = Field(default_factory=list)
 
 
 class ShowNotificationsPanelRequest(BaseModel):

@@ -10,6 +10,9 @@
 
 """One entry of the notifications drawer. Qt-free."""
 
+# Standard library imports.
+from pathlib import Path
+
 # Enthought library imports.
 from traits.api import (
     Any,
@@ -20,6 +23,7 @@ from traits.api import (
     HasTraits,
     Instance,
     Int,
+    List,
     Property,
     Str,
     Tuple,
@@ -32,6 +36,7 @@ from ..consts import (
     SEVERITIES,
     SEVERITY_ERROR,
     SEVERITY_WARNING,
+    DetailLink,
     HelpAction,
     OpenPathAction,
     PublishAction,
@@ -93,6 +98,12 @@ class Notification(HasTraits):
     #: Within Needs attention, higher sorts first.
     priority = Int(0)
 
+    #: A local picture's path, shown small beside the text; empty for none.
+    thumbnail = Str()
+
+    #: Spans of the detail shown as links to local folders.
+    links = List(Instance(DetailLink))
+
     #: True until the user has seen it.
     unread = Bool(True)
 
@@ -141,7 +152,16 @@ class Notification(HasTraits):
 
     @observe(
         "title, detail, severity, count, last_seen, unread, action,"
-        " secondary_action, needs_attention, is_new, acted, expanded"
+        " secondary_action, needs_attention, is_new, acted, expanded, thumbnail,"
+        " links"
     )
     def _announce_change(self, event):
         self.changed = True
+
+
+def link_folder(path):
+    """The folder a detail link to ``path`` opens: the path itself when it is
+    a folder, else the folder holding it, so a link never runs a file."""
+    path = Path(path)
+
+    return path if path.is_dir() else path.parent
