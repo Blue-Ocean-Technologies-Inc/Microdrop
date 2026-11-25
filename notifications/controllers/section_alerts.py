@@ -111,7 +111,7 @@ class SectionAlertWatcher(HasTraits):
         )
         self.pane_model.section_alerts.append(entry)
 
-        if self.offer is not None:
+        if self.offer is not None and alert.pop_up:
             self.offer(entry)
 
         return entry

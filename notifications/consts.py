@@ -30,7 +30,7 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 # Enthought library imports.
-from traits.api import Bool, Callable, HasTraits, Instance, Int, List, Str, Tuple
+from traits.api import Bool, Callable, Event, HasTraits, Instance, Int, List, Str, Tuple
 
 # Microdrop style imports.
 from microdrop_style.colors import (
@@ -267,14 +267,8 @@ TONE_CONNECTED = "connected"
 TONE_DISCONNECTED = "disconnected"
 TONE_ALERT = "alert"
 TONE_COMPLETION = "completion"
-TONES = (
-    TONE_NONE,
-    TONE_SOFT,
-    TONE_CONNECTED,
-    TONE_DISCONNECTED,
-    TONE_ALERT,
-    TONE_COMPLETION,
-)
+TONES = (TONE_NONE, TONE_SOFT, TONE_CONNECTED, TONE_DISCONNECTED, TONE_ALERT)
+TONES += (TONE_COMPLETION,)
 
 #: How each tone is named in the settings.
 TONE_LABELS = {
@@ -387,11 +381,21 @@ class SectionAlert(HasTraits):
     #: The declared category it belongs to, for its pop-up and tone.
     category_id = Str()
 
+    #: Whether it pops up as a toast; off, it is only marked new and
+    #: counted, e.g. one of many summed up by another alert's toast.
+    pop_up = Bool(True)
+
+    #: Whether it counts on the bell; off for an alert summing up others.
+    counted = Bool(True)
+
     #: Not seen yet in the open drawer with its section expanded.
     unread = Bool(True)
 
     #: Seen in the drawer open now: marked new until it closes.
     is_new = Bool(False)
+
+    #: Fired when the user dismisses its toast.
+    dismissed = Event()
 
 
 class NotificationSection(HasTraits):

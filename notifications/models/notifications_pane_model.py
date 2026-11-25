@@ -144,7 +144,11 @@ class NotificationsPaneModel(HasTraits):
     def _recount_bell(self, event):
         shown = set(map(id, self.toasts.entries_shown()))
         entries = [*self.center.entries, *self.section_alerts]
-        counted = [e for e in entries if e.unread and id(e) not in shown]
+        counted = [
+            e
+            for e in entries
+            if e.unread and id(e) not in shown and getattr(e.alert, "counted", True)
+        ]
         levels = [SEVERITIES.index(e.severity) for e in counted if not e.section_id]
         alerts = [e for e in counted if e.section_id]
 

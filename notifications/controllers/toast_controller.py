@@ -105,8 +105,12 @@ class ToastStackController(HasTraits):
     # ------------------------------------------------------------------ #
 
     def dismiss(self, item):
-        """The toast's cross: into the bell, still unread."""
+        """The toast's cross: into the bell, still unread. A section's
+        alert hears of it."""
         item.trait_set(into_bell=True, leaving=True)
+
+        if item.entry.alert is not None:
+            item.entry.alert.dismissed = True
 
     def clear(self):
         """Take every toast off at once (the drawer opened, or a reset)."""
