@@ -23,10 +23,8 @@ folder (``notifications.consts.notifications_data_dir``).
 While this plugin is loaded, MicroDrop does not open its What's New dialog
 at launch: the release notes are the What's new sub-section and its toast.
 
-Add a post by hand by editing ``feed.json`` (see ``feed.schema.json`` beside
-it), or with the feed creator::
-
-    python -m news.feed_creator [FEED.json] [--theme light|dark]
+Add a post by editing ``news/resources/feed.json`` by hand; it is validated
+by ``news/resources/feed.schema.json``, which describes every field.
 """
 
 # Standard library imports.

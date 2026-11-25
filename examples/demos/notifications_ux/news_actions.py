@@ -8,21 +8,19 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The Demo menu's News actions: the feed creator, reload, and pushes.
+"""The Demo menu's News actions: reload and pushes.
 
 Aimed at the news plugin's News section, fetched when used (the plugin
-loads after the window paints): the creator opens on the shipped feed file
-and sends to News.
+loads after the window paints).
 """
 
 # Enthought library imports.
 from pyface.action.api import Action
-from traits.api import Callable, HasTraits, Int, List
+from traits.api import Callable, HasTraits, Int
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import file_dialog
 from news.consts import FEED_PATH
-from news.feed_creator.app import open_feed_creator
 
 #: What Push sample post sends: a placeholder with rich text.
 SAMPLE_PUSH_POST = {
@@ -55,16 +53,12 @@ class NewsFeedActions(HasTraits):
     #: ``window()``: the main window's control, the dialogs' parent.
     window = Callable(lambda: None)
 
-    #: Open creators, held so they stay open.
-    _creators = List()
-
     #: Sample posts pushed so far, for their ids.
     _pushed = Int(0)
 
     def actions(self):
-        """The menu items, creator first."""
+        """The menu items."""
         return [
-            Action(name="Feed creator…", on_perform=self.open_creator),
             Action(name="Reload feed", on_perform=self.reload),
             Action(name="Push post from JSON…", on_perform=self.push_from_file),
             Action(name="Push sample post", on_perform=self.push_sample),
@@ -80,20 +74,6 @@ class NewsFeedActions(HasTraits):
 
         if self.section is not None:
             self.section.controller.reload()
-
-    def open_creator(self):
-        """The feed creator on the feed file, able to send to News."""
-        if self.section is None:
-            return
-
-        self._creators = [ui for ui in self._creators if ui.control is not None]
-        self._creators.append(
-            open_feed_creator(
-                str(FEED_PATH),
-                feed_controller=self.section.controller,
-                parent=None,
-            )
-        )
 
     def push_from_file(self):
         """Push a post or feed chosen in a file dialog."""

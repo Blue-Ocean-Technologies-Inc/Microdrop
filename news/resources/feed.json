@@ -1,7 +1,7 @@
 {
   "$schema": "./feed.schema.json",
   "version": 1,
-  "_readme": "News shown in the News section of MicroDrop's notifications drawer. Edit it with the feed creator (python -m news.feed_creator) or by hand; feed.schema.json describes every field. Newsletters: https://sci-bots.com/en-ca/pages/newsletters",
+  "_readme": "News shown in the News section of MicroDrop's notifications drawer. Edit it by hand; feed.schema.json validates it and describes every field. Newsletters: https://sci-bots.com/en-ca/pages/newsletters",
   "posts": [
     {
       "id": "dropbot-launch-preview",

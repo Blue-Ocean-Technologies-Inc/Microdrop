@@ -8,9 +8,8 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Small widgets the News section and the feed creator share: the feed's
-status line as an inline banner (an editor on the controller's
-``status_text``), and a widget saying when its palette changes."""
+"""The News section's status line as an inline banner: an editor on the
+feed controller's ``status_text``."""
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
@@ -33,10 +32,6 @@ HEADER_RULE_SIZE = (4 * GRID, 3)
 
 _ROLE = QtGui.QPalette.ColorRole
 _ALIGN = QtCore.Qt.AlignmentFlag
-_PALETTE_EVENTS = (
-    QtCore.QEvent.Type.PaletteChange,
-    QtCore.QEvent.Type.ApplicationPaletteChange,
-)
 
 
 def _glyph_label(glyph, pixel_size, color, parent):
@@ -47,18 +42,6 @@ def _glyph_label(glyph, pixel_size, color, parent):
     label.setStyleSheet(f"QLabel {{ color: {color}; }}")
 
     return label
-
-
-class ThemedWidget(QtWidgets.QWidget):
-    """Says when its palette changes."""
-
-    palette_changed = QtCore.Signal()
-
-    def changeEvent(self, event):
-        super().changeEvent(event)
-
-        if event.type() in _PALETTE_EVENTS:
-            self.palette_changed.emit()
 
 
 class _StatusBanner(QtWidgets.QFrame):

@@ -13,8 +13,7 @@
 in the text colour, count chip, detail, chevron, a short rule in the group's
 accent) and a post's frame (the post's card with the "new" marker).
 
-``make_post_card`` builds a post's card exactly as the drawer shows it; the
-feed creator's preview builds its cards with it too.
+``make_post_card`` builds a post's card exactly as the drawer shows it.
 """
 
 # Enthought library imports.

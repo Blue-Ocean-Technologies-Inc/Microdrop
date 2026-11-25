@@ -222,7 +222,7 @@ class NotificationsDevPlugin(Plugin):
         ]
 
     def _news_actions(self):
-        """Feed creator, reload and pushes, on the news plugin's section."""
+        """Reload and pushes, on the news plugin's section."""
         from .news_actions import NewsFeedActions
 
         self._news = NewsFeedActions(
