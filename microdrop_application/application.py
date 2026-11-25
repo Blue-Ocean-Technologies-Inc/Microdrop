@@ -321,7 +321,7 @@ class MicrodropApplication(TasksApplication):
 
     @observe("application_initialized")
     def _on_application_initialized(self, event):
-        logger.critical("Application Initialized")
+        logger.info("Application Initialized")
         _show_beta_disclaimer()
         _show_whats_new()
 
