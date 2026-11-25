@@ -76,11 +76,19 @@ from device_viewer.consts import (
     GeometryChangedMessage,
     StepParamsCommitMessage,
 )
-from dropbot_controller.consts import DROPBOT_DISCONNECTED, REALTIME_MODE_UPDATED
+from dropbot_controller.consts import (
+    DROPBOT_CONNECTED,
+    DROPBOT_CONNECTION_STATE_KEY,
+    DROPBOT_DISCONNECTED,
+    REALTIME_MODE_UPDATED,
+)
 from electrode_controller.consts import electrode_state_change_publisher
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from microdrop_application.dialogs.pyface_wrapper import YES, confirm
-from microdrop_application.helpers import is_advanced_mode
+from microdrop_application.helpers import (
+    get_microdrop_redis_globals_manager,
+    is_advanced_mode,
+)
 from pluggable_protocol_tree.consts import (
     DV_EXECUTION_PARAM_COL_IDS,
     ELECTRODE_TO_CHANNEL_KEY,
@@ -115,6 +123,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+app_globals = get_microdrop_redis_globals_manager()
 
 
 def _execution_params_for_row(row) -> dict:
@@ -331,6 +340,13 @@ class DeviceViewerSyncController(HasTraits):
     _selection_model = Instance(QObject, allow_none=True)
 
     realtime_mode = Bool()
+
+    #: A device is connected, from the hardware connected/disconnected
+    #: signals every backend publishes. Seeded from the DropBot's
+    #: app-globals mirror, since a connection made before this listener
+    #: existed is never signalled again.
+    connected = Bool()
+
     actuated_channels = Set(Int)
     # Mirror of the operator's Advanced Mode toggle (ADVANCED_MODE_CHANGE).
     # The dock pane observes this to keep the live run's context + the tree's
@@ -361,6 +377,15 @@ class DeviceViewerSyncController(HasTraits):
 
     def _advanced_mode_default(self):
         return bool(is_advanced_mode())
+
+    def _connected_default(self):
+        try:
+            return bool(app_globals.get(DROPBOT_CONNECTION_STATE_KEY, False))
+        except Exception as e:
+            # No Redis (tests, headless imports): the signals still follow.
+            logger.debug(f"connection state unavailable: {e}")
+
+            return False
 
     def traits_init(self):
         logger.info("Starting Protocol Tree Device View Sync Controller listener")
@@ -594,7 +619,10 @@ class DeviceViewerSyncController(HasTraits):
                 logger.warning(f"bad phase-navigation state {message!r}: {e}")
         elif topic == REALTIME_MODE_UPDATED:
             self.realtime_mode = message.casefold() == "true"
+        elif topic == DROPBOT_CONNECTED:
+            self.connected = True
         elif topic == DROPBOT_DISCONNECTED:
+            self.connected = False
             self.realtime_mode = False
         elif topic == ADVANCED_MODE_CHANGE:
             # Qt-free trait — the dock pane's dispatch="ui" observer marshals

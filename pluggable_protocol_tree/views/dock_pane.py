@@ -1166,14 +1166,26 @@ class PluggableProtocolDockPane(TraitsDockPane):
         self._pane.navigation_bar.merge_phase_controls_to_play_button()
         # Clear hardware actuation: independent of the DV's free-mode publish
         # below, which can race with PROTOCOL_RUNNING and leave the last step's
-        # channels energized after abort/error.
-        try:
-            publish_message(
-                topic=ELECTRODES_STATE_CHANGE,
-                message=json.dumps({"electrodes": [], "channels": []}),
+        # channels energized after abort/error. Sent whenever a device is
+        # connected, whatever the realtime mode, and after any run that
+        # actuated hardware; only a preview run with nothing connected has
+        # nothing to clear.
+        device_connected = self.sync is None or self.sync.connected
+
+        if self._current_run_preview_mode and not device_connected:
+            logger.info(
+                "Protocol terminated: electrode clear not sent; reasons: "
+                "Preview run; Device not connected;"
             )
-        except Exception as e:
-            logger.warning(f"protocol-terminated electrode clear failed: {e}")
+        else:
+            try:
+                publish_message(
+                    topic=ELECTRODES_STATE_CHANGE,
+                    message=json.dumps({"electrodes": [], "channels": []}),
+                )
+            except Exception as e:
+                logger.warning(f"protocol-terminated electrode clear failed: {e}")
+
         # Realtime-mode restore is owned by RealtimeModeHandler's
         # on_post_protocol_end hook (runs once per run on the executor).
         # Push free-mode payload to DV: clear_highlights cleared the tree
