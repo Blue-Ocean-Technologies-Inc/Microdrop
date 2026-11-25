@@ -822,3 +822,38 @@ Every field after `action` is optional and defaults to "not set", so messages po
 **In-process sources** (not topics) — warning-and-above log records from the root logger (`services/log_forwarder.py`: batched every 250 ms, collapsed by logger + level + message template + exception line, minus `LOG_IGNORE_RULES`; category `notifications.log`), and a "failed to load" error for every failed plugin load record (category `notifications.plugin_load_failed`, critical).
 
 **Sections** — the drawer is one scrolling column: Needs attention, the contributed `NOTIFICATION_SECTIONS` (a `NotificationSection`: id, title, summary, order, `factory(parent)`, and its look `glyph` / `accent` / `logo`), then Activity. `plugin_management` contributes the plugin loading list; the indicator click publishes `NOTIFICATIONS_SHOW_PANEL` with that section's id. A section raises alerts for what is new in it (e.g. news posts) by appending `SectionAlert`s to its `alerts`: each pops up, counts on the bell and is marked new until seen in the open drawer with the section expanded, never listed in Activity; the drawer keeps the alert's `unread` / `is_new` current, and a click on its toast asks the section's `alert_widget(contents, alert)` for the widget to scroll to. The drawer opens only from the bell, a toast, or the request; it is no dock pane, so task layouts and the View menu never list it.
+
+### device_viewer → notifications drawer: the calibration reminder (#1133)
+
+```
+DeviceViewerDockPane (pane first shown, after the window painted)
+  └─ model.load_calibration_data_from_preferences()   # values + calibration.calibrated_on
+  └─ CalibrationReminderController.start()             # then hourly, and on every change
+       reminder_state(liquid, filler, calibrated_on, today):
+         missing      ─► NOTIFICATION_POST  "No calibration saved"       priority 2
+         date unknown ─► NOTIFICATION_POST  "Calibration date unknown"   priority 1
+         stale (>7 d) ─► NOTIFICATION_POST  "Calibration is N days old"  priority 1
+         fresh        ─► NOTIFICATION_RESOLVE "Calibrated" (only after a card this session)
+```
+
+Every post: severity warning, `needs_attention`, `pop_up` False (no toast, no sound, counted on the bell), `category_id` `device_viewer.dropbot_maintenance`, `thread_id` `device_viewer.calibration_reminder` (one card, updated in place), `condition_id` `device_viewer.calibration_needed`, help link "How to calibrate" (target "Calibrating the device"). Measuring the filler or liquid capacitance stamps `CalibrationModel.calibrated_on` (ISO day, saved beside the values as `calibration.calibrated_on` in the preferences) before the value, so the card resolves at once.
+
+### dropbot_tools_menu → notifications drawer: the self-test reminder (#1133)
+
+```
+application.extra_plugins_loaded ─► SelfTestReminderController.start()
+  reads <application home>/notifications/self_test.json {"last_full_run_completed": ISO}
+  reminder_state(last_run, today):
+    never run     ─► NOTIFICATION_POST "Self test has not been run"      priority 2
+    stale (>10 d) ─► NOTIFICATION_POST "Self test last run N days ago"   priority 1
+    fresh         ─► nothing
+
+dropbot/signals/self_tests_progress  SESSION_START {tests}   ─► full suite = more than one test
+dropbot/signals/self_tests_results   {failed_channels}       ─► counts tests that failed channels
+dropbot/signals/self_tests_progress  SESSION_END {status}
+  completed full suite ─► self_test.json written
+                       ─► NOTIFICATION_RESOLVE "Self test passed" | "Self test finished · N failed"
+```
+
+Every post: as the calibration reminder (warning, Needs attention, `pop_up` False, the same category), `thread_id` `dropbot_tools_menu.self_test_reminder`, `condition_id` `dropbot_tools_menu.self_test_needed`, help link "What does it check?" (target "DropBot self tests"). The time is kept once for any board: the frontend has no stable id for the connected DropBot.
+
