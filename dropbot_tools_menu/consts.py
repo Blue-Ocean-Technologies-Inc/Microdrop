@@ -65,9 +65,6 @@ SELF_TEST_STALE_DAYS = 10
 SELF_TEST_REMINDER_THREAD_ID = f"{PKG}.self_test_reminder"
 SELF_TEST_REMINDER_CONDITION_ID = f"{PKG}.self_test_needed"
 
-#: The tutorial its help link names.
-SELF_TEST_HELP_TARGET = "DropBot self tests"
-
 #: When the last full run completed, in the notifications data folder
 #: (``notifications.consts.notifications_data_dir``); written only by this
 #: plugin, the moment a run completes. One value for any board: the

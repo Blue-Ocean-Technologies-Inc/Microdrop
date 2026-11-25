@@ -1207,6 +1207,3 @@ CALIBRATION_STALE_DAYS = 7
 #: and one condition, resolved the moment a calibration is saved.
 CALIBRATION_REMINDER_THREAD_ID = f"{PKG}.calibration_reminder"
 CALIBRATION_REMINDER_CONDITION_ID = f"{PKG}.calibration_needed"
-
-#: The tutorial its help link names.
-CALIBRATION_HELP_TARGET = "Calibrating the device"

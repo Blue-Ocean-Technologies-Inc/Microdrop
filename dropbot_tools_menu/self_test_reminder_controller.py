@@ -25,10 +25,15 @@ from traits.api import Any, Bool, HasTraits, Int, Str, observe
 
 # Microdrop package imports.
 from device_viewer.consts import DROPBOT_MAINTENANCE_CATEGORY_ID
+from dropbot_status_and_controls.consts import (
+    DROPBOT_STATUS_TUTORIAL_ID,
+    SELF_TESTS_TUTORIAL_ANCHOR,
+)
 from notifications.consts import (
     SEVERITY_WARNING,
     HelpAction,
     PublishAction,
+    help_target,
     notification_publisher,
     notification_resolve_publisher,
     notifications_data_dir,
@@ -41,7 +46,6 @@ from microdrop_utils.json_state_file import read_json_state, write_json_state
 from .consts import (
     PKG,
     RUN_SELF_TESTS_REQUEST,
-    SELF_TEST_HELP_TARGET,
     SELF_TEST_LAST_RUN_KEY,
     SELF_TEST_REMINDER_CONDITION_ID,
     SELF_TEST_REMINDER_THREAD_ID,
@@ -186,7 +190,10 @@ class SelfTestReminderController(HasTraits):
                 "source": PKG,
                 "action": run,
                 "secondary_action": HelpAction(
-                    label="What does it check?", target=SELF_TEST_HELP_TARGET
+                    label="What does it check?",
+                    target=help_target(
+                        DROPBOT_STATUS_TUTORIAL_ID, SELF_TESTS_TUTORIAL_ANCHOR
+                    ),
                 ),
                 "needs_attention": True,
                 "category_id": DROPBOT_MAINTENANCE_CATEGORY_ID,

@@ -28,6 +28,14 @@ from pyface.api import GUI
 from traits.api import Callable, HasTraits, Instance
 
 # Microdrop package imports.
+from dropbot_status_and_controls.consts import (
+    CALIBRATION_TUTORIAL_ANCHOR,
+    CHIP_STATUS_TUTORIAL_ANCHOR,
+    CONNECTION_TUTORIAL_ANCHOR,
+    DROPBOT_STATUS_TUTORIAL_ID,
+    SELF_TESTS_TUTORIAL_ANCHOR,
+    VOLUME_TUTORIAL_ANCHOR,
+)
 from examples.demos.notifications_pane.sample_notifications import post_log_samples
 from notifications.consts import (
     SEVERITY_ERROR,
@@ -38,6 +46,7 @@ from notifications.consts import (
     OpenPathAction,
     PublishAction,
     SnoozeAction,
+    help_target,
     notification_publisher,
 )
 from notifications.models.notification_center import NotificationCenter
@@ -91,7 +100,10 @@ CALIBRATION_DETAIL = (
 )
 
 #: Calibration has no command yet: the card carries only its how-to.
-CALIBRATION_HELP = HelpAction(label="How to calibrate", target="Calibrating the device")
+CALIBRATION_HELP = HelpAction(
+    label="How to calibrate",
+    target=help_target(DROPBOT_STATUS_TUTORIAL_ID, CALIBRATION_TUTORIAL_ANCHOR),
+)
 
 #: Days without a self test before it is stale, and how long the demo's
 #: last one was.
@@ -108,7 +120,10 @@ SELF_TEST_DETAIL = (
 
 #: The stale self test's buttons: a real command, and what it checks.
 SELF_TEST_ACTION = PublishAction(label="Run self test", topic=SELF_TEST_TOPIC)
-SELF_TEST_HELP = HelpAction(label="What does it check?", target="DropBot self tests")
+SELF_TEST_HELP = HelpAction(
+    label="What does it check?",
+    target=help_target(DROPBOT_STATUS_TUTORIAL_ID, SELF_TESTS_TUTORIAL_ANCHOR),
+)
 
 PLUGIN_UPDATES_DETAIL = (
     "heater-microdrop-plugin 1.4.0 → 1.5.0\n"
@@ -171,7 +186,9 @@ def post_warning():
         severity=SEVERITY_WARNING,
         category="hardware",
         source="dropbot_controller",
-        secondary_action=HelpAction(target="Droplet detection and volume").model_dump(),
+        secondary_action=HelpAction(
+            target=help_target(DROPBOT_STATUS_TUTORIAL_ID, VOLUME_TUTORIAL_ANCHOR)
+        ).model_dump(),
     )
 
 
@@ -185,7 +202,8 @@ def post_error():
         source="dropbot_controller",
         action=PublishAction(label="Retry", topic=RETRY_CONNECTION_TOPIC).model_dump(),
         secondary_action=HelpAction(
-            label="How do I connect?", target="Connecting a DropBot"
+            label="How do I connect?",
+            target=help_target(DROPBOT_STATUS_TUTORIAL_ID, CONNECTION_TUTORIAL_ANCHOR),
         ).model_dump(),
     )
 
@@ -248,7 +266,8 @@ def post_dropbot_disconnected():
             label="Reconnect", topic=RETRY_CONNECTION_TOPIC
         ).model_dump(),
         secondary_action=HelpAction(
-            label="How do I reconnect?", target="Connecting a DropBot"
+            label="How do I reconnect?",
+            target=help_target(DROPBOT_STATUS_TUTORIAL_ID, CONNECTION_TUTORIAL_ANCHOR),
         ).model_dump(),
         **_DEVICE_FIELDS,
     )
@@ -295,7 +314,8 @@ def post_chip_removed(run_waiting):
         needs_attention=run_waiting,
         condition_id=CHIP_MISSING_CONDITION if run_waiting else "",
         secondary_action=HelpAction(
-            label="How to insert a chip", target="Inserting a chip"
+            label="How to insert a chip",
+            target=help_target(DROPBOT_STATUS_TUTORIAL_ID, CHIP_STATUS_TUTORIAL_ANCHOR),
         ).model_dump(),
         **_DEVICE_FIELDS,
     )
