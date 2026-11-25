@@ -11,12 +11,18 @@
 
 """The News section's contents in the drawer's column: the feed's status
 line, then one sub-section per group (Top stories, Releases,
-Sci-Bots Dispense, Announcements, Updates), at natural height."""
+Sci-Bots Dispense, Announcements, Updates), at natural height. The first
+(the pinned top story) is built at once, each other on a paced GUI turn of
+its own, so the most important card shows first and no turn builds them
+all."""
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtWidgets
 from traits.api import Any, HasTraits, Instance, observe
 from traitsui.api import UItem, View
+
+# Microdrop utils imports.
+from microdrop_utils.gui_pacing import invoke_paced
 
 # Local imports.
 from ..models.news_section import NewsSection
@@ -61,6 +67,9 @@ class FeedColumn(QtWidgets.QWidget):
         self._subsections = []
         self._rebuild_queued = False
 
+        #: The groups whose sub-sections are still to build, in order.
+        self._pending_groups = []
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(6, 0, 8, 6)
         layout.setSpacing(0)
@@ -88,14 +97,26 @@ class FeedColumn(QtWidgets.QWidget):
             QtCore.QTimer.singleShot(0, self.rebuild)
 
     def rebuild(self):
-        """A sub-section per group; the model leaves empty groups out."""
+        """A sub-section per group, the first now and the others on paced
+        turns; the model leaves empty groups out."""
         self._rebuild_queued = False
         self._dispose_subsections()
+        self._pending_groups = list(self.controller.model.groups)
+        self._add_next_subsection()
 
-        for group in self.controller.model.groups:
-            subsection = FeedSubsection(group, self, self)
-            self._groups.addWidget(subsection)
-            self._subsections.append(subsection)
+        for _group in self._pending_groups:
+            invoke_paced(self._add_next_subsection)
+
+    def _add_next_subsection(self):
+        """Build the next pending group's sub-section, if any is left: a
+        rebuild or a dispose meanwhile leaves fewer, or none."""
+
+        if not self._pending_groups:
+            return
+
+        subsection = FeedSubsection(self._pending_groups.pop(0), self, self)
+        self._groups.addWidget(subsection)
+        self._subsections.append(subsection)
 
     def show_new(self):
 
@@ -108,6 +129,9 @@ class FeedColumn(QtWidgets.QWidget):
         if self._rebuild_queued:
             self.rebuild()
 
+        while self._pending_groups:
+            self._add_next_subsection()
+
         for subsection in self._subsections:
             frame = subsection.frame_for(post_id)
 
@@ -117,6 +141,7 @@ class FeedColumn(QtWidgets.QWidget):
         return None
 
     def _dispose_subsections(self):
+        self._pending_groups = []
 
         for subsection in self._subsections:
             subsection.dispose()
