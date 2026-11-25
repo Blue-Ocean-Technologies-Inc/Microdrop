@@ -627,6 +627,14 @@ class DeviceViewerSyncController(HasTraits):
         QtTreeModel.dataChanged must fire there. Captures free-mode toggles
         into _free_mode_stash; clears stash for any step-scoped/empty message."""
         payload = event.new
+
+        # A state message with no content (the device viewer has no state
+        # to send yet, e.g. at start-up) is "no state yet", not malformed.
+        if not str(payload).strip():
+            logger.debug("PROTOCOL TREE (Device Sync): empty DV state skipped")
+
+            return
+
         try:
             dv_msg = DeviceViewerMessageModel.deserialize(payload)
             logger.info(f"PROTOCOL TREE (Device Sync): received message: {dv_msg}")
