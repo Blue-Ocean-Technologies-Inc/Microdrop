@@ -22,6 +22,7 @@ from notifications.controllers.toast_controller import (
     RINGING_ARRIVALS,
     SKIP_QUIET,
     SKIP_READ,
+    SKIP_SENT_QUIETLY,
     SKIP_START_UP,
     arrival_outcome,
 )
@@ -53,3 +54,11 @@ def test_arrival_outcome(
 def test_only_visible_outcomes_ring():
     assert set(RINGING_ARRIVALS) == {ARRIVAL_POP_UP, ARRIVAL_REFRESH, ARRIVAL_IN_DRAWER}
     assert not {SKIP_START_UP, SKIP_READ, SKIP_QUIET} & set(RINGING_ARRIVALS)
+
+
+@pytest.mark.parametrize("drawer_open", [False, True])
+def test_a_quiet_message_never_rings(drawer_open):
+    outcome = arrival_outcome(True, drawer_open, True, False, False, True)
+
+    assert outcome == SKIP_SENT_QUIETLY
+    assert outcome not in RINGING_ARRIVALS

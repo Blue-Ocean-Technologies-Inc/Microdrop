@@ -87,6 +87,12 @@ class Notification(HasTraits):
     #: Its declared notification category; empty when uncategorised.
     category_id = Str()
 
+    #: The sender's choice: False, it arrives with no toast and no sound.
+    pop_up = Bool(True)
+
+    #: Within Needs attention, higher sorts first.
+    priority = Int(0)
+
     #: True until the user has seen it.
     unread = Bool(True)
 

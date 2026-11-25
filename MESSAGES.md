@@ -804,6 +804,8 @@ notification_publisher.publish({
     "category_id": "dropbot.chip_removed",   # a declared NOTIFICATION_CATEGORIES id
     "thread_id": "dropbot.chip.COM5",        # posts with this id update one entry in place
     "condition_id": "dropbot.chip_missing",  # NOTIFICATION_RESOLVE with this id clears it
+    "pop_up": True,                          # False: listed and counted, no toast, no sound
+    "priority": 0,                           # within Needs attention, higher sorts first
 })
 ```
 
@@ -811,7 +813,7 @@ Every field after `action` is optional and defaults to "not set", so messages po
 
 **Receiving** — `NotificationsMessageHandler._on_post_triggered` validates on the worker thread and hands the message to `NotificationCenter.post_message` with `GUI.invoke_later`. A notification with the same `(source, category, severity, title)` as a listed one collapses into it (count + 1, latest text and time, moved to the top, unread again); one with a `thread_id` replaces its thread's entry state whole, counted once. A category the user keeps out of the drawer is not recorded, unless it is an error or needs attention. The session keeps `MAX_ENTRIES` (300); the oldest go first; Clear all keeps Needs attention. Nothing persists across launches.
 
-**Arrival** — each new (or newly unread) entry, and each repeat, is offered to the toasts (`ToastStackController.offer`, rule `arrival_outcome`): while the drawer is open it lands there marked new; otherwise it pops up as a toast (three at most, the rest counted on "+N more"), refreshes the toast already showing, or, while quiet (`ToastStackModel.quiet`), is held for one summary toast unless it is an error, needs attention or belongs to the quiet run's own category group. Whatever shows rings the bell and chimes the category's tone (`services/chime.py`); start-up history, read entries and held ones are silent. Info and success toasts time out (settings), warnings, errors, Needs attention and ones with a button stay.
+**Arrival** — each new (or newly unread) entry, and each repeat, is offered to the toasts (`ToastStackController.offer`, rule `arrival_outcome`): while the drawer is open it lands there marked new; otherwise it pops up as a toast (three at most, the rest counted on "+N more"), refreshes the toast already showing, or, while quiet (`ToastStackModel.quiet`), is held for one summary toast unless it is an error, needs attention or belongs to the quiet run's own category group. Whatever shows rings the bell and chimes the category's tone (`services/chime.py`); start-up history, read entries, held ones and those posted with `pop_up` False (the sender's per-message choice, e.g. a reminder re-posted at every launch) are silent. Needs attention lists by `priority` (higher first), then newest first. Info and success toasts time out (settings), warnings, errors, Needs attention and ones with a button stay.
 
 **Resolving** — publish `NotificationResolveRequest(condition_id, resolution)` on NOTIFICATION_RESOLVE when the condition clears; `NotificationCenter.resolve` moves its cards out of Needs attention, read, marked with `resolution`. A thread whose next post no longer needs attention leaves Needs attention too, in place.
 

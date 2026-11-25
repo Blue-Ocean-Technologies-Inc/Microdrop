@@ -222,6 +222,16 @@ class NotificationMessage(BaseModel):
     #: NOTIFICATION_RESOLVE naming it clears the card, no button pressed.
     condition_id: str = ""
 
+    #: The sender's choice for this message: False lists it (Needs
+    #: attention, the bell's count) with no toast and no sound, e.g. a
+    #: reminder re-posted at every launch. The user's category switch
+    #: still turns pop-ups off for a category; this only turns one off.
+    pop_up: bool = True
+
+    #: Within Needs attention, higher sorts first (ties newest first), e.g.
+    #: a calibration that is missing above one that is only stale.
+    priority: int = 0
+
 
 class ShowNotificationsPanelRequest(BaseModel):
     """Show the notifications pane, expanding ``section_id`` if given."""

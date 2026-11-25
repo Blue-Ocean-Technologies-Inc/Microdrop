@@ -44,21 +44,28 @@ RINGING_ARRIVALS = (ARRIVAL_POP_UP, ARRIVAL_REFRESH, ARRIVAL_IN_DRAWER)
 SKIP_START_UP = "start-up history"
 SKIP_READ = "already read"
 SKIP_QUIET = "quiet"
+SKIP_SENT_QUIETLY = "sent quietly"
 
 #: Who posts the summary when a quiet run ends.
 QUIET_SUMMARY_SOURCE = "notifications"
 
 
-def arrival_outcome(enabled, drawer_open, unread, toast_showing, held_quietly):
+def arrival_outcome(
+    enabled, drawer_open, unread, toast_showing, held_quietly, sent_quietly=False
+):
     """What an arrival (new, or a repeat of an entry already listed) does.
 
     It rings whenever something visible happens: a toast pops up, the toast
     already showing is refreshed (its count goes up, its time restarts), or
     it lands in the open drawer. It is silent only when nothing is seen:
-    start-up history, an entry already read, one held while quiet."""
+    start-up history, an entry already read, one held while quiet; and
+    whenever its sender posted it quietly (``pop_up`` False)."""
 
     if not enabled:
         return SKIP_START_UP
+
+    if sent_quietly:
+        return SKIP_SENT_QUIETLY
 
     if drawer_open:
         return ARRIVAL_IN_DRAWER
@@ -138,7 +145,7 @@ class ToastStackController(HasTraits):
         held = toasts.quiet and not urgent and not own
 
         outcome = arrival_outcome(
-            self.enabled, model.is_open, entry.unread, showing, held
+            self.enabled, model.is_open, entry.unread, showing, held, not entry.pop_up
         )
 
         if outcome not in RINGING_ARRIVALS:

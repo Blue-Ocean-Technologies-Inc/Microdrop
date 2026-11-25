@@ -104,9 +104,11 @@ class NotificationCenter(HasTraits):
     #: Fired after ``update_all`` changed many entries quietly.
     bulk_changed = Event()
 
-    #: Entries the user has to act on, newest first; and every other entry.
+    #: Entries the user has to act on, highest priority then newest first;
+    #: and every other entry, newest first.
     attention_entries = Property(
-        List(Instance(Notification)), observe="entries.items.needs_attention"
+        List(Instance(Notification)),
+        observe="entries.items.[needs_attention, priority]",
     )
     history_entries = Property(
         List(Instance(Notification)), observe="entries.items.needs_attention"
@@ -116,7 +118,10 @@ class NotificationCenter(HasTraits):
     _entries_by_key = Dict()
 
     def _get_attention_entries(self):
-        return [entry for entry in self.entries if entry.needs_attention]
+        attention = [entry for entry in self.entries if entry.needs_attention]
+
+        # Stable: equal priorities keep their newest-first order.
+        return sorted(attention, key=lambda entry: -entry.priority)
 
     def _get_history_entries(self):
         return [entry for entry in self.entries if not entry.needs_attention]
@@ -142,6 +147,8 @@ class NotificationCenter(HasTraits):
         condition_id="",
         category_id="",
         thread_id="",
+        pop_up=True,
+        priority=0,
     ):
         """List a notification, collapsing it into an equal-keyed entry, or
         updating its thread's entry in place.
@@ -174,6 +181,8 @@ class NotificationCenter(HasTraits):
             "needs_attention": needs_attention,
             "condition_id": condition_id,
             "category_id": category_id,
+            "pop_up": pop_up,
+            "priority": priority,
         }
         entry = self._entries_by_key.get(key)
 
@@ -211,6 +220,8 @@ class NotificationCenter(HasTraits):
             condition_id=message.condition_id,
             category_id=message.category_id,
             thread_id=message.thread_id,
+            pop_up=message.pop_up,
+            priority=message.priority,
         )
 
     def find(self, key):
@@ -332,6 +343,8 @@ class NotificationCenter(HasTraits):
                 needs_attention=state["needs_attention"] or entry.needs_attention,
                 condition_id=state["condition_id"] or entry.condition_id,
                 category_id=state["category_id"] or entry.category_id,
+                pop_up=state["pop_up"],
+                priority=max(state["priority"], entry.priority),
             )
 
         entry.trait_set(
