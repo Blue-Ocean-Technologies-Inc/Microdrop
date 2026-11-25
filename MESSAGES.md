@@ -817,7 +817,7 @@ notification_publisher.publish({
 
 Every field after `action` is optional and defaults to "not set", so messages posted before they existed validate unchanged. `action` is data, never a callable: `{"kind": "publish", "label", "topic", "message"}` publishes `message` on `topic`, `{"kind": "open_path", "label", "path"}` opens a file or folder. `secondary_action` is `{"kind": "help", "label", "target"}` (a link; with no `action` the card's one outlined button). Its `target` names a tutorial, `"<tutorial id>"` or `"<tutorial id>#<section id>"` (`help_target` builds it, e.g. `"dropbot_status#part-tools"`); pressing it publishes OPEN_TUTORIAL. It is disabled, with a tooltip, until the help plugin announces on HELP_AVAILABILITY that tutorials can be opened or `{"kind": "snooze", "label"}` ("Later": out of Needs attention, into Activity). Pressing `action` marks the card handled: read, out of Needs attention, its buttons replaced by the label.
 
-**Receiving** — `NotificationsMessageHandler._on_post_triggered` validates on the worker thread and hands the message to `NotificationCenter.post_message` with `GUI.invoke_later`. A notification with the same `(source, category, severity, title)` as a listed one collapses into it (count + 1, latest text and time, moved to the top, unread again); one with a `thread_id` replaces its thread's entry state whole, counted once. A category the user keeps out of the drawer is not recorded, unless it is an error or needs attention. The session keeps `MAX_ENTRIES` (300); the oldest go first; Clear all keeps Needs attention. Nothing persists across launches.
+**Receiving** — `NotificationsMessageHandler._on_post_triggered` validates on the worker thread and hands the message to `NotificationCenter.post_message` with `GUI.invoke_later`. A notification with the same `(source, category, severity, title)` as a listed one collapses into it (count + 1, latest text and time, moved to the top, unread again); one with a `thread_id` replaces its thread's entry state whole, counted once. One naming an `occurrence` collapses only into the entry of that same occurrence (key `(source, category, severity, title, occurrence)`), so occurrences of one notification are separate entries. A category the user keeps out of the drawer is not recorded, unless it is an error or needs attention. The session keeps `MAX_ENTRIES` (300); the oldest go first; Clear all keeps Needs attention. Nothing persists across launches.
 
 **Arrival** — each new (or newly unread) entry, and each repeat, is offered to the toasts (`ToastStackController.offer`, rule `arrival_outcome`): while the drawer is open it lands there marked new; otherwise it pops up as a toast (three at most, the rest counted on "+N more"), refreshes the toast already showing, or, while quiet (`ToastStackModel.quiet`), is held for one summary toast unless it is an error, needs attention or belongs to the quiet run's own category group. Whatever shows rings the bell and chimes the category's tone (`services/chime.py`); start-up history, read entries, held ones and those posted with `pop_up` False (the sender's per-message choice, e.g. a reminder re-posted at every launch) are silent. Needs attention lists by `priority` (higher first), then newest first. Info and success toasts time out (settings), warnings, errors, Needs attention and ones with a button stay.
 
@@ -825,9 +825,48 @@ Every field after `action` is optional and defaults to "not set", so messages po
 
 **Categories** — a plugin declares its kinds of notification as `NotificationCategorySpec`s (id, group, label, description, defaults for drawer / popup / tone, `critical`) in its `consts.py` and contributes them with `List(SPECS, contributes_to=NOTIFICATION_CATEGORIES)`; messages name one in `category_id`. The user's choices (gear button in the drawer header) are saved in `settings.json` in the notifications data folder, with "Open the notifications panel at start-up" (default on; `MICRODROP_NOTIFICATIONS_OPEN_AT_START=0`/`1` overrides it).
 
-**In-process sources** (not topics) — warning-and-above log records from the root logger (`services/log_forwarder.py`: batched every 250 ms, collapsed by logger + level + message template + exception line, minus `LOG_IGNORE_RULES`; category `notifications.log`), and a "failed to load" error for every failed plugin load record (category `notifications.plugin_load_failed`, critical).
+**In-process sources** (not topics) — warning-and-above log records from the root logger (`services/log_forwarder.py`: batched every 250 ms, collapsed by logger + level + message template + exception line, minus `LOG_IGNORE_RULES` and records logged with `extra=LOG_RECORDED_EXTRA`, whose event a dialog already lists; category `notifications.log`), and a "failed to load" error for every failed plugin load record (category `notifications.plugin_load_failed`, critical).
 
 **Sections** — the drawer is one scrolling column: Needs attention, the contributed `NOTIFICATION_SECTIONS` (a `NotificationSection`: id, title, summary, order, `factory(parent)`, and its look `glyph` / `accent` / `logo`), then Activity. `plugin_management` contributes the plugin loading list; the indicator click publishes `NOTIFICATIONS_SHOW_PANEL` with that section's id. A section raises alerts for what is new in it (e.g. news posts) by appending `SectionAlert`s to its `alerts`: each pops up, counts on the bell and is marked new until seen in the open drawer with the section expanded, never listed in Activity; the drawer keeps the alert's `unread` / `is_new` current, and a click on its toast asks the section's `alert_widget(contents, alert)` for the widget to scroll to. The drawer opens only from the bell, a toast, or the request; it is no dock pane, so task layouts and the View menu never list it.
+
+### Any plugin → notifications drawer: errors and warnings shown as dialogs
+
+```
+caller (GUI thread; device events arrive through a Qt dialog signal or GUI.invoke_later)
+  pyface_wrapper.error / warning (record=True by default)
+  pyface_wrapper.information / success (only with record=True)
+    └─ dialog_records.record_from_kwargs ─► record_dialog         # BEFORE the dialog opens
+         same (severity, title, text) within DIALOG_REPEAT_WINDOW_S (2 s) ─► same occurrence
+         ─► NOTIFICATION_POST {title, detail (plain text), severity, source,
+                               category_id notifications.dialog_alerts,
+                               occurrence, pop_up False, help link if help_target}
+    └─ dialog.exec()                                              # the modal dialog, unchanged
+  custom dialogs (DropBot no power) call record_dialog themselves
+```
+
+`confirm`, `choose` and `disclaimer` never record (a question is not an event); `record=False` opts an error or warning out (e.g. feedback on a form). The entry is listed in Activity and counted on the bell (red while an unread error), with no toast and no sound whatever the category settings say; `notifications.dialog_alerts` (MicroDrop › "Errors and warnings shown in a dialog") is critical, pop-up off, tone None. The title is the dialog's title, or its first line when the title is only "Error"/"Warning"/"Information"/"Success"; the detail is the text with markup stripped, then the dialog's details, cut at `DIALOG_DETAIL_MAX_CHARS`. `source` is the caller's (`source=`), else "MicroDrop"; `attempt_func_execution_with_error_dialog` passes the widget's package. `occurrence` keys the entry (`NotificationCenter.post_message`): a burst of one dialog is one entry counted ×N, the same dialog later is a new entry, so three halts read 3 on the bell. Publishing is posted before `exec()` and the drawer's `GUI.invoke_later` runs inside the dialog's own event loop, so the entry is listed while the dialog is still open; with no notifications plugin the post has no listener. A log record repeating a recorded dialog's event is logged with `extra=LOG_RECORDED_EXTRA`: unchanged in the log file, skipped by the log forwarder, so one event is one entry.
+
+| Dialog | Source | Help link | Log record marked |
+|---|---|---|---|
+| DropBot Halted (`dropbot_status_and_controls.dialog_views`) | `dropbot_status_and_controls` | `dropbot_status#dlg-halted` | `dropbot_controller_base` "DropBot halted due to …" |
+| ERROR: No Power (custom dialog, `record_dialog`) | `dropbot_status_and_controls` | `dropbot_status#dlg-nopower` | `dropbot_monitor_mixin_service` "DropBot has no power." |
+| Portable chip lock failed / pads may be pressed, firmware outdated | `portable_dropbot_status_and_controls` | — | motors service "… --> FAILED" (chip lock) |
+| `<Operation> Error` (`attempt_func_execution_with_error_dialog`) | widget's package | — | "<Operation> failed: …" |
+| Run Summary Failed | `pluggable_protocol_tree` | — | "protocol logging flush failed" (when the dialog shows) |
+
+### pluggable_protocol_tree → notifications drawer: run reports
+
+```
+ProtocolLoggingController._flush (flush worker thread, after the settling delay)
+  LoggingReport.write_report ─► reports/report_<stamp>.html
+  ─► NOTIFICATION_POST "Report generated"  (run_report_card)
+  ─► completion_callback ─► "Run Summary Generated" success dialog (not recorded)
+
+card's Show (drawer) ─► OpenPathAction ─► microdrop_utils.file_handler.open_file(report)   # the system browser, as the dialog's link
+file name link       ─► the report's folder
+```
+
+One card per report, posted where the report is written so every report has one whichever way the run ended: severity success, `source` `pluggable_protocol_tree`, `category_id` `pluggable_protocol_tree.run_reports` (Protocol › Run reports; drawer on, pop-up off, tone None), `pop_up` False, detail `<file name>` then `Experiment <folder>`, the file name a `DetailLink` to the report, `occurrence` the file name (reports never collapse into each other). The success dialog keeps `record` off, so the report is listed once.
 
 ### device_viewer → notifications drawer: the calibration reminder (#1133)
 
