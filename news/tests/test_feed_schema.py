@@ -168,8 +168,12 @@ def test_the_shipped_files_validate():
         (folder / "example_posts_invalid.json").read_text("utf-8")
     )
 
-    assert (len(feed.posts), feed.errors) == (3, [])
-    assert {post.kind for post in feed.posts} == {"newsletter"}
+    assert (len(feed.posts), feed.errors) == (5, [])
+    assert {post.kind for post in feed.posts} == {
+        "newsletter",
+        "product",
+        "announcement",
+    }
     assert (len(announcement.posts), announcement.errors) == (1, [])
     assert (len(rich.posts), rich.errors) == (1, [])
     assert (len(minimal.posts), minimal.errors) == (1, [])
