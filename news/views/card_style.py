@@ -25,15 +25,14 @@ GRID = 8
 #: Corner radius of cards, pictures and banners.
 CORNER_RADIUS = 10
 
-#: A lead card's picture shows whole, at its own aspect, at most this
-#: share of the card's width tall and this many pixels; this tall while it
-#: loads.
-PICTURE_MAX_SHARE = 0.75
-PICTURE_CEILING = 360
+#: A lead card's picture always fills the card's width, edge to edge, at
+#: its own aspect up to this share of the width tall and this many pixels;
+#: past that it is cropped top and bottom, centred, never padded. A wide
+#: banner (about 2.7:1) is never cropped; a square photo shows its middle.
+#: This tall while it loads.
+PICTURE_MAX_SHARE = 0.62
+PICTURE_CEILING = 400
 BANNER_LOADING_HEIGHT = 112
-
-#: A picture is never drawn more than this much above its own size.
-MAX_UPSCALE = 1.1
 
 #: A compact row's picture box; the picture fits inside it whole.
 THUMBNAIL_SIZE = (11 * GRID, 7 * GRID)
@@ -180,19 +179,12 @@ def picture_cap(width):
     return min(PICTURE_MAX_SHARE * width, PICTURE_CEILING)
 
 
-def whole_picture_box(width, picture_width, picture_height):
-    """A picture shown whole across a ``width`` wide card: the box's height
-    and the picture's ``(x, y, w, h)`` in it. At its own aspect it fills the
-    width, unless that would make it taller than ``picture_cap`` (a square
-    or tall picture: it is then fitted in, centred) or enlarge it more than
-    MAX_UPSCALE (then centred at that size). Never cropped."""
-    picture_width = max(picture_width, 1)
-    picture_height = max(picture_height, 1)
-    scale = min(width / picture_width, picture_cap(width) / picture_height, MAX_UPSCALE)
-    shown_width = round(picture_width * scale)
-    shown_height = round(picture_height * scale)
+def full_width_picture_height(width, picture_width, picture_height):
+    """The height (px) of a picture filling a ``width`` wide card: its own
+    aspect's, capped by ``picture_cap`` (it is then cover-cropped)."""
+    aspect = max(picture_width, 1) / max(picture_height, 1)
 
-    return shown_height, ((width - shown_width) // 2, 0, shown_width, shown_height)
+    return round(min(width / aspect, picture_cap(width)))
 
 
 def pair_aspect(aspects):
@@ -210,15 +202,15 @@ def picture_pair_cells(width, caption_height, aspects=(PAIR_ASPECT, PAIR_ASPECT)
     area's height. Side by side (PAIR_MIN_WIDTH or wider) they are equal
     halves either side of a GRID gap at their shared ``pair_aspect``;
     narrower they stack, each full width at its own aspect, as tall as
-    ``picture_cap`` allows. ``aspects`` are the pictures' width over
-    height."""
+    ``picture_cap`` allows (``full_width_picture_height``). ``aspects``
+    are the pictures' width over height."""
 
     if width < PAIR_MIN_WIDTH:
         cells = []
         top = 0
 
         for aspect in aspects:
-            height = round(min(width / max(aspect, 1e-6), picture_cap(width)))
+            height = full_width_picture_height(width, aspect, 1)
             cells.append((0, top, width, height))
             top += height + caption_height + GRID
 
@@ -229,28 +221,6 @@ def picture_pair_cells(width, caption_height, aspects=(PAIR_ASPECT, PAIR_ASPECT)
     cells = [(index * (side + GRID), 0, side, height) for index in (0, 1)]
 
     return cells, height + caption_height
-
-
-def placed_picture(pixmap, width, height, place, ratio):
-    """``pixmap`` scaled into ``place`` (``(x, y, w, h)``) on a transparent
-    ``width`` x ``height`` picture, sharp at device pixel ``ratio``: the
-    card's own background shows around it."""
-    canvas = QtGui.QPixmap(round(width * ratio), round(height * ratio))
-    canvas.setDevicePixelRatio(ratio)
-    canvas.fill(QtCore.Qt.GlobalColor.transparent)
-
-    x, y, place_width, place_height = place
-    scaled = fitted(pixmap, place_width, place_height, ratio)
-    painter = QtGui.QPainter(canvas)
-    painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
-    painter.drawPixmap(
-        QtCore.QRectF(x, y, place_width, place_height),
-        scaled,
-        QtCore.QRectF(scaled.rect()),
-    )
-    painter.end()
-
-    return canvas
 
 
 def rounded_rect_path(rect, radius=CORNER_RADIUS):

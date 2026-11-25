@@ -28,10 +28,8 @@ from .card_style import (
     fitted,
     is_dark,
     picture_pair_cells,
-    placed_picture,
     placeholder_fill,
     rounded_rect_path,
-    whole_picture_box,
 )
 
 _ROLE = QtGui.QPalette.ColorRole
@@ -247,8 +245,8 @@ class Thumbnail(QtWidgets.QWidget):
 
 class PicturePair(QtWidgets.QWidget):
     """Two captioned pictures, side by side at equal height, or stacked when
-    narrow (see ``picture_pair_cells``): side by side cropped as little as
-    their shared aspect needs, stacked each whole. A click on one emits
+    narrow (see ``picture_pair_cells``), each filling its cell edge to edge,
+    cropped as little as the cell needs. A click on one emits
     ``picture_clicked`` with its index, and goes no further."""
 
     picture_clicked = QtCore.Signal(int)
@@ -331,27 +329,15 @@ class PicturePair(QtWidgets.QWidget):
 
     def _crop(self, index, rect):
         """Picture ``index`` for ``rect``, made once per size from the loaded
-        picture, sharp at the device pixel ratio: side by side cropped to
-        the shared aspect (as little as it needs), stacked shown whole."""
+        picture, sharp at the device pixel ratio, filling it (cropped as
+        little as it needs)."""
         crop = self._crops.get(index)
 
         if crop is not None:
             return crop
 
-        pixmap = self.pixmaps[index]
         ratio = self.devicePixelRatioF()
-
-        if rect.width() < self.width():
-            crop = cropped(pixmap, rect.width(), rect.height(), ratio)
-
-        else:
-            size = pixmap.deviceIndependentSize()
-            height, (x, _y, width, _h) = whole_picture_box(
-                rect.width(), size.width(), size.height()
-            )
-            place = (x, (rect.height() - height) // 2, width, height)
-            crop = placed_picture(pixmap, rect.width(), rect.height(), place, ratio)
-
+        crop = cropped(self.pixmaps[index], rect.width(), rect.height(), ratio)
         self._crops[index] = crop
 
         return crop
