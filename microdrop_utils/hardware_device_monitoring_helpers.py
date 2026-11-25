@@ -8,15 +8,20 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 import re
 import threading
 import time
 
+# Third-party imports.
 import serial
 from serial.tools.list_ports import grep
+
+# Enthought library imports.
 from traits.api import Any, HasTraits, Str
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -40,7 +45,7 @@ _probe_lock = threading.Lock()
 PORT_BUSY = object()
 
 
-def check_connected_ports_hwid(id_to_screen, regexp='USB Serial'):
+def check_connected_ports_hwid(id_to_screen, regexp="USB Serial"):
     """
     Check connected USB ports for a specific hardware id.
     """
@@ -57,13 +62,16 @@ def check_connected_ports_hwid(id_to_screen, regexp='USB Serial'):
     return valid_ports
 
 
-def check_devices_available(hwids_to_check):
-    """
-    Method to find the USB port of device with hwid in hwids_to_check if it is connected.
+class DeviceNotFoundError(Exception):
+    """No connected device matches the hwids searched for: the normal idle
+    state while none is plugged in, which a monitor reports quietly."""
 
-    Note:
-        Returns the first port name found if multiple ports are connected with devices having given hwid.
-        Does not screen rest of provided hwids once port was found.
+
+def check_devices_available(hwids_to_check):
+    """The USB port of a connected device with a hwid in ``hwids_to_check``.
+
+    Returns the first port found when several devices share a hwid; raises
+    DeviceNotFoundError when none is connected.
     """
 
     for hwid in hwids_to_check:
@@ -72,11 +80,11 @@ def check_devices_available(hwids_to_check):
         if len(valid_ports) > 0:
             port_name = str(valid_ports[0].device)
             # Indicate success by returning the port name
-            logger.info(f'Device for hwids {hwids_to_check} found on port {port_name}')
+            logger.info(f"Device for hwids {hwids_to_check} found on port {port_name}")
             return port_name
 
         else:
-            raise Exception(f'No device for hwids {hwids_to_check} found')
+            raise DeviceNotFoundError(f"No device for hwids {hwids_to_check} found")
 
 
 #: Prefix of a board's identity frame line: ``§WHOAMI{json}``.
@@ -122,8 +130,8 @@ class ClaimedPort(HasTraits):
 
     port = Str(desc="Serial port name, e.g. COM7")
     serial = Any(
-        desc="serial.Serial handle open since the whoami probe identified "
-             "the board")
+        desc="serial.Serial handle open since the whoami probe identified the board"
+    )
 
     def __str__(self):
         return self.port
@@ -135,8 +143,7 @@ class ClaimedPort(HasTraits):
             pass
 
 
-def _probe_port(port, baudrate, timeout_s=WHOAMI_PROBE_WAIT_S,
-                keep_open=False):
+def _probe_port(port, baudrate, timeout_s=WHOAMI_PROBE_WAIT_S, keep_open=False):
     """``(result, handle)``: result is a ``device_id`` string, ``None``
     (opened, no identity — older firmware), or ``PORT_BUSY`` (could not
     open). ``handle`` is the still-open serial port when ``keep_open`` and
@@ -162,8 +169,7 @@ def _probe_port(port, baudrate, timeout_s=WHOAMI_PROBE_WAIT_S,
             buf = b""
             while time.monotonic() < deadline:
                 buf += probe.readline()
-                device_id = device_id_from_whoami_output(
-                    buf.decode(errors="replace"))
+                device_id = device_id_from_whoami_output(buf.decode(errors="replace"))
                 if device_id is not None:
                     keep = keep_open
                     return device_id, (probe if keep_open else None)
@@ -221,13 +227,17 @@ def _prune_unidentified_state(device_id_fragment, seen_ports):
     unplugged, or the COM name reassigned) so stale misses can't carry over
     to whatever appears there next."""
     with _unidentified_state_lock:
-        for key in [k for k in _unidentified_miss_counts
-                    if k[0] == device_id_fragment and k[1] not in seen_ports]:
+        for key in [
+            k
+            for k in _unidentified_miss_counts
+            if k[0] == device_id_fragment and k[1] not in seen_ports
+        ]:
             del _unidentified_miss_counts[key]
 
 
-def claim_port_by_device_id(hwids, device_id_fragment, *,
-                            min_unidentified_scans=1) -> ClaimedPort:
+def claim_port_by_device_id(
+    hwids, device_id_fragment, *, min_unidentified_scans=1
+) -> ClaimedPort:
     """Claim the port of the board whose whoami ``device_id`` contains
     ``device_id_fragment``, searching all ports matching ``hwids`` by
     VID:PID. Returns a ClaimedPort whose serial handle has been open since
@@ -268,7 +278,8 @@ def claim_port_by_device_id(hwids, device_id_fragment, *,
                 _note_port_identified(device_id_fragment, port)
                 logger.debug(
                     f"Port {port} identifies as '{result}' — not a "
-                    f"'{device_id_fragment}' board; skipping")
+                    f"'{device_id_fragment}' board; skipping"
+                )
                 try:
                     handle.close()
                 except Exception:
@@ -280,7 +291,8 @@ def claim_port_by_device_id(hwids, device_id_fragment, *,
             logger.debug(
                 f"Port {port} unidentified for "
                 f"{misses}/{min_unidentified_scans} scans; not yet eligible "
-                f"for the '{device_id_fragment}' fallback")
+                f"for the '{device_id_fragment}' fallback"
+            )
             continue
         # The probe closed this port (only identified ports stay open), so
         # the fallback reopens it here. A failure just skips this scan: the
@@ -293,13 +305,17 @@ def claim_port_by_device_id(hwids, device_id_fragment, *,
         logger.warning(
             f"No port identified as a '{device_id_fragment}' board; falling "
             f"back to port {port} after {misses} scans with no whoami reply "
-            f"(older firmware?)")
+            f"(older firmware?)"
+        )
         return ClaimedPort(port=port, serial=handle)
-    raise Exception(f"No '{device_id_fragment}' board found for hwids {hwids}")
+    raise DeviceNotFoundError(
+        f"No '{device_id_fragment}' board found for hwids {hwids}"
+    )
 
 
-def find_port_by_device_id(hwids, device_id_fragment, *,
-                           min_unidentified_scans=1) -> str:
+def find_port_by_device_id(
+    hwids, device_id_fragment, *, min_unidentified_scans=1
+) -> str:
     """The port NAME of the board whose whoami ``device_id`` contains
     ``device_id_fragment`` (see claim_port_by_device_id for the search and
     fallback rules). The claimed handle is closed before returning — for
@@ -307,12 +323,12 @@ def find_port_by_device_id(hwids, device_id_fragment, *,
     the periodic monitors use claim_port_by_device_id instead to hand the
     open port straight to the proxy."""
     claimed = claim_port_by_device_id(
-        hwids, device_id_fragment,
-        min_unidentified_scans=min_unidentified_scans)
+        hwids, device_id_fragment, min_unidentified_scans=min_unidentified_scans
+    )
     claimed.close()
     return claimed.port
 
 
 if __name__ == "__main__":
-    hwids = ['VID:PID=16C0:0483']
+    hwids = ["VID:PID=16C0:0483"]
     check_devices_available(hwids)
