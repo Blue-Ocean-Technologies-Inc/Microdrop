@@ -34,8 +34,9 @@ from microdrop_style import colour_roles
 from microdrop_style.color_contrast import label_on
 from microdrop_style.colors import INFO_COLOR
 from microdrop_style.icons.icons import ICON_NOTIFICATIONS, ICON_NOTIFICATIONS_ACTIVE
-from microdrop_style.palette_helpers import icon_font, text_font
+from microdrop_style.palette_helpers import icon_font
 from microdrop_style.panel_theme import accent_of, muted_text, role_color, theme_palette
+from microdrop_style.typography import CHIP, role_font
 
 # Local imports.
 from ..models.notifications_pane_model import ALERT_SEVERITY, NotificationsPaneModel
@@ -124,7 +125,7 @@ class NotificationBellIcon(QtWidgets.QWidget):
         )
 
     def _badge_font(self):
-        return text_font(self.font(), -2.0, QtGui.QFont.Weight.Bold)
+        return role_font(CHIP, QtGui.QFont.Weight.Bold)
 
     def _badge_width(self):
 

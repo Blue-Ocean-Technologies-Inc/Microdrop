@@ -28,9 +28,6 @@ and ``build_contents()``.
 from pyface.qt import QtCore, QtWidgets
 from traits.api import Any, Bool, HasTraits, Instance, Int, List, observe
 
-# Microdrop style imports.
-from microdrop_style.typography import BODY_TEXT, role_font
-
 # Local imports.
 from ..models.notifications_pane_model import NotificationsPaneModel
 from .drawer import NotificationsDrawer, anchored_drawer_rect
@@ -267,7 +264,6 @@ class NotificationsDrawerHost(HasTraits):
 
     def _build_drawer(self):
         self.drawer = drawer = NotificationsDrawer(self.window)
-        drawer.setFont(role_font(BODY_TEXT))
         drawer.hide()
         drawer.close_requested.connect(self._close_from_view)
         drawer.edge.width_requested.connect(self._resize_to)

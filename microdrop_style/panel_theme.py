@@ -34,6 +34,7 @@ from microdrop_style.palette_helpers import (
 
 # Local imports.
 from . import colour_roles
+from .touch_style import TOUCH_GROWS_PROPERTY
 
 _ROLE = QtGui.QPalette.ColorRole
 
@@ -225,3 +226,56 @@ def icon_button_style(palette, pixel_size=18, selector="QToolButton"):
         f" {selector}:pressed {{ background: {css(with_alpha(text, 0.15))}; }}"
         f" {selector}:disabled {{ color: {css(with_alpha(text, 0.22))}; }}"
     )
+
+
+def isolated_style_sheet(root, palette):
+    """The rules for everything under the widget named ``root`` (an object
+    name): the panel's own values for every property the application style
+    sheet sets app-wide (touch mode's finger sizes and frames), so none of
+    them reaches it. A widget's own style sheet still wins over these; an
+    ancestor's (this one) wins over the application's whatever its
+    specificity."""
+    scope = f"#{root}"
+    grows = f'{TOUCH_GROWS_PROPERTY}="true"'
+    text = palette.color(_ROLE.Text)
+    frame = css(card_border(palette))
+
+    return f"""
+{scope} QPushButton[{grows}] {{ padding: 3px 11px; }}
+{scope} QToolButton[{grows}] {{ padding: 2px; }}
+{scope} QLineEdit[{grows}] {{ padding: 1px 2px; }}
+{scope} QCheckBox, {scope} QRadioButton {{ spacing: 6px; padding: 0px; }}
+{scope} QCheckBox::indicator, {scope} QRadioButton::indicator {{
+    width: 14px; height: 14px;
+}}
+{scope} QComboBox, {scope} QAbstractSpinBox {{
+    min-height: 0px; padding: 1px 4px;
+}}
+{scope} QHeaderView::section {{
+    padding: 3px 6px; border: none;
+    border-right: 1px solid {frame}; border-bottom: 1px solid {frame};
+    background-color: {css(card_fill(palette))}; color: {css(text)};
+}}
+{scope} QTableView::item, {scope} QTreeView::item, {scope} QListView::item {{
+    min-height: 0px;
+}}
+{scope} QScrollBar:vertical {{
+    width: 8px; margin: 0px; border: none; background-color: transparent;
+}}
+{scope} QScrollBar:horizontal {{
+    height: 8px; margin: 0px; border: none; background-color: transparent;
+}}
+{scope} QScrollBar::handle {{
+    margin: 2px; border-radius: 2px;
+    background-color: {css(with_alpha(text, 0.28))};
+}}
+{scope} QScrollBar::handle:hover, {scope} QScrollBar::handle:pressed {{
+    background-color: {css(with_alpha(text, 0.45))};
+}}
+{scope} QScrollBar::handle:vertical {{ min-height: 24px; }}
+{scope} QScrollBar::handle:horizontal {{ min-width: 24px; }}
+{scope} QScrollBar::add-line, {scope} QScrollBar::sub-line {{
+    width: 0px; height: 0px; border: none; background: none;
+}}
+{scope} QScrollBar::add-page, {scope} QScrollBar::sub-page {{ background: none; }}
+"""

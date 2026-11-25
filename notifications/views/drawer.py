@@ -26,6 +26,7 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 from microdrop_style.panel_theme import theme_palette
 
 # Local imports.
+from .isolation import isolate
 from .view_consts import (
     DRAWER_GRIP_WIDTH,
     DRAWER_OBJECT_NAME,
@@ -129,7 +130,7 @@ class NotificationsDrawer(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.setObjectName(DRAWER_OBJECT_NAME)
+        isolate(self, DRAWER_OBJECT_NAME)
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
 
         #: Below this widget's top the background is translucent; None

@@ -17,8 +17,12 @@ from ..consts import PKG
 # ---------------------------------------------------------------------------
 # Drawer
 # ---------------------------------------------------------------------------
-#: Object name of the drawer widget, for style sheets and tests.
-DRAWER_OBJECT_NAME = f"{PKG}.drawer"
+#: Object names of the panel's isolated roots (``isolation.isolate``): the
+#: drawer, each toast and the settings window. Plain identifiers, as the
+#: roots' style sheets select them by name.
+DRAWER_OBJECT_NAME = f"{PKG}Drawer"
+TOAST_OBJECT_NAME = f"{PKG}Toast"
+SETTINGS_OBJECT_NAME = f"{PKG}Settings"
 
 #: Space (px) between the drawer's edges and its contents.
 DRAWER_PADDING_PX = 6

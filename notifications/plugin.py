@@ -275,7 +275,9 @@ class NotificationsPlugin(Plugin):
     @observe("controller:pane_model:settings_button")
     def _open_settings(self, event):
         """The settings window, raised if already open."""
+        from .views.isolation import isolate
         from .views.settings_view import settings_view
+        from .views.view_consts import SETTINGS_OBJECT_NAME
 
         settings = self.controller.pane_model.center.settings
         view, context = settings_view(settings)
@@ -289,9 +291,9 @@ class NotificationsPlugin(Plugin):
             return
 
         parent = getattr(self._window, "control", None)
-        self._settings_uis[view.title] = settings.edit_traits(
-            view=view, context=context, parent=parent
-        )
+        ui = settings.edit_traits(view=view, context=context, parent=parent)
+        isolate(ui.control, SETTINGS_OBJECT_NAME)
+        self._settings_uis[view.title] = ui
 
     # ------------------------------------------------------------------ #
     # Contributions                                                       #

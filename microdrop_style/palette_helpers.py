@@ -73,19 +73,6 @@ def icon_font(pixel_size):
     return font
 
 
-def text_font(base, point_delta=0.0, weight=None):
-    """``base`` resized by ``point_delta`` points, at ``weight``."""
-    font = QtGui.QFont(base)
-
-    if font.pointSizeF() > 0:
-        font.setPointSizeF(font.pointSizeF() + point_delta)
-
-    if weight is not None:
-        font.setWeight(weight)
-
-    return font
-
-
 def rounded_path(rect, radius):
     """A rounded rectangle path inside ``rect`` (a QRect), half a pixel in so
     a one-pixel border is crisp."""

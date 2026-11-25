@@ -27,6 +27,8 @@ from microdrop_style.typography import CHIP, role_font
 
 # Local imports.
 from .card import NotificationCard
+from .isolation import isolate
+from .view_consts import TOAST_OBJECT_NAME
 
 #: Room (px) around a toast's card for its shadow.
 SHADOW = 12
@@ -42,6 +44,8 @@ class ToastWidget(QtWidgets.QWidget):
 
     def __init__(self, entry, parent=None, help_available=True):
         super().__init__(parent)
+
+        isolate(self, TOAST_OBJECT_NAME)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(SHADOW, SHADOW - 4, SHADOW, SHADOW + 4)
