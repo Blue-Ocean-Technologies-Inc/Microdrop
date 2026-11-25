@@ -72,7 +72,11 @@ from microdrop_application.dialogs.pyface_wrapper import (
     error,
     warning,
 )
-from notifications.consts import SEVERITY_INFO, notification_publisher
+from notifications.consts import (
+    LOG_RECORDED_EXTRA,
+    SEVERITY_INFO,
+    notification_publisher,
+)
 
 # Local imports.
 from ..consts import (
@@ -504,7 +508,10 @@ class CameraAlignmentWorkflowController(HasTraits):
         try:
             self.endpoint_store.save(device_key, event.new)
         except OSError as exc:
-            logger.error(f"Could not save the endpoint of {device_key}: {exc}")
+            logger.error(
+                f"Could not save the endpoint of {device_key}: {exc}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             error(
                 self._alignment_window(),
                 f"The camera-alignment endpoint for {device_key} could not be "
@@ -637,7 +644,10 @@ class CameraAlignmentWorkflowController(HasTraits):
                 self.preset_store.set_default(preset.id)
 
         except (OSError, ValueError) as exc:
-            logger.error(f"Could not save alignment preset '{naming.name}': {exc}")
+            logger.error(
+                f"Could not save alignment preset '{naming.name}': {exc}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             error(
                 parent,
                 f"The alignment preset '{naming.name.strip()}' could not be saved "
@@ -696,7 +706,10 @@ class CameraAlignmentWorkflowController(HasTraits):
                 self.endpoint_store.save(device_key, preset.endpoint_quad)
 
         except (OSError, ValueError) as exc:
-            logger.error(f"Could not apply alignment preset '{preset.name}': {exc}")
+            logger.error(
+                f"Could not apply alignment preset '{preset.name}': {exc}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             error(
                 parent,
                 f"The alignment preset '{preset.name}' was not applied: the "
@@ -1085,7 +1098,10 @@ class CameraAlignmentWorkflowController(HasTraits):
         try:
             store.refresh()
         except OSError as exc:
-            logger.error(f"Camera-alignment presets unavailable ({store.path}): {exc}")
+            logger.error(
+                f"Camera-alignment presets unavailable ({store.path}): {exc}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             store.mark_unavailable(PRESETS_UNAVAILABLE_TEMPLATE.format(path=store.path))
             error(
                 None,
@@ -1144,7 +1160,10 @@ class CameraAlignmentWorkflowController(HasTraits):
         try:
             self.preset_store.delete(row.preset_id)
         except (OSError, ValueError) as exc:
-            logger.error(f"Could not delete alignment preset '{row.name}': {exc}")
+            logger.error(
+                f"Could not delete alignment preset '{row.name}': {exc}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             error(
                 self._alignment_window(),
                 f"The alignment preset '{row.name}' could not be deleted from "

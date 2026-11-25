@@ -52,6 +52,7 @@ from traitsui.api import CustomEditor, HGroup, UItem, VGroup, View, spring
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import YES, confirm, error
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop style imports.
 from microdrop_style.colors import WARNING_COLOR
@@ -510,7 +511,10 @@ class EndpointPane(AlignmentPaneBase):
             try:
                 self.endpoint_store.remove(self.device_name)
             except OSError as exc:
-                logger.error(f"Could not clear the endpoint of {device}: {exc}")
+                logger.error(
+                    f"Could not clear the endpoint of {device}: {exc}",
+                    extra=LOG_RECORDED_EXTRA,
+                )
                 error(
                     None,
                     f"The saved endpoint for {device} could not be cleared.",

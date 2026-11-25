@@ -23,6 +23,7 @@ from microdrop_application.dialogs.consts import (
     DEFAULT_WEB_VIEW_DIALOG_HEIGHT,
     DEFAULT_WEB_VIEW_DIALOG_WIDTH,
 )
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Local imports.
 from .consts import (
@@ -222,7 +223,10 @@ class OpenMicrodropLauncherAction(Action):
             start_launcher(path)
 
         except OSError as e:
-            logger.error(f"Could not start the MicroDrop launcher {path}: {e}")
+            logger.error(
+                f"Could not start the MicroDrop launcher {path}: {e}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             error(None, f"Could not start the MicroDrop launcher:\n{path}\n\n{e}")
 
 

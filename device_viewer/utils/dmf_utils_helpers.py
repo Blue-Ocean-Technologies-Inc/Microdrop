@@ -20,6 +20,7 @@ from shapely.strtree import STRtree
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import error
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop utils imports.
 from microdrop_utils.shapely_helpers import (
@@ -192,6 +193,7 @@ class PolygonNeighborFinder:
                         f"Error: {e}. Saving debug plot to {temp_path}. Proceeding "
                         "with random endpoints...",
                         exc_info=True,
+                        extra=LOG_RECORDED_EXTRA,
                     )
 
                     # 3. Format the polygon list for the report

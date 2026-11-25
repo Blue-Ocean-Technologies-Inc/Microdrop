@@ -44,6 +44,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     warning,
 )
 from microdrop_status_bar.consts import ICON_PRIORITY_LEFT
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop style imports.
 from microdrop_style.button_styles import get_tooltip_style
@@ -636,7 +637,8 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
             if self.model.routes.commit_enabled and self._last_applied_step_id:
                 logger.warning(
                     f"Unsaved route execution settings for last step "
-                    f"{self._last_applied_step_id}"
+                    f"{self._last_applied_step_id}",
+                    extra=LOG_RECORDED_EXTRA,
                 )
 
                 choice = warning(
@@ -1282,7 +1284,7 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
                 break
 
             except PermissionError as e:
-                logger.warning(f"Save As refused: {e}")
+                logger.warning(f"Save As refused: {e}", extra=LOG_RECORDED_EXTRA)
                 warning(
                     None,
                     f"{e}<br><br>Choose another location.",

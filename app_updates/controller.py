@@ -28,6 +28,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     information,
     warning,
 )
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop utils imports.
 from microdrop_utils.source_update_startup import SKIP_GIT_UPDATE_ENV_VAR
@@ -247,7 +248,10 @@ class UpdatesController(Controller):
 
             return choice == SET_AND_SWITCH
 
-        logger.error(f"Not switching to {target.name}: unknown kind {target.kind!r}")
+        logger.error(
+            f"Not switching to {target.name}: unknown kind {target.kind!r}",
+            extra=LOG_RECORDED_EXTRA,
+        )
         error(
             parent=parent,
             title="Switch version",
@@ -296,13 +300,17 @@ class UpdatesController(Controller):
             exited = self.application.exit()
         except Exception:
             logger.exception(
-                f"MicroDrop failed to close after switching to {target_name}"
+                f"MicroDrop failed to close after switching to {target_name}",
+                extra=LOG_RECORDED_EXTRA,
             )
         else:
             if exited is True:
                 return
 
-            logger.error(f"MicroDrop did not close after switching to {target_name}")
+            logger.error(
+                f"MicroDrop did not close after switching to {target_name}",
+                extra=LOG_RECORDED_EXTRA,
+            )
 
         warning(
             parent=None,

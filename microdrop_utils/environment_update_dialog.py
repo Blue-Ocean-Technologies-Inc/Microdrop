@@ -25,6 +25,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     information,
     warning,
 )
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop utils imports.
 from microdrop_utils.environment_update import (
@@ -105,7 +106,7 @@ def offer_environment_update(feature, package, application=None):
     "Not now" or when the update or import failed (already reported to the
     user)."""
     message = missing_package_message(feature, package)
-    logger.warning(message)
+    logger.warning(message, extra=LOG_RECORDED_EXTRA)
 
     # Planned before asking, so the question can name what the update
     # discards and re-adds; a plan that fails is reported once the user
@@ -216,7 +217,7 @@ def _update_in_place(feature, package, plan, commands):
 
 def _report_update_failure(exception, commands):
     """Show why the update failed and the ``commands`` to run by hand."""
-    logger.error(f"Environment update failed: {exception}")
+    logger.error(f"Environment update failed: {exception}", extra=LOG_RECORDED_EXTRA)
 
     error(
         None,

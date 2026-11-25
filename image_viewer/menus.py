@@ -20,6 +20,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     error,
     information,
 )
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop utils imports.
 from microdrop_utils.environment_update_dialog import (
@@ -120,7 +121,9 @@ class PruneExperimentsAction(Action):
 
             return
         except OSError as e:
-            logger.exception(f"Failed to prune experiments: {e}")
+            logger.exception(
+                f"Failed to prune experiments: {e}", extra=LOG_RECORDED_EXTRA
+            )
             error(
                 None,
                 f"Pruning stopped, could not move an experiment folder to the "

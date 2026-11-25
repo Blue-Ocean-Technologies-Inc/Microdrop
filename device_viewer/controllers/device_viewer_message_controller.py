@@ -34,6 +34,7 @@ from traits.api import HasTraits, Instance, Str, provides
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import error
+from notifications.consts import LOG_RECORDED_EXTRA
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
 
 # Microdrop utils imports.
@@ -202,7 +203,8 @@ class DeviceViewerMessageController(HasTraits):
 
         if name == "output-current-exceeded":
             logger.error(
-                "Output current exceeded Device viewer blocked till reconnection."
+                "Output current exceeded Device viewer blocked till reconnection.",
+                extra=LOG_RECORDED_EXTRA,
             )
             GUI.invoke_later(
                 lambda: error(

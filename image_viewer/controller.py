@@ -43,6 +43,7 @@ from traitsui.api import Controller
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import YES, confirm, error, warning
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop utils imports.
 from microdrop_utils.environment_update_dialog import (
@@ -354,7 +355,9 @@ class ImageViewerController(Controller):
 
             return
         except OSError as e:
-            logger.exception(f"Failed to delete experiment '{name}': {e}")
+            logger.exception(
+                f"Failed to delete experiment '{name}': {e}", extra=LOG_RECORDED_EXTRA
+            )
             error(
                 None,
                 f"Could not delete experiment '{name}': {e}",
