@@ -130,10 +130,11 @@ Receiving: (Via handlers, image_viewer/message_handler.py)
 
 Receiving: (Via handlers, notifications/controllers/message_handler.py)
 - NOTIFICATION_POST "ui/notifications/post" — any plugin posts a notification (`NotificationMessage`, via `notification_publisher`); see the notifications flow below
-- NOTIFICATIONS_SHOW_PANEL "ui/notifications/show_panel" — open the notifications drawer (right-hand, over the panes), expanding a section if `section_id` names one (`ShowNotificationsPanelRequest`, via `show_notifications_panel_publisher`)
+- NOTIFICATIONS_SHOW_PANEL "ui/notifications/show_panel" — open the notifications drawer (floating, bottom right, over the panes), expanding a section if `section_id` names one, the drawer's own `notifications.attention` / `notifications.history` included (`ShowNotificationsPanelRequest`, via `show_notifications_panel_publisher`)
+- NOTIFICATION_RESOLVE "ui/notifications/resolve" — the condition behind Needs attention cards cleared: every card whose `condition_id` matches leaves Needs attention, read, its buttons replaced by `resolution` (`NotificationResolveRequest`, via `notification_resolve_publisher`)
 
-Sending: (Via an entry's action button)
-- the topic and message of a notification's `PublishAction`, as the poster defined them
+Sending: (Via a card's buttons)
+- the topic and message of a notification's `PublishAction`, as the poster defined them; a `HelpAction` publishes nothing (it opens help in-process, and is disabled while nothing can)
 
 ### plugin_management
 
@@ -768,7 +769,7 @@ Each capturing step stores the resolution and camera properties it captures with
 - `_update_prefs()` does not touch app_globals. It writes the last-applied voltage/frequency straight into the ETS preferences node by path — `get_default_preferences().set(f"{VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH}.ui_default_{voltage|frequency}", value)` — using `VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH = "microdrop.ui.voltage_frequency_range"` (a new constant in `dropbot_preferences_ui/consts.py`; `VoltageFrequencyRangePreferences.preferences_path` now reuses the same constant instead of a duplicate literal).
 - This works because `envisage.application.Application.__init__` installs the running app's own `ScopedPreferences` node as apptools' package-global default (`set_default_preferences(self.preferences)`) before any plugin constructs a `PreferencesHelper`, and `PreferencesHelper._preferences_default()` returns that same default — so `get_default_preferences()` here and any `VoltageFrequencyRangePreferences()` instance's `self.preferences` are the identical node. Verified interactively: writing by path updates a live `VoltageFrequencyRangePreferences` instance's trait (via its `preferences.add_preferences_listener` callback), which fires `_publish_to_app_globals` and keeps app_globals in sync — `dropbot_status_and_controls` remains the only writer of `ui_default_voltage`/`ui_default_frequency` in app_globals, it just triggers that write indirectly through the ETS node rather than writing app_globals itself. A fresh `VoltageFrequencyRangePreferences()` instance (e.g. after a full app + Redis restart) reads the same persisted value straight from the ETS-backed `preferences.ini`, so the last-applied value survives restarts exactly as it did before #610.
 
-### Any plugin → notifications drawer: posting a notification (#1077)
+### Any plugin → notifications drawer: posting a notification (#1077, #1137)
 
 **Posting** — import only `notifications.consts` (allowed by `.importlinter`) and publish a `NotificationMessage`:
 
@@ -776,19 +777,30 @@ Each capturing step stores the resolution and camera properties it captures with
 from notifications.consts import notification_publisher
 
 notification_publisher.publish({
-    "title": "Protocol finished",            # one line, required
-    "detail": "12 steps in 4 min",           # optional; a traceback shows monospace
-    "severity": "success",                   # info | success | warning | error
-    "category": "protocol",                  # free text: plugins, log, protocol, hardware, ...
-    "source": "pluggable_protocol_tree",     # who posted
-    "action": {"kind": "open_path", "label": "Show report", "path": "C:/.../report.html"},
+    "title": "Chip removed",                 # one line, required
+    "detail": "The protocol is paused.",     # optional; a traceback shows monospace
+    "severity": "warning",                   # info | success | warning | error
+    "category": "hardware",                  # free text
+    "source": "dropbot_status_and_controls", # who posted
+    "action": {"kind": "publish", "label": "Retry", "topic": "...", "message": ""},
+    "secondary_action": {"kind": "help", "label": "How to insert a chip", "target": "Inserting a chip"},
+    "needs_attention": True,                 # listed under Needs attention, toast stays
+    "category_id": "dropbot.chip_removed",   # a declared NOTIFICATION_CATEGORIES id
+    "thread_id": "dropbot.chip.COM5",        # posts with this id update one entry in place
+    "condition_id": "dropbot.chip_missing",  # NOTIFICATION_RESOLVE with this id clears it
 })
 ```
 
-`timestamp` defaults to now. `action` is data, never a callable: `{"kind": "publish", "label", "topic", "message"}` publishes `message` on `topic` when the button is pressed, `{"kind": "open_path", "label", "path"}` opens a file or folder.
+Every field after `action` is optional and defaults to "not set", so messages posted before they existed validate unchanged. `action` is data, never a callable: `{"kind": "publish", "label", "topic", "message"}` publishes `message` on `topic`, `{"kind": "open_path", "label", "path"}` opens a file or folder. `secondary_action` is `{"kind": "help", "label", "target"}` (a link; with no `action` the card's one outlined button; disabled with a tooltip while nothing in the app can open help) or `{"kind": "snooze", "label"}` ("Later": out of Needs attention, into Activity). Pressing `action` marks the card handled: read, out of Needs attention, its buttons replaced by the label.
 
-**Receiving** — `NotificationsMessageHandler._on_post_triggered` validates on the worker thread and hands the message to `NotificationCenter.post_message` with `GUI.invoke_later`. A notification with the same `(source, category, severity, title)` as a listed one collapses into it (count + 1, latest text and time, moved to the top, unread again). The session keeps `MAX_ENTRIES` (300); the oldest go first. Nothing persists across launches.
+**Receiving** — `NotificationsMessageHandler._on_post_triggered` validates on the worker thread and hands the message to `NotificationCenter.post_message` with `GUI.invoke_later`. A notification with the same `(source, category, severity, title)` as a listed one collapses into it (count + 1, latest text and time, moved to the top, unread again); one with a `thread_id` replaces its thread's entry state whole, counted once. A category the user keeps out of the drawer is not recorded, unless it is an error or needs attention. The session keeps `MAX_ENTRIES` (300); the oldest go first; Clear all keeps Needs attention. Nothing persists across launches.
 
-**In-process sources** (not topics) — the plugin also lists, without any message: warning-and-above log records from the root logger (`services/log_forwarder.py`: batched every 250 ms, collapsed by logger + level + message template + exception line, minus `LOG_IGNORE_RULES` in `notifications/consts.py`), and a "failed to load" error for every failed plugin load record (`application.plugin_load_status`).
+**Arrival** — each new (or newly unread) entry, and each repeat, is offered to the toasts (`ToastStackController.offer`, rule `arrival_outcome`): while the drawer is open it lands there marked new; otherwise it pops up as a toast (three at most, the rest counted on "+N more"), refreshes the toast already showing, or, while quiet (`ToastStackModel.quiet`), is held for one summary toast unless it is an error, needs attention or belongs to the quiet run's own category group. Whatever shows rings the bell and chimes the category's tone (`services/chime.py`); start-up history, read entries and held ones are silent. Info and success toasts time out (settings), warnings, errors, Needs attention and ones with a button stay.
 
-**Sections** — `plugin_management` contributes the plugin loading list to the `NOTIFICATION_SECTIONS` extension point (a `NotificationSection`: id, title, summary, order, `factory(parent)`); the indicator click publishes `NOTIFICATIONS_SHOW_PANEL` with that section's id, which opens the drawer and expands it. The drawer opens only from the status-bar bell or this request; it is no dock pane, so task layouts and the View menu never list it.
+**Resolving** — publish `NotificationResolveRequest(condition_id, resolution)` on NOTIFICATION_RESOLVE when the condition clears; `NotificationCenter.resolve` moves its cards out of Needs attention, read, marked with `resolution`. A thread whose next post no longer needs attention leaves Needs attention too, in place.
+
+**Categories** — a plugin declares its kinds of notification as `NotificationCategorySpec`s (id, group, label, description, defaults for drawer / popup / tone, `critical`) in its `consts.py` and contributes them with `List(SPECS, contributes_to=NOTIFICATION_CATEGORIES)`; messages name one in `category_id`. The user's choices are session-only for now (gear button in the drawer header).
+
+**In-process sources** (not topics) — warning-and-above log records from the root logger (`services/log_forwarder.py`: batched every 250 ms, collapsed by logger + level + message template + exception line, minus `LOG_IGNORE_RULES`; category `notifications.log`), and a "failed to load" error for every failed plugin load record (category `notifications.plugin_load_failed`, critical).
+
+**Sections** — the drawer is one scrolling column: Needs attention, the contributed `NOTIFICATION_SECTIONS` (a `NotificationSection`: id, title, summary, order, `factory(parent)`, and its look `glyph` / `accent` / `logo`), then Activity. `plugin_management` contributes the plugin loading list; the indicator click publishes `NOTIFICATIONS_SHOW_PANEL` with that section's id. A section raises alerts for what is new in it (e.g. news posts) by appending `SectionAlert`s to its `alerts`: each pops up, counts on the bell and is marked new until seen in the open drawer with the section expanded, never listed in Activity; the drawer keeps the alert's `unread` / `is_new` current, and a click on its toast asks the section's `alert_widget(contents, alert)` for the widget to scroll to. The drawer opens only from the bell, a toast, or the request; it is no dock pane, so task layouts and the View menu never list it.
