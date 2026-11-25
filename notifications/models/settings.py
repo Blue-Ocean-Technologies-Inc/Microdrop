@@ -8,14 +8,17 @@
 #
 # Thanks for using Microdrop open source!
 
-"""How notifications arrive, Qt-free: toasts, sound, and the user's choices
-per notification category.
+"""How notifications arrive, Qt-free: the drawer at start-up, toasts, sound,
+and the user's choices per notification category.
 
 A category is a kind of notification a plugin posts, like a phone's
 notification channel. Its owner declares it in its ``consts.py`` (a
 ``NotificationCategorySpec``) with the defaults; the user then decides per
 category whether it is kept in the drawer, pops up, and which tone it plays.
-For the session only, for now: nothing here is saved.
+
+The choices are saved as a plain dict (``to_state``/``apply_state``), in
+settings.json in the notifications data folder
+(``services.settings_store``).
 """
 
 # Enthought library imports.
@@ -32,11 +35,17 @@ from traits.api import (
     Property,
     Range,
     Str,
+    TraitError,
     observe,
 )
 
 # Local imports.
-from ..consts import TONE_NONE, TONES
+from ..consts import OPEN_AT_START_ENV, TONE_NONE, TONES
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 #: How long (s) an info or success toast stays by default, hover not
 #: counted; and the range the user may choose from.
@@ -45,6 +54,48 @@ TOAST_SECONDS_RANGE = (2, 60)
 
 #: The chime's volume (%) by default.
 DEFAULT_VOLUME = 80
+
+#: The settings saved, by trait name: the general ones, and each category's.
+SAVED_SETTINGS = (
+    "open_at_start",
+    "auto_dismiss",
+    "auto_dismiss_seconds",
+    "sound_enabled",
+    "sound_volume",
+)
+SAVED_CATEGORY_CHOICES = ("in_drawer", "popup", "tone")
+
+#: The key of the categories' choices in the saved dict.
+CATEGORIES_KEY = "categories"
+
+
+def opens_at_start(saved, environ):
+    """Whether the drawer opens at start-up: as OPEN_AT_START_ENV in
+    ``environ`` says when it is "1" or "0", else as ``saved`` says."""
+    override = environ.get(OPEN_AT_START_ENV, "").strip()
+
+    if override in ("0", "1"):
+        return override == "1"
+
+    return saved
+
+
+def _take_choices(target, choices, names, prefix=""):
+    """Set each of ``names`` found in ``choices`` on ``target``; returns the
+    keys (``prefix`` + name) whose values it would not take."""
+    rejected = []
+
+    for name in names:
+        if name not in choices:
+            continue
+
+        try:
+            setattr(target, name, choices[name])
+
+        except TraitError:
+            rejected.append(f"{prefix}{name}")
+
+    return rejected
 
 
 class NotificationCategory(HasTraits):
@@ -104,6 +155,10 @@ class NotificationCategoryGroup(HasTraits):
 class NotificationSettings(HasTraits):
     """The user's choices on how notifications arrive."""
 
+    #: The drawer opens as the main window first shows, on the plugins
+    #: loading; OPEN_AT_START_ENV overrides it.
+    open_at_start = Bool(True)
+
     #: Info and success toasts leave on their own; off, every toast stays
     #: until dismissed or acted on, and no countdown is drawn.
     auto_dismiss = Bool(True)
@@ -136,20 +191,76 @@ class NotificationSettings(HasTraits):
     #: The categories by id.
     _by_id = Dict(Str, Instance(NotificationCategory))
 
+    #: The saved choices per category id, as ``to_state`` writes them: a
+    #: category declared later (its plugin loads later) takes them then, and
+    #: those of categories not declared this session are saved again.
+    _saved_choices = Dict(Str, Dict)
+
     def _get_timeout_ms(self):
         return self.auto_dismiss_seconds * 1000
 
     def declare(self, specs):
-        """Add the categories ``specs`` declare; ids already known keep the
-        user's choices."""
+        """Add the categories ``specs`` declare, with the saved choices if
+        any; ids already known keep the user's choices."""
 
         for spec in specs:
             if spec.id in self._by_id:
                 continue
 
             category = category_from_spec(spec)
+            rejected = self._take_saved_choices(category)
+
+            if rejected:
+                logger.warning(f"Saved notification settings ignored: {rejected}")
+
             self._by_id[spec.id] = category
             self.group(spec.group).categories.append(category)
+
+    # ------------------------------------------------------------------ #
+    # Saving                                                              #
+    # ------------------------------------------------------------------ #
+
+    def to_state(self):
+        """The choices as a JSON-ready dict, for ``apply_state``."""
+        choices = dict(self._saved_choices)
+
+        for category_id, category in self._by_id.items():
+            choices[category_id] = {
+                name: getattr(category, name) for name in SAVED_CATEGORY_CHOICES
+            }
+
+        state = {name: getattr(self, name) for name in SAVED_SETTINGS}
+        state[CATEGORIES_KEY] = choices
+
+        return state
+
+    def apply_state(self, state):
+        """Take the choices in ``state`` (``to_state``'s dict); what it lacks
+        keeps its default. Returns the keys whose values were unusable, which
+        keep their default too."""
+        rejected = _take_choices(self, state, SAVED_SETTINGS)
+        choices = state.get(CATEGORIES_KEY, {})
+
+        if not isinstance(choices, dict):
+            rejected.append(CATEGORIES_KEY)
+            choices = {}
+
+        self._saved_choices = {
+            category_id: category_choices
+            for category_id, category_choices in choices.items()
+            if isinstance(category_choices, dict)
+        }
+
+        for category in self._by_id.values():
+            rejected += self._take_saved_choices(category)
+
+        return rejected
+
+    def _take_saved_choices(self, category):
+        choices = self._saved_choices.get(category.id, {})
+        prefix = f"{CATEGORIES_KEY}.{category.id}."
+
+        return _take_choices(category, choices, SAVED_CATEGORY_CHOICES, prefix)
 
     def group(self, name):
         """The group named ``name``, made empty if new."""

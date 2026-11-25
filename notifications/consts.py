@@ -288,9 +288,15 @@ class NotificationResolveRequest(BaseModel):
 #: The folder, in the application home, for everything the notifications
 #: feature persists: one small JSON file per concern, each written only by
 #: the plugin that owns it (news_state.json by the news plugin,
-#: self_test.json by the DropBot tools menu; the drawer's settings.json
-#: when they persist).
+#: self_test.json by the DropBot tools menu, settings.json by this plugin).
 NOTIFICATIONS_DATA_DIRNAME = "notifications"
+
+#: The user's notification settings, in the data folder.
+NOTIFICATION_SETTINGS_FILENAME = "settings.json"
+
+#: "1" opens the drawer at start-up, "0" keeps it closed, whatever the saved
+#: setting: for tests, demos and automation.
+OPEN_AT_START_ENV = "MICRODROP_NOTIFICATIONS_OPEN_AT_START"
 
 
 def notifications_data_dir():

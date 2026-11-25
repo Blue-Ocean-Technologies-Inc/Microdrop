@@ -8,10 +8,10 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The notification settings window, opened from the drawer's gear: toasts,
-sound, and each owner's categories; and one owner's page listing only its
-categories. Both edit the same category objects, so they stay in step. Run
-standalone against just the model::
+"""The notification settings window, opened from the drawer's gear: the
+panel at start-up, toasts, sound, and each owner's categories; and one
+owner's page listing only its categories. Both edit the same category
+objects, so they stay in step. Run standalone against just the model::
 
     view, context = settings_view(settings)
     settings.edit_traits(view=view, context=context)
@@ -33,7 +33,7 @@ from traitsui.api import (
 from traitsui.extras.checkbox_column import CheckboxColumn
 
 # Local imports.
-from ..consts import TONE_LABELS, TONE_NONE
+from ..consts import OPEN_AT_START_ENV, TONE_LABELS, TONE_NONE
 from ..models.settings import TOAST_SECONDS_RANGE
 
 #: The tone choices, in order, as EnumEditor wants them.
@@ -116,6 +116,18 @@ def _group_item(key, group):
 
 
 GENERAL_GROUPS = [
+    VGroup(
+        Item(
+            "open_at_start",
+            label="Open the notifications panel at start-up",
+            tooltip=(
+                "Shows the panel as MicroDrop starts, on the plugins loading; "
+                f"{OPEN_AT_START_ENV}=0 or 1 overrides this"
+            ),
+        ),
+        label="Notifications panel",
+        show_border=True,
+    ),
     VGroup(
         Item(
             "auto_dismiss",

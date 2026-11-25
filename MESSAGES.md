@@ -817,7 +817,7 @@ Every field after `action` is optional and defaults to "not set", so messages po
 
 **Resolving** — publish `NotificationResolveRequest(condition_id, resolution)` on NOTIFICATION_RESOLVE when the condition clears; `NotificationCenter.resolve` moves its cards out of Needs attention, read, marked with `resolution`. A thread whose next post no longer needs attention leaves Needs attention too, in place.
 
-**Categories** — a plugin declares its kinds of notification as `NotificationCategorySpec`s (id, group, label, description, defaults for drawer / popup / tone, `critical`) in its `consts.py` and contributes them with `List(SPECS, contributes_to=NOTIFICATION_CATEGORIES)`; messages name one in `category_id`. The user's choices are session-only for now (gear button in the drawer header).
+**Categories** — a plugin declares its kinds of notification as `NotificationCategorySpec`s (id, group, label, description, defaults for drawer / popup / tone, `critical`) in its `consts.py` and contributes them with `List(SPECS, contributes_to=NOTIFICATION_CATEGORIES)`; messages name one in `category_id`. The user's choices (gear button in the drawer header) are saved in `settings.json` in the notifications data folder, with "Open the notifications panel at start-up" (default on; `MICRODROP_NOTIFICATIONS_OPEN_AT_START=0`/`1` overrides it).
 
 **In-process sources** (not topics) — warning-and-above log records from the root logger (`services/log_forwarder.py`: batched every 250 ms, collapsed by logger + level + message template + exception line, minus `LOG_IGNORE_RULES`; category `notifications.log`), and a "failed to load" error for every failed plugin load record (category `notifications.plugin_load_failed`, critical).
 
