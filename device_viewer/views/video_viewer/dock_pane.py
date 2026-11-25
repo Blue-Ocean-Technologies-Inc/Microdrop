@@ -69,12 +69,12 @@ from microdrop_utils.traitsui_qt_helpers import (
 
 # Local imports.
 from ...consts import (
-    PKG,
     RECORDING_TRANSFORM_SIDECAR_SUFFIX,
     RECORDINGS_DIR_NAME,
     recording_state_model,
 )
 from ...preferences import DeviceViewerPreferences
+from ...recording_viewer_consts import RECORDING_VIEWER_DOCK_PANE_ID
 from .model import VideoViewerModel
 from .video_canvas import video_canvas_factory
 from .video_export import AlignedVideoExporter
@@ -100,7 +100,7 @@ class VideoViewerDockPane(LazyContentDockPane, TraitsDockPane):
     media player, is built the first time the pane is shown.
     """
 
-    id = PKG + ".video_viewer.dock_pane"
+    id = RECORDING_VIEWER_DOCK_PANE_ID
     name = "Recording Viewer"
 
     model = Instance(VideoViewerModel)
@@ -288,6 +288,22 @@ class VideoViewerDockPane(LazyContentDockPane, TraitsDockPane):
         else:
             self.model.selected_video = ""
             self.model.current_path = ""
+
+    def show_recording(self, path):
+        """Play the recording at ``path``, as browsing to its folder and
+        picking it in the Recording list would."""
+        path = Path(path)
+        directory = str(path.parent)
+
+        # A new folder is scanned by its observer; the same one is rescanned
+        # here, for a recording saved since the last scan.
+        if self.model.directory != directory:
+            self.model.directory = directory
+
+        else:
+            self._refresh_recordings()
+
+        self.model.selected_video = path.name
 
     @observe("model:selected_video")
     def _load_selected(self, event):
