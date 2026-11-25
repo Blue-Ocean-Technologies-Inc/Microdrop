@@ -25,6 +25,12 @@ def fit_item_views(widget):
     shows grows, which reports only ``layoutChanged``."""
 
     for view in widget.findChildren(QtWidgets.QAbstractItemView):
+        # A table's headers are item views too, but sized by their table:
+        # fitted as views of no rows they were fixed 2 px tall, hiding the
+        # column titles and leaving the rows past the first drawn blank.
+        if isinstance(view, QtWidgets.QHeaderView):
+            continue
+
         fit_item_view(view)
 
         # Fitted again once shown: an unshown header has no height yet.
@@ -52,7 +58,10 @@ def fit_item_view(view):
     try:
         if isinstance(view, QtWidgets.QTableView):
             rows = view.verticalHeader().length()
-            header = view.horizontalHeader().height()
+            header = view.horizontalHeader()
+
+            # Its size hint: its height is not set until the view is shown.
+            header = 0 if header.isHidden() else header.sizeHint().height()
 
         else:
             rows = max(view.sizeHintForRow(0), 0) * view.model().rowCount()
