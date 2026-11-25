@@ -19,7 +19,9 @@ scenarios. Run from ``src/``:
     pixi run python -m examples.demos.notifications_ux.run_notifications_ux_demo
 
 ``--theme light`` or ``dark`` forces a theme; ``--open`` opens the drawer
-once the window is up.
+once the window is up. ``--app-font-pt 14`` sets the application's font to
+that size, as a larger text size would: the rest of the window grows with
+it, the notifications panel (its own fixed type scale) does not.
 
 It touches nothing of a MicroDrop already running: it starts its own Redis
 on a free port (never 6379) and uses a temporary application home, both gone
@@ -38,9 +40,10 @@ from .isolated_session import isolated_session
 WINDOW_SIZE = (1440, 880)
 
 
-def run(open_drawer):
-    """Run the app until its window closes. Inside ``isolated_session()``:
-    imports the plugin modules only now."""
+def run(open_drawer, app_font_pt=None):
+    """Run the app until its window closes, its font at ``app_font_pt``
+    points if given. Inside ``isolated_session()``: imports the plugin
+    modules only now."""
     from envisage.api import CorePlugin
     from envisage.ui.tasks.api import TasksPlugin
     from pyface.qt.QtWidgets import QApplication
@@ -88,6 +91,11 @@ def run(open_drawer):
     app_instance = QApplication.instance() or QApplication(sys.argv)
     style_app(app_instance)
 
+    if app_font_pt:
+        font = app_instance.font()
+        font.setPointSizeF(app_font_pt)
+        app_instance.setFont(font)
+
     plugins = [
         CorePlugin(),
         MessageRouterPlugin(),
@@ -134,11 +142,16 @@ def main():
     parser.add_argument(
         "--open", action="store_true", help="open the drawer once the window is up"
     )
+    parser.add_argument(
+        "--app-font-pt",
+        type=float,
+        help="the application's font size (points), e.g. 14 to mimic larger text",
+    )
     args = parser.parse_args()
     theme = "follow_system" if args.theme == "system" else args.theme
 
     with isolated_session(theme=theme):
-        run(open_drawer=args.open)
+        run(open_drawer=args.open, app_font_pt=args.app_font_pt)
 
 
 if __name__ == "__main__":
