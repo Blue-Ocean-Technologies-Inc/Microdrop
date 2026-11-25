@@ -134,8 +134,12 @@ class CardFrame(QtWidgets.QFrame):
         # Its height is its height for its width, every pass: a Maximum
         # policy capped it at the height for its previous width, so a card
         # narrowed (its pictures stacking) was cut off below the first.
+        # Its width is the column's: a layout measures a child's height at
+        # no less than its minimum width, and a card's rows can ask more
+        # than the drawer's narrowest column, measuring it short (side by
+        # side) while it is drawn narrow (stacked).
         policy = QtWidgets.QSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Ignored,
             QtWidgets.QSizePolicy.Policy.Preferred,
         )
         policy.setHeightForWidth(True)

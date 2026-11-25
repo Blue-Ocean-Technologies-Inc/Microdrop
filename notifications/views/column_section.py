@@ -96,6 +96,16 @@ class ColumnSection(QtWidgets.QWidget):
         #: What was built for it: a widget, or a TraitsUI UI around one.
         self.contents = None
 
+        # Its width is the column's, whatever its contents' least width: the
+        # column measures a section's height at no less than that, so wider
+        # contents than the column were measured short and cut off.
+        policy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
