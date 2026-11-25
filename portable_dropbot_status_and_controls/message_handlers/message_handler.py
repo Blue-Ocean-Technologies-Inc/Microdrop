@@ -36,6 +36,7 @@ from ..consts import (
     FAN_DUTY_BITS,
     HEATER_ONOFF_BITS,
     HUMIDITY_SENSOR_DEAD_RAW,
+    PKG,
 )
 from ..models.model import PortableDropbotStatusAndControlsModel
 
@@ -334,6 +335,7 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
             "Portable UI. MicroDrop does not flash firmware.",
             title="Portable DropBot Firmware Outdated",
             cancel=False,
+            source=PKG,
         )
 
     def _on_error_triggered(self, body):
@@ -360,9 +362,10 @@ class PortableDropbotStatusAndControlsMessageHandler(BaseMessageHandler):
                 "safe.",
                 title="Chip Pads May Still Be Pressed",
                 cancel=False,
+                source=PKG,
             )
         else:
-            GUI.invoke_later(error, None, message, title="Chip Lock Failed")
+            GUI.invoke_later(error, None, message, title="Chip Lock Failed", source=PKG)
 
     def _record_alarm(self, text):
         """Show text as the last alarm and log it."""
