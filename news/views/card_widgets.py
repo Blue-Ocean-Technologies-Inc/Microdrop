@@ -260,6 +260,10 @@ class PicturePair(QtWidgets.QWidget):
         #: The loaded pictures, as loaded: every crop is made from these.
         self.pixmaps = [None] * len(captions)
 
+        #: The pictures' sizes known before they load (QSize or None), so
+        #: the cells have their final shape from the start.
+        self.sizes = [None] * len(captions)
+
         #: Crops made for the current cells, by index; dropped on resize.
         self._crops = {}
 
@@ -282,11 +286,12 @@ class PicturePair(QtWidgets.QWidget):
         self.update()
 
     def _aspects(self):
-        """Each picture's width over height; PAIR_ASPECT until loaded."""
+        """Each picture's width over height: as loaded, else as its known
+        size says, else PAIR_ASPECT."""
         aspects = []
 
-        for pixmap in self.pixmaps[:2]:
-            size = pixmap.deviceIndependentSize() if pixmap is not None else None
+        for pixmap, known in zip(self.pixmaps[:2], self.sizes[:2]):
+            size = pixmap.deviceIndependentSize() if pixmap is not None else known
             aspect = size.width() / max(size.height(), 1) if size else PAIR_ASPECT
             aspects.append(aspect or PAIR_ASPECT)
 

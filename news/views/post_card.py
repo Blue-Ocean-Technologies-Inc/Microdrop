@@ -118,8 +118,9 @@ class FeedPostCard(HasTraits):
     #: A compact release row's first feature, shown while collapsed.
     _teaser = Any()
 
-    #: The loaded picture.
+    #: The loaded picture, and its size known before then (QSize or None).
     _picture = Any()
+    _picture_size = Any()
 
     #: A lead card's two pictures, and their loaded pixmaps.
     _pair = Any()
@@ -376,6 +377,7 @@ class FeedPostCard(HasTraits):
             [alt for _src, _caption, alt in images],
             self.control,
         )
+        self._pair.sizes = [thumbnail_loader().known_size(src) for src, *_ in images]
         self._pair.setFont(self._font("small", SMALL_POINTS))
         self._pair.picture_clicked.connect(self._preview_picture)
 
@@ -443,8 +445,13 @@ class FeedPostCard(HasTraits):
             self._teaser.setVisible(not self.post.expanded)
 
     def _show_loading(self):
+        """A lead card's banner placeholder, at the picture's own height if
+        its size is known (``_show_banner``): the card keeps its size."""
+
         if self.lead:
+            self._picture_size = thumbnail_loader().known_size(self.post.image)
             self._set_banner("loading", BANNER_LOADING_HEIGHT)
+            self._show_banner()
 
     def _show_picture(self, pixmap):
         """Show the loaded picture; None removes its placeholder."""
@@ -453,6 +460,8 @@ class FeedPostCard(HasTraits):
             return
 
         if pixmap is None:
+            self._picture_size = None
+
             if self.lead:
                 self._set_banner(None, 0)
 
@@ -474,16 +483,25 @@ class FeedPostCard(HasTraits):
     def _show_banner(self):
         """The picture across the card's top, edge to edge at its own
         aspect, cropped top and bottom past the cap
-        (``full_width_picture_height``); never padded."""
+        (``full_width_picture_height``); never padded. Until it loads, its
+        placeholder at that height, if its size is known."""
 
-        if not self.lead or self.control is None or self._picture is None:
+        if not self.lead or self.control is None:
+            return
+
+        loaded = self._picture is not None
+        picture = self._picture_size
+
+        if loaded:
+            picture = self._picture.deviceIndependentSize()
+
+        if picture is None:
             return
 
         width = self.control.width()
-        picture = self._picture.deviceIndependentSize()
         height = full_width_picture_height(width, picture.width(), picture.height())
         ratio = self.control.devicePixelRatioF()
-        banner = cropped(self._picture, width, height, ratio)
+        banner = cropped(self._picture, width, height, ratio) if loaded else "loading"
 
         self._set_banner(banner, height)
 
