@@ -175,6 +175,8 @@ DEFERRED_FRONTEND_PLUGINS = [
     # drawer open at start-up leads with it. It contributes only its drawer
     # section and its kind of notification, and needs no other deferred
     # plugin, so loading it first changes no service or extension precedence.
+    # Its feed and release notes are read on the loader's worker (prepare),
+    # and its drawer section's views imported there too.
     DeferredPlugin(
         spec="news.plugin:NewsPlugin",
         priority=PRIORITY_FIRST,
@@ -182,7 +184,9 @@ DEFERRED_FRONTEND_PLUGINS = [
             "news.services.news_feed",
             "news.controllers.news_alerts",
             "news.services.seen_state",
+            "news.views.feed_column",
         ],
+        prepare="news.services.news_feed:prepare_news_feed",
     ),
     DeferredPlugin(
         spec="ssh_controls_ui.plugin:SSHUIPlugin",

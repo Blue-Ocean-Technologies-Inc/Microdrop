@@ -77,6 +77,13 @@ class DeferredPlugin(HasTraits):
     #: plugin.
     priority = Int(0)
 
+    #: A ``"module:function"`` the loader calls with no arguments on its
+    #: worker thread, after the imports: Qt-free reading and parsing the
+    #: plugin would otherwise do on the GUI thread. What it returns is
+    #: handed to the plugin as its ``prepared`` trait; if it fails, the
+    #: plugin is constructed without it. Empty for none.
+    prepare = Str()
+
     #: The class part of ``spec``, the plugin's name until it is imported.
     class_name = Property(Str, observe="spec")
 
@@ -104,3 +111,10 @@ class DeferredPlugin(HasTraits):
         module = importlib.import_module(module_path)
 
         return getattr(module, class_name)
+
+    def import_prepare(self):
+        """Import and return the function ``prepare`` names."""
+        module_path, _, function_name = self.prepare.partition(":")
+        module = importlib.import_module(module_path)
+
+        return getattr(module, function_name)

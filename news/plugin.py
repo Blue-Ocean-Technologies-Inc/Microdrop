@@ -11,9 +11,11 @@
 """NewsPlugin — Blue Ocean Technologies' and Sci-Bots' news and MicroDrop's
 release notes as the News section of the notifications drawer.
 
-A deferred frontend plugin: it starts after the main window has painted,
-reads the feed file shipped in ``news/resources/feed.json`` (and, on one
-machine, ``news/resources/local/local_posts.json``) and CHANGELOG.md, and
+A deferred frontend plugin, loaded first of them: it starts after the main
+window has painted, reads the feed file shipped in
+``news/resources/feed.json`` (and, on one machine,
+``news/resources/local/local_posts.json``) and CHANGELOG.md, at launch on
+the deferred loader's worker thread (``prepared``), and
 contributes the section through ``notifications.consts`` alone. Posts not
 seen before are new: they are marked in the drawer, and a launch toasts at
 most twice, once for this version's release notes and once for the rest.
@@ -69,13 +71,17 @@ class NewsPlugin(Plugin):
         NEWS_CATEGORIES, contributes_to=NOTIFICATION_CATEGORIES
     )
 
+    #: The feed as the deferred loader read it on its worker thread
+    #: (``news.services.news_feed.prepare_news_feed``); None to read it here.
+    prepared = Any()
+
     #: Raises the alerts and records what has been seen.
     _alerts = Any()
 
     def _sections_default(self):
         from .services.news_feed import make_news_section
 
-        return [make_news_section()]
+        return [make_news_section(self.prepared)]
 
     def start(self):
         """Load what has been seen, and mark what has not."""

@@ -60,6 +60,44 @@ class PushResult(NamedTuple):
     errors: list
 
 
+class LoadedFeed(NamedTuple):
+    """The sources' posts as read (``read_feed_sources``): validated
+    messages by id, one line per problem, and whether every source failed.
+    Plain data, safe to hand from a worker thread to the GUI thread."""
+
+    messages: dict
+    problems: list
+    all_failed: bool
+
+
+def read_feed_sources(sources):
+    """Read and validate every source's posts, their pictures resolved; on
+    an id in several, the first source wins. A source that fails gives
+    nothing and a problem. Qt-free and touches no shown model, so it may
+    run on a worker thread."""
+    messages, problems, failed = {}, [], 0
+
+    for source in sources:
+        try:
+            payload = source.load()
+
+        except FeedLoadError as error:
+            problems.append(f"Feed source unavailable: {error}")
+            failed += 1
+
+            continue
+
+        parsed = parse_feed_payload(payload)
+        problems.extend(parsed.errors)
+
+        for message in parsed.posts:
+            messages.setdefault(
+                message.id, with_resolved_pictures(message, source.resolve_image)
+            )
+
+    return LoadedFeed(messages, problems, bool(sources) and failed == len(sources))
+
+
 def sort_posts(posts):
     """``posts`` pinned first, then newest first; ties keep their order."""
     return sorted(posts, key=lambda post: (not post.pinned, -post.date.toordinal()))
@@ -130,32 +168,18 @@ class SciBotsFeedController(Controller):
     def reload(self):
         """Read every source again; pushed posts are kept. A source that
         fails contributes nothing and is reported; the others still load."""
-        messages, problems, failed = {}, [], 0
+        self.show_loaded(read_feed_sources(self.sources))
 
-        for source in self.sources:
-            try:
-                payload = source.load()
-
-            except FeedLoadError as error:
-                problems.append(f"Feed source unavailable: {error}")
-                failed += 1
-
-                continue
-
-            parsed = parse_feed_payload(payload)
-            problems.extend(parsed.errors)
-
-            for message in parsed.posts:
-                messages.setdefault(
-                    message.id, with_resolved_pictures(message, source.resolve_image)
-                )
+    def show_loaded(self, loaded):
+        """Show the LoadedFeed read from the sources (``read_feed_sources``,
+        perhaps on a worker); pushed posts are kept."""
+        messages = loaded.messages
 
         self._source_messages = messages
         hidden = self._show_posts()
-        all_failed = bool(self.sources) and failed == len(self.sources)
 
         # A clean load says nothing: the feed itself shows it.
-        if not problems:
+        if not loaded.problems:
             logger.info(f"Sci-Bots Feed loaded {len(messages)} posts{hidden}")
             self.dismiss_status()
 
@@ -163,8 +187,8 @@ class SciBotsFeedController(Controller):
 
         self._report(
             f"Loaded {_plural(len(messages), 'post')}{hidden}",
-            problems,
-            failed=all_failed,
+            loaded.problems,
+            failed=loaded.all_failed,
         )
 
     def push(self, payload, base_dir=None):

@@ -56,9 +56,15 @@ LAUNCH_MODULES = (
     "notifications.services.settings_store",
     "notifications.views.drawer_host",
     "notifications.views.column",
-    # Read at launch to decide on the What's New dialog; the news plugin
-    # itself is deferred.
+    # Read at launch to decide on the What's New dialog.
     "news.consts",
+    # The news plugin, deferred but loaded first: what the loader's worker
+    # imports (preload_modules) and runs (prepare) for it.
+    "news.plugin",
+    "news.services.news_feed",
+    "news.controllers.news_alerts",
+    "news.services.seen_state",
+    "news.views.feed_column",
 )
 
 #: Packages none of them may import. Bare ``scipy`` is not listed: pint, which

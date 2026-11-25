@@ -209,6 +209,11 @@ them with the rest.
   the News section). Their order decides service and extension precedence, and a UI is
   declared after the service it needs, so raise a priority only for a plugin that needs,
   and contributes ahead of, no other deferred plugin.
+- **Off the GUI thread.** The loader's worker imports the plugin's module and its
+  `preload_modules`, then calls its `prepare` (`"module:function"`, optional): Qt-free
+  reading and parsing whose result the plugin is constructed with as its `prepared` trait
+  (the news plugin reads its feed and the changelog there). A failing `prepare` is logged
+  and the plugin constructed without it, so it must still work with `prepared` None.
 - **Swap.** The live controller mounts the plugin's panes; `add_dock_pane_live` replaces a
   pane already mounted under the same id in place (Qt's `saveState`/`restoreState` keyed
   by the shared dock-widget object name), so the real pane keeps the placeholder's
