@@ -15,6 +15,7 @@ import json
 from envisage.api import TASK_EXTENSIONS, Plugin
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
+from pyface.api import GUI
 from traits.api import Bool, Instance, List, Str, observe
 
 # Microdrop package imports.
@@ -22,6 +23,7 @@ from dropbot_controller.consts import (
     CHIP_INSERTED,
     DROPBOT_CONNECTED,
     DROPBOT_DISCONNECTED,
+    RUN_ALL_TESTS,
     SELF_TESTS_PROGRESS,
     SELF_TESTS_RESULTS,
     SelfTestResultsSignal,
@@ -36,7 +38,13 @@ from microdrop_utils.dramatiq_controller_base import (
 )
 
 # Local imports.
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    PKG,
+    RUN_SELF_TESTS_REQUEST,
+    PKG_name,
+    RunSelfTestsRequest,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -153,6 +161,27 @@ class DropbotToolsMenuPlugin(Plugin):
         elif topic == SELF_TESTS_RESULTS:
             self.self_test_dialogs_controller.on_self_tests_results(message)
             self._follow_self_test_result(message)
+        elif topic == RUN_SELF_TESTS_REQUEST:
+            RunSelfTestsRequest.model_validate_json(message or "{}")
+            GUI.invoke_later(self._run_all_self_tests)
+
+    def _run_all_self_tests(self):
+        """Run all the self tests as Tools > Dropbot > Run all on-board
+        self-tests does (the test-board dialog included)."""
+        from .run_self_tests import run_self_tests
+
+        window = self.application.active_window
+
+        if window is None:
+            return
+
+        run_self_tests(
+            self, window.active_task, RUN_ALL_TESTS, self.application.user_data
+        )
+
+    @observe("dropbot_connected")
+    def _tell_self_test_reminder(self, event):
+        self.self_test_reminder.connected = event.new
 
     def _follow_self_test_session(self, raw_message):
         """Tell the reminder a session started or ended."""

@@ -71,3 +71,11 @@ def test_only_the_full_suite_counts_as_a_run():
 def test_a_run_resolves_with_its_outcome():
     assert session_resolution(0) == "Self test passed"
     assert session_resolution(2) == "Self test finished · 2 failed"
+
+
+def test_without_a_dropbot_the_reminder_says_to_connect_one():
+    _title, disconnected, _priority = reminder_text(SELF_TEST_STALE, 12)
+    _title, connected, _priority = reminder_text(SELF_TEST_STALE, 12, connected=True)
+
+    assert "Connect a DropBot first" in disconnected
+    assert "Connect a DropBot first" not in connected

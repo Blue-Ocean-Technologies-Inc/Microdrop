@@ -855,5 +855,7 @@ dropbot/signals/self_tests_progress  SESSION_END {status}
                        ─► NOTIFICATION_RESOLVE "Self test passed" | "Self test finished · N failed"
 ```
 
-Every post: as the calibration reminder (warning, Needs attention, `pop_up` False, the same category), `thread_id` `dropbot_tools_menu.self_test_reminder`, `condition_id` `dropbot_tools_menu.self_test_needed`, help link "What does it check?" (target "DropBot self tests"). The time is kept once for any board: the frontend has no stable id for the connected DropBot.
+Every post: as the calibration reminder (warning, Needs attention, `pop_up` False, the same category), `thread_id` `dropbot_tools_menu.self_test_reminder`, `condition_id` `dropbot_tools_menu.self_test_needed`, help link "What does it check?" (target "DropBot self tests"). While a DropBot is connected (`DropbotToolsMenuPlugin.dropbot_connected`), the card also has the button "Run self test", publishing RUN_SELF_TESTS_REQUEST; without one it is help-only and says to connect a DropBot first. The card is re-posted quietly through its thread whenever the connection changes.
+
+- RUN_SELF_TESTS_REQUEST "ui/dropbot_tools_menu/run_self_tests" — run all the DropBot self tests exactly as Tools › Dropbot › Run all on-board self-tests does (`run_self_tests`: nothing but a "disconnected" dialog without a DropBot; the "insert the test board" dialog first; then RUN_ALL_TESTS with the user data folder for the report). Handled on the frontend by `dropbot_tools_menu` (its listener, then `GUI.invoke_later`). Payload `RunSelfTestsRequest` (no fields; `{}`), via `run_self_tests_request_publisher`. The time is kept once for any board: the frontend has no stable id for the connected DropBot.
 

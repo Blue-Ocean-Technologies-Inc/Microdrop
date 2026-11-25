@@ -29,8 +29,11 @@ STALE_PRIORITY = 1
 
 _CHECK = (
     "Check the high-voltage output, channels and chip connections before your "
-    "next experiment: Tools › Dropbot › Run all on-board self-tests, "
-    "with the test board in."
+    "next experiment."
+)
+_CONNECT_FIRST = (
+    " Connect a DropBot first, then run it from here or from Tools › Dropbot › "
+    "Run all on-board self-tests."
 )
 
 
@@ -61,15 +64,17 @@ def reminder_state(last_run, today, stale_days=SELF_TEST_STALE_DAYS):
     return SELF_TEST_FRESH, age
 
 
-def reminder_text(state, age):
+def reminder_text(state, age, connected=False):
     """The reminder's ``(title, detail, priority)`` for ``state``; None when
-    fresh (no reminder)."""
+    fresh (no reminder). Without a DropBot connected, the detail says to
+    connect one first (the card then has no Run button)."""
+    detail = _CHECK if connected else _CHECK + _CONNECT_FIRST
 
     if state == SELF_TEST_NEVER_RUN:
-        return ("Self test has not been run", _CHECK, NEVER_RUN_PRIORITY)
+        return ("Self test has not been run", detail, NEVER_RUN_PRIORITY)
 
     if state == SELF_TEST_STALE:
-        return (f"Self test last run {age} days ago", _CHECK, STALE_PRIORITY)
+        return (f"Self test last run {age} days ago", detail, STALE_PRIORITY)
 
     return None
 

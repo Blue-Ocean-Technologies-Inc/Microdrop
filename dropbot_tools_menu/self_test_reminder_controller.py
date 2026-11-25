@@ -21,13 +21,14 @@ from datetime import date, datetime
 
 # Enthought library imports.
 from pyface.timer.api import CallbackTimer
-from traits.api import Any, Bool, HasTraits, Int, Str
+from traits.api import Any, Bool, HasTraits, Int, Str, observe
 
 # Microdrop package imports.
 from device_viewer.consts import DROPBOT_MAINTENANCE_CATEGORY_ID
 from notifications.consts import (
     SEVERITY_WARNING,
     HelpAction,
+    PublishAction,
     notification_publisher,
     notification_resolve_publisher,
     notifications_data_dir,
@@ -39,6 +40,7 @@ from microdrop_utils.json_state_file import read_json_state, write_json_state
 # Local imports.
 from .consts import (
     PKG,
+    RUN_SELF_TESTS_REQUEST,
     SELF_TEST_HELP_TARGET,
     SELF_TEST_LAST_RUN_KEY,
     SELF_TEST_REMINDER_CONDITION_ID,
@@ -69,12 +71,16 @@ class SelfTestReminderController(HasTraits):
     #: When the last full run completed, ISO; empty when never.
     last_run = Str()
 
+    #: Whether a DropBot is connected: the card's Run button needs one.
+    connected = Bool(False)
+
     #: Whether the running session is the full suite, and how many of its
     #: tests reported failed channels so far.
     _full_session = Bool(False)
     _failed_tests = Int(0)
 
-    #: The ``(state, age)`` last posted; None before the first look.
+    #: The ``(state, age, connected)`` last posted; None before the first
+    #: look.
     _posted = Any()
 
     #: Looks again every RECHECK_INTERVAL_MS.
@@ -131,7 +137,14 @@ class SelfTestReminderController(HasTraits):
                 "resolution": session_resolution(self._failed_tests),
             }
         )
-        self._posted = (SELF_TEST_FRESH, 0)
+        self._posted = (SELF_TEST_FRESH, 0, self.connected)
+
+    @observe("connected")
+    def _connection_changed(self, event):
+
+        # Before start(), the first look is start's.
+        if self._posted is not None:
+            self.show_state()
 
     # ------------------------------------------------------------------ #
     # The card                                                            #
@@ -141,18 +154,28 @@ class SelfTestReminderController(HasTraits):
         """Post or update the reminder for today's state; nothing when that
         state is the one already shown, or fresh."""
         state, age = reminder_state(self.last_run, date.today())
+        connected = self.connected
 
-        if (state, age) == self._posted:
+        if (state, age, connected) == self._posted:
             return
 
-        self._posted = (state, age)
-        text = reminder_text(state, age)
+        self._posted = (state, age, connected)
+        text = reminder_text(state, age, connected)
 
         if text is None:
             return
 
         title, detail, priority = text
         logger.info(f"Self-test reminder: {title}")
+
+        # Only with a DropBot to run on; a thread post replaces the card
+        # whole, so the button comes and goes with the connection.
+        run = None
+
+        if connected:
+            run = PublishAction(
+                label="Run self test", topic=RUN_SELF_TESTS_REQUEST, message="{}"
+            )
 
         notification_publisher.publish(
             {
@@ -161,6 +184,7 @@ class SelfTestReminderController(HasTraits):
                 "severity": SEVERITY_WARNING,
                 "category": "hardware",
                 "source": PKG,
+                "action": run,
                 "secondary_action": HelpAction(
                     label="What does it check?", target=SELF_TEST_HELP_TARGET
                 ),
