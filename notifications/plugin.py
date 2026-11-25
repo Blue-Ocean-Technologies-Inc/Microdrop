@@ -20,6 +20,12 @@ bell: the drawer is built the first time it opens, the toasts the first
 time one pops up, the sounds the first time one plays and the settings
 window the first time it is asked for.
 
+Once the main window has first painted, the saved settings are read and,
+unless they (or OPEN_AT_START_ENV) say not to, the drawer opens on paced
+GUI turns, the Plugins section expanded while plugins still load: something
+to watch while the rest of the app loads, never in the way of the window
+taking input.
+
 Other plugins post through ``notifications.consts``, add sections through
 NOTIFICATION_SECTIONS and declare their kinds of notification through
 NOTIFICATION_CATEGORIES.
@@ -27,15 +33,21 @@ NOTIFICATION_CATEGORIES.
 
 # Standard library imports.
 import logging
+import os
+from importlib import import_module
 
 # Enthought library imports.
 from envisage.api import ExtensionPoint, Plugin
-from traits.api import Any, Dict, Instance, List, observe, on_trait_change
+from traits.api import Any, Bool, Dict, Instance, List, observe, on_trait_change
 from traits.observation.api import trait
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
+from plugin_management.consts import LOAD_STATUS_SECTION_ID
+
+# Microdrop utils imports.
+from microdrop_utils.gui_pacing import invoke_paced
 
 # Local imports.
 from .consts import (
@@ -50,11 +62,16 @@ from .consts import (
 )
 from .controllers.notifications_controller import NotificationsController
 from .controllers.toast_controller import ToastStackController
+from .models.settings import opens_at_start
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: The drawer's modules, imported on a paced turn of their own before the
+#: drawer opens at start-up.
+DRAWER_MODULES = (".views.drawer_host", ".views.column")
 
 
 class NotificationsPlugin(Plugin):
@@ -118,6 +135,12 @@ class NotificationsPlugin(Plugin):
     #: The open settings windows, by title.
     _settings_uis = Dict()
 
+    #: Keeps the settings in their file; made once they are loaded.
+    _settings_store = Any()
+
+    #: Whether the first main window's first paint is awaited, or was.
+    _awaits_first_paint = Bool(False)
+
     def start(self):
         """Start collecting notifications and put the bell in the status
         bar; the drawer and toasts go on the main window once it opens."""
@@ -163,16 +186,23 @@ class NotificationsPlugin(Plugin):
         self._bell.widget.clicked.connect(self.controller.toggle_pane)
         self.status_bar_icons.append(self._bell.widget)
 
-        # Started after the window opened: a plugin loaded at runtime.
+        # Started after the window opened: a plugin loaded at runtime. The
+        # window has painted; the drawer stays closed.
         window = getattr(self.application, "active_window", None)
 
         if window is not None and window.control is not None:
+            self._awaits_first_paint = True
             self._put_on_window(window)
+            self._load_settings()
 
     def stop(self):
         """Stop collecting, take the drawer and toasts off and withdraw the
         bell (hot unload)."""
         self._take_off_window()
+
+        if self._settings_store is not None:
+            self._settings_store.flush()
+            self._settings_store = None
 
         if self._log_handler is not None:
             logging.getLogger().removeHandler(self._log_handler)
@@ -202,8 +232,17 @@ class NotificationsPlugin(Plugin):
     @observe(trait("application", notify=False).trait("window_opened", optional=True))
     def _put_on_opened_window(self, event):
 
-        if self.controller is not None and event.new is not None:
-            self._put_on_window(event.new.window)
+        if self.controller is None or event.new is None:
+            return
+
+        window = event.new.window
+        self._put_on_window(window)
+
+        if not self._awaits_first_paint:
+            from microdrop_utils.first_paint import call_after_first_paint
+
+            self._awaits_first_paint = True
+            call_after_first_paint(window.control, self._after_first_paint)
 
     @observe(trait("application", notify=False).trait("window_closed", optional=True))
     def _take_off_closed_window(self, event):
@@ -229,6 +268,53 @@ class NotificationsPlugin(Plugin):
                 view.detach()
 
         self._window = None
+
+    # ------------------------------------------------------------------ #
+    # Start-up, once the main window has painted                          #
+    # ------------------------------------------------------------------ #
+
+    def _after_first_paint(self):
+        """Read the saved settings; open the drawer if they, or the
+        override, say so: its modules imported on one paced turn, the drawer
+        and its header built on the next, each section on one of its own."""
+
+        if self.controller is None:
+            return
+
+        self._load_settings()
+        settings = self.controller.pane_model.center.settings
+
+        if opens_at_start(settings.open_at_start, os.environ):
+            invoke_paced(self._import_drawer)
+            invoke_paced(self._open_at_start)
+
+    def _load_settings(self):
+        from .services.settings_store import NotificationSettingsStore
+
+        settings = self.controller.pane_model.center.settings
+        self._settings_store = NotificationSettingsStore(settings=settings)
+        self._settings_store.load()
+
+    def _import_drawer(self):
+
+        for name in DRAWER_MODULES:
+            import_module(name, __package__)
+
+    def _open_at_start(self):
+        """Open the drawer without the focus, the Plugins section expanded
+        while plugins still load; not once the user has opened it, nor
+        off the window."""
+        opened_before = self._drawer_host is not None
+
+        if self.controller is None or self._window is None or opened_before:
+            return
+
+        status = getattr(self.application, "plugin_load_status", None)
+
+        if status is not None and status.loading_count:
+            self.controller.pane_model.expand_section(LOAD_STATUS_SECTION_ID)
+
+        self.controller.show_pane(by_app=True)
 
     # ------------------------------------------------------------------ #
     # Built on first use                                                  #

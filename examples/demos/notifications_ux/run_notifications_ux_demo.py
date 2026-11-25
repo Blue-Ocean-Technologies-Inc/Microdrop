@@ -19,7 +19,8 @@ scenarios. Run from ``src/``:
     pixi run python -m examples.demos.notifications_ux.run_notifications_ux_demo
 
 ``--theme light`` or ``dark`` forces a theme; ``--open`` opens the drawer
-once the window is up. ``--app-font-pt 14`` sets the application's font to
+once the window is up (without it the drawer stays closed: the app's own
+opening at start-up is off here). ``--app-font-pt 14`` sets the application's font to
 that size, as a larger text size would: the rest of the window grows with
 it, the notifications panel (its own fixed type scale) does not.
 
@@ -30,6 +31,7 @@ when it exits. No hardware or backend plugin is loaded.
 
 # Standard library imports.
 import argparse
+import os
 import signal
 import sys
 
@@ -55,6 +57,7 @@ def run(open_drawer, app_font_pt=None):
     from microdrop_application.plugin import MicrodropPlugin
     from microdrop_status_bar.plugin import StatusBarPlugin
     from news.plugin import NewsPlugin
+    from notifications.consts import OPEN_AT_START_ENV
     from notifications.plugin import NotificationsPlugin
 
     from microdrop_style.helpers import style_app
@@ -87,6 +90,10 @@ def run(open_drawer, app_font_pt=None):
 
         def _on_application_initialized(self, event):
             """No beta disclaimer, What's New or DropBot search in the demo."""
+
+    # The drawer opens only on --open, never also at start-up; unless the
+    # environment already says otherwise.
+    os.environ.setdefault(OPEN_AT_START_ENV, "0")
 
     app_instance = QApplication.instance() or QApplication(sys.argv)
     style_app(app_instance)

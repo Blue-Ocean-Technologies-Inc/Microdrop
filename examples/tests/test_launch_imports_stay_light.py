@@ -41,8 +41,8 @@ LAUNCH_MODULES = (
     "pluggable_protocol_tree.services.logging.controller",
     "ssh_controls.service",
     "user_help_plugin.plugin",
-    # What NotificationsPlugin.start() imports; the drawer, toasts and
-    # settings window are imported on first use, not here.
+    # What NotificationsPlugin.start() imports; the toasts and settings
+    # window are imported on first use, not here.
     "notifications.plugin",
     "notifications.controllers.load_failure_notifier",
     "notifications.controllers.message_handler",
@@ -51,6 +51,11 @@ LAUNCH_MODULES = (
     "notifications.services.chime",
     "notifications.services.log_forwarder",
     "notifications.views.bell",
+    # Right after the first paint: the saved settings, and the drawer, which
+    # opens at start-up by default.
+    "notifications.services.settings_store",
+    "notifications.views.drawer_host",
+    "notifications.views.column",
     # Read at launch to decide on the What's New dialog; the news plugin
     # itself is deferred.
     "news.consts",
