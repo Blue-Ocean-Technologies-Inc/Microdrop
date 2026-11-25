@@ -101,7 +101,7 @@ def main(plugins, contexts, application, persist, splash_screen=None):
     ``splash_screen`` is a splash the launcher already opened; the
     application takes it over instead of opening its own.
     """
-    from examples.plugin_consts import with_updates_panel
+    from examples.plugin_consts import with_notifications_demo, with_updates_panel
 
     from microdrop_style.helpers import style_app
 
@@ -113,6 +113,9 @@ def main(plugins, contexts, application, persist, splash_screen=None):
 
     # Launchers pass saved plugin lists, which may predate the Updates panel.
     plugins = with_updates_panel(plugins)
+
+    # Dev only: MICRODROP_NOTIFICATIONS_DEMO=1 adds the notifications Demo menu.
+    plugins = with_notifications_demo(plugins)
 
     plugins, deferred_plugins = _split_deferred_plugins(plugins, application)
 

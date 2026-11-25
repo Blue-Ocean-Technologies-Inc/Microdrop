@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+import os
+
 # Enthought library imports.
 from envisage.api import CorePlugin
 from envisage.ui.tasks.api import TasksPlugin
@@ -267,3 +270,22 @@ def with_updates_panel(plugins):
     plugins.insert(position, AppUpdatesPlugin)
 
     return plugins
+
+
+#: Set to "1", the run scripts add the notifications Demo menu (dev only).
+NOTIFICATIONS_DEMO_ENV = "MICRODROP_NOTIFICATIONS_DEMO"
+
+
+def with_notifications_demo(plugins, environ=os.environ):
+    """Return a copy of ``plugins`` with the notifications Demo menu added
+    when ``MICRODROP_NOTIFICATIONS_DEMO=1`` is set and the notifications
+    plugin is loaded: a dev-only way to fire fake notifications inside the
+    real app. Without the variable the list is returned unchanged."""
+    plugins = list(plugins)
+
+    if environ.get(NOTIFICATIONS_DEMO_ENV) != "1" or NotificationsPlugin not in plugins:
+        return plugins
+
+    from examples.demos.notifications_ux.dev_plugin import NotificationsDevPlugin
+
+    return [*plugins, NotificationsDevPlugin]
