@@ -20,7 +20,12 @@ import threading
 import pytest
 
 # Microdrop package imports.
-from notifications.consts import LOG_DELIVERY_CHUNK, SEVERITY_ERROR, SEVERITY_WARNING
+from notifications.consts import (
+    LOG_DELIVERY_CHUNK,
+    LOG_RECORDED_EXTRA,
+    SEVERITY_ERROR,
+    SEVERITY_WARNING,
+)
 from notifications.models.notification_center import NotificationCenter
 from notifications.services.log_forwarder import NotificationLogHandler
 
@@ -129,6 +134,14 @@ def test_ignored_and_own_records_are_not_forwarded(forwarding):
 
     finally:
         own.removeHandler(own_handler)
+
+    assert timer.scheduled == []
+
+
+def test_a_record_already_listed_by_its_dialog_is_not_forwarded(forwarding):
+    center, source, timer = forwarding
+
+    source.error("DropBot halted", extra=LOG_RECORDED_EXTRA)
 
     assert timer.scheduled == []
 

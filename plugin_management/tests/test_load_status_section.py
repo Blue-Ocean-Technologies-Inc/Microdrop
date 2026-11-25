@@ -49,19 +49,29 @@ def test_the_section_summary_follows_the_load_records():
     assert section.summary == "1 plugins loaded"
 
 
-def test_the_section_contents_are_the_load_status_view(qapp):
+def test_the_section_contents_list_the_records_and_follow_additions(qapp):
     status = PluginLoadStatus()
     status.mark_failed("b.plugin", "RuntimeError: no", "Traceback ...", name="B")
     section = PluginLoadStatusSection(status=status)
 
-    ui = section.factory(None)
+    contents = section.factory(None)
 
     try:
-        assert ui.control is not None
-        assert ui.context["object"].selected.plugin_id == "b.plugin"
+        assert contents.table.rowCount() == 1
+        assert contents.table.item(0, 1).text() == "B"
+        assert contents.model.selected.plugin_id == "b.plugin"
+
+        status.mark_pending("a.plugin", "A")
+
+        # The rows are rebuilt once per burst of changes, on the event loop.
+        qapp.processEvents()
+
+        assert contents.table.rowCount() == 2
+        assert contents.table.item(1, 1).text() == "A"
 
     finally:
-        ui.dispose()
+        contents.dispose()
+        contents.deleteLater()
 
 
 class _Recorder:

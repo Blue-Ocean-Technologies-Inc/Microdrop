@@ -8,37 +8,44 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The notifications drawer's panel: the drawer's contents on a background
-that is opaque behind the header and sections and faintly translucent
-behind the cards, with a border along its left edge.
+"""The notifications drawer's panel: a floating panel with rounded corners,
+opaque behind its header and faintly translucent behind its sections, with
+a left edge that drags its width.
 
-It is a plain child of the main window, not a dock widget, so it lays over
+It is a plain child of the main window, not a dock widget, so it lies over
 the panes instead of moving them. NotificationsDrawerHost places it, opens
 and closes it, and turns it opaque when what lies beneath keeps changing;
-the panel itself only paints, keeps the clicks it receives, and asks to
-close on Esc.
+the panel itself only paints, reports its repaints, keeps the clicks it
+receives, and asks to close on Esc.
 """
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
 
+# Microdrop style imports.
+from microdrop_style.panel_theme import theme_palette
+
 # Local imports.
-from ..consts import (
+from .isolation import isolate
+from .view_consts import (
+    DRAWER_GRIP_WIDTH,
     DRAWER_OBJECT_NAME,
     DRAWER_OPACITY,
     DRAWER_PADDING_PX,
-    DRAWER_WIDTH,
+    DRAWER_RADIUS,
 )
 
 _ROLE = QtGui.QPalette.ColorRole
 
 _DIRECT_CHILDREN = QtCore.Qt.FindChildOption.FindDirectChildrenOnly
 
+#: Width (px) of the grip's line while hovered or dragged.
+GRIP_LINE_WIDTH = 3
+
 
 def anchored_drawer_rect(window):
-    """Where the drawer goes on ``window`` (a QMainWindow): at its right
-    edge, between the menu bar and top toolbars above and the status bar
-    below, as wide as DRAWER_WIDTH or the window if that is narrower."""
+    """The room for the drawer on ``window`` (a QMainWindow): its full width,
+    between the menu bar and top toolbars above and the status bar below."""
     top = 0
     bottom = window.height()
     menu = window.menuWidget()
@@ -60,21 +67,71 @@ def anchored_drawer_rect(window):
     if status_bar is not None and status_bar.isVisible():
         bottom = status_bar.geometry().top()
 
-    width = min(DRAWER_WIDTH, window.width())
+    return QtCore.QRect(0, top, window.width(), max(bottom - top, 0))
 
-    return QtCore.QRect(window.width() - width, top, width, max(bottom - top, 0))
+
+class EdgeGrip(QtWidgets.QWidget):
+    """The drawer's left edge: drag to resize. ``width_requested`` carries
+    the drawer width the drag asks for."""
+
+    width_requested = QtCore.Signal(int)
+
+    def __init__(self, drawer):
+        super().__init__(drawer)
+
+        self._drawer = drawer
+        self._press = None
+
+        self.setCursor(QtCore.Qt.CursorShape.SizeHorCursor)
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
+        self.setToolTip("Drag to resize")
+
+    def paintEvent(self, event):
+
+        if not self.underMouse() and self._press is None:
+            return
+
+        painter = QtGui.QPainter(self)
+        line = QtCore.QRect(0, 0, GRIP_LINE_WIDTH, self.height())
+        painter.fillRect(line, theme_palette().color(_ROLE.Highlight))
+
+    def mousePressEvent(self, event):
+        self._press = (event.globalPosition().x(), self._drawer.width())
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+
+        if self._press is not None:
+            start_x, start_width = self._press
+            moved = event.globalPosition().x() - start_x
+            self.width_requested.emit(int(start_width - moved))
+
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self._press = None
+        self.update()
+        event.accept()
 
 
 class NotificationsDrawer(QtWidgets.QWidget):
     """The drawer panel; its contents go in with ``set_contents``."""
 
-    #: Esc pressed while the drawer has the focus.
+    #: Esc pressed while the drawer has the focus (or anywhere in its window,
+    #: see ``set_escape_window_wide``).
     close_requested = QtCore.Signal()
+
+    #: The panel was repainted: with a translucent background, that is also
+    #: what lies beneath repainting.
+    painted = QtCore.Signal()
+
+    #: The application's palette changed: a theme switch.
+    theme_changed = QtCore.Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.setObjectName(DRAWER_OBJECT_NAME)
+        isolate(self, DRAWER_OBJECT_NAME)
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
 
         #: Below this widget's top the background is translucent; None
@@ -87,9 +144,24 @@ class NotificationsDrawer(QtWidgets.QWidget):
         )
         self._layout.setSpacing(0)
 
-        escape = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Escape), self)
-        escape.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        escape.activated.connect(self.close_requested)
+        self.edge = EdgeGrip(self)
+
+        self._escape = QtGui.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key.Key_Escape), self
+        )
+        self._escape.activated.connect(self.close_requested)
+        self.set_escape_window_wide(False)
+
+    def set_escape_window_wide(self, window_wide):
+        """Whether Esc closes the drawer anywhere in its window, as for a
+        drawer opened without the focus, or only with the focus in it."""
+        context = (
+            QtCore.Qt.ShortcutContext.WindowShortcut
+            if window_wide
+            else QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+
+        self._escape.setContext(context)
 
     def set_contents(self, contents, translucent_area=None):
         """Show ``contents``; the background behind ``translucent_area`` (a
@@ -104,32 +176,67 @@ class NotificationsDrawer(QtWidgets.QWidget):
         return self._has_translucent_area() and not opaque
 
     def set_translucent(self, translucent):
-        """Let what lies beneath show behind the cards, or not. Opaque, the
-        panel tells Qt so, which then stops painting what lies beneath."""
+        """Let what lies beneath show behind the sections, or not. Opaque,
+        the panel tells Qt so, which then stops painting what lies beneath."""
         self.setAttribute(
             QtCore.Qt.WidgetAttribute.WA_OpaquePaintEvent, not translucent
         )
         self.update()
 
+    def outline(self):
+        """The panel's rounded outline."""
+        path = QtGui.QPainterPath()
+        path.addRoundedRect(
+            QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+            DRAWER_RADIUS,
+            DRAWER_RADIUS,
+        )
+
+        return path
+
     def paintEvent(self, event):
-        """Opaque down to the translucent area, then translucent, then the
-        left border on top."""
+        """Opaque down to the translucent area, then translucent, within
+        rounded corners and a hairline border."""
+        palette = theme_palette()
         painter = QtGui.QPainter(self)
-        color = self.palette().color(_ROLE.Window)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        outline = self.outline()
+        color = palette.color(_ROLE.Window)
         split = self.height()
 
         if self.is_translucent():
-            area = self._translucent_area
-            split = area.mapTo(self, QtCore.QPoint(0, 0)).y()
+            split = self._translucent_area.mapTo(self, QtCore.QPoint(0, 0)).y()
 
+        painter.setClipPath(outline)
         painter.fillRect(0, 0, self.width(), split, color)
 
         if split < self.height():
             color.setAlphaF(DRAWER_OPACITY)
             painter.fillRect(0, split, self.width(), self.height() - split, color)
 
-        painter.setPen(self.palette().color(_ROLE.Mid))
-        painter.drawLine(0, 0, 0, self.height())
+        painter.setClipping(False)
+        painter.setPen(QtGui.QPen(palette.color(_ROLE.Mid)))
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+        painter.drawPath(outline)
+        painter.end()
+
+        self.painted.emit()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        self.edge.setGeometry(0, 0, DRAWER_GRIP_WIDTH, self.height())
+        self.edge.raise_()
+
+        # Clicks and paint outside the corners reach what lies beneath.
+        self.setMask(QtGui.QRegion(self.outline().toFillPolygon().toPolygon()))
+
+    def event(self, event):
+
+        if event.type() == QtCore.QEvent.Type.ApplicationPaletteChange:
+            self.theme_changed.emit()
+
+        return super().event(event)
 
     def _has_translucent_area(self):
 

@@ -1,0 +1,65 @@
+{
+  "$schema": "./feed.schema.json",
+  "version": 1,
+  "_readme": "News shown in the News section of MicroDrop's notifications drawer. Edit it by hand; feed.schema.json validates it and describes every field. Newsletters: https://sci-bots.com/en-ca/pages/newsletters",
+  "posts": [
+    {
+      "id": "dropbot-launch-preview",
+      "title": "Our family is growing: meet DropBot v4.0",
+      "kind": "product",
+      "date": "2026-11",
+      "source": "Sci-Bots",
+      "pinned": true,
+      "summary": "The next generation of DropBot: one benchtop instrument that makes low-volume automation accessible in any lab.",
+      "summary_html": "<p>The next generation of DropBot, first shown at SLAS 2026: one benchtop instrument that makes low-volume automation accessible in any lab.</p><ul><li>Automated sample prep from nL to µL</li><li>120 individually addressable electrodes, 35–200 Vrms, 50 Hz – 65 kHz</li><li>Built-in magnet and heater for bead-based and thermal workflows</li><li>Brightfield and fluorescence camera with exchangeable filters</li><li>Touchscreen and embedded computer, so it runs stand-alone</li><li><b>Optional:</b> PMT for ultra-sensitive detection, battery operation</li></ul>",
+      "url": "https://sci-bots.com/en-ca",
+      "images": [
+        {
+          "src": "images/dropbot_launch_concept.jpg",
+          "alt": "Concept art: DropBot v4.0 and a small companion box walking hand in hand down a Toronto street"
+        },
+        {
+          "src": "images/dropbot_launch_photo.jpg",
+          "alt": "DropBot v4.0: a white benchtop instrument with a built-in touchscreen running MicroDrop and an open chip drawer"
+        }
+      ]
+    },
+    {
+      "id": "dropbot-chip-top-plates-sale",
+      "title": "Save $75 on DropBot chip top plates",
+      "kind": "announcement",
+      "date": "2026-11",
+      "source": "Sci-Bots",
+      "summary": "A pack of five replacement top plates is now US$175, down from US$250.",
+      "summary_html": "<p>Top plates wear out. This replacement pack of five, identical to the ones shipped with standard DropBot glass chips, is now <b>US$175</b>, down from US$250.</p><ul><li>50 × 25 mm ITO-coated glass (8–12 ohms/sq), 0.7 mm or 0.5 mm thick</li><li>Hydrophobic fluoropolymer coating on the top and edges, for active dispensing from reservoirs</li><li>Transparent, durable, and compatible with all DropBot chips</li></ul><p><a href=\"https://cdn.shopify.com/s/files/1/0663/4294/4985/files/Top_Plate_Manual.pdf?v=1742603427\">Top plate manual (PDF)</a></p>",
+      "url": "https://sci-bots.com/en-ca/products/dropbot-chip-top-plates",
+      "images": [
+        {
+          "src": "images/dropbot_chip_top_plates.jpg",
+          "alt": "A pack of DropBot chip top plates"
+        }
+      ]
+    },
+    {
+      "title": "MicroTAS 2026 and DMF for Multiplexed Sepsis Biomarkers",
+      "kind": "newsletter",
+      "date": "2026-09",
+      "url": "https://mailchi.mp/ca50665d1c53/our-new-product-is-available-now-6758621",
+      "image": "https://sci-bots.com/cdn/shop/files/Newsletter_Header_7.png?v=1757481140&width=800"
+    },
+    {
+      "title": "MicroDrop updates and DMF for prenatal genetic diagnostics",
+      "kind": "newsletter",
+      "date": "2026-08",
+      "url": "https://mailchi.mp/6c3f025ade7e/our-new-product-is-available-now-6758454",
+      "image": "https://sci-bots.com/cdn/shop/files/Newsletter_Header_16.png?v=1786054944&width=800"
+    },
+    {
+      "title": "New Products and Dielectric tradeoff for biologically compatible DMF",
+      "kind": "newsletter",
+      "date": "2026-07",
+      "url": "https://mailchi.mp/572b3ad128d9/our-new-product-is-available-now-6757959",
+      "image": "https://sci-bots.com/cdn/shop/files/Newsletter_Header_15.png?v=1784849990&width=800"
+    }
+  ]
+}

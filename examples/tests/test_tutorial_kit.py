@@ -15,6 +15,7 @@ import importlib
 import os
 import subprocess
 import sys
+from types import SimpleNamespace
 
 # Qt reads the platform when the first QApplication is made, which importing
 # the plugins below can do; set it first so no test ever opens a window.
@@ -313,6 +314,16 @@ def test_bundled_tutorials_reach_the_help_menu(monkeypatch):
     # An envisage Application installs its preferences as the process-wide
     # default node; restore it so later PreferencesHelper tests don't share it.
     monkeypatch.setattr(package_globals, "_default_preferences", None)
+
+    # No listener made and no announcement sent: no Redis is needed.
+    monkeypatch.setattr(
+        "user_help_plugin.plugin.generate_class_method_dramatiq_listener_actor",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "user_help_plugin.plugin.help_availability_publisher",
+        SimpleNamespace(publish=lambda payload: None),
+    )
 
     help_plugin = UserHelpPlugin()
     application = Application(plugins=[help_plugin])

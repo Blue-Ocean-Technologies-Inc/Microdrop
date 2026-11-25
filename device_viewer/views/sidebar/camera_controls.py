@@ -86,7 +86,6 @@ def build_camera_controls(
     video_item,
     scene,
     app_preferences,
-    status_bar_manager,
     source_providers,
     on_align_camera,
     on_go_to_endpoint,
@@ -95,9 +94,6 @@ def build_camera_controls(
 
     Parameters
     ----------
-    status_bar_manager
-        Usually still None here: the task creates it after the dock panes,
-        and the pane pushes it to the camera widget once it exists.
     source_providers
         Callable returning the camera-source providers other plugins
         contribute.
@@ -111,7 +107,6 @@ def build_camera_controls(
         video_item,
         scene,
         app_preferences,
-        status_bar_manager=status_bar_manager,
         source_providers=source_providers,
     )
 

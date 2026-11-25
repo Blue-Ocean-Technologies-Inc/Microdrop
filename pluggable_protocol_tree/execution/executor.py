@@ -53,6 +53,7 @@ from traits.api import (
 )
 
 # Microdrop package imports.
+from notifications.consts import LOG_RECORDED_EXTRA
 from pluggable_protocol_tree.execution.events import PauseEvent
 from pluggable_protocol_tree.execution.exceptions import (
     AbortError,
@@ -407,7 +408,8 @@ class ProtocolExecutor(HasTraits):
                 logger.exception("protocol-end hooks raised during abort cleanup")
         except Exception as e:
             self._error = e
-            logger.exception("Protocol error")
+            # The Protocol error dialog lists it, traceback included.
+            logger.exception("Protocol error", extra=LOG_RECORDED_EXTRA)
             try:
                 # Best-effort teardown for the current repetition and the run.
                 self._run_hooks("on_protocol_end", handlers, proto_ctx, row=None)

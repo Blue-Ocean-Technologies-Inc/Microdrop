@@ -36,6 +36,8 @@ from traits.etsconfig.api import ETSConfig
 
 # Microdrop package imports.
 from dropbot_controller.consts import START_DEVICE_MONITORING
+from news.consts import NEWS_PLUGIN_ID
+from news.consts import PKG as NEWS_PKG
 
 # Microdrop style imports.
 from microdrop_style.helpers import (
@@ -54,7 +56,12 @@ from microdrop_utils.system_config import is_rpi
 from microdrop_utils.tasks_runtime_helpers import describe_dock_widgets
 
 # Local imports.
-from .consts import CHANGELOG_PATH, ESSENTIAL_PLUGIN_IDS, EXPERIMENT_DIR
+from .consts import (
+    CHANGELOG_PATH,
+    ESSENTIAL_PLUGIN_IDS,
+    EXPERIMENT_DIR,
+    PREVIOUS_CHANGELOG_FILENAME,
+)
 from .helpers import (
     get_microdrop_redis_globals_manager,
     resolve_dock_separator_style,
@@ -113,7 +120,7 @@ def _show_whats_new():
         return
     current_changelog = CHANGELOG_PATH.read_text(encoding="utf-8")
 
-    cache = Path(ETSConfig.application_home) / ".previous_changelog"
+    cache = Path(ETSConfig.application_home) / PREVIOUS_CHANGELOG_FILENAME
     if not cache.exists():
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text(current_changelog, encoding="utf-8")
@@ -323,10 +330,25 @@ class MicrodropApplication(TasksApplication):
     def _on_application_initialized(self, event):
         logger.info("Application Initialized")
         _show_beta_disclaimer()
-        _show_whats_new()
+
+        # The news plugin shows the release notes in the notifications
+        # drawer instead; without it, the dialog does.
+        if not self._news_shows_release_notes():
+            _show_whats_new()
 
         logger.info("Requesting Dropbot Search")
         publish_message(message="", topic=START_DEVICE_MONITORING)
+
+    def _news_shows_release_notes(self):
+        """Whether the news plugin is loaded, or will be once the window has
+        painted (a deferred plugin)."""
+        if self.get_plugin(NEWS_PLUGIN_ID) is not None:
+            return True
+
+        return any(
+            deferred.spec.startswith(f"{NEWS_PKG}.")
+            for deferred in self.deferred_plugins
+        )
 
     ############################# Initialization #############################
     def traits_init(self):

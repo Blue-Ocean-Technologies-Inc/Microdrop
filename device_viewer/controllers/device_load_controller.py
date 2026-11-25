@@ -25,6 +25,7 @@ from traits.api import Bool, HasTraits, Instance
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import error, warning
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Local imports.
 from ..preferences import DeviceViewerPreferences
@@ -103,6 +104,7 @@ class DeviceLoadController(HasTraits):
         logger.error(
             f"Could not create electrodes from SVG file: {svg_file}. Error: {e}",
             exc_info=True,
+            extra=LOG_RECORDED_EXTRA,
         )
         error(
             None,

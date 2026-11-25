@@ -19,6 +19,7 @@ from device_viewer.consts import (
     PROTOCOL_RUNNING,
 )
 from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
+from user_help_plugin.consts import tutorial_id
 
 # Microdrop style imports.
 from microdrop_style.colors import ERROR_COLOR, GREY, SUCCESS_COLOR, WARNING_COLOR
@@ -88,3 +89,17 @@ halted_color = ERROR_COLOR
 DROPBOT_STATUS_TUTORIAL_HTML_PATH = (
     Path(__file__).parent / "resources" / "dropbot_status.html"
 )
+
+#: The tutorial's id for OPEN_TUTORIAL, and the sections (ids in its page)
+#: other plugins' help links open: connecting, inserting a chip, the volume
+#: readout, and the Tools > Dropbot self tests.
+DROPBOT_STATUS_TUTORIAL_ID = tutorial_id(DROPBOT_STATUS_TUTORIAL_HTML_PATH)
+CONNECTION_TUTORIAL_ANCHOR = "connection"
+CHIP_STATUS_TUTORIAL_ANCHOR = "chip-status"
+VOLUME_TUTORIAL_ANCHOR = "volume"
+SELF_TESTS_TUTORIAL_ANCHOR = "part-tools"
+
+#: The tutorial's sections on the halted and no-power dialogs, the help
+#: links of the entries those dialogs leave in the notifications drawer.
+HALTED_DIALOG_TUTORIAL_ANCHOR = "dlg-halted"
+NO_POWER_DIALOG_TUTORIAL_ANCHOR = "dlg-nopower"

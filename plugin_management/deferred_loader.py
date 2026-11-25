@@ -10,12 +10,14 @@
 
 """Start the run configuration's deferred plugins once the window is up.
 
-The plugins load one after another, each in steps that leave the event loop
-free in between, so the window repaints and takes input while they load:
+The plugins load one after another, highest ``priority`` first and otherwise
+as declared (``load_order``), each in steps that leave the event loop free
+in between, so the window repaints and takes input while they load:
 
 1. A worker thread imports the plugin's module and the modules it declares
-   it imports lazily (``DeferredPlugin.module_names``); the GUI thread runs
-   on meanwhile.
+   it imports lazily (``DeferredPlugin.module_names``), and runs its
+   ``prepare`` (Qt-free reading and parsing), whose result the plugin is
+   constructed with; the GUI thread runs on meanwhile.
 2. One GUI turn constructs the plugin, adds it to the application and starts
    it through the isolating plugin manager, which records the start and
    withdraws the plugin if it fails. Adding it contributes its task
@@ -45,7 +47,7 @@ from pyface.api import GUI
 from traits.api import Bool, Event, Float, HasTraits, Instance, List
 
 # Microdrop utils imports.
-from microdrop_utils.deferred_plugins import DeferredPlugin
+from microdrop_utils.deferred_plugins import DeferredPlugin, load_order
 from microdrop_utils.gui_pacing import invoke_paced
 from microdrop_utils.isolating_plugin_manager import withdraw_plugin
 from microdrop_utils.plugin_load_status import PluginLoadStatus, summarize_exception
@@ -81,7 +83,7 @@ class DeferredPluginLoader(HasTraits):
     #: ``IsolatingPluginManager``.
     application = Instance(IApplication)
 
-    #: The plugins to load, in order.
+    #: The plugins to load, as declared; they load in ``load_order``.
     deferred_plugins = List(Instance(DeferredPlugin))
 
     #: Where every plugin's load is recorded.
@@ -122,7 +124,7 @@ class DeferredPluginLoader(HasTraits):
             return
 
         self.live_task_extensions = live_task_extensions
-        self._queue = list(self.deferred_plugins)
+        self._queue = load_order(self.deferred_plugins)
         self._started_at = time.perf_counter()
         self.running = True
 
@@ -147,9 +149,11 @@ class DeferredPluginLoader(HasTraits):
         ).start()
 
     def _import_modules(self, deferred):
-        """Import ``deferred``'s modules, on the worker thread, then hand the
-        plugin back to the GUI thread to add and start."""
+        """Import ``deferred``'s modules and run its ``prepare``, on the
+        worker thread, then hand the plugin and what was prepared back to
+        the GUI thread to add and start."""
         started_at = time.perf_counter()
+        imported = True
 
         for module_name in deferred.module_names:
             try:
@@ -161,20 +165,38 @@ class DeferredPluginLoader(HasTraits):
                 logger.warning(
                     f"Importing {module_name} in the background failed: {error}"
                 )
+                imported = False
 
                 break
+
+        prepared = self._prepare(deferred) if imported else None
 
         logger.debug(
             f"Imported {deferred.spec} in the background in "
             f"{time.perf_counter() - started_at:.3f} s"
         )
 
-        GUI.invoke_later(invoke_paced, self._add_and_start, deferred)
+        GUI.invoke_later(invoke_paced, self._add_and_start, deferred, prepared)
 
-    def _add_and_start(self, deferred):
+    def _prepare(self, deferred):
+        """What ``deferred.prepare`` returns, on the worker thread; None if
+        there is none or it fails, and the plugin then does without."""
+
+        if not deferred.prepare:
+            return None
+
+        try:
+            return deferred.import_prepare()()
+
+        except Exception:
+            logger.exception(f"Preparing {deferred.spec} in the background failed")
+
+            return None
+
+    def _add_and_start(self, deferred, prepared=None):
         """Add and start the plugin, then wait for its panes."""
         try:
-            plugin = self._load(deferred)
+            plugin = self._load(deferred, prepared)
 
         # Whatever goes wrong, the plugins after this one must still load.
         except Exception:
@@ -196,8 +218,9 @@ class DeferredPluginLoader(HasTraits):
 
         self._load_next()
 
-    def _load(self, deferred):
-        """Import, construct, add and start one plugin.
+    def _load(self, deferred, prepared=None):
+        """Import, construct (with ``prepared``, unless None), add and start
+        one plugin.
 
         Returns
         -------
@@ -208,7 +231,8 @@ class DeferredPluginLoader(HasTraits):
         started_at = time.perf_counter()
 
         try:
-            plugin = deferred.import_class()()
+            traits = {} if prepared is None else {"prepared": prepared}
+            plugin = deferred.import_class()(**traits)
 
         except Exception as error:
             logger.error(f"Deferred plugin {deferred.spec} failed to import")

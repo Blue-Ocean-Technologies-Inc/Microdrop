@@ -8,17 +8,25 @@
 #
 # Thanks for using Microdrop open source!
 
-from traits.api import HasTraits, Float, Instance, observe
+# Standard library imports.
+from datetime import date
 
+# Enthought library imports.
+from traits.api import Float, HasTraits, Instance, Str, observe
+
+# Microdrop package imports.
 from device_viewer.models.electrodes import Electrodes
-
-from logger.logger_service import get_logger
-logger = get_logger(__name__)
-
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
+
+# Local imports.
+from ..consts import FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 app_globals = get_microdrop_redis_globals_manager()
 
-from ..consts import FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY
 
 def _update_app_globals_on_trait_change_event(event, value_units=""):
     app_globals[event.name] = event.new
@@ -26,11 +34,24 @@ def _update_app_globals_on_trait_change_event(event, value_units=""):
 
 
 class CalibrationModel(HasTraits):
-
     last_capacitance = Float(desc="last capacitance reported by dropbot in pF")  # pF
 
-    liquid_capacitance_over_area = Float(allow_none=True, default_value=None, desc="Measure capacitance in selected electrodes covered by liquid normalized over electrode area in pF/mm^2")
-    filler_capacitance_over_area = Float(allow_none=True, default_value=None, desc="Measure capacitance in selected electrodes covered by air normalized over electrode area in pF/mm^2")
+    liquid_capacitance_over_area = Float(
+        allow_none=True,
+        default_value=None,
+        desc="Measure capacitance in selected electrodes covered by liquid "
+        "normalized over electrode area in pF/mm^2",
+    )
+    filler_capacitance_over_area = Float(
+        allow_none=True,
+        default_value=None,
+        desc="Measure capacitance in selected electrodes covered by air "
+        "normalized over electrode area in pF/mm^2",
+    )
+
+    #: The day the last calibration value was measured, ISO ("2026-11-25");
+    #: empty when unknown (never calibrated, or saved before dates were).
+    calibrated_on = Str()
 
     # Reference to electrodes for area calculations
     electrodes = Instance(Electrodes)
@@ -42,6 +63,8 @@ class CalibrationModel(HasTraits):
             return
 
         if self.last_capacitance:
+            # Dated first: the value then completes a fresh calibration.
+            self.calibrated_on = date.today().isoformat()
             self.filler_capacitance_over_area = self.last_capacitance / area
 
     def measure_liquid_capacitance(self):
@@ -51,10 +74,14 @@ class CalibrationModel(HasTraits):
             return
 
         if self.last_capacitance:
+            # Dated first: the value then completes a fresh calibration.
+            self.calibrated_on = date.today().isoformat()
             self.liquid_capacitance_over_area = self.last_capacitance / area
 
     def reset(self):
-        self.reset_traits([FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY])
+        self.reset_traits(
+            [FILLER_CAPACITANCE_KEY, LIQUID_CAPACITANCE_KEY, "calibrated_on"]
+        )
 
     @observe(LIQUID_CAPACITANCE_KEY)
     def _liquid_capacitance_changed(self, event):
@@ -62,5 +89,4 @@ class CalibrationModel(HasTraits):
 
     @observe(FILLER_CAPACITANCE_KEY)
     def _filler_capacitance_changed(self, event):
-        _update_app_globals_on_trait_change_event(event,"pF/mm^2")
-
+        _update_app_globals_on_trait_change_event(event, "pF/mm^2")

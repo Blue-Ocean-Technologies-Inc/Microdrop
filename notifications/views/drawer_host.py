@@ -8,138 +8,99 @@
 #
 # Thanks for using Microdrop open source!
 
-"""The notifications drawer on a main window, like a desktop notification
-centre: anchored to the right, from below the menu bar and toolbars down to
-the status bar, laid over the panes rather than moving them.
+"""The notifications drawer on a main window, like Windows 11's notification
+centre: a floating panel at the bottom right, above the status bar by the
+bell, as tall as its contents up to the window's room, laid over the panes
+rather than moving them.
 
-The host follows the model's ``is_open``. It builds the drawer's contents
-the first time the drawer opens, keeps the drawer anchored as the window
-resizes, and closes it on Esc or on a click elsewhere in the window. It is
-no dock pane, so the task layout, presets and the View menu never see it.
+The host follows the model's ``is_open``. Nothing is built, and nothing
+watches the window, until the drawer first opens: then the panel and its
+contents are built, and while it is open the host keeps it placed, eases
+its height to its contents, closes it on Esc or on a press elsewhere in the
+window, and turns it opaque over a busy backdrop. It is no dock pane, so
+the task layout, presets and the View menu never see it.
 
-The drawer's background behind the cards is faintly translucent while what
-lies beneath is still; once that keeps repainting (a camera feed), the
-drawer turns opaque until closed, so it is not repainted with every frame.
-Nothing of this runs while the drawer is closed.
-
-The model outlives any window: ``attach()`` puts the drawer on a window,
-``detach()`` takes it off, and a window deleted without ``detach()`` is
-let go of too.
+Where the drawer goes and what it shows are overridable: ``placement()``
+and ``build_contents()``.
 """
 
-# Standard library imports.
-import time
-from collections import deque
-
 # Enthought library imports.
-from pyface.qt import QtCore, QtGui, QtWidgets
-from traits.api import (
-    Any,
-    Bool,
-    Float,
-    HasTraits,
-    Instance,
-    Int,
-    List,
-    Property,
-    observe,
-)
-from traitsui.api import UI
+from pyface.qt import QtCore, QtWidgets
+from traits.api import Any, Bool, HasTraits, Instance, Int, List, observe
 
 # Local imports.
-from ..consts import (
-    DRAWER_BACKDROP_PAINTS_PER_S,
-    DRAWER_CLOSES_ON_CLICK_OUTSIDE,
-    DRAWER_SLIDE_MS,
-)
 from ..models.notifications_pane_model import NotificationsPaneModel
 from .drawer import NotificationsDrawer, anchored_drawer_rect
+from .drawer_watch import OpenDrawerWatch
+from .view_consts import (
+    DRAWER_CLOSES_ON_CLICK_OUTSIDE,
+    DRAWER_FIT_MS,
+    DRAWER_FIT_STEP_PX,
+    DRAWER_INSET,
+    DRAWER_MAX_WIDTH,
+    DRAWER_MIN_HEIGHT,
+    DRAWER_MIN_WIDTH,
+    DRAWER_SLIDE_MS,
+    WINDOW_LEFT_IN_VIEW,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-#: Repaints within this many seconds of each other are one window repaint.
-BACKDROP_SAME_FRAME_S = 0.015
-
 #: Milliseconds after the drawer finishes sliding in during which repaints
 #: are the drawer appearing, not what lies beneath changing.
 BACKDROP_SETTLE_MS = 250
 
-#: Presses that close the drawer when outside it.
-_PRESS_EVENTS = (
-    QtCore.QEvent.Type.MouseButtonPress,
-    QtCore.QEvent.Type.MouseButtonDblClick,
-)
 
-#: Window events after which the open drawer is placed again.
-_PLACING_EVENTS = (
-    QtCore.QEvent.Type.Resize,
-    QtCore.QEvent.Type.LayoutRequest,
-    QtCore.QEvent.Type.Show,
-)
+def drawer_width_for(window_width, wanted):
+    """The drawer's width in a ``window_width`` window, for ``wanted``."""
+    widest = max(
+        min(DRAWER_MAX_WIDTH, window_width - WINDOW_LEFT_IN_VIEW), DRAWER_MIN_WIDTH
+    )
 
-
-class _EventRelay(QtCore.QObject):
-    """An event filter handing every event to ``handler(watched, event)``."""
-
-    def __init__(self, handler, parent=None):
-        super().__init__(parent)
-
-        self._handler = handler
-
-    def eventFilter(self, watched, event):
-        return self._handler(watched, event)
+    return min(max(wanted, DRAWER_MIN_WIDTH), widest, window_width)
 
 
 class NotificationsDrawerHost(HasTraits):
     """Puts a NotificationsDrawer on a QMainWindow and opens and closes it
     with the model."""
 
-    #: Its ``is_open`` opens and closes the drawer.
+    #: Its ``is_open`` opens and closes the drawer; ``drawer_width`` sizes it.
     model = Instance(NotificationsPaneModel)
 
-    #: Widgets whose clicks never count as outside the drawer: the bell,
+    #: Widgets whose presses never count as outside the drawer: the bell,
     #: which toggles the drawer itself.
     click_outside_exempt = List()
 
-    #: Whether a click elsewhere in the window closes the drawer.
+    #: Whether a press elsewhere in the window closes the drawer.
     closes_on_click_outside = Bool(DRAWER_CLOSES_ON_CLICK_OUTSIDE)
 
     #: Duration (ms) of the slide in; 0 opens the drawer at once.
     slide_ms = Int(DRAWER_SLIDE_MS)
 
-    #: The QMainWindow the drawer is on; None while detached.
+    #: The QMainWindow the drawer is for; None while detached.
     window = Any()
 
-    #: The drawer widget; None while detached.
+    #: The drawer widget; None until first opened.
     drawer = Any()
 
-    #: Whether the drawer's contents have been built (on first open).
-    contents_built = Property(Bool, observe="_ui")
+    #: The built contents, whose ``natural_height()`` the drawer follows.
+    _contents = Any()
 
-    #: The contents' TraitsUI UI once built.
-    _ui = Instance(UI)
+    #: Whether the contents were built for another theme, and whether
+    #: following a theme change is queued.
+    _stale = Bool(False)
+    _theme_queued = Bool(False)
 
-    #: Watches the window for resizes and new children.
-    _window_relay = Any()
+    #: What the open drawer watches; made with the drawer.
+    _watch = Instance(OpenDrawerWatch)
 
-    #: Watches the whole application, while the drawer is open, for clicks
-    #: and for repaints of what lies beneath a translucent drawer.
-    _app_relay = Any()
-
-    #: When what lies beneath repainted within the last second.
-    _backdrop_paints = Instance(deque, ())
-
-    #: Repaints before this time (time.monotonic()) are the drawer opening.
-    _watch_backdrop_from = Float()
-
-    #: Whether the release of a click that closed the drawer is still due.
-    _swallow_release = Bool(False)
-
-    #: The slide-in animation.
+    #: The slide in, and the height following the contents.
     _slide = Any()
+    _fit = Any()
+    _height_target = Int(0)
 
     #: The widget that had the focus before the drawer took it.
     _focus_before = Any()
@@ -149,20 +110,11 @@ class NotificationsDrawerHost(HasTraits):
     # ------------------------------------------------------------------ #
 
     def attach(self, window):
-        """Put the drawer on ``window`` (a QMainWindow), closed unless the
-        model is open."""
+        """Put the drawer on ``window`` (a QMainWindow): closed and unbuilt
+        unless the model is open."""
         self.detach()
 
         self.window = window
-        self.drawer = drawer = NotificationsDrawer(window)
-        drawer.hide()
-        drawer.close_requested.connect(self._close_from_view)
-
-        self._slide = QtCore.QPropertyAnimation(drawer, b"pos", drawer)
-        self._slide.setEasingCurve(QtCore.QEasingCurve.Type.OutCubic)
-
-        self._window_relay = _EventRelay(self._on_window_event, window)
-        window.installEventFilter(self._window_relay)
         window.destroyed.connect(self._forget_window)
 
         if self.model.is_open:
@@ -174,30 +126,58 @@ class NotificationsDrawerHost(HasTraits):
         if self.window is None:
             return
 
-        window, drawer = self.window, self.drawer
-
         try:
-            window.destroyed.disconnect(self._forget_window)
-            window.removeEventFilter(self._window_relay)
+            self.window.destroyed.disconnect(self._forget_window)
 
         # The window is already gone; its children went with it.
         except RuntimeError as error:
             logger.debug(f"Notifications drawer window already deleted: {error}")
 
-        self._remove_app_relay()
+        if self._watch is not None:
+            self._watch.stop()
+
         self._dispose_contents()
+
+        if self.drawer is not None:
+            try:
+                self.drawer.deleteLater()
+
+            except RuntimeError as error:
+                logger.debug(f"Notifications drawer already deleted: {error}")
+
         self._clear_references()
-
-        try:
-            drawer.deleteLater()
-
-        except RuntimeError as error:
-            logger.debug(f"Notifications drawer already deleted: {error}")
-
         self.model.is_open = False
 
-    def _get_contents_built(self):
-        return self._ui is not None
+    @property
+    def contents_built(self):
+        """Whether the drawer's contents have been built (on first open)."""
+        return self._contents is not None
+
+    def placement(self, available, natural_height):
+        """Where the drawer goes within ``available`` (the window's room
+        between its top bars and its status bar): at the right, inset, at
+        the model's width, as tall as ``natural_height`` allows, its bottom
+        by the status bar. Override to place it elsewhere."""
+        width = drawer_width_for(available.width(), self.model.drawer_width)
+        room = max(available.height() - 2 * DRAWER_INSET, 0)
+        height = min(max(natural_height, DRAWER_MIN_HEIGHT), room)
+        right = available.right() + 1 - DRAWER_INSET
+        bottom = available.bottom() + 1 - DRAWER_INSET
+
+        return QtCore.QRect(right - width, bottom - height, width, height)
+
+    def build_contents(self, parent):
+        """Build the drawer's contents in ``parent``. Returns the contents
+        widget (with ``natural_height()``, a ``height_changed`` signal and
+        ``dispose()``) and the widget behind which the panel is translucent.
+        Opened by the app, the sections follow the header one per paced GUI
+        turn. Override to show other contents."""
+        from .column import DrawerContents
+
+        contents = DrawerContents(self.model, parent)
+        contents.follow_model_sections(paced=self.model.opened_by_app)
+
+        return contents, contents.scroll
 
     # ------------------------------------------------------------------ #
     # Opening and closing                                                 #
@@ -206,21 +186,30 @@ class NotificationsDrawerHost(HasTraits):
     @observe("model:is_open")
     def _follow_model(self, event):
 
-        if self.drawer is None:
+        if self.window is None:
             return
 
         if event.new:
             self._open()
 
-        else:
+        elif self.drawer is not None:
             self._close()
 
+    @observe("model:drawer_width")
+    def _follow_width(self, event):
+
+        if self.drawer is not None and self.drawer.isVisible():
+            self._place()
+
     def _open(self):
+
+        if self.drawer is None:
+            self._build_drawer()
+
+        if self._stale or self._contents is None:
+            self._rebuild_contents()
+
         drawer = self.drawer
-
-        if self._ui is None:
-            self._build_contents()
-
         final = self._place()
         drawer.show()
         drawer.raise_()
@@ -232,19 +221,19 @@ class NotificationsDrawerHost(HasTraits):
             self._slide.setEndValue(final.topLeft())
             self._slide.start()
 
-        self._focus_before = QtWidgets.QApplication.focusWidget()
-        drawer.setFocus(QtCore.Qt.FocusReason.PopupFocusReason)
+        # Opened by the app, the drawer leaves the focus to the window: Esc
+        # reaches it from anywhere in the window instead.
+        if not self.model.opened_by_app:
+            self._focus_before = QtWidgets.QApplication.focusWidget()
+            drawer.setFocus(QtCore.Qt.FocusReason.PopupFocusReason)
+
+        drawer.set_escape_window_wide(self.model.opened_by_app)
 
         # Over a native window (a sibling made native) nothing composites
         # beneath a translucent widget.
         drawer.set_translucent(not drawer.internalWinId())
-        self._backdrop_paints.clear()
-        self._watch_backdrop_from = (
-            time.monotonic() + (self.slide_ms + BACKDROP_SETTLE_MS) / 1000
-        )
-
-        if self.closes_on_click_outside or drawer.is_translucent():
-            self._install_app_relay()
+        self._watch.closes_on_click_outside = self.closes_on_click_outside
+        self._watch.start((self.slide_ms + BACKDROP_SETTLE_MS) / 1000)
 
     def _close(self):
         drawer = self.drawer
@@ -252,10 +241,11 @@ class NotificationsDrawerHost(HasTraits):
         had_focus = focus is not None and drawer.isAncestorOf(focus)
 
         self._slide.stop()
+        self._fit.stop()
         drawer.hide()
+        drawer.set_escape_window_wide(False)
 
-        if not self._swallow_release:
-            self._remove_app_relay()
+        self._watch.stop()
 
         if had_focus or drawer.hasFocus():
             self._restore_focus()
@@ -275,41 +265,80 @@ class NotificationsDrawerHost(HasTraits):
         except RuntimeError as error:
             logger.debug(f"Focus target gone: {error}")
 
-    def _build_contents(self):
-        from .notification_list_editor import NotificationListView
-        from .notifications_view import NotificationsView
+    # ------------------------------------------------------------------ #
+    # Building                                                            #
+    # ------------------------------------------------------------------ #
 
-        self._ui = self.model.edit_traits(
-            view=NotificationsView, kind="subpanel", parent=self.drawer
+    def _build_drawer(self):
+        self.drawer = drawer = NotificationsDrawer(self.window)
+        drawer.hide()
+        drawer.close_requested.connect(self._close_from_view)
+        drawer.edge.width_requested.connect(self._resize_to)
+        self._watch = OpenDrawerWatch(
+            model=self.model,
+            window=self.window,
+            drawer=drawer,
+            exempt=self.click_outside_exempt,
+            place=self._place,
+            busy=self._animating,
         )
-        contents = self._ui.control
+        drawer.painted.connect(self._watch.note_paint)
+        drawer.theme_changed.connect(self._queue_follow_theme)
 
-        # The cards' list: what lies beneath shows between the cards.
-        self.drawer.set_contents(
-            contents, translucent_area=contents.findChild(NotificationListView)
-        )
+        self._slide = QtCore.QPropertyAnimation(drawer, b"pos", drawer)
+        self._slide.setEasingCurve(QtCore.QEasingCurve.Type.OutCubic)
+
+        self._fit = QtCore.QVariantAnimation(drawer)
+        self._fit.setDuration(DRAWER_FIT_MS)
+        self._fit.setEasingCurve(QtCore.QEasingCurve.Type.OutCubic)
+        self._fit.valueChanged.connect(self._set_height)
+
+    def _rebuild_contents(self):
+        """Build the contents afresh, every colour resolved for the current
+        theme."""
+        self._dispose_contents()
+        self._stale = False
+        self._contents, area = self.build_contents(self.drawer)
+
+        self.drawer.set_contents(self._contents, translucent_area=area)
+        self._contents.height_changed.connect(self._fit_height)
 
     def _dispose_contents(self):
+        contents, self._contents = self._contents, None
 
-        if self._ui is None:
+        if contents is None:
             return
 
         # At app exit the window may already have deleted the contents.
         try:
-            self._ui.dispose()
+            contents.dispose()
+            contents.deleteLater()
 
         except RuntimeError as error:
             logger.debug(f"Notifications drawer contents already deleted: {error}")
 
-        self._ui = None
+    def _resize_to(self, width):
+        self.model.drawer_width = drawer_width_for(self.window.width(), width)
 
     # ------------------------------------------------------------------ #
     # Placement                                                           #
     # ------------------------------------------------------------------ #
 
+    def _natural_height(self, available):
+        return (
+            available.height()
+            if self._contents is None
+            else (self._contents.natural_height())
+        )
+
     def _place(self):
-        """Anchor the drawer to its window; return where it ends up."""
-        rect = anchored_drawer_rect(self.window)
+        """Place the drawer where ``placement()`` says; return where it ends
+        up."""
+        available = anchored_drawer_rect(self.window)
+        rect = self.placement(available, self._natural_height(available))
+
+        self._fit.stop()
+        self._height_target = rect.height()
 
         # Mid-slide, only where the slide ends moves.
         if self._slide.state() == QtCore.QAbstractAnimation.State.Running:
@@ -321,149 +350,82 @@ class NotificationsDrawerHost(HasTraits):
 
         return rect
 
-    # ------------------------------------------------------------------ #
-    # Event filters                                                       #
-    # ------------------------------------------------------------------ #
-
-    def _on_window_event(self, watched, event):
-        """Keep the open drawer anchored and above the panes."""
+    def _fit_height(self):
+        """Ease the top edge to the contents' new height: at once for small
+        steps (a section folding frame by frame), not at all for a pixel or
+        two, never during the slide."""
         drawer = self.drawer
 
-        if drawer is None or not drawer.isVisible():
-            return False
+        if drawer is None or not drawer.isVisible() or self._contents is None:
+            return
 
-        event_type = event.type()
-
-        if event_type in _PLACING_EVENTS:
+        if self._slide.state() == QtCore.QAbstractAnimation.State.Running:
             self._place()
 
-        # A pane added later (a plugin loaded at runtime) stacks above.
-        elif event_type == QtCore.QEvent.Type.ChildAdded:
-            drawer.raise_()
-
-        return False
-
-    def _on_application_event(self, watched, event):
-        """Close the drawer on a press elsewhere in its window, using up the
-        press and its release; watch what lies beneath a translucent drawer
-        for repaints."""
-        event_type = event.type()
-
-        if event_type == QtCore.QEvent.Type.Paint:
-            self._note_backdrop_paint(watched, event)
-
-            return False
-
-        if event_type == QtCore.QEvent.Type.MouseButtonRelease:
-            return self._end_swallowed_click(watched)
-
-        if event_type not in _PRESS_EVENTS or not self.closes_on_click_outside:
-            return False
-
-        if not self._is_outside_drawer(watched):
-            return False
-
-        self._swallow_release = True
-        self.model.is_open = False
-
-        return True
-
-    def _note_backdrop_paint(self, widget, event):
-        """Turn the drawer opaque once what lies beneath keeps repainting: a
-        translucent drawer is repainted with it, a camera feed's every frame.
-        Repaints the drawer causes itself — sliding in, or under the mouse
-        while used — do not count."""
-        drawer = self.drawer
-
-        if drawer is None or not drawer.is_translucent():
             return
 
-        if not self._is_outside_drawer(widget, exempt=()):
+        available = anchored_drawer_rect(self.window)
+        target = self.placement(available, self._natural_height(available)).height()
+
+        if abs(target - self._height_target) < 2:
             return
 
-        now = time.monotonic()
-        paints = self._backdrop_paints
-        cursor = drawer.mapFromGlobal(QtGui.QCursor.pos())
+        self._height_target = target
+        current = drawer.height()
+        self._fit.stop()
 
-        if now < self._watch_backdrop_from or drawer.rect().contains(cursor):
+        if abs(target - current) < DRAWER_FIT_STEP_PX:
+            self._set_height(target)
+
             return
 
-        # One repaint of the window paints many widgets.
-        if paints and now - paints[-1] < BACKDROP_SAME_FRAME_S:
-            return
+        self._fit.setStartValue(current)
+        self._fit.setEndValue(target)
+        self._fit.start()
 
-        painted = event.rect().translated(widget.mapTo(self.window, QtCore.QPoint()))
+    def _animating(self):
+        """Whether the drawer is sliding in or easing its height."""
+        running = QtCore.QAbstractAnimation.State.Running
 
-        if not painted.intersects(drawer.geometry()):
-            return
+        return running in (self._slide.state(), self._fit.state())
 
-        paints.append(now)
+    def _set_height(self, height):
+        available = anchored_drawer_rect(self.window)
+        rect = self.placement(available, int(height))
 
-        while paints and now - paints[0] > 1.0:
-            paints.popleft()
-
-        if len(paints) > DRAWER_BACKDROP_PAINTS_PER_S:
-            logger.debug("Notifications drawer turns opaque over a busy backdrop")
-            drawer.set_translucent(False)
-
-    def _end_swallowed_click(self, watched):
-
-        if not self._swallow_release or not isinstance(watched, QtWidgets.QWidget):
-            return False
-
-        self._swallow_release = False
-
-        if self.model is None or not self.model.is_open:
-            self._remove_app_relay()
-
-        return True
-
-    def _is_outside_drawer(self, widget, exempt=None):
-        """Whether ``widget`` is in the drawer's window but not the drawer,
-        nor one of the ``exempt`` widgets (by default those exempt from
-        closing it). Other windows (dialogs, menus, floating panes) never
-        count."""
-        drawer = self.drawer
-
-        # Mouse events reach the window's QWindow before its widgets.
-        if drawer is None or not isinstance(widget, QtWidgets.QWidget):
-            return False
-
-        if widget.window() is not self.window:
-            return False
-
-        if widget is drawer or drawer.isAncestorOf(widget):
-            return False
-
-        if exempt is None:
-            exempt = self.click_outside_exempt
-
-        return not any(
-            widget is other or other.isAncestorOf(widget) for other in exempt
-        )
-
-    def _install_app_relay(self):
-
-        if self._app_relay is None:
-            self._app_relay = _EventRelay(self._on_application_event)
-            QtWidgets.QApplication.instance().installEventFilter(self._app_relay)
-
-    def _remove_app_relay(self):
-        self._swallow_release = False
-
-        if self._app_relay is not None:
-            QtWidgets.QApplication.instance().removeEventFilter(self._app_relay)
-            self._app_relay = None
+        self.drawer.setGeometry(rect)
 
     # ------------------------------------------------------------------ #
-    # Window teardown                                                     #
+    # Theme and teardown                                                  #
     # ------------------------------------------------------------------ #
+
+    def _queue_follow_theme(self):
+        """Follow the theme once the switch has settled: every widget hears
+        of it, one after another."""
+
+        if not self._theme_queued:
+            self._theme_queued = True
+            QtCore.QTimer.singleShot(0, self.follow_theme)
+
+    def follow_theme(self):
+        """The theme changed: rebuild the contents, so no part keeps the
+        other theme's colours; while closed, at the next opening."""
+        self._theme_queued = False
+
+        if self._contents is None:
+            return
+
+        if self.drawer is not None and self.drawer.isVisible():
+            self._rebuild_contents()
+            self._place()
+
+        else:
+            self._stale = True
 
     def _forget_window(self, *args):
         """The window was deleted without ``detach()``: its children, the
         drawer and contents among them, went with it. The contents' UI is
         still disposed, so its editors stop listening to the model."""
-        self._remove_app_relay()
         self._dispose_contents()
         self._clear_references()
         self.model.is_open = False
@@ -471,6 +433,7 @@ class NotificationsDrawerHost(HasTraits):
     def _clear_references(self):
         self.window = None
         self.drawer = None
-        self._window_relay = None
+        self._watch = None
         self._slide = None
+        self._fit = None
         self._focus_before = None

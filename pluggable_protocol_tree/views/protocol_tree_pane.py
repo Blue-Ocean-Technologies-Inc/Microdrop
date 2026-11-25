@@ -78,6 +78,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from pluggable_protocol_tree.consts import (
     ELECTRODES_STATE_APPLIED,
+    PKG,
     PROTOCOL_FILE_DIALOG_FILTER,
     PROTOCOL_REDO_SHORTCUTS,
     PROTOCOL_UNDO_SHORTCUT,
@@ -872,6 +873,7 @@ class ProtocolTreePane(QWidget):
                 parent=self,
                 title="Import error",
                 message="Select both a device SVG and a protocol file.",
+                record=False,  # feedback on the import form, not an event
             )
             return
 
@@ -1185,6 +1187,7 @@ class ProtocolTreePane(QWidget):
             "directory.",
             title="Run Summary Failed",
             detail=message,
+            source=PKG,
         )
 
     @attempt_func_execution_with_error_dialog

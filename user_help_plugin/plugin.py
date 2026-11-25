@@ -15,24 +15,38 @@ from functools import partial
 from envisage.api import TASK_EXTENSIONS, ExtensionPoint, Plugin
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.api import SchemaAddition
-from traits.api import Instance, List, Str, on_trait_change
+from pyface.api import GUI
+from traits.api import Any, Instance, List, Str, on_trait_change
 
 # Microdrop package imports.
+from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import PKG as microdrop_application_PKG
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_controller_base import (
+    generate_class_method_dramatiq_listener_actor,
+    unregister_dramatiq_listener_actor,
+)
 
 # Local imports.
 from .consts import (
+    ACTOR_TOPIC_DICT,
     GETTING_STARTED_TUTORIAL_HTML_PATH,
+    GETTING_STARTED_TUTORIAL_ID,
     GETTING_STARTED_TUTORIAL_TITLE,
     HELP_ACTIONS_ADDITION_ID,
     HELP_LOGS_STORAGE_TUTORIAL_HTML_PATH,
     HELP_LOGS_STORAGE_TUTORIAL_TITLE,
+    LISTENER_NAME,
+    OPEN_TUTORIAL,
     PKG,
     TUTORIAL_ORDER_REFERENCE,
     TUTORIAL_ORDER_START,
     TUTORIALS,
+    OpenTutorialRequest,
     PKG_name,
     TutorialEntry,
+    help_availability_publisher,
 )
 from .menus import TutorialCatalog
 from .simulations import TutorialSimulationCatalog
@@ -86,13 +100,65 @@ class UserHelpPlugin(Plugin):
     #: extension point itself, so the contribution needs another name.
     contributed_tutorials = List(contributes_to=TUTORIALS)
 
+    #: OPEN_TUTORIAL is routed to this plugin's listener.
+    actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
+
+    #: The listener actor, made at start; and the last tutorial it opened,
+    #: kept so its window is not garbage collected.
+    _listener = Any()
+    _opened = Any()
+
     def start(self):
-        """Fill the catalog and follow tutorial contributions from now on."""
+        """Fill the catalog and follow tutorial contributions from now on;
+        listen for OPEN_TUTORIAL, then say tutorials can be opened."""
         super().start()
 
         # The ``_items`` handler below fires only once this connects it.
         self.connect_extension_point_traits()
         self._update_catalog()
+
+        # The listener exists before the announcement, so no request sent
+        # in answer to it can reach an undefined actor.
+        self._listener = generate_class_method_dramatiq_listener_actor(
+            listener_name=LISTENER_NAME, class_method=self._listener_routine
+        )
+        help_availability_publisher.publish({"available": True})
+
+    def stop(self):
+        """Say tutorials can no longer be opened, and release the listener so
+        a restart can register it anew."""
+        help_availability_publisher.publish({"available": False})
+        unregister_dramatiq_listener_actor(LISTENER_NAME)
+        self._listener = None
+
+        super().stop()
+
+    def open_tutorial(self, tutorial_id, anchor=None):
+        """Open the tutorial ``tutorial_id`` names, at the section ``anchor``
+        if given, as Help > Tutorials opens it; an unknown id opens Getting
+        Started instead, with a warning."""
+        from .menus import tutorial_action
+
+        entries = {entry.id: entry for entry in self.tutorial_catalog.entries}
+        entry = entries.get(tutorial_id)
+
+        if entry is None:
+            logger.warning(
+                f"No tutorial {tutorial_id!r}; opening Getting Started instead"
+            )
+            entry, anchor = entries.get(GETTING_STARTED_TUTORIAL_ID), None
+
+        if entry is None:
+            return
+
+        self._opened = tutorial_action(entry, anchor)
+        self._opened.perform(None)
+
+    def _listener_routine(self, message, topic):
+
+        if topic == OPEN_TUTORIAL:
+            request = OpenTutorialRequest.model_validate_json(message)
+            GUI.invoke_later(self.open_tutorial, request.tutorial_id, request.anchor)
 
     @on_trait_change("tutorials_items")
     def _on_tutorials_changed(self, event):

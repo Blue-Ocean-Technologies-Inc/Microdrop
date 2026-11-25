@@ -25,6 +25,7 @@ from traits.api import Instance, Str, observe
 # Microdrop package imports.
 from device_viewer.consts import KEYBOARD_SHORTCUTS
 from microdrop_application.dialogs.pyface_wrapper import confirm, error, warning
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop utils imports.
 from microdrop_utils.tasks_runtime_helpers import describe_dock_widgets
@@ -162,7 +163,8 @@ class SaveLayoutPresetAction(TaskAction):
         except RuntimeError as capture_error:
             logger.warning(
                 f"Could not capture the window layout for a preset: "
-                f"{capture_error}\n{describe_dock_widgets(window.control)}"
+                f"{capture_error}\n{describe_dock_widgets(window.control)}",
+                extra=LOG_RECORDED_EXTRA,
             )
             warning(
                 window.control,
@@ -190,7 +192,10 @@ class SaveLayoutPresetAction(TaskAction):
                 shortcut=model.shortcut,
             )
         except (OSError, pickle.PicklingError) as save_error:
-            logger.error(f"Could not save layout preset '{preset_name}': {save_error}")
+            logger.error(
+                f"Could not save layout preset '{preset_name}': {save_error}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             error(
                 window.control,
                 f"The layout preset '{preset_name}' could not be saved.",
@@ -281,7 +286,8 @@ class ApplyLayoutPresetAction(TaskAction):
         if missing_task_ids or task_layout is None:
             logger.warning(
                 f"Layout preset '{self.preset_name}' references tasks "
-                f"{missing_task_ids} this window does not have; not applied"
+                f"{missing_task_ids} this window does not have; not applied",
+                extra=LOG_RECORDED_EXTRA,
             )
             warning(
                 window.control,
@@ -350,7 +356,10 @@ class ManageLayoutPresetsAction(TaskAction):
                 table.changed_default(),
             )
         except (OSError, ValueError) as apply_error:
-            logger.error(f"Could not update the layout presets: {apply_error}")
+            logger.error(
+                f"Could not update the layout presets: {apply_error}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             error(
                 window.control,
                 "The layout presets could not all be updated.",

@@ -35,6 +35,7 @@ from pyface.api import GUI
 
 # Local imports.
 from ..consts import (
+    CATEGORY_ID_LOG,
     CATEGORY_LOG,
     LOG_BUFFER_LIMIT,
     LOG_CHUNK_PAUSE_MS,
@@ -42,6 +43,7 @@ from ..consts import (
     LOG_FLUSH_INTERVAL_MS,
     LOG_IGNORE_RULES,
     LOG_MIN_LEVEL,
+    LOG_RECORDED_ATTR,
     MAX_ENTRIES,
     PKG,
     SEVERITY_ERROR,
@@ -143,6 +145,7 @@ def post_arguments(item):
         "detail": detail,
         "severity": severity,
         "category": CATEGORY_LOG,
+        "category_id": CATEGORY_ID_LOG,
         "source": snapshot["name"],
         "timestamp": snapshot["created"],
         "key": snapshot["key"],
@@ -240,6 +243,11 @@ class NotificationLogHandler(logging.Handler):
             self._invoke_after(LOG_CHUNK_PAUSE_MS, self._post_pending_chunk)
 
     def _buffer_record(self, record):
+
+        # Its event is listed already, e.g. by the dialog shown for it.
+        if getattr(record, LOG_RECORDED_ATTR, False):
+            return
+
         snapshot = snapshot_record(record)
 
         if is_ignored(snapshot["name"], snapshot["message"], self._ignore_rules):

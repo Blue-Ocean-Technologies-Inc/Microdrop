@@ -270,6 +270,8 @@ class DeviceViewMainModel(HasTraits):
             return
 
         try:
+            # Its date first, so the values do not briefly read as undated.
+            self.calibration.calibrated_on = saved.get("calibration.calibrated_on", "")
             self.calibration.liquid_capacitance_over_area = float(l_cap_pref)
             self.calibration.filler_capacitance_over_area = float(f_cap_pref)
 
@@ -718,7 +720,8 @@ class DeviceViewMainModel(HasTraits):
 
     @observe(
         "calibration:liquid_capacitance_over_area, "
-        "calibration:filler_capacitance_over_area"
+        "calibration:filler_capacitance_over_area, "
+        "calibration:calibrated_on"
     )
     def _calibration_data_changed(self, event=None):
         """Persist the calibration capacitances so they survive a restart

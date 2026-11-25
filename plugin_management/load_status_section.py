@@ -12,8 +12,8 @@
 
 Contributed to the notifications plugin's NOTIFICATION_SECTIONS extension
 point; without that plugin the contribution is simply unused. The section's
-summary follows the load records, and its contents — the load-status panel's
-view — are built the first time it is expanded.
+summary follows the load records, and its contents — the records' table —
+are built the first time it is expanded.
 """
 
 # Enthought library imports.
@@ -27,6 +27,8 @@ from microdrop_utils.plugin_load_status import PluginLoadStatus
 
 # Local imports.
 from .consts import (
+    LOAD_STATUS_SECTION_ACCENT,
+    LOAD_STATUS_SECTION_GLYPH,
     LOAD_STATUS_SECTION_ID,
     LOAD_STATUS_SECTION_ORDER,
     LOAD_STATUS_SECTION_TITLE,
@@ -40,6 +42,8 @@ class PluginLoadStatusSection(NotificationSection):
     id = LOAD_STATUS_SECTION_ID
     title = LOAD_STATUS_SECTION_TITLE
     order = LOAD_STATUS_SECTION_ORDER
+    glyph = LOAD_STATUS_SECTION_GLYPH
+    accent = LOAD_STATUS_SECTION_ACCENT
 
     #: The load records — the application's ``plugin_load_status``.
     status = Instance(PluginLoadStatus, ())
@@ -48,16 +52,14 @@ class PluginLoadStatusSection(NotificationSection):
         return self.build_contents
 
     def build_contents(self, parent):
-        """The load-status panel's view, embedded, first failure selected."""
-        from .load_status_view import PluginLoadStatusView
+        """The records' table and the selected plugin's details, first
+        failure selected."""
+        from .load_status_table import PluginLoadStatusSectionContents
 
         model = PluginLoadStatusPanelModel(status=self.status)
-        ui = model.edit_traits(
-            view=PluginLoadStatusView, kind="subpanel", parent=parent
-        )
         model.select_first_failure()
 
-        return ui
+        return PluginLoadStatusSectionContents(model, parent)
 
     @observe("status.summary")
     def _follow_summary(self, event):

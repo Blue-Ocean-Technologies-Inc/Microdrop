@@ -32,7 +32,10 @@ from pyface.qt.QtWidgets import QApplication
 from pyface.undo.api import CommandStack, UndoManager
 
 # Microdrop package imports.
-from device_viewer.consts import LIVE_ALIGNMENT_SETUP_PREFERENCE
+from device_viewer.consts import (
+    CAMERA_ALIGNMENT_CATEGORY_ID,
+    LIVE_ALIGNMENT_SETUP_PREFERENCE,
+)
 from device_viewer.controllers.camera_alignment_controller import (
     CameraAlignmentWorkflowController,
 )
@@ -129,6 +132,7 @@ def controller(model, tmp_path):
                 endpoint_store=endpoint_store,
             ),
             statusbar_message=MagicMock(),
+            post_notification=MagicMock(),
             get_video_item=StubVideoItem,
         )
 
@@ -156,8 +160,11 @@ def _tuples(points):
     return [point.toTuple() for point in points]
 
 
-def _status(controller):
-    return controller.statusbar_message.call_args.args[0]
+def _notice(controller):
+    """The text of the last restore notification posted."""
+    payload = controller.post_notification.call_args.args[0]
+
+    return f"{payload['title']}: {payload['detail']}"
 
 
 def _take_charge(controller, model, cameras):
@@ -258,7 +265,13 @@ def test_camera_switch_with_nothing_saved_keeps_and_flags(controller, model, cam
     _switch(cameras, CAM_B)
 
     assert _live(model) == (_tuples(REFERENCE_A), _tuples(SCENE_A))
-    assert "No saved alignment for camera" in _status(controller)
+    assert "No saved alignment for camera" in _notice(controller)
+
+    # A notification of its own kind, one entry per camera.
+    payload = controller.post_notification.call_args.args[0]
+
+    assert payload["category_id"] == CAMERA_ALIGNMENT_CATEGORY_ID
+    assert payload["thread_id"].endswith(CAM_B.camera_id or CAM_B.label)
     assert controller._setup_notice
     # Camera A's alignment is not stamped as camera B's on the way out.
     _switch(cameras, CAM_A)
@@ -278,7 +291,7 @@ def test_camera_switch_round_trip_restores_each_cameras_last_used(
     _switch(cameras, CAM_A)
 
     assert _live(model) == (_tuples(REFERENCE_A), _tuples(SCENE_A))
-    assert "last used" in _status(controller)
+    assert "last used" in _notice(controller)
     assert controller._setup_notice == ""
 
     _switch(cameras, CAM_B)
@@ -309,7 +322,7 @@ def test_last_used_outranks_the_default(controller, model, cameras):
 
     # (b): no last used for camera B yet — its default.
     assert _live(model)[1] == _tuples(SCENE_A)
-    assert "default alignment preset 'bench'" in _status(controller)
+    assert "default alignment preset 'bench'" in _notice(controller)
 
     _set_live(model, REFERENCE_B, SCENE_B)
     _switch(cameras, CAM_A)
@@ -416,7 +429,7 @@ def test_restore_waits_for_a_running_protocol(controller, model, cameras):
     _switch(cameras, CAM_A)
 
     assert _live(model) == (_tuples(REFERENCE_B), _tuples(SCENE_B))
-    assert "when the protocol stops" in _status(controller)
+    assert "when the protocol stops" in _notice(controller)
 
     model.editable = True
 
@@ -439,7 +452,7 @@ def test_device_load_remembers_the_outgoing_and_restores_the_new(
     assert controller.preset_store.last_used_for(CAM_A, "2x3device").scene_quad == [
         list(point.toTuple()) for point in SCENE_B
     ]
-    assert "No saved alignment" in _status(controller)
+    assert "No saved alignment" in _notice(controller)
 
     _set_live(model, REFERENCE_A, SCENE_A)
     model.electrodes.set_electrodes_from_svg_file(str(DEVICES / "2x3device.svg"))
@@ -662,7 +675,7 @@ def test_an_endpoint_only_default_never_overwrites_the_endpoint(
 
     assert controller.endpoint_store.load("2x3device") == ENDPOINT
     assert _live(model) == (_tuples(REFERENCE_A), _tuples(SCENE_A))
-    assert "No saved alignment" in _status(controller)
+    assert "No saved alignment" in _notice(controller)
 
 
 def test_restore_falls_through_an_endpoint_only_default(controller, model, cameras):
@@ -678,7 +691,7 @@ def test_restore_falls_through_an_endpoint_only_default(controller, model, camer
     # The device default (endpoint only) is skipped: the camera's
     # any-device default is reached.
     assert _live(model) == (_tuples(REFERENCE_B), _tuples(SCENE_B))
-    assert "'mount'" in _status(controller)
+    assert "'mount'" in _notice(controller)
     assert controller.endpoint_store.load("2x3device") == OLD_ENDPOINT
 
 

@@ -27,6 +27,7 @@ from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
+from notifications.consts import NOTIFICATION_CATEGORIES
 from pluggable_protocol_tree.builtins.duration_column import make_duration_column
 from pluggable_protocol_tree.builtins.electrodes_column import make_electrodes_column
 from pluggable_protocol_tree.builtins.id_column import make_id_column
@@ -67,6 +68,7 @@ from pluggable_protocol_tree.consts import (
     ACTOR_TOPIC_DICT,
     EXECUTOR_LISTENER_NAME,
     EXPERIMENTS_MENU_ID,
+    NOTIFICATION_CATEGORY_SPECS,
     PKG,
     PROTOCOL_COLUMNS,
     PROTOCOL_MENU_ID,
@@ -144,6 +146,10 @@ class PluggableProtocolTreePlugin(Plugin):
     # pulls traitsui).
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+
+    notification_categories = List(
+        NOTIFICATION_CATEGORY_SPECS, contributes_to=NOTIFICATION_CATEGORIES
+    )
 
     #: The AutoSave switch, added by the dock pane when it mounts; the
     #: microdrop_status_bar plugin places it in the app status bar.

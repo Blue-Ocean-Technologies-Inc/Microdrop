@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+import os
+
 # Enthought library imports.
 from envisage.api import CorePlugin
 from envisage.ui.tasks.api import TasksPlugin
@@ -57,7 +60,11 @@ from microdrop_utils.broker_server_helpers import (
     load_dramatiq_worker_settings,
     redis_server_context,
 )
-from microdrop_utils.deferred_plugins import DeferredDockPane, DeferredPlugin
+from microdrop_utils.deferred_plugins import (
+    PRIORITY_FIRST,
+    DeferredDockPane,
+    DeferredPlugin,
+)
 
 # Logger import.
 from logger.plugin import LoggerPlugin
@@ -163,6 +170,24 @@ DEFERRED_FRONTEND_PLUGINS = [
             ),
         ],
     ),
+    # The News section of the notifications drawer, and MicroDrop's release
+    # notes (instead of the What's New dialog at launch). Loaded first: the
+    # drawer open at start-up leads with it. It contributes only its drawer
+    # section and its kind of notification, and needs no other deferred
+    # plugin, so loading it first changes no service or extension precedence.
+    # Its feed and release notes are read on the loader's worker (prepare),
+    # and its drawer section's views imported there too.
+    DeferredPlugin(
+        spec="news.plugin:NewsPlugin",
+        priority=PRIORITY_FIRST,
+        preload_modules=[
+            "news.services.news_feed",
+            "news.controllers.news_alerts",
+            "news.services.seen_state",
+            "news.views.feed_column",
+        ],
+        prepare="news.services.news_feed:prepare_news_feed",
+    ),
     DeferredPlugin(
         spec="ssh_controls_ui.plugin:SSHUIPlugin",
         preload_modules=["ssh_controls_ui.menus", "ssh_controls_ui.preferences"],
@@ -267,3 +292,22 @@ def with_updates_panel(plugins):
     plugins.insert(position, AppUpdatesPlugin)
 
     return plugins
+
+
+#: Set to "1", the run scripts add the notifications Demo menu (dev only).
+NOTIFICATIONS_DEMO_ENV = "MICRODROP_NOTIFICATIONS_DEMO"
+
+
+def with_notifications_demo(plugins, environ=os.environ):
+    """Return a copy of ``plugins`` with the notifications Demo menu added
+    when ``MICRODROP_NOTIFICATIONS_DEMO=1`` is set and the notifications
+    plugin is loaded: a dev-only way to fire fake notifications inside the
+    real app. Without the variable the list is returned unchanged."""
+    plugins = list(plugins)
+
+    if environ.get(NOTIFICATIONS_DEMO_ENV) != "1" or NotificationsPlugin not in plugins:
+        return plugins
+
+    from examples.demos.notifications_ux.dev_plugin import NotificationsDevPlugin
+
+    return [*plugins, NotificationsDevPlugin]

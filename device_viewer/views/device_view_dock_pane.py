@@ -13,6 +13,7 @@ from functools import partial
 from pathlib import Path
 
 # Enthought library imports.
+from pyface.api import GUI
 from pyface.qt.QtCore import QPointF, QRectF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QBrush, QColor, QFont, QGraphicsScene, QImage, QPainter
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
@@ -44,6 +45,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     warning,
 )
 from microdrop_status_bar.consts import ICON_PRIORITY_LEFT
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop style imports.
 from microdrop_style.button_styles import get_tooltip_style
@@ -59,6 +61,7 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import safe_copy_file
+from microdrop_utils.first_paint import call_after_first_paint
 from microdrop_utils.keyboard_shortcuts_view import show_keyboard_shortcuts
 from microdrop_utils.lazy_dock_pane import LazyContentDockPane
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
@@ -82,6 +85,9 @@ from ..consts import (
     camera_edit_status_message_text,
     camera_place_status_message_text,
     device_modified_tag,
+)
+from ..controllers.calibration_reminder_controller import (
+    CalibrationReminderController,
 )
 from ..controllers.camera_alignment_controller import (
     CameraAlignmentWorkflowController,
@@ -238,6 +244,9 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
     #: ``loaded_path`` and ``modified``.
     svg_persistence = Instance(SvgPersistenceService)
 
+    #: Posts the calibration reminder to the notifications drawer.
+    calibration_reminder = Instance(CalibrationReminderController)
+
     #: Restarted by each sidebar edit while auto-commit is due; commits the
     #: edits once they settle.
     _auto_commit_timer = Instance(QTimer)
@@ -295,6 +304,12 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
 
         ############## load last-session calibration data ##############################
         self.model.load_calibration_data_from_preferences()
+
+        # Its reminder (Needs attention), started by create() once the
+        # window has painted.
+        self.calibration_reminder = CalibrationReminderController(
+            calibration=self.model.calibration
+        )
 
         ################################################################################################
         # ----------- Setup device view widget ----------------- #
@@ -623,7 +638,8 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
             if self.model.routes.commit_enabled and self._last_applied_step_id:
                 logger.warning(
                     f"Unsaved route execution settings for last step "
-                    f"{self._last_applied_step_id}"
+                    f"{self._last_applied_step_id}",
+                    extra=LOG_RECORDED_EXTRA,
                 )
 
                 choice = warning(
@@ -859,7 +875,21 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
         """
         self._set_up_device_model()
 
+        # Model-side too, so it is posted whether or not the view is ever
+        # built; off the launch path, after the window's first paint.
+        if parent.isVisible():
+            GUI.invoke_later(self._start_calibration_reminder)
+
+        else:
+            call_after_first_paint(parent, self._start_calibration_reminder)
+
         super().create(parent)
+
+    def _start_calibration_reminder(self):
+
+        # The pane may have gone before the window painted.
+        if self.control is not None:
+            self.calibration_reminder.start()
 
     def _set_up_device_model(self):
         """Load the preferred device, publish the first state message, and
@@ -976,7 +1006,6 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
             self.video_item,
             self.scene,
             self.app_preferences,
-            status_bar_manager=self.task.window.status_bar_manager,
             source_providers=self._camera_source_providers,
             on_align_camera=self.camera_alignment_controller.open_camera_alignment,
             on_go_to_endpoint=self.camera_alignment_controller.go_to_endpoint,
@@ -1052,6 +1081,9 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
         """Detach the contributed layers before the pane's widgets go."""
         if self.layer_host is not None:
             self.layer_host.remove_all()
+
+        if self.calibration_reminder is not None:
+            self.calibration_reminder.stop()
 
         super().destroy()
 
@@ -1267,7 +1299,7 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
                 break
 
             except PermissionError as e:
-                logger.warning(f"Save As refused: {e}")
+                logger.warning(f"Save As refused: {e}", extra=LOG_RECORDED_EXTRA)
                 warning(
                     None,
                     f"{e}<br><br>Choose another location.",
@@ -1526,8 +1558,7 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
 
     def _connect_recording_icon(self):
         """Once both the recording icon and the camera panel exist, the
-        record button drives the icon and the panel's media-capture
-        notifications go to the status bar."""
+        record button drives the icon."""
         recording_icon = getattr(self, "recording_icon", None)
 
         if recording_icon is None or self.camera_control_widget is None:
@@ -1535,5 +1566,4 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
 
         widget = self.camera_control_widget
 
-        widget.status_bar_manager = self.task.window.status_bar_manager
         widget.record_toggle_button.toggled.connect(recording_icon.set_enabled)

@@ -92,6 +92,11 @@ DOCK_SEPARATOR_COLOR_LABELS = {
 
 scibots_icon_path = Path(__file__).parent / "resources" / "scibots-icon.png"
 CHANGELOG_PATH = Path(__file__).parent.parent / "CHANGELOG.md"
+
+#: The CHANGELOG.md text the What's New dialog last showed, in the
+#: application home; the news plugin keeps it current when it shows notes.
+PREVIOUS_CHANGELOG_FILENAME = ".previous_changelog"
+
 APP_GLOBALS_REDIS_HASH = "microdrop_application_globals"
 
 # app_globals keys (stored in APP_GLOBALS_REDIS_HASH via the redis client)

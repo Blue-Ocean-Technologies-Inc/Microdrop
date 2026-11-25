@@ -22,6 +22,9 @@ import dramatiq
 from pyface.api import GUI
 from traits.api import HasTraits, Instance, Str
 
+# Microdrop package imports.
+from user_help_plugin.consts import HelpAvailability, open_tutorial_publisher
+
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
     basic_listener_actor_routine,
@@ -30,7 +33,13 @@ from microdrop_utils.dramatiq_controller_base import (
 )
 
 # Local imports.
-from ..consts import LISTENER_NAME, NotificationMessage, ShowNotificationsPanelRequest
+from ..consts import (
+    LISTENER_NAME,
+    NotificationMessage,
+    NotificationResolveRequest,
+    ShowNotificationsPanelRequest,
+    parse_help_target,
+)
 from .notifications_controller import NotificationsController
 
 # Logger import.
@@ -40,7 +49,8 @@ logger = get_logger(__name__)
 
 
 class NotificationsMessageHandler(HasTraits):
-    """Posts NOTIFICATION_POST payloads and shows the pane on request."""
+    """Posts NOTIFICATION_POST payloads, shows the pane on request, and
+    clears the cards of a resolved condition."""
 
     #: Acts on the requests.
     controller = Instance(NotificationsController)
@@ -74,3 +84,24 @@ class NotificationsMessageHandler(HasTraits):
         request = ShowNotificationsPanelRequest.model_validate_json(message)
 
         GUI.invoke_later(self.controller.show_pane, request.section_id)
+
+    def _on_resolve_triggered(self, message):
+        request = NotificationResolveRequest.model_validate_json(message)
+        center = self.controller.pane_model.center
+
+        GUI.invoke_later(center.resolve, request.condition_id, request.resolution)
+
+    def _on_availability_triggered(self, message):
+        """The help plugin started or stopped: the help links follow."""
+        availability = HelpAvailability.model_validate_json(message)
+        opener = open_tutorial if availability.available else None
+
+        GUI.invoke_later(setattr, self.controller, "open_help", opener)
+
+
+def open_tutorial(target):
+    """Ask the help plugin to open the tutorial a HelpAction ``target``
+    names (``tutorial id#section``)."""
+    tutorial_id, anchor = parse_help_target(target)
+
+    open_tutorial_publisher.publish({"tutorial_id": tutorial_id, "anchor": anchor})

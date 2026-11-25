@@ -8,23 +8,34 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import asyncio
 import functools
 import html
 import threading
 from typing import Any, Callable, TypeVar, cast
 
+# Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import (
-    error, escape_html_multiline, format_traceback_detail,
+    error,
+    escape_html_multiline,
+    format_traceback_detail,
 )
+from notifications.consts import LOG_RECORDED_EXTRA
+
+# Microdrop style imports.
 from microdrop_style.colors import DIALOG_ERROR_TEXT_COLOR
+
+# Microdrop utils imports.
 from microdrop_utils.datetime_helpers import TimestampedMessage
+
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-T = TypeVar('T')
-F = TypeVar('F', bound=Callable[..., Any])
+T = TypeVar("T")
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 def attempt_func_execution_with_error_dialog(func):
@@ -45,13 +56,17 @@ def attempt_func_execution_with_error_dialog(func):
     import / browse-reports / etc.). Do NOT use on executor callbacks —
     those handle errors via the executor's own signal chain.
     """
+
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         try:
             return func(self, *args, **kwargs)
         except Exception as exc:
             op_name = func.__name__.replace("_", " ").strip().title()
-            logger.error(f"{op_name} failed: {exc}", exc_info=True)
+            # Its dialog lists it in the notifications drawer.
+            logger.error(
+                f"{op_name} failed: {exc}", exc_info=True, extra=LOG_RECORDED_EXTRA
+            )
             detail = format_traceback_detail(exc)
             cause = escape_html_multiline(str(exc) or "(no message)")
             informative = (
@@ -67,12 +82,16 @@ def attempt_func_execution_with_error_dialog(func):
                     title=f"{op_name} Error",
                     informative=informative,
                     detail=detail,
+                    # The widget's package: the plugin whose action failed.
+                    source=type(self).__module__.split(".")[0],
                 )
             except Exception as dialog_err:
                 logger.error(
-                    f"failed to show error dialog for {op_name}: "
-                    f"{dialog_err}", exc_info=True)
+                    f"failed to show error dialog for {op_name}: {dialog_err}",
+                    exc_info=True,
+                )
             return None
+
     return wrapper
 
 
@@ -87,6 +106,7 @@ def debounce(wait_seconds: float = 0.5) -> Callable[[F], F]:
     Returns:
         Decorated function that will be debounced
     """
+
     def decorator(fn: F) -> F:
         timer: threading.Timer | None = None
         lock = threading.Lock()
@@ -99,8 +119,10 @@ def debounce(wait_seconds: float = 0.5) -> Callable[[F], F]:
                 try:
                     fn(*args, **kwargs)
                 except Exception as e:
-                    # Log the error but don't let it propagate to avoid breaking the timer
-                    logger.warning(f"Error in debounced function {fn}: {e}", exc_info=True)
+                    # Logged, not raised: raising would break the timer.
+                    logger.warning(
+                        f"Error in debounced function {fn}: {e}", exc_info=True
+                    )
 
             with lock:
                 if timer is not None:
@@ -110,6 +132,7 @@ def debounce(wait_seconds: float = 0.5) -> Callable[[F], F]:
                 timer.start()
 
         return cast(F, wrapped)
+
     return decorator
 
 
@@ -124,6 +147,7 @@ def debounce_async(wait_seconds: float = 0.5) -> Callable[[F], F]:
     Returns:
         Decorated coroutine that will be debounced
     """
+
     def decorator(fn: F) -> F:
         task: asyncio.Task[Any] | None = None
         lock = asyncio.Lock()
@@ -136,9 +160,10 @@ def debounce_async(wait_seconds: float = 0.5) -> Callable[[F], F]:
                 try:
                     await fn(*args, **kwargs)
                 except Exception as e:
-                    # Log the error but don't let it propagate to avoid breaking the timer
-                    logger.warning(f"Error in debounced async function {fn}: {e}",
-                                   exc_info=True)
+                    # Logged, not raised: raising would break the timer.
+                    logger.warning(
+                        f"Error in debounced async function {fn}: {e}", exc_info=True
+                    )
 
             async with lock:
                 if task and not task.done():
@@ -158,32 +183,45 @@ def debounce_async(wait_seconds: float = 0.5) -> Callable[[F], F]:
                 task = asyncio.create_task(waiter())
 
         return cast(F, wrapped)
+
     return decorator
 
 
 def timestamped_value(property_name: str) -> Callable[[F], F]:
-    '''
-    Decorator that will only run the method if the body is more recent than the current value. Should be used on callbacks of the form
-    
+    """
+    Decorator that will only run the method if the body is more recent than
+    the current value. Should be used on callbacks of the form
+
     def callback(self, body: TimestampedMessage, *args, **kwargs)
 
     Args:
-        property_name: The class attribute that stores the TimestampedMessage to be compared with the body and updated
+        property_name: The class attribute that stores the TimestampedMessage
+            to be compared with the body and updated
 
     Returns:
-        Decorated function that will only run the method if the body is more recent than the current value
+        Decorated function that will only run the method if the body is more
+        recent than the current value
 
-    To force an update, pass force_update=True as a keyword argument to the method when calling it. You still need to pass a TimestampedMessage as the first argument, but the timestamp will be ignored.
-    '''
+    To force an update, pass force_update=True as a keyword argument to the
+    method when calling it. You still need to pass a TimestampedMessage as the
+    first argument, but the timestamp will be ignored.
+    """
+
     def decorator(method: F) -> F:
         @functools.wraps(method)
-        def wrapped(self, body: TimestampedMessage,  *args, **kwargs) -> None:
+        def wrapped(self, body: TimestampedMessage, *args, **kwargs) -> None:
             if body.is_after(getattr(self, property_name)):
                 setattr(self, property_name, body)
-                return method(self, body) # Note that we don't pass any args or kwargs to the method since we specify the function signature
-            elif kwargs.get('force_update', False):
+                # No args or kwargs: the signature is fixed to (self, body).
+                return method(self, body)
+            elif kwargs.get("force_update", False):
                 return method(self, body)
             else:
-                logger.info(f"Skipping {property_name} update because it is older than the last update")
+                logger.info(
+                    f"Skipping {property_name} update because it is older than "
+                    "the last update"
+                )
+
         return wrapped
+
     return decorator

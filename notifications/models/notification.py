@@ -8,10 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
-"""One entry of the notifications pane. Qt-free."""
+"""One entry of the notifications drawer. Qt-free."""
+
+# Standard library imports.
+from pathlib import Path
 
 # Enthought library imports.
 from traits.api import (
+    Any,
     Bool,
     Enum,
     Event,
@@ -19,6 +23,7 @@ from traits.api import (
     HasTraits,
     Instance,
     Int,
+    List,
     Property,
     Str,
     Tuple,
@@ -27,10 +32,22 @@ from traits.api import (
 )
 
 # Local imports.
-from ..consts import SEVERITIES, OpenPathAction, PublishAction
+from ..consts import (
+    SEVERITIES,
+    SEVERITY_ERROR,
+    SEVERITY_WARNING,
+    DetailLink,
+    HelpAction,
+    OpenPathAction,
+    PublishAction,
+    SnoozeAction,
+)
 
 #: A detail holding this reads as a traceback, shown monospace.
 TRACEBACK_MARKER = "Traceback (most recent call last)"
+
+#: The first part of a thread's entry key: ``(THREAD_KEY, thread_id)``.
+THREAD_KEY = "thread"
 
 
 class Notification(HasTraits):
@@ -63,24 +80,88 @@ class Notification(HasTraits):
     #: The entry's button, if any.
     action = Union(None, Instance(PublishAction), Instance(OpenPathAction))
 
+    #: The second, quieter button: a help link or "Later".
+    secondary_action = Union(None, Instance(HelpAction), Instance(SnoozeAction))
+
+    #: The user has to do something about it: listed under Needs attention.
+    needs_attention = Bool(False)
+
+    #: The condition that raised it; resolving that id clears it.
+    condition_id = Str()
+
+    #: Its declared notification category; empty when uncategorised.
+    category_id = Str()
+
+    #: The sender's choice: False, it arrives with no toast and no sound.
+    pop_up = Bool(True)
+
+    #: Within Needs attention, higher sorts first.
+    priority = Int(0)
+
+    #: A local picture's path, shown small beside the text; empty for none.
+    thumbnail = Str()
+
+    #: Spans of the detail shown as links to local folders.
+    links = List(Instance(DetailLink))
+
     #: True until the user has seen it.
     unread = Bool(True)
 
-    #: Whether the pane shows the detail. Kept with the entry so the list
-    #: keeps it when its rows are rebuilt.
+    #: Seen for the first time in the drawer open now; marked until it closes.
+    is_new = Bool(False)
+
+    #: What the user did with it, e.g. "Calibrate", or what resolved it;
+    #: empty until then. Its buttons give way to this.
+    acted = Str()
+
+    #: Whether the drawer shows the whole detail. Kept with the entry so a
+    #: rebuilt card keeps it.
     expanded = Bool(False)
+
+    #: For a section's alert (never listed in Activity): the section's id
+    #: and the SectionAlert it stands for.
+    section_id = Str()
+    alert = Any()
+
+    #: The stripe ``(light theme, dark theme)`` instead of the severity's.
+    accent = Tuple()
 
     #: True when the detail is a traceback, shown monospace and unwrapped.
     monospace_detail = Property(Bool, observe="detail")
 
-    #: Fired when anything shown changes. One trait for a list to observe
-    #: on each of its entries rather than seven: hundreds of entries each
-    #: hooked seven times made posting slow.
+    #: Whether its toast stays until dismissed or acted on.
+    sticky = Property(Bool, observe="severity, action, needs_attention")
+
+    #: Fired when anything shown changes. One trait for a card to observe
+    #: rather than a dozen: hundreds of entries each hooked a dozen times
+    #: made posting slow.
     changed = Event()
 
     def _get_monospace_detail(self):
         return TRACEBACK_MARKER in self.detail
 
-    @observe("title, detail, count, last_seen, unread, action, expanded")
+    def _get_sticky(self):
+        urgent = self.severity in (SEVERITY_WARNING, SEVERITY_ERROR)
+
+        return urgent or self.needs_attention or self.action is not None
+
+    @property
+    def is_thread(self):
+        """Whether it is a thread's entry, updated in place by each post."""
+        return bool(self.key) and self.key[0] == THREAD_KEY
+
+    @observe(
+        "title, detail, severity, count, last_seen, unread, action,"
+        " secondary_action, needs_attention, is_new, acted, expanded, thumbnail,"
+        " links"
+    )
     def _announce_change(self, event):
         self.changed = True
+
+
+def link_folder(path):
+    """The folder a detail link to ``path`` opens: the path itself when it is
+    a folder, else the folder holding it, so a link never runs a file."""
+    path = Path(path)
+
+    return path if path.is_dir() else path.parent

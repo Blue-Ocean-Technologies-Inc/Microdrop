@@ -68,6 +68,22 @@ from device_viewer.models.messages import (
 from device_viewer.models.step_params_commit import (
     StepParamsCommitMessage as StepParamsCommitMessage,
 )
+from device_viewer.notification_consts import (
+    # The kinds of notification live in their own module, re-exported here.
+    CAMERA_ALIGNMENT_CATEGORY_ID as CAMERA_ALIGNMENT_CATEGORY_ID,
+)
+from device_viewer.notification_consts import (
+    CAMERA_CAPTURES_CATEGORY_ID as CAMERA_CAPTURES_CATEGORY_ID,
+)
+from device_viewer.notification_consts import (
+    CAPTURE_SESSION_WINDOW_S as CAPTURE_SESSION_WINDOW_S,
+)
+from device_viewer.notification_consts import (
+    DROPBOT_MAINTENANCE_CATEGORY_ID as DROPBOT_MAINTENANCE_CATEGORY_ID,
+)
+from device_viewer.notification_consts import (
+    NOTIFICATION_CATEGORY_SPECS as NOTIFICATION_CATEGORY_SPECS,
+)
 from dropbot_controller.consts import (
     CAPACITANCE_UPDATED,
     CHIP_INSERTED,
@@ -382,6 +398,12 @@ RECORDING_TRANSFORM_SIDECAR_SUFFIX = ".transform.json"
 # any incompatible schema change.
 RECORDING_OVERLAY_SIDECAR_SUFFIX = ".overlay.json"
 RECORDING_OVERLAY_SIDECAR_VERSION = 1
+
+# Poster written next to a recording when it stops: the last frame shown,
+# small, for the recording's notification card. Not a recording container,
+# so the Recording Viewer does not list it.
+RECORDING_POSTER_SUFFIX = ".poster.jpg"
+RECORDING_POSTER_LONGEST_SIDE = 320
 
 # ---------------------------------------------------------------------------
 # Video recording preferences (camera preferences node). The recorder is
@@ -1164,3 +1186,15 @@ DEVICE_FILES_TUTORIAL_HTML_PATH = (
 RECORDING_VIEWER_TUTORIAL_HTML_PATH = (
     Path(__file__).parent / "resources" / "recording_viewer.html"
 )
+
+# ---------------------------------------------------------------------------
+# Calibration reminder (Needs attention)
+# ---------------------------------------------------------------------------
+#: A saved calibration older than this many days is stale. A constant for
+#: now; a preference can replace it.
+CALIBRATION_STALE_DAYS = 7
+
+#: The reminder's card: one thread, updated in place (missing, stale, gone),
+#: and one condition, resolved the moment a calibration is saved.
+CALIBRATION_REMINDER_THREAD_ID = f"{PKG}.calibration_reminder"
+CALIBRATION_REMINDER_CONDITION_ID = f"{PKG}.calibration_needed"

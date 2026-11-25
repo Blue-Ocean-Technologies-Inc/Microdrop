@@ -23,6 +23,7 @@ from microdrop_application.dialogs.consts import (
     DEFAULT_WEB_VIEW_DIALOG_HEIGHT,
     DEFAULT_WEB_VIEW_DIALOG_WIDTH,
 )
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Local imports.
 from .consts import (
@@ -222,7 +223,10 @@ class OpenMicrodropLauncherAction(Action):
             start_launcher(path)
 
         except OSError as e:
-            logger.error(f"Could not start the MicroDrop launcher {path}: {e}")
+            logger.error(
+                f"Could not start the MicroDrop launcher {path}: {e}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             error(None, f"Could not start the MicroDrop launcher:\n{path}\n\n{e}")
 
 
@@ -286,15 +290,27 @@ def tutorial_section(entry):
     return entry.order // TUTORIAL_SECTION_SPAN
 
 
-def tutorial_action(entry):
-    """Return the action opening one tutorial page."""
+def tutorial_action(entry, anchor=None):
+    """Return the action opening one tutorial page, scrolled to the section
+    with the id ``anchor`` if given: what Help > Tutorials and OPEN_TUTORIAL
+    both open."""
     return OpenWebViewDialogAction(
         # A single & is a Qt mnemonic marker; && shows one.
         name=f"{entry.title.replace('&', '&&')}...",
         tooltip=f"Open the {entry.title}",
-        source=entry.path,
+        source=tutorial_source(entry.path, anchor),
         window_title=entry.title,
     )
+
+
+def tutorial_source(path, anchor=None):
+    """What the web view (or the system browser) loads for a tutorial page:
+    its path, or its file URL ending in ``#anchor``."""
+
+    if not anchor:
+        return path
+
+    return f"{Path(path).as_uri()}#{anchor}"
 
 
 def menu_factory(tutorial_catalog=None):

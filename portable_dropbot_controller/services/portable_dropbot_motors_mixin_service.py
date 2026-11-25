@@ -19,6 +19,9 @@ from pydantic import ValidationError
 # Enthought library imports.
 from traits.api import Any, Str, provides
 
+# Microdrop package imports.
+from notifications.consts import LOG_RECORDED_EXTRA
+
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
@@ -347,7 +350,11 @@ class PortableDropbotMotorsMixinService(MotionSafetyMixin):
                 self.pads_smart_engaged = True
 
             error = self._pad_engage_error(engage, ok, reply)
-            logger.error(f"Portable Dropbot {context} --> FAILED: {error}")
+            # The chip-lock dialog lists it in the notifications drawer.
+            logger.error(
+                f"Portable Dropbot {context} --> FAILED: {error}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             chip_lock_failed_publisher.publish(
                 {
                     "action": "lock" if engage else "unlock",

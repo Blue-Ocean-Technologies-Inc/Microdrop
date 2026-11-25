@@ -20,7 +20,7 @@ import dramatiq
 
 # Enthought library imports.
 from pyface.api import GUI
-from traits.api import HasTraits, Instance, Str
+from traits.api import Callable, HasTraits, Instance, Str
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
@@ -31,7 +31,7 @@ from microdrop_utils.dramatiq_controller_base import (
 
 # Local imports.
 from .analysis.roi_model import RoiAnalysisModel
-from .consts import LISTENER_NAME
+from .consts import LISTENER_NAME, ShowImageRequest
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -41,10 +41,15 @@ logger = get_logger(__name__)
 
 class ImageViewerMessageHandler(HasTraits):
     """Keeps the analysis model's ``protocol_running`` in step with the
-    protocol tree's PROTOCOL_RUNNING messages."""
+    protocol tree's PROTOCOL_RUNNING messages, and hands SHOW_IMAGE
+    requests to the plugin."""
 
     #: The model the handlers write to.
     model = Instance(RoiAnalysisModel)
+
+    #: ``show_image(path)``, called on the GUI thread: shows the image in
+    #: the viewer's pane, brought forward.
+    show_image = Callable()
 
     #: Unique Dramatiq listener name; consts.ACTOR_TOPIC_DICT routes to it.
     name = Str(LISTENER_NAME)
@@ -70,3 +75,8 @@ class ImageViewerMessageHandler(HasTraits):
     def _on_protocol_running_triggered(self, message):
         running = message.casefold() == "true"
         GUI.invoke_later(setattr, self.model, "protocol_running", running)
+
+    def _on_show_image_triggered(self, message):
+        request = ShowImageRequest.model_validate_json(message)
+
+        GUI.invoke_later(self.show_image, request.path)

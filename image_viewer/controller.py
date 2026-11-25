@@ -43,6 +43,7 @@ from traitsui.api import Controller
 
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import YES, confirm, error, warning
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop utils imports.
 from microdrop_utils.environment_update_dialog import (
@@ -354,7 +355,9 @@ class ImageViewerController(Controller):
 
             return
         except OSError as e:
-            logger.exception(f"Failed to delete experiment '{name}': {e}")
+            logger.exception(
+                f"Failed to delete experiment '{name}': {e}", extra=LOG_RECORDED_EXTRA
+            )
             error(
                 None,
                 f"Could not delete experiment '{name}': {e}",
@@ -779,6 +782,38 @@ class ImageViewerController(Controller):
         waiting out the settle time, then rescan."""
         self._capture_readiness.mark_complete(path)
         self.request_rescan()
+
+    def show_image(self, path):
+        """Show the image at ``path`` as picking it in the lists would: in
+        its Capture Session, under the selected Image Group when that holds
+        it (else "All"), with the filter cleared if it hides the image. An
+        image the browsed folder does not hold, or not yet, shows alone."""
+        model = self.model
+        path = Path(path)
+        group = next(
+            (
+                name
+                for name in (model.selected_image_group, IMAGE_GROUP_ALL)
+                if any(path in paths for _name, paths in model.image_group_bursts(name))
+            ),
+            None,
+        )
+
+        if group is not None:
+            if group != model.selected_image_group:
+                model.selected_image_group = group
+
+            if not model.visible_of([path]):
+                model.selected_filter = IMAGE_FILTER_ALL
+
+            if model.selected_burst != BURST_FILTER_ALL:
+                model.selected_burst = model.session_of(path)
+
+        # Last: the selections above may each land on another image.
+        model.current_path = str(path)
+
+        if group is not None:
+            self._refresh_visible("keep")
 
     def _retry_failed_load(self):
         """Reload the displayed image whose load failed once the file

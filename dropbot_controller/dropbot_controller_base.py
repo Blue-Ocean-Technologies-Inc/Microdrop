@@ -33,6 +33,7 @@ from electrode_controller.consts import (
     disabled_channels_changed_publisher,
 )
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
+from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
@@ -365,7 +366,8 @@ class DropbotControllerBase(HasTraits):
 
         publish_message(topic=HALT, message=halted_message)
 
-        logger.error(f"DropBot halted due to {reason}")
+        # The halted dialog lists it in the notifications drawer.
+        logger.error(f"DropBot halted due to {reason}", extra=LOG_RECORDED_EXTRA)
 
     @staticmethod
     def _output_state_changed_wrapper(signal: dict[str, str]):

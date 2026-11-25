@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+from pathlib import Path
+
 # Enthought library imports.
 from envisage.api import (
     PREFERENCES_CATEGORIES,
@@ -18,13 +21,14 @@ from envisage.api import (
 )
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
-from traits.api import Callable, List, Str, on_trait_change
+from traits.api import Callable, Instance, List, Str, on_trait_change
 
 # Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
+from notifications.consts import NOTIFICATION_CATEGORIES
 from user_help_plugin.consts import TUTORIAL_ORDER_DEVICE, TUTORIALS, TutorialEntry
 
 # Local imports.
@@ -35,10 +39,15 @@ from .consts import (
     DEVICE_FILES_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_LAYERS,
+    NOTIFICATION_CATEGORY_SPECS,
     PKG,
     RECORDING_VIEWER_TUTORIAL_HTML_PATH,
     ZONES_TUTORIAL_HTML_PATH,
     PKG_name,
+)
+from .recording_viewer_consts import (
+    RECORDING_VIEWER_ACTOR_TOPIC_DICT,
+    RECORDING_VIEWER_DOCK_PANE_ID,
 )
 
 # Logger import.
@@ -60,7 +69,21 @@ class DeviceViewerPlugin(Plugin):
 
     #### Contributions to extension points made by this plugin ################
     # This plugin contributes some actors that can be called using certain routing keys.
-    actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
+    actor_topic_routing = List(
+        [ACTOR_TOPIC_DICT, RECORDING_VIEWER_ACTOR_TOPIC_DICT],
+        contributes_to=ACTOR_TOPIC_ROUTES,
+    )
+
+    #: Hands SHOW_RECORDING to the Recording Viewer; made in start().
+    recording_viewer_message_handler = Instance(
+        "device_viewer.controllers.recording_viewer_message_handler."
+        "RecordingViewerMessageHandler"
+    )
+
+    #: The device viewer's kinds of notification.
+    notification_categories = List(
+        NOTIFICATION_CATEGORY_SPECS, contributes_to=NOTIFICATION_CATEGORIES
+    )
 
     task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
 
@@ -112,6 +135,48 @@ class DeviceViewerPlugin(Plugin):
         # already resolved, so resolve this one now.
         logger.debug(f"Device viewer layers contributed at start: {len(self.layers)}")
 
+        # Here, not with the pane: SHOW_RECORDING's route is registered at
+        # launch, and the pane may be closed and its contents unbuilt.
+        from .controllers.recording_viewer_message_handler import (
+            RecordingViewerMessageHandler,
+        )
+
+        self.recording_viewer_message_handler = RecordingViewerMessageHandler(
+            show_recording=self._show_recording
+        )
+
+    def stop(self):
+        """Release the Recording Viewer's listener, so a restart can
+        register it anew."""
+
+        if self.recording_viewer_message_handler is not None:
+            self.recording_viewer_message_handler.teardown()
+            self.recording_viewer_message_handler = None
+
+        super().stop()
+
+    def _show_recording(self, path):
+        """Play the recording at ``path`` in the Recording Viewer pane, raised
+        where it is or popped out when closed (SHOW_RECORDING)."""
+        from microdrop_utils.dock_pane_presenting import (
+            live_dock_pane,
+            present_dock_pane,
+        )
+
+        if not Path(path).is_file():
+            logger.warning(f"File not found: {path}")
+
+            return
+
+        pane = live_dock_pane(self.application, RECORDING_VIEWER_DOCK_PANE_ID)
+
+        if pane is None:
+            logger.warning(f"No Recording Viewer pane to show {path} in")
+
+            return
+
+        present_dock_pane(pane, then=lambda: pane.show_recording(path))
+
     @on_trait_change("layers_items")
     def _on_layers_changed(self, event):
         """A plugin contributing layers was loaded or unloaded at runtime.
@@ -131,16 +196,9 @@ class DeviceViewerPlugin(Plugin):
 
     def _live_dock_pane(self):
         """Return the mounted device viewer pane, or None."""
-        window = getattr(self.application, "active_window", None)
+        from microdrop_utils.dock_pane_presenting import live_dock_pane
 
-        if window is None:
-            windows = getattr(self.application, "windows", None) or []
-            window = windows[0] if windows else None
-
-        if window is None:
-            return None
-
-        return window.get_dock_pane(PKG + ".dock_pane")
+        return live_dock_pane(self.application, PKG + ".dock_pane")
 
     ###########################################################################
     # Protected interface.

@@ -8,25 +8,35 @@
 #
 # Thanks for using Microdrop open source!
 
-from pyface.tasks.action.api import SMenu
-from traits.api import Property, Directory
-from traits.api import Int, Any
-
-from logger.logger_service import get_logger
-logger = get_logger(__name__)
-
+# Third-party imports.
 from dropbot.hardware_test import ALL_TESTS
 
+# Enthought library imports.
+from pyface.tasks.action.api import SMenu
+from traits.api import Any, Directory, Int, Property
+
+# Microdrop package imports.
+from dropbot_controller.consts import (
+    REBOOT,
+    RUN_ALL_TESTS,
+    START_DEVICE_MONITORING,
+    TEST_CHANNELS,
+    TEST_ON_BOARD_FEEDBACK_CALIBRATION,
+    TEST_SHORTS,
+    TEST_VOLTAGE,
+)
+from microdrop_application.dialogs.pyface_wrapper import OK, warning
+
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_traits_helpers import DramatiqMessagePublishAction
-from microdrop_utils.status_bar_utils import set_status_bar_message
 
-from dropbot_controller.consts import RUN_ALL_TESTS, TEST_SHORTS, TEST_VOLTAGE, TEST_CHANNELS, \
-    TEST_ON_BOARD_FEEDBACK_CALIBRATION, START_DEVICE_MONITORING, REBOOT
+# Local imports.
+from .run_self_tests import run_self_tests
 
+# Logger import.
+from logger.logger_service import get_logger
 
-from .self_test_dialogs import ShowSelfTestIntroDialogAction, DropbotDisconnectedDialogAction
-
-from microdrop_application.dialogs.pyface_wrapper import warning, OK
+logger = get_logger(__name__)
 
 
 class RunTests(DramatiqMessagePublishAction):
@@ -37,82 +47,61 @@ class RunTests(DramatiqMessagePublishAction):
     def _get_message(self, event=None):
         if self.object and hasattr(self.object, "application"):
             return self.object.application.user_data
+
         return None
 
     def perform(self, event=None):
-        window = event.task.window
-        
-        dropbot_connected = self.plugin.dropbot_connected
-        if not dropbot_connected:
-            set_status_bar_message("Warning: Cannot start test, Dropbot is disconnected", window)
-            disconnected_dialog = DropbotDisconnectedDialogAction()
-            return disconnected_dialog.perform(event)
+        run_self_tests(self.plugin, event.task, self.topic, self.message)
 
-        logger.info("Requesting running self tests for dropbot")
-        self_test_intro_dialog = ShowSelfTestIntroDialogAction()
-      
-        # only show the intro dialog for the tests that require the test board
-        if self.topic != TEST_VOLTAGE and self.topic != TEST_ON_BOARD_FEEDBACK_CALIBRATION:
-            set_status_bar_message("Click OK to continue", window)
-            if self_test_intro_dialog.perform(event):
-                set_status_bar_message("Running self tests...", window, 15000)
-                super().perform(event)
-        else:
-            set_status_bar_message("Running self tests...", window, 30000)
-            super().perform(event)
+
+class DropbotRebootAction(DramatiqMessagePublishAction):
+    name = "&Reboot Dropbot"
+    topic = REBOOT
+
+    def pre_perform(self):
+        logger.info("Request user confirmation to reboot Dropbot")
+
+        user_choice = warning(
+            None,
+            "Rebooting the <b>DropBot</b> will <b>Disconnect</b> the "
+            "microcontroller and the DropBot may become <b>Unresponsive</b>. "
+            "Do you still want to proceed?",
+            title="Dropbot Reboot Warning",
+        )
+
+        return user_choice == OK
 
 
 def dropbot_tools_menu_factory(plugin=None):
-    """
-    Create a menu for the Manual Controls
-    The Sgroup is a list of actions that will be displayed in the menu.
-    In this case there is only one action, the help menu.
-    It is contributed to the manual controls dock pane using its show help method. Hence it is a DockPaneAction.
-    It fetches the specified method from the dock pane essentially.
-    """
-
-    # create new groups with all the possible dropbot self-test options as actions
+    """The Tools > Dropbot menu: the self tests (all, or one at a time), a
+    new search for the DropBot, and a reboot."""
     test_actions = [
-        RunTests(name="Test &high voltage", topic=TEST_VOLTAGE,  plugin=plugin),
-        RunTests(name='On-board &feedback calibration', topic=TEST_ON_BOARD_FEEDBACK_CALIBRATION, plugin=plugin),
-        RunTests(name='&Detect shorted channels', topic=TEST_SHORTS,  plugin=plugin),
+        RunTests(name="Test &high voltage", topic=TEST_VOLTAGE, plugin=plugin),
+        RunTests(
+            name="On-board &feedback calibration",
+            topic=TEST_ON_BOARD_FEEDBACK_CALIBRATION,
+            plugin=plugin,
+        ),
+        RunTests(name="&Detect shorted channels", topic=TEST_SHORTS, plugin=plugin),
         RunTests(name="Scan &test board", topic=TEST_CHANNELS, plugin=plugin),
     ]
+    test_options_menu = SMenu(
+        items=test_actions,
+        id="dropbot_on_board_self_tests",
+        name="&On-board self-tests",
+    )
+    run_all_tests = RunTests(
+        name="&Run all on-board self-tests",
+        topic=RUN_ALL_TESTS,
+        num_tests=len(ALL_TESTS),
+        plugin=plugin,
+    )
+    dropbot_search = DramatiqMessagePublishAction(
+        name="&Search for Dropbot Connection", topic=START_DEVICE_MONITORING
+    )
 
-    test_options_menu = SMenu(items=test_actions, id="dropbot_on_board_self_tests", name="&On-board self-tests", )
-
-    # create an action to run all the test options at once
-    run_all_tests = RunTests(name="&Run all on-board self-tests", topic=RUN_ALL_TESTS, num_tests=len(ALL_TESTS), plugin=plugin)
-
-    '''
-    (from hardware_test.py)
-    ALL_TESTS = ['system_info', 'test_system_metrics', 'test_i2c', 'test_voltage',
-             'test_shorts', 'test_on_board_feedback_calibration',
-             'test_channels']
-    '''
-
-    # create an action to restart dropbot search
-    dropbot_search = DramatiqMessagePublishAction(name="&Search for Dropbot Connection", topic=START_DEVICE_MONITORING)
-
-    # create an action to reboot dropbot
-
-    class DropbotRebootAction(DramatiqMessagePublishAction):
-        name = "&Reboot Dropbot"
-        topic = REBOOT
-
-        def pre_perform(self):
-            logger.info("Request user confirmation to reboot Dropbot")
-
-            user_choice = warning(None,
-                                  "Rebooting the <b>DropBot</b> will <b>Disconnect</b> the microcontroller and the "
-                                  "DropBot may become <b>Unresponsive</b>. Do you still want to proceed?",
-                                  title="Dropbot Reboot Warning",)
-
-            return user_choice == OK
-
-    dropbot_reboot = DropbotRebootAction()
-
-    # return an SMenu object compiling each object made and put into Dropbot menu under Tools menu.
-    return SMenu(items=[run_all_tests, test_options_menu, dropbot_search, dropbot_reboot], id="dropbot_tools", name="Drop&bot")
-
-
+    return SMenu(
+        items=[run_all_tests, test_options_menu, dropbot_search, DropbotRebootAction()],
+        id="dropbot_tools",
+        name="Drop&bot",
+    )

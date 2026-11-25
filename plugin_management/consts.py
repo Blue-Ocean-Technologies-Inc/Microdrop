@@ -94,6 +94,10 @@ LOAD_STATUS_SECTION_ID = f"{PKG}.load_status"
 LOAD_STATUS_SECTION_TITLE = "Plugins"
 LOAD_STATUS_SECTION_ORDER = 0
 
+#: The section header's glyph and accent ``(light theme, dark theme)``.
+LOAD_STATUS_SECTION_GLYPH = "extension"
+LOAD_STATUS_SECTION_ACCENT = ("#9C47B2", "#C77DDA")
+
 #: Muted text colour of a deferred pane's placeholder while its plugin loads,
 #: by whether the colour scheme is dark.
 PLACEHOLDER_LOADING_COLORS = {False: GREY["dark"], True: GREY["lighter"]}

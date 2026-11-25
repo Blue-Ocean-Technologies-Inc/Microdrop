@@ -105,6 +105,7 @@ Receiving: (Via handlers)
 - DEVICE_VIEWER_CAMERA_SELECT_SOURCE "ui/device_viewer/camera/select_source" (see the camera source selection flow below)
 - DEVICE_VIEWER_CAMERA_APPLY_SETTINGS "ui/device_viewer/camera/apply_settings" (a step's capture setup; see the per-step capture camera settings flow below)
 - DISABLED_CHANNELS_CHANGED "hardware/signals/disabled_channels_changed" (replaces the hardware-disabled set only; see the disabled channels flow below)
+- SHOW_RECORDING "ui/device_viewer/recording_viewer/show_recording" — play the recording at `path` in the Recording Viewer, its pane brought forward (`ShowRecordingRequest`, via `show_recording_publisher`, in `recording_viewer_consts.py`; the video cards' Show button; heard by `RecordingViewerMessageHandler`, made at the plugin's start); see the camera captures flow below
 
 Sending: (Via publish_method)
 - ELECTRODES_STATE_CHANGE "dropbot/requests/electrodes_state_change"
@@ -125,15 +126,17 @@ Sending: (Via publish_method)
 
 Receiving: (Via handlers, image_viewer/message_handler.py)
 - PROTOCOL_RUNNING "microdrop/protocol_running" — sets the ROI analysis model's `protocol_running` on the GUI thread: Calculate/Export/AI Detect/Track ask before starting, the ROI batch computes at most 2 images at once, and a draw/edit holds the view (no auto-follow, no refit)
+- SHOW_IMAGE "ui/image_viewer/show_image" — show the image file at `path` (`ShowImageRequest`, via `show_image_publisher`; the photo cards' Show button) in its Capture Session, the Image Viewer pane brought forward (`microdrop_utils.dock_pane_presenting`); see the camera captures flow below
 
 ### notifications
 
 Receiving: (Via handlers, notifications/controllers/message_handler.py)
 - NOTIFICATION_POST "ui/notifications/post" — any plugin posts a notification (`NotificationMessage`, via `notification_publisher`); see the notifications flow below
-- NOTIFICATIONS_SHOW_PANEL "ui/notifications/show_panel" — open the notifications drawer (right-hand, over the panes), expanding a section if `section_id` names one (`ShowNotificationsPanelRequest`, via `show_notifications_panel_publisher`)
+- NOTIFICATIONS_SHOW_PANEL "ui/notifications/show_panel" — open the notifications drawer (floating, bottom right, over the panes), expanding a section if `section_id` names one, the drawer's own `notifications.attention` / `notifications.history` included (`ShowNotificationsPanelRequest`, via `show_notifications_panel_publisher`)
+- NOTIFICATION_RESOLVE "ui/notifications/resolve" — the condition behind Needs attention cards cleared: every card whose `condition_id` matches leaves Needs attention, read, its buttons replaced by `resolution` (`NotificationResolveRequest`, via `notification_resolve_publisher`)
 
-Sending: (Via an entry's action button)
-- the topic and message of a notification's `PublishAction`, as the poster defined them
+Sending: (Via a card's buttons)
+- the topic and message of a notification's `PublishAction`, as the poster defined them; a `HelpAction` publishes nothing (it opens help in-process, and is disabled while nothing can)
 
 ### plugin_management
 
@@ -784,7 +787,7 @@ Each capturing step stores the resolution and camera properties it captures with
 - `_update_prefs()` does not touch app_globals. It writes the last-applied voltage/frequency straight into the ETS preferences node by path — `get_default_preferences().set(f"{VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH}.ui_default_{voltage|frequency}", value)` — using `VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH = "microdrop.ui.voltage_frequency_range"` (a new constant in `dropbot_preferences_ui/consts.py`; `VoltageFrequencyRangePreferences.preferences_path` now reuses the same constant instead of a duplicate literal).
 - This works because `envisage.application.Application.__init__` installs the running app's own `ScopedPreferences` node as apptools' package-global default (`set_default_preferences(self.preferences)`) before any plugin constructs a `PreferencesHelper`, and `PreferencesHelper._preferences_default()` returns that same default — so `get_default_preferences()` here and any `VoltageFrequencyRangePreferences()` instance's `self.preferences` are the identical node. Verified interactively: writing by path updates a live `VoltageFrequencyRangePreferences` instance's trait (via its `preferences.add_preferences_listener` callback), which fires `_publish_to_app_globals` and keeps app_globals in sync — `dropbot_status_and_controls` remains the only writer of `ui_default_voltage`/`ui_default_frequency` in app_globals, it just triggers that write indirectly through the ETS node rather than writing app_globals itself. A fresh `VoltageFrequencyRangePreferences()` instance (e.g. after a full app + Redis restart) reads the same persisted value straight from the ETS-backed `preferences.ini`, so the last-applied value survives restarts exactly as it did before #610.
 
-### Any plugin → notifications drawer: posting a notification (#1077)
+### Any plugin → notifications drawer: posting a notification (#1077, #1137)
 
 **Posting** — import only `notifications.consts` (allowed by `.importlinter`) and publish a `NotificationMessage`:
 
@@ -792,19 +795,144 @@ Each capturing step stores the resolution and camera properties it captures with
 from notifications.consts import notification_publisher
 
 notification_publisher.publish({
-    "title": "Protocol finished",            # one line, required
-    "detail": "12 steps in 4 min",           # optional; a traceback shows monospace
-    "severity": "success",                   # info | success | warning | error
-    "category": "protocol",                  # free text: plugins, log, protocol, hardware, ...
-    "source": "pluggable_protocol_tree",     # who posted
-    "action": {"kind": "open_path", "label": "Show report", "path": "C:/.../report.html"},
+    "title": "Chip removed",                 # one line, required
+    "detail": "The protocol is paused.",     # optional; a traceback shows monospace
+    "severity": "warning",                   # info | success | warning | error
+    "category": "hardware",                  # free text
+    "source": "dropbot_status_and_controls", # who posted
+    "action": {"kind": "publish", "label": "Retry", "topic": "...", "message": ""},
+    "secondary_action": {"kind": "help", "label": "How to insert a chip", "target": "Inserting a chip"},
+    "needs_attention": True,                 # listed under Needs attention, toast stays
+    "category_id": "dropbot.chip_removed",   # a declared NOTIFICATION_CATEGORIES id
+    "thread_id": "dropbot.chip.COM5",        # posts with this id update one entry in place
+    "condition_id": "dropbot.chip_missing",  # NOTIFICATION_RESOLVE with this id clears it
+    "pop_up": True,                          # False: listed and counted, no toast, no sound
+    "priority": 0,                           # within Needs attention, higher sorts first
+    "thumbnail": "C:/.../captures/a.png",    # a local image file, shown small beside the text
+    "links": [{"text": "a.png", "path": "C:/.../captures/a.png"}],  # detail spans opening a folder
 })
 ```
 
-`timestamp` defaults to now. `action` is data, never a callable: `{"kind": "publish", "label", "topic", "message"}` publishes `message` on `topic` when the button is pressed, `{"kind": "open_path", "label", "path"}` opens a file or folder.
+`thumbnail` is a local file path, never a URL or the picture's data (a URL or `data:` value fails validation). The card shows it cover-cropped in a fixed 4:3 rounded box at the right of the meta line and detail (72×54 px in the drawer, 64×48 in a toast), never scaled up; the box is reserved when the card is built and the picture loads once it shows, decoded off the GUI thread at about display size (`microdrop_utils.image_thumbnails`, kept by path, modification time, size and box), and a thread's post that changes it replaces it in place. A missing or unreadable file, or a video (by its name), shows a placeholder glyph of its kind. Clicking it presses the card's `action`. `links` are `DetailLink`s: the first occurrence of `text` in the detail shows as a link in the panel's link colour (drawer cards; a toast shows the plain detail), its `path` the tooltip; clicking it, or Enter on it, opens the path's folder in the file manager (a file's path opens the folder holding it, never the file), through the drawer's `open_path` (`microdrop_utils.file_handler.open_file`). The detail itself stays plain text, so nothing else in it becomes markup. Structured links rather than HTML in the detail: the card's detail is laid out and clamped as plain text, and a local path is no web link the news sanitiser would allow.
 
-**Receiving** — `NotificationsMessageHandler._on_post_triggered` validates on the worker thread and hands the message to `NotificationCenter.post_message` with `GUI.invoke_later`. A notification with the same `(source, category, severity, title)` as a listed one collapses into it (count + 1, latest text and time, moved to the top, unread again). The session keeps `MAX_ENTRIES` (300); the oldest go first. Nothing persists across launches.
+Every field after `action` is optional and defaults to "not set", so messages posted before they existed validate unchanged. `action` is data, never a callable: `{"kind": "publish", "label", "topic", "message"}` publishes `message` on `topic`, `{"kind": "open_path", "label", "path"}` opens a file or folder. `secondary_action` is `{"kind": "help", "label", "target"}` (a link; with no `action` the card's one outlined button). Its `target` names a tutorial, `"<tutorial id>"` or `"<tutorial id>#<section id>"` (`help_target` builds it, e.g. `"dropbot_status#part-tools"`); pressing it publishes OPEN_TUTORIAL. It is disabled, with a tooltip, until the help plugin announces on HELP_AVAILABILITY that tutorials can be opened or `{"kind": "snooze", "label"}` ("Later": out of Needs attention, into Activity). Pressing `action` marks the card handled: read, out of Needs attention, its buttons replaced by the label.
 
-**In-process sources** (not topics) — the plugin also lists, without any message: warning-and-above log records from the root logger (`services/log_forwarder.py`: batched every 250 ms, collapsed by logger + level + message template + exception line, minus `LOG_IGNORE_RULES` in `notifications/consts.py`), and a "failed to load" error for every failed plugin load record (`application.plugin_load_status`).
+**Receiving** — `NotificationsMessageHandler._on_post_triggered` validates on the worker thread and hands the message to `NotificationCenter.post_message` with `GUI.invoke_later`. A notification with the same `(source, category, severity, title)` as a listed one collapses into it (count + 1, latest text and time, moved to the top, unread again); one with a `thread_id` replaces its thread's entry state whole, counted once. One naming an `occurrence` collapses only into the entry of that same occurrence (key `(source, category, severity, title, occurrence)`), so occurrences of one notification are separate entries. A category the user keeps out of the drawer is not recorded, unless it is an error or needs attention. The session keeps `MAX_ENTRIES` (300); the oldest go first; Clear all keeps Needs attention. Nothing persists across launches.
 
-**Sections** — `plugin_management` contributes the plugin loading list to the `NOTIFICATION_SECTIONS` extension point (a `NotificationSection`: id, title, summary, order, `factory(parent)`); the indicator click publishes `NOTIFICATIONS_SHOW_PANEL` with that section's id, which opens the drawer and expands it. The drawer opens only from the status-bar bell or this request; it is no dock pane, so task layouts and the View menu never list it.
+**Arrival** — each new (or newly unread) entry, and each repeat, is offered to the toasts (`ToastStackController.offer`, rule `arrival_outcome`): while the drawer is open it lands there marked new; otherwise it pops up as a toast (three at most, the rest counted on "+N more"), refreshes the toast already showing, or, while quiet (`ToastStackModel.quiet`), is held for one summary toast unless it is an error, needs attention or belongs to the quiet run's own category group. Whatever shows rings the bell and chimes the category's tone (`services/chime.py`); start-up history, read entries, held ones and those posted with `pop_up` False (the sender's per-message choice, e.g. a reminder re-posted at every launch) are silent. Needs attention lists by `priority` (higher first), then newest first. Info and success toasts time out (settings), warnings, errors, Needs attention and ones with a button stay.
+
+**Resolving** — publish `NotificationResolveRequest(condition_id, resolution)` on NOTIFICATION_RESOLVE when the condition clears; `NotificationCenter.resolve` moves its cards out of Needs attention, read, marked with `resolution`. A thread whose next post no longer needs attention leaves Needs attention too, in place.
+
+**Categories** — a plugin declares its kinds of notification as `NotificationCategorySpec`s (id, group, label, description, defaults for drawer / popup / tone, `critical`) in its `consts.py` and contributes them with `List(SPECS, contributes_to=NOTIFICATION_CATEGORIES)`; messages name one in `category_id`. The user's choices (gear button in the drawer header) are saved in `settings.json` in the notifications data folder, with "Open the notifications panel at start-up" (default on; `MICRODROP_NOTIFICATIONS_OPEN_AT_START=0`/`1` overrides it).
+
+**In-process sources** (not topics) — warning-and-above log records from the root logger (`services/log_forwarder.py`: batched every 250 ms, collapsed by logger + level + message template + exception line, minus `LOG_IGNORE_RULES` and records logged with `extra=LOG_RECORDED_EXTRA`, whose event a dialog already lists; category `notifications.log`), and a "failed to load" error for every failed plugin load record (category `notifications.plugin_load_failed`, critical).
+
+**Sections** — the drawer is one scrolling column: Needs attention, the contributed `NOTIFICATION_SECTIONS` (a `NotificationSection`: id, title, summary, order, `factory(parent)`, and its look `glyph` / `accent` / `logo`), then Activity. `plugin_management` contributes the plugin loading list; the indicator click publishes `NOTIFICATIONS_SHOW_PANEL` with that section's id. A section raises alerts for what is new in it (e.g. news posts) by appending `SectionAlert`s to its `alerts`: each pops up, counts on the bell and is marked new until seen in the open drawer with the section expanded, never listed in Activity; the drawer keeps the alert's `unread` / `is_new` current, and a click on its toast asks the section's `alert_widget(contents, alert)` for the widget to scroll to. The drawer opens only from the bell, a toast, or the request; it is no dock pane, so task layouts and the View menu never list it.
+
+### Any plugin → notifications drawer: errors and warnings shown as dialogs
+
+```
+caller (GUI thread; device events arrive through a Qt dialog signal or GUI.invoke_later)
+  pyface_wrapper.error / warning (record=True by default)
+  pyface_wrapper.information / success (only with record=True)
+    └─ dialog_records.record_from_kwargs ─► record_dialog         # BEFORE the dialog opens
+         same (severity, title, text) within DIALOG_REPEAT_WINDOW_S (2 s) ─► same occurrence
+         ─► NOTIFICATION_POST {title, detail (plain text), severity, source,
+                               category_id notifications.dialog_alerts,
+                               occurrence, pop_up False, help link if help_target}
+    └─ dialog.exec()                                              # the modal dialog, unchanged
+  custom dialogs (DropBot no power) call record_dialog themselves
+```
+
+`confirm`, `choose` and `disclaimer` never record (a question is not an event); `record=False` opts an error or warning out (e.g. feedback on a form). The entry is listed in Activity and counted on the bell (red while an unread error), with no toast and no sound whatever the category settings say; `notifications.dialog_alerts` (MicroDrop › "Errors and warnings shown in a dialog") is critical, pop-up off, tone None. The title is the dialog's title, or its first line when the title is only "Error"/"Warning"/"Information"/"Success"; the detail is the text with markup stripped, then the dialog's details, cut at `DIALOG_DETAIL_MAX_CHARS`. `source` is the caller's (`source=`), else "MicroDrop"; `attempt_func_execution_with_error_dialog` passes the widget's package. `occurrence` keys the entry (`NotificationCenter.post_message`): a burst of one dialog is one entry counted ×N, the same dialog later is a new entry, so three halts read 3 on the bell. Publishing is posted before `exec()` and the drawer's `GUI.invoke_later` runs inside the dialog's own event loop, so the entry is listed while the dialog is still open; with no notifications plugin the post has no listener. A log record repeating a recorded dialog's event is logged with `extra=LOG_RECORDED_EXTRA`: unchanged in the log file, skipped by the log forwarder, so one event is one entry.
+
+| Dialog | Source | Help link | Log record marked |
+|---|---|---|---|
+| DropBot Halted (`dropbot_status_and_controls.dialog_views`) | `dropbot_status_and_controls` | `dropbot_status#dlg-halted` | `dropbot_controller_base` "DropBot halted due to …" |
+| ERROR: No Power (custom dialog, `record_dialog`) | `dropbot_status_and_controls` | `dropbot_status#dlg-nopower` | `dropbot_monitor_mixin_service` "DropBot has no power." |
+| Portable chip lock failed / pads may be pressed, firmware outdated | `portable_dropbot_status_and_controls` | — | motors service "… --> FAILED" (chip lock) |
+| `<Operation> Error` (`attempt_func_execution_with_error_dialog`) | widget's package | — | "<Operation> failed: …" |
+| Run Summary Failed | `pluggable_protocol_tree` | — | "protocol logging flush failed" (when the dialog shows) |
+
+### pluggable_protocol_tree → notifications drawer: run reports
+
+```
+ProtocolLoggingController._flush (flush worker thread, after the settling delay)
+  LoggingReport.write_report ─► reports/report_<stamp>.html
+  ─► NOTIFICATION_POST "Report generated"  (run_report_card)
+  ─► completion_callback ─► "Run Summary Generated" success dialog (not recorded)
+
+card's Show (drawer) ─► OpenPathAction ─► microdrop_utils.file_handler.open_file(report)   # the system browser, as the dialog's link
+file name link       ─► the report's folder
+```
+
+One card per report, posted where the report is written so every report has one whichever way the run ended: severity success, `source` `pluggable_protocol_tree`, `category_id` `pluggable_protocol_tree.run_reports` (Protocol › Run reports; drawer on, pop-up off, tone None), `pop_up` False, detail `<file name>` then `Experiment <folder>`, the file name a `DetailLink` to the report, `occurrence` the file name (reports never collapse into each other). The success dialog keeps `record` off, so the report is listed once.
+
+### device_viewer → notifications drawer: the calibration reminder (#1133)
+
+```
+DeviceViewerDockPane (pane first shown, after the window painted)
+  └─ model.load_calibration_data_from_preferences()   # values + calibration.calibrated_on
+  └─ CalibrationReminderController.start()             # then hourly, and on every change
+       reminder_state(liquid, filler, calibrated_on, today):
+         missing      ─► NOTIFICATION_POST  "No calibration saved"       priority 2
+         date unknown ─► NOTIFICATION_POST  "Calibration date unknown"   priority 1
+         stale (>7 d) ─► NOTIFICATION_POST  "Calibration is N days old"  priority 1
+         fresh        ─► NOTIFICATION_RESOLVE "Calibrated" (only after a card this session)
+```
+
+Every post: severity warning, `needs_attention`, `pop_up` False (no toast, no sound, counted on the bell), `category_id` `device_viewer.dropbot_maintenance`, `thread_id` `device_viewer.calibration_reminder` (one card, updated in place), `condition_id` `device_viewer.calibration_needed`, help link "How to calibrate" (target "Calibrating the device"). Measuring the filler or liquid capacitance stamps `CalibrationModel.calibrated_on` (ISO day, saved beside the values as `calibration.calibrated_on` in the preferences) before the value, so the card resolves at once.
+
+### device_viewer → notifications drawer: photos and videos (Camera › Captures)
+
+```
+camera panel (CameraControlWidget, GUI thread) ─► CaptureNotificationsController
+  photo saved (ImageSaver.save_complete)   ─► NOTIFICATION_POST "Photo captured" | "N photos captured"
+  no camera frame to grab                  ─► NOTIFICATION_POST "Photo not captured"     (error)
+  recording finalized (recording_stopped)  ─► poster saved (ImageSaver, JPG) ─► NOTIFICATION_POST "Video saved"
+
+card's Show (drawer, GUI thread)
+  photo card ─► SHOW_IMAGE {path: latest photo}     ─► image_viewer listener ─► ImageViewerPlugin._show_image
+  video card ─► SHOW_RECORDING {path: the video}    ─► RecordingViewerMessageHandler ─► DeviceViewerPlugin._show_recording
+      file missing ─► logger.warning "File not found: <path>" (a warning card, via the log forwarder); else
+      present_dock_pane(pane): on screen (docked, behind a tab, floating) ─► raised where it is
+                               closed ─► popped out floating, centred over the main window
+      ─► once the pane's contents exist (a lazy pane is built first):
+         ImageViewerController.show_image(path) | VideoViewerDockPane.show_recording(path)
+```
+
+Every post: `category_id` `device_viewer.camera_captures` (group Camera, label Captures; drawer and pop-up on, tone Soft), `source` `device_viewer`, `category` `camera`. The photo and video cards' button is Show, a `PublishAction` on the viewer's request topic with `{"path": <the file>}` (the latest photo on a photos card); while the viewer's plugin is not running in this process (its listener actor is not registered, `is_dramatiq_listener_registered`) it is `{"kind": "open_path", "label": "Show folder", "path": <the file's folder>}` instead (opened by the drawer through `microdrop_utils.file_handler.open_file`, no topic), decided on each post. The folder is a link instead: the file name in the card's detail is a `DetailLink` to the file, opening its folder. Thumbnails: a photo card's is the photo (the latest on a photos card); a video card's is its poster, `<name>.poster.jpg` beside the recording (`RECORDING_POSTER_SUFFIX`, longest side `RECORDING_POSTER_LONGEST_SIDE` 320 px): `video_record_stop` takes the frame the video sink shows at that moment (no decoding of the file), and once the recording is finalized `_post_video_saved` writes it on the thread pool and posts the card; with no frame (the camera already off) or a failed write, the thumbnail is the recording itself, shown as a film glyph. The Recording Viewer lists only `*.mp4`/`*.mkv`, and the Image Viewer only `captures/`, so posters are listed by neither. "On screen" is the dock widget's own state: a closed pane's widget is hidden, one behind a tab only moved out of sight (pyface's `visible` stays True for it); a docked pane's `raise_()` selects its tab. The Image Viewer shows the photo in its Capture Session (the selected Image Group when it holds it, else "All"; the filter cleared if it hides it), or alone when the browsed folder does not hold it; the Recording Viewer browses the video's folder and picks it. Photos: success, detail the file name ("Latest: <name>" past the first). One card per capture session, `thread_id` `device_viewer.camera_captures.photos.<n>`, updated in place with the count: a session is one folder and one protocol run (counted on the main model's `protocol_running` turning on), and outside a run, photos into the same folder within `CAPTURE_SESSION_WINDOW_S` (5 min) of the previous one (`models/capture_session.py`, `continues_capture_session`). Videos: success, detail `<name> (m:ss)` (start to stop of the recording), `thread_id` `device_viewer.camera_captures.video.<path>`. A capture whose request set `show_status_message` False (the protocol's Capture and Record columns, the fluorescence panes) posts with `pop_up` False; the capture button's pop up. The recording's start shows only as the status-bar recording icon; a recording error keeps its dialog (and its logged error card).
+
+### dropbot_tools_menu → notifications drawer: the self-test reminder (#1133)
+
+```
+application.extra_plugins_loaded ─► SelfTestReminderController.start()
+  reads <application home>/notifications/self_test.json {"last_full_run_completed": ISO}
+  reminder_state(last_run, today):
+    never run     ─► NOTIFICATION_POST "Self test has not been run"      priority 2
+    stale (>10 d) ─► NOTIFICATION_POST "Self test last run N days ago"   priority 1
+    fresh         ─► nothing
+
+dropbot/signals/self_tests_progress  SESSION_START {tests}   ─► full suite = more than one test
+dropbot/signals/self_tests_results   {failed_channels}       ─► counts tests that failed channels
+dropbot/signals/self_tests_progress  SESSION_END {status}
+  completed full suite ─► self_test.json written
+                       ─► NOTIFICATION_RESOLVE "Self test passed" | "Self test finished · N failed"
+```
+
+Every post: as the calibration reminder (warning, Needs attention, `pop_up` False, the same category), `thread_id` `dropbot_tools_menu.self_test_reminder`, `condition_id` `dropbot_tools_menu.self_test_needed`, help link "What does it check?" (target "DropBot self tests"). While a DropBot is connected (`DropbotToolsMenuPlugin.dropbot_connected`), the card also has the button "Run self test", publishing RUN_SELF_TESTS_REQUEST; without one it is help-only and says to connect a DropBot first. The card is re-posted quietly through its thread whenever the connection changes.
+
+- RUN_SELF_TESTS_REQUEST "ui/dropbot_tools_menu/run_self_tests" — run all the DropBot self tests exactly as Tools › Dropbot › Run all on-board self-tests does (`run_self_tests`: nothing but a "disconnected" dialog without a DropBot; the "insert the test board" dialog first; then RUN_ALL_TESTS with the user data folder for the report). Handled on the frontend by `dropbot_tools_menu` (its listener, then `GUI.invoke_later`). Payload `RunSelfTestsRequest` (no fields; `{}`), via `run_self_tests_request_publisher`. The time is kept once for any board: the frontend has no stable id for the connected DropBot.
+
+### Anyone → user_help_plugin: opening a tutorial by id
+
+- OPEN_TUTORIAL "ui/help/open_tutorial" — open a tutorial as Help › Tutorials does (the same `tutorial_action`), scrolled to a section when `anchor` names one (an `id` in the page). An unknown id logs a warning and opens Getting Started. Payload `OpenTutorialRequest{tutorial_id, anchor=None}`, via `open_tutorial_publisher`. A tutorial's id is its page's file name without `.html` (`tutorial_id(path)`, `TutorialEntry.id`), e.g. `dropbot_status`. Handled on the frontend by `UserHelpPlugin` (its listener `user_help_plugin_listener`, then `GUI.invoke_later`).
+- HELP_AVAILABILITY "ui/help/availability" — `HelpAvailability{available}`: True once `UserHelpPlugin` has started (after its listener exists), False when it stops; via `help_availability_publisher`. The notifications drawer follows it: help links are enabled only while it is True. The help plugin is deferred, so links stay disabled for the few seconds after the window paints.
+
+```
+card help link ─► NotificationsController.open_help(target)
+                 └─ open_tutorial(target): parse_help_target ─► OPEN_TUTORIAL {tutorial_id, anchor}
+UserHelpPlugin listener ─► GUI.invoke_later(open_tutorial) ─► tutorial_action(entry, anchor).perform()
+                           (QtWebEngine dialog; the system browser where QtWebEngine cannot load)
+```
+

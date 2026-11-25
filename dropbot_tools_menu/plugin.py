@@ -8,10 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+import json
+
 # Enthought library imports.
 from envisage.api import TASK_EXTENSIONS, Plugin
 from envisage.ui.tasks.api import TaskExtension
 from pyface.action.schema.schema_addition import SchemaAddition
+from pyface.api import GUI
 from traits.api import Bool, Instance, List, Str, observe
 
 # Microdrop package imports.
@@ -19,8 +23,11 @@ from dropbot_controller.consts import (
     CHIP_INSERTED,
     DROPBOT_CONNECTED,
     DROPBOT_DISCONNECTED,
+    RUN_ALL_TESTS,
     SELF_TESTS_PROGRESS,
     SELF_TESTS_RESULTS,
+    SelfTestResultsSignal,
+    TestEvent,
 )
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import PKG as microdrop_application_PKG
@@ -31,7 +38,13 @@ from microdrop_utils.dramatiq_controller_base import (
 )
 
 # Local imports.
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    PKG,
+    RUN_SELF_TESTS_REQUEST,
+    PKG_name,
+    RunSelfTestsRequest,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -68,6 +81,12 @@ class DropbotToolsMenuPlugin(Plugin):
         "dropbot_tools_menu.self_test_dialogs_controller.SelfTestDialogsController"
     )
 
+    #: Posts the self-test reminder (Needs attention) and records each
+    #: completed full run; built on first use, off the launch path.
+    self_test_reminder = Instance(
+        "dropbot_tools_menu.self_test_reminder_controller.SelfTestReminderController"
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._setup_listener_actor()
@@ -78,6 +97,20 @@ class DropbotToolsMenuPlugin(Plugin):
         from .self_test_dialogs_controller import SelfTestDialogsController
 
         return SelfTestDialogsController(application=self.application)
+
+    def _self_test_reminder_default(self):
+        from .self_test_reminder_controller import SelfTestReminderController
+
+        return SelfTestReminderController()
+
+    @observe("application:extra_plugins_loaded")
+    def _start_self_test_reminder(self, event):
+        """Post the reminder once the launch is over: the window painted and
+        the deferred plugins in."""
+        self.self_test_reminder.start()
+
+    def stop(self):
+        self.self_test_reminder.stop()
 
     def _contributed_task_extensions_default(self):
 
@@ -124,8 +157,59 @@ class DropbotToolsMenuPlugin(Plugin):
             logger.info(f"Dropbot connected: {self.dropbot_connected}")
         elif topic == SELF_TESTS_PROGRESS:
             self.self_test_dialogs_controller.on_self_tests_progress(message)
+            self._follow_self_test_session(message)
         elif topic == SELF_TESTS_RESULTS:
             self.self_test_dialogs_controller.on_self_tests_results(message)
+            self._follow_self_test_result(message)
+        elif topic == RUN_SELF_TESTS_REQUEST:
+            RunSelfTestsRequest.model_validate_json(message or "{}")
+            GUI.invoke_later(self._run_all_self_tests)
+
+    def _run_all_self_tests(self):
+        """Run all the self tests as Tools > Dropbot > Run all on-board
+        self-tests does (the test-board dialog included)."""
+        from .run_self_tests import run_self_tests
+
+        window = self.application.active_window
+
+        if window is None:
+            return
+
+        run_self_tests(
+            self, window.active_task, RUN_ALL_TESTS, self.application.user_data
+        )
+
+    @observe("dropbot_connected")
+    def _tell_self_test_reminder(self, event):
+        self.self_test_reminder.connected = event.new
+
+    def _follow_self_test_session(self, raw_message):
+        """Tell the reminder a session started or ended."""
+
+        try:
+            data = json.loads(raw_message)
+
+        except ValueError:
+            return
+
+        payload = data.get("payload", {})
+
+        if data.get("type") == TestEvent.SESSION_START:
+            self.self_test_reminder.session_started(payload.get("tests"))
+
+        elif data.get("type") == TestEvent.SESSION_END:
+            self.self_test_reminder.session_ended(payload.get("status"))
+
+    def _follow_self_test_result(self, raw_message):
+        """Tell the reminder whether a test reported failed channels."""
+
+        try:
+            signal = SelfTestResultsSignal.model_validate_json(raw_message)
+
+        except ValueError:
+            return
+
+        self.self_test_reminder.test_result(signal.failed_channels)
 
     def _setup_listener_actor(self):
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(

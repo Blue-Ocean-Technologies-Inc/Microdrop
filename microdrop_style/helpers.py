@@ -184,7 +184,15 @@ def apply_color_scheme(color_scheme):
     if color_scheme_in_force == Qt.ColorScheme.Dark:
         QApplication.setPalette(dark_palette())
     else:
-        QApplication.setPalette(_startup_palette)
+        palette = _startup_palette
+
+        # Started under a dark OS theme, the startup palette is dark: on
+        # Windows the light palette can land after this check, and setting
+        # the dark one here would keep the app dark for good.
+        if palette.window().color().lightness() < DARK_PALETTE_LIGHTNESS_THRESHOLD:
+            palette = QApplication.style().standardPalette()
+
+        QApplication.setPalette(palette)
 
     sync_traitsui_field_colors(QApplication.palette())
     refresh_widget_palettes()

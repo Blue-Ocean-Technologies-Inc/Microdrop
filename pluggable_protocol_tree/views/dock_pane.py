@@ -44,6 +44,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     error as error_dialog,
 )
 from microdrop_application.helpers import is_advanced_mode
+from notifications.consts import LOG_RECORDED_EXTRA
 from pluggable_protocol_tree.consts import (
     ACK_WAIT_FOREVER,
     ELECTRODES_STATE_CHANGE,
@@ -1056,7 +1057,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
     def _on_error(self, event=None):
         msg = event.new
-        logger.error(f"Protocol error: {msg}")
+        logger.error(f"Protocol error: {msg}", extra=LOG_RECORDED_EXTRA)
         self._publish_protocol_running("False")
         # Immediate teardown only; the completion flow is deferred so the
         # error dialog is shown before the "Generate Run Summary?" prompt.

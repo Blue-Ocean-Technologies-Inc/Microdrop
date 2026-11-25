@@ -21,7 +21,7 @@ from dramatiq.middleware import CurrentMessage
 # Enthought library imports.
 from traits.api import Callable, HasTraits, Instance, Str, provides
 
-# Microdrop package imports.
+# Local imports.
 from .datetime_helpers import TimestampedMessage
 from .i_dramatiq_controller_base import IDramatiqControllerBase
 
@@ -194,6 +194,12 @@ def unregister_dramatiq_listener_actor(listener_name: str) -> bool:
         return False
     logger.info(f"Unregistered dramatiq actor {listener_name!r}")
     return True
+
+
+def is_dramatiq_listener_registered(listener_name):
+    """Whether a listener actor named ``listener_name`` is registered in this
+    process: its plugin is running here, so a message routed to it is heard."""
+    return listener_name in dramatiq.get_broker().actors
 
 
 def basic_listener_actor_routine(

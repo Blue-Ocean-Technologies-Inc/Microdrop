@@ -41,6 +41,30 @@ LAUNCH_MODULES = (
     "pluggable_protocol_tree.services.logging.controller",
     "ssh_controls.service",
     "user_help_plugin.plugin",
+    # What NotificationsPlugin.start() imports; the toasts and settings
+    # window are imported on first use, not here.
+    "notifications.plugin",
+    "notifications.controllers.load_failure_notifier",
+    "notifications.controllers.message_handler",
+    "notifications.controllers.section_alerts",
+    "notifications.models.own_sections",
+    "notifications.services.chime",
+    "notifications.services.log_forwarder",
+    "notifications.views.bell",
+    # Right after the first paint: the saved settings, and the drawer, which
+    # opens at start-up by default.
+    "notifications.services.settings_store",
+    "notifications.views.drawer_host",
+    "notifications.views.column",
+    # Read at launch to decide on the What's New dialog.
+    "news.consts",
+    # The news plugin, deferred but loaded first: what the loader's worker
+    # imports (preload_modules) and runs (prepare) for it.
+    "news.plugin",
+    "news.services.news_feed",
+    "news.controllers.news_alerts",
+    "news.services.seen_state",
+    "news.views.feed_column",
 )
 
 #: Packages none of them may import. Bare ``scipy`` is not listed: pint, which
@@ -52,6 +76,8 @@ HEAVY_PACKAGES = (
     "scipy.optimize",
     "scipy.special",
     "scipy.stats",
+    # The chime loads Qt Multimedia the first time it sounds.
+    "PySide6.QtMultimedia",
 )
 
 _PROBE = """

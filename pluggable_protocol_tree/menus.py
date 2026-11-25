@@ -24,6 +24,7 @@ from traits.api import Str
 # Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import warning
 from microdrop_application.helpers import get_current_experiment_directory
+from notifications.consts import LOG_RECORDED_EXTRA
 from pluggable_protocol_tree.consts import EXPERIMENTS_MENU_ID, PKG, PROTOCOL_MENU_ID
 
 # Microdrop utils imports.
@@ -68,7 +69,10 @@ class OpenExperimentFolderAction(Action):
         try:
             directory = get_current_experiment_directory()
         except Exception as e:
-            logger.warning(f"Could not resolve the current experiment folder: {e}")
+            logger.warning(
+                f"Could not resolve the current experiment folder: {e}",
+                extra=LOG_RECORDED_EXTRA,
+            )
             warning(
                 None,
                 "The current experiment folder is unavailable.",
