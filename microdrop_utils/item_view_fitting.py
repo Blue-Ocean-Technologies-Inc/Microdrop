@@ -18,17 +18,31 @@ from pyface.qt import QtCore, QtWidgets
 
 def fit_item_views(widget):
     """Grow every list and table in ``widget`` to all its rows, and again
-    whenever their rows change."""
+    whenever its rows change or it is resized (rows can rewrap).
+
+    Row changes come as inserts and removals, a reset, or a layout change:
+    a TraitsUI table, for one, re-filters its proxy model when the list it
+    shows grows, which reports only ``layoutChanged``."""
 
     for view in widget.findChildren(QtWidgets.QAbstractItemView):
         fit_item_view(view)
+
+        # Fitted again once shown: an unshown header has no height yet.
+        view.installEventFilter(_RefitOnResize(view))
 
         model = view.model()
 
         if model is None:
             continue
 
-        for signal in (model.rowsInserted, model.rowsRemoved, model.modelReset):
+        signals = (
+            model.rowsInserted,
+            model.rowsRemoved,
+            model.modelReset,
+            model.layoutChanged,
+        )
+
+        for signal in signals:
             signal.connect(lambda *args, view=view: _fit_later(view))
 
 
@@ -54,3 +68,22 @@ def fit_item_view(view):
 
 def _fit_later(view):
     QtCore.QTimer.singleShot(0, lambda: fit_item_view(view))
+
+
+class _RefitOnResize(QtCore.QObject):
+    """Fits its view again, once things settle, when its width changes or
+    it is first shown."""
+
+    def __init__(self, view):
+        super().__init__(view)
+
+        self._width = None
+
+    def eventFilter(self, watched, event):
+        resized = event.type() == QtCore.QEvent.Type.Resize
+
+        if resized and event.size().width() != self._width:
+            self._width = event.size().width()
+            _fit_later(watched)
+
+        return False
