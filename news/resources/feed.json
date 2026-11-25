@@ -4,6 +4,27 @@
   "_readme": "News shown in the News section of MicroDrop's notifications drawer. Edit it with the feed creator (python -m news.feed_creator) or by hand; feed.schema.json describes every field. Newsletters: https://sci-bots.com/en-ca/pages/newsletters",
   "posts": [
     {
+      "id": "dropbot-launch-preview",
+      "title": "Our family is growing: meet DropBot v4.0",
+      "kind": "product",
+      "date": "2026-11",
+      "source": "Sci-Bots",
+      "pinned": true,
+      "summary": "The next generation of DropBot: one benchtop instrument that makes low-volume automation accessible in any lab.",
+      "summary_html": "<p>The next generation of DropBot, first shown at SLAS 2026: one benchtop instrument that makes low-volume automation accessible in any lab.</p><ul><li>Automated sample prep from nL to µL</li><li>120 individually addressable electrodes, 35–200 Vrms, 50 Hz – 65 kHz</li><li>Built-in magnet and heater for bead-based and thermal workflows</li><li>Brightfield and fluorescence camera with exchangeable filters</li><li>Touchscreen and embedded computer, so it runs stand-alone</li><li><b>Optional:</b> PMT for ultra-sensitive detection, battery operation</li></ul>",
+      "url": "https://sci-bots.com/en-ca",
+      "images": [
+        {
+          "src": "images/dropbot_launch_concept.jpg",
+          "alt": "Concept art: DropBot v4.0 and a small companion box walking hand in hand down a Toronto street"
+        },
+        {
+          "src": "images/dropbot_launch_photo.jpg",
+          "alt": "DropBot v4.0: a white benchtop instrument with a built-in touchscreen running MicroDrop and an open chip drawer"
+        }
+      ]
+    },
+    {
       "title": "MicroTAS 2026 and DMF for Multiplexed Sepsis Biomarkers",
       "kind": "newsletter",
       "date": "2026-09",
