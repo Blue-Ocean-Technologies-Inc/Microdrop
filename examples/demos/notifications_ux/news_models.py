@@ -36,7 +36,7 @@ from notifications.consts import SectionAlert
 
 # Microdrop style imports.
 from microdrop_style.colors import PRIMARY_SHADE
-from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
+from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_MARKS
 
 # Local imports.
 from .demo_categories import NEWS_NEW_POSTS
@@ -62,7 +62,7 @@ class NewsSection(SciBotsFeedSection):
     order = NEWS_SECTION_ORDER
     glyph = "newspaper"
     accent = NEWS_ACCENT
-    logo = str(BLUE_OCEAN_SCI_BOTS_LOGO)
+    logo = str(BLUE_OCEAN_SCI_BOTS_MARKS)
 
     #: At natural height, like every section of the column.
     max_height = 0
