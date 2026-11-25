@@ -130,7 +130,7 @@ class DeviceViewerPublishController(HasTraits):
                 "change since state messages are disabled."
             )
         else:
-            logger.info("Device viewer will process device view model state changes")
+            logger.debug("Device viewer will process device view model state changes")
 
     # ---------------------------------------------------- state message
     @observe("message_buffer")
