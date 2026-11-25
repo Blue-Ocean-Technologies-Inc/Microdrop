@@ -25,6 +25,10 @@ Usage:
     # Usage remains identical:
     if confirm(parent, "Continue?", title="Confirm") == YES:
         do_something()
+
+``error`` and ``warning`` are also recorded in the notifications drawer,
+quietly; ``information`` and ``success`` when passed ``record=True``. See
+dialog_records for the ``record``, ``source`` and ``help_target`` keywords.
 """
 
 # Standard library imports.
@@ -50,7 +54,17 @@ except ImportError:
     FileDialog = None
     PYFACE_FILE_OK = OK
 
+# Microdrop package imports.
+from notifications.consts import (
+    SEVERITY_ERROR,
+    SEVERITY_INFO,
+    SEVERITY_SUCCESS,
+    SEVERITY_WARNING,
+)
+
+# Local imports.
 from .base_message_dialog import BaseMessageDialog
+from .dialog_records import record_from_kwargs
 from .message_dialog_types import (
     DisclaimerDialog,
     ErrorAlertDialog,
@@ -350,6 +364,10 @@ def information(
     full backward compatibility.
     """
 
+    record_from_kwargs(
+        kwargs, SEVERITY_INFO, title, message, informative, detail, record=False
+    )
+
     def create_dialog(**opts):
         return InformationDialog(exit=cancel, **opts)
 
@@ -403,6 +421,10 @@ def success(
     full backward compatibility.
     """
 
+    record_from_kwargs(
+        kwargs, SEVERITY_SUCCESS, title, message, informative, detail, record=False
+    )
+
     def create_dialog(**opts):
         return SuccessDialog(exit=cancel, **opts)
 
@@ -453,6 +475,8 @@ def warning(
     Otherwise the return value is a plain ``int`` (YES / NO / CANCEL) for
     full backward compatibility.
     """
+
+    record_from_kwargs(kwargs, SEVERITY_WARNING, title, message, informative, detail)
 
     def create_dialog(**opts):
         return WarningAlertDialog(exit=cancel, **opts)
@@ -522,6 +546,8 @@ def error(
     Otherwise the return value is a plain ``int`` (YES / NO / CANCEL) for
     full backward compatibility.
     """
+
+    record_from_kwargs(kwargs, SEVERITY_ERROR, title, message, informative, detail)
 
     def create_dialog(**opts):
         return ErrorAlertDialog(
