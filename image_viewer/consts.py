@@ -11,17 +11,44 @@
 # Standard library imports.
 from pathlib import Path
 
+# Third-party imports.
+from pydantic import BaseModel, ConfigDict, Field
+
 # Microdrop package imports.
 from device_viewer.consts import PROTOCOL_RUNNING
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
-#: The viewer reads capture files straight off disk; its one topic is
-#: whether a protocol is running, while which it runs lighter.
+#: Request: show the image file at ``path`` in the Image Viewer, its pane
+#: raised where it is, or popped out when closed (ShowImageRequest). The
+#: camera's photo cards send it from their Show button.
+SHOW_IMAGE = "ui/image_viewer/show_image"
+
+
+class ShowImageRequest(BaseModel):
+    """The SHOW_IMAGE payload."""
+
+    #: Built on first use, not at launch.
+    model_config = ConfigDict(defer_build=True)
+
+    #: The image file to show.
+    path: str = Field(min_length=1)
+
+
+show_image_publisher = ValidatedTopicPublisher(
+    topic=SHOW_IMAGE, validator_class=ShowImageRequest
+)
+
+#: The viewer reads capture files straight off disk; its topics are
+#: whether a protocol is running, while which it runs lighter, and
+#: requests to show an image.
 LISTENER_NAME = f"{PKG}_listener"
-ACTOR_TOPIC_DICT = {LISTENER_NAME: [PROTOCOL_RUNNING]}
+ACTOR_TOPIC_DICT = {LISTENER_NAME: [PROTOCOL_RUNNING, SHOW_IMAGE]}
 
 #: The Image Viewer and ROI Intensities dock panes. The run configuration
 #: declares them too, so their placeholders exist before this plugin loads.

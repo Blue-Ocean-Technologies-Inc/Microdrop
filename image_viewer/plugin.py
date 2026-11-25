@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+from pathlib import Path
+
 # Enthought library imports.
 from envisage.api import (
     PREFERENCES_CATEGORIES,
@@ -29,11 +32,17 @@ from user_help_plugin.consts import TUTORIAL_ORDER_ANALYSIS, TUTORIALS, Tutorial
 from .consts import (
     ACTOR_TOPIC_DICT,
     ANALYSIS_HELP_HTML_PATH,
+    DOCK_PANE_ID,
     IMAGE_FILTERS,
     IMAGE_VIEWER_TUTORIAL_HTML_PATH,
     PKG,
     PKG_name,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 
 class ImageViewerPlugin(Plugin):
@@ -125,9 +134,37 @@ class ImageViewerPlugin(Plugin):
         from .preferences import migrate_legacy_preferences
 
         migrate_legacy_preferences(self.application.preferences)
-        self.message_handler = ImageViewerMessageHandler(model=roi_analysis_model)
+        self.message_handler = ImageViewerMessageHandler(
+            model=roi_analysis_model, show_image=self._show_image
+        )
 
     def stop(self):
         if self.message_handler is not None:
             self.message_handler.teardown()
             self.message_handler = None
+
+    def _show_image(self, path):
+        """Show the image at ``path`` in the Image Viewer pane, raised where
+        it is or popped out when closed (SHOW_IMAGE)."""
+        from microdrop_utils.dock_pane_presenting import (
+            live_dock_pane,
+            present_dock_pane,
+        )
+
+        from .dock_pane import ImageViewerDockPane
+
+        if not Path(path).is_file():
+            logger.warning(f"File not found: {path}")
+
+            return
+
+        pane = live_dock_pane(self.application, DOCK_PANE_ID)
+
+        # None before the window opens; a placeholder while this plugin's
+        # panes are still being mounted.
+        if not isinstance(pane, ImageViewerDockPane):
+            logger.warning(f"No Image Viewer pane to show {path} in")
+
+            return
+
+        present_dock_pane(pane, then=lambda: pane.controller.show_image(path))

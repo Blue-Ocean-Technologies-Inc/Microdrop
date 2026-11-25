@@ -780,6 +780,38 @@ class ImageViewerController(Controller):
         self._capture_readiness.mark_complete(path)
         self.request_rescan()
 
+    def show_image(self, path):
+        """Show the image at ``path`` as picking it in the lists would: in
+        its Capture Session, under the selected Image Group when that holds
+        it (else "All"), with the filter cleared if it hides the image. An
+        image the browsed folder does not hold, or not yet, shows alone."""
+        model = self.model
+        path = Path(path)
+        group = next(
+            (
+                name
+                for name in (model.selected_image_group, IMAGE_GROUP_ALL)
+                if any(path in paths for _name, paths in model.image_group_bursts(name))
+            ),
+            None,
+        )
+
+        if group is not None:
+            if group != model.selected_image_group:
+                model.selected_image_group = group
+
+            if not model.visible_of([path]):
+                model.selected_filter = IMAGE_FILTER_ALL
+
+            if model.selected_burst != BURST_FILTER_ALL:
+                model.selected_burst = model.session_of(path)
+
+        # Last: the selections above may each land on another image.
+        model.current_path = str(path)
+
+        if group is not None:
+            self._refresh_visible("keep")
+
     def _retry_failed_load(self):
         """Reload the displayed image whose load failed once the file
         has changed since — it was most likely caught mid-write."""
