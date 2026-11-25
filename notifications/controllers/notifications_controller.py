@@ -65,13 +65,18 @@ class NotificationsController(HasTraits):
         """Close the drawer if it is open, else open it."""
         self.pane_model.is_open = not self.pane_model.is_open
 
-    def show_pane(self, section_id=""):
-        """Open the drawer, expanding ``section_id`` if given."""
+    def show_pane(self, section_id="", by_app=False):
+        """Open the drawer, expanding ``section_id`` if given; ``by_app``
+        when the app opens it, not the user (``opened_by_app``)."""
+        model = self.pane_model
 
         if section_id:
-            self.pane_model.expand_section(section_id)
+            model.expand_section(section_id)
 
-        self.pane_model.is_open = True
+        if not model.is_open:
+            model.opened_by_app = by_app
+
+        model.is_open = True
 
     # ------------------------------------------------------------------ #
     # The header's buttons                                                #

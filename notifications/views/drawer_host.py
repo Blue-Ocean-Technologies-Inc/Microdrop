@@ -170,11 +170,12 @@ class NotificationsDrawerHost(HasTraits):
         """Build the drawer's contents in ``parent``. Returns the contents
         widget (with ``natural_height()``, a ``height_changed`` signal and
         ``dispose()``) and the widget behind which the panel is translucent.
-        Override to show other contents."""
+        Opened by the app, the sections follow the header one per paced GUI
+        turn. Override to show other contents."""
         from .column import DrawerContents
 
         contents = DrawerContents(self.model, parent)
-        contents.follow_model_sections()
+        contents.follow_model_sections(paced=self.model.opened_by_app)
 
         return contents, contents.scroll
 
@@ -220,8 +221,13 @@ class NotificationsDrawerHost(HasTraits):
             self._slide.setEndValue(final.topLeft())
             self._slide.start()
 
-        self._focus_before = QtWidgets.QApplication.focusWidget()
-        drawer.setFocus(QtCore.Qt.FocusReason.PopupFocusReason)
+        # Opened by the app, the drawer leaves the focus to the window: Esc
+        # reaches it from anywhere in the window instead.
+        if not self.model.opened_by_app:
+            self._focus_before = QtWidgets.QApplication.focusWidget()
+            drawer.setFocus(QtCore.Qt.FocusReason.PopupFocusReason)
+
+        drawer.set_escape_window_wide(self.model.opened_by_app)
 
         # Over a native window (a sibling made native) nothing composites
         # beneath a translucent widget.
@@ -237,6 +243,7 @@ class NotificationsDrawerHost(HasTraits):
         self._slide.stop()
         self._fit.stop()
         drawer.hide()
+        drawer.set_escape_window_wide(False)
 
         self._watch.stop()
 

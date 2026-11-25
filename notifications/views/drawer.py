@@ -117,7 +117,8 @@ class EdgeGrip(QtWidgets.QWidget):
 class NotificationsDrawer(QtWidgets.QWidget):
     """The drawer panel; its contents go in with ``set_contents``."""
 
-    #: Esc pressed while the drawer has the focus.
+    #: Esc pressed while the drawer has the focus (or anywhere in its window,
+    #: see ``set_escape_window_wide``).
     close_requested = QtCore.Signal()
 
     #: The panel was repainted: with a translucent background, that is also
@@ -145,9 +146,22 @@ class NotificationsDrawer(QtWidgets.QWidget):
 
         self.edge = EdgeGrip(self)
 
-        escape = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key.Key_Escape), self)
-        escape.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        escape.activated.connect(self.close_requested)
+        self._escape = QtGui.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key.Key_Escape), self
+        )
+        self._escape.activated.connect(self.close_requested)
+        self.set_escape_window_wide(False)
+
+    def set_escape_window_wide(self, window_wide):
+        """Whether Esc closes the drawer anywhere in its window, as for a
+        drawer opened without the focus, or only with the focus in it."""
+        context = (
+            QtCore.Qt.ShortcutContext.WindowShortcut
+            if window_wide
+            else QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+
+        self._escape.setContext(context)
 
     def set_contents(self, contents, translucent_area=None):
         """Show ``contents``; the background behind ``translucent_area`` (a

@@ -110,6 +110,12 @@ class NotificationsPaneModel(HasTraits):
     #: Whether the drawer is open.
     is_open = Bool(False)
 
+    #: Whether the app opened the drawer (at start-up), not the user: it
+    #: then leaves the keyboard focus where it is, closes on Esc anywhere in
+    #: its window, and builds its sections one per paced GUI turn. Off again
+    #: once it closes.
+    opened_by_app = Bool(False)
+
     #: The drawer's width (px), for the session.
     drawer_width = Int(DRAWER_WIDTH)
 
@@ -185,6 +191,12 @@ class NotificationsPaneModel(HasTraits):
         """Open the drawer on ``entry``."""
         self.is_open = True
         self.reveal = entry
+
+    @observe("is_open")
+    def _forget_who_opened(self, event):
+
+        if not event.new:
+            self.opened_by_app = False
 
     # ------------------------------------------------------------------ #
     # The bell's count                                                    #
