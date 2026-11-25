@@ -293,16 +293,18 @@ class DeviceViewerPublishController(HasTraits):
             reason += "actuates); "
 
         if not self.model.realtime_mode:
-            reason += "Realtime mode; "
+            reason += "Realtime mode off; "
 
         if not self.model.connected:
             reason += "Device Not connected; "
 
-        # Expected state, not a failure: at start-up no device is connected
-        # and realtime mode is off, and the UI already shows both.
-        logger.debug(
-            f"DEVICE VIEWER: Cannot publish electrodes state change; reasons: {reason}"
-        )
+        # Why actuation will not happen, for the console: info, below what
+        # the notifications drawer shows (an expected state, not a fault).
+        if reason:
+            logger.info(
+                f"DEVICE VIEWER: Cannot publish electrodes state change; "
+                f"reasons: {reason}"
+            )
 
     # ------------------------------------------------------- geometry
     def _publish_geometry_if_changed(self):
