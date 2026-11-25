@@ -13,6 +13,7 @@
 line limits, colours from the palette, and picture fitting."""
 
 # Standard library imports.
+import math
 import re
 
 # Enthought library imports.
@@ -24,17 +25,25 @@ GRID = 8
 #: Corner radius of cards, pictures and banners.
 CORNER_RADIUS = 10
 
-#: A lead card's banner: at most this tall; this tall while it loads.
-BANNER_MAX_HEIGHT = 168
+#: A lead card's picture shows whole, at its own aspect, at most this
+#: share of the card's width tall and this many pixels; this tall while it
+#: loads.
+PICTURE_MAX_SHARE = 0.75
+PICTURE_CEILING = 360
 BANNER_LOADING_HEIGHT = 112
+
+#: A picture is never drawn more than this much above its own size.
+MAX_UPSCALE = 1.1
 
 #: A compact row's picture box; the picture fits inside it whole.
 THUMBNAIL_SIZE = (11 * GRID, 7 * GRID)
 
-#: A lead card's two pictures: each centre-cropped to this aspect (width
-#: over height) so they stand at equal height, side by side unless the
-#: card is narrower than PAIR_MIN_WIDTH, then stacked.
+#: A lead card's two pictures: side by side unless the card is narrower
+#: than PAIR_MIN_WIDTH, then stacked. Side by side they share one aspect
+#: (width over height), the less extreme of theirs, kept within
+#: PAIR_ASPECT_RANGE; PAIR_ASPECT until they have loaded.
 PAIR_ASPECT = 4 / 3
+PAIR_ASPECT_RANGE = (3 / 4, 2.0)
 PAIR_MIN_WIDTH = 35 * GRID
 
 #: A picture's preview: at most this share of its screen.
@@ -166,26 +175,82 @@ def fitted(pixmap, width, height, ratio):
     return result
 
 
-def picture_pair_cells(width, caption_height):
+def picture_cap(width):
+    """The most height (px) a lead card's picture takes at ``width``."""
+    return min(PICTURE_MAX_SHARE * width, PICTURE_CEILING)
+
+
+def whole_picture_box(width, picture_width, picture_height):
+    """A picture shown whole across a ``width`` wide card: the box's height
+    and the picture's ``(x, y, w, h)`` in it. At its own aspect it fills the
+    width, unless that would make it taller than ``picture_cap`` (a square
+    or tall picture: it is then fitted in, centred) or enlarge it more than
+    MAX_UPSCALE (then centred at that size). Never cropped."""
+    picture_width = max(picture_width, 1)
+    picture_height = max(picture_height, 1)
+    scale = min(width / picture_width, picture_cap(width) / picture_height, MAX_UPSCALE)
+    shown_width = round(picture_width * scale)
+    shown_height = round(picture_height * scale)
+
+    return shown_height, ((width - shown_width) // 2, 0, shown_width, shown_height)
+
+
+def pair_aspect(aspects):
+    """The one aspect two pictures share side by side: the less extreme of
+    theirs (the nearer to square), within PAIR_ASPECT_RANGE."""
+    aspect = min(aspects, key=lambda value: abs(math.log(max(value, 1e-6))))
+    low, high = PAIR_ASPECT_RANGE
+
+    return min(max(aspect, low), high)
+
+
+def picture_pair_cells(width, caption_height, aspects=(PAIR_ASPECT, PAIR_ASPECT)):
     """Where a lead card's two pictures go in a ``width`` wide area, each
     with ``caption_height`` beneath: ``(x, y, w, h)`` per picture, and the
-    area's height. Side by side, the two are equal halves either side of a
-    GRID gap; narrower than PAIR_MIN_WIDTH they stack, each full width. Every
-    picture is PAIR_ASPECT."""
+    area's height. Side by side (PAIR_MIN_WIDTH or wider) they are equal
+    halves either side of a GRID gap at their shared ``pair_aspect``;
+    narrower they stack, each full width at its own aspect, as tall as
+    ``picture_cap`` allows. ``aspects`` are the pictures' width over
+    height."""
 
     if width < PAIR_MIN_WIDTH:
-        height = round(width / PAIR_ASPECT)
-        step = height + caption_height + GRID
-        cells = [(0, index * step, width, height) for index in (0, 1)]
+        cells = []
+        top = 0
 
-    else:
-        side = (width - GRID) // 2
-        height = round(side / PAIR_ASPECT)
-        cells = [(index * (side + GRID), 0, side, height) for index in (0, 1)]
+        for aspect in aspects:
+            height = round(min(width / max(aspect, 1e-6), picture_cap(width)))
+            cells.append((0, top, width, height))
+            top += height + caption_height + GRID
 
-    _x, y, _w, h = cells[-1]
+        return cells, top - GRID
 
-    return cells, y + h + caption_height
+    side = (width - GRID) // 2
+    height = round(side / pair_aspect(aspects))
+    cells = [(index * (side + GRID), 0, side, height) for index in (0, 1)]
+
+    return cells, height + caption_height
+
+
+def placed_picture(pixmap, width, height, place, ratio):
+    """``pixmap`` scaled into ``place`` (``(x, y, w, h)``) on a transparent
+    ``width`` x ``height`` picture, sharp at device pixel ``ratio``: the
+    card's own background shows around it."""
+    canvas = QtGui.QPixmap(round(width * ratio), round(height * ratio))
+    canvas.setDevicePixelRatio(ratio)
+    canvas.fill(QtCore.Qt.GlobalColor.transparent)
+
+    x, y, place_width, place_height = place
+    scaled = fitted(pixmap, place_width, place_height, ratio)
+    painter = QtGui.QPainter(canvas)
+    painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
+    painter.drawPixmap(
+        QtCore.QRectF(x, y, place_width, place_height),
+        scaled,
+        QtCore.QRectF(scaled.rect()),
+    )
+    painter.end()
+
+    return canvas
 
 
 def rounded_rect_path(rect, radius=CORNER_RADIUS):

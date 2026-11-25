@@ -39,7 +39,6 @@ from ..models.feed_model import (
 from ..services.thumbnails import thumbnail_loader
 from .card_style import (
     BANNER_LOADING_HEIGHT,
-    BANNER_MAX_HEIGHT,
     COMPACT_TITLE_LINES,
     COMPACT_TITLE_POINTS,
     GRID,
@@ -54,10 +53,11 @@ from .card_style import (
     TAG_TINT,
     THUMBNAIL_SIZE,
     blend,
-    cropped,
     fitted,
+    placed_picture,
     release_summary_html,
     scaled_font,
+    whole_picture_box,
 )
 from .card_widgets import (
     CardFrame,
@@ -472,17 +472,20 @@ class FeedPostCard(HasTraits):
             self._thumbnail.update()
 
     def _show_banner(self):
-        """The picture across the card's top, at most BANNER_MAX_HEIGHT."""
+        """The whole picture across the card's top, at its own aspect: a
+        wide one fills the width, a square or tall one is fitted in,
+        centred on the card's background (``whole_picture_box``)."""
 
         if not self.lead or self.control is None or self._picture is None:
             return
 
         width = self.control.width()
-        aspect = self._picture.width() / max(self._picture.height(), 1)
-        height = min(round(width / aspect), BANNER_MAX_HEIGHT)
+        picture = self._picture.deviceIndependentSize()
+        height, place = whole_picture_box(width, picture.width(), picture.height())
         ratio = self.control.devicePixelRatioF()
+        banner = placed_picture(self._picture, width, height, place, ratio)
 
-        self._set_banner(cropped(self._picture, width, height, ratio), height)
+        self._set_banner(banner, height)
 
     def _set_banner(self, banner, height):
         card = self.control
