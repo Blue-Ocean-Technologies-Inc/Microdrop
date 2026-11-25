@@ -211,7 +211,7 @@ class NotificationCard(QtWidgets.QFrame):
         text.addWidget(self._meta)
         text.addSpacing(4)
 
-        self._body = CardBody(self, CARD_BODY_LINES)
+        self._body = CardBody(self, CARD_BODY_LINES, keyboard=not self.toast)
         self._body.overflow_changed.connect(self._show_more_link)
         self._body.link_clicked.connect(
             lambda path: self.link_clicked.emit(self.entry, path)
@@ -316,8 +316,7 @@ class NotificationCard(QtWidgets.QFrame):
         self._body.show_detail(
             format_preview(entry) if traceback else entry.detail,
             lines=0 if expanded else CARD_BODY_LINES,
-            # A toast's body opens the drawer: its links are the drawer's.
-            links=() if self.toast else entry.links,
+            links=entry.links,
         )
 
         if traceback and expanded:

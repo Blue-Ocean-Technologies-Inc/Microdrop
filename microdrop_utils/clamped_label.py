@@ -114,20 +114,24 @@ class ClampedLabel(QtWidgets.QLabel):
         )
         self.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.NoTextInteraction)
 
-    def set_links(self, link_texts, color=""):
+    def set_links(self, link_texts, color="", keyboard=True):
         """Show the first occurrence of each of ``link_texts`` as a link in
-        ``color`` (a CSS colour), reachable by mouse and keyboard; its index
-        (as text) comes with ``linkActivated``. Applies from the next
+        ``color`` (a CSS colour), reachable by mouse and, with ``keyboard``,
+        by Tab (the label then takes focus; without, it never does); its
+        index (as text) comes with ``linkActivated``. Applies from the next
         ``set_full_text``; no texts shows plain text again."""
         flag = QtCore.Qt.TextInteractionFlag
         self._link_texts = tuple(link_texts)
         self._link_color = color
 
         if self._link_texts:
+            interaction = flag.LinksAccessibleByMouse
+
+            if keyboard:
+                interaction |= flag.LinksAccessibleByKeyboard
+
             self.setTextFormat(QtCore.Qt.TextFormat.RichText)
-            self.setTextInteractionFlags(
-                flag.LinksAccessibleByMouse | flag.LinksAccessibleByKeyboard
-            )
+            self.setTextInteractionFlags(interaction)
 
         else:
             self.setTextFormat(QtCore.Qt.TextFormat.AutoText)

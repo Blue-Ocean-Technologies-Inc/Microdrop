@@ -243,15 +243,21 @@ def card_tooltip(entry):
 class CardBody(ClampedLabel):
     """A card's detail, cut to its lines, its links (DetailLink) in the
     panel's link colour. A link's path is its tooltip; a click on it gives
-    the path with ``link_clicked``."""
+    the path with ``link_clicked`` and goes no further, while a click
+    anywhere else in the text is the card's. Without ``keyboard`` (a toast,
+    which never takes focus) the links are for the mouse only."""
 
     link_clicked = QtCore.Signal(str)
 
-    def __init__(self, parent=None, lines=2):
+    def __init__(self, parent=None, lines=2, keyboard=True):
         super().__init__(parent, lines)
 
         self.setObjectName("cardBody")
         self._paths = []
+        self._keyboard = keyboard
+
+        #: Whether the click being released activated a link.
+        self._activated = False
 
         self.linkActivated.connect(self._activate)
         self.linkHovered.connect(lambda href: self.setToolTip(self._path(href)))
@@ -259,8 +265,24 @@ class CardBody(ClampedLabel):
     def show_detail(self, text, lines, links=()):
         """Show ``text`` cut to ``lines`` (0: all of it), with ``links``."""
         self._paths = [link.path for link in links]
-        self.set_links([link.text for link in links], css(link_color(theme_palette())))
+        self.set_links(
+            [link.text for link in links],
+            css(link_color(theme_palette())),
+            keyboard=self._keyboard,
+        )
         self.set_full_text(text, lines=lines)
+
+    def mouseReleaseEvent(self, event):
+        self._activated = False
+        super().mouseReleaseEvent(event)
+
+        # The label takes every release once it has links; only a link's
+        # is kept from the card (a toast's body click opens the drawer).
+        if self._activated:
+            event.accept()
+
+        else:
+            event.ignore()
 
     def _path(self, href):
         """The path of the link whose href is ``href`` (its index)."""
@@ -269,6 +291,7 @@ class CardBody(ClampedLabel):
         return self._paths[index] if 0 <= index < len(self._paths) else ""
 
     def _activate(self, href):
+        self._activated = True
         path = self._path(href)
 
         if path:

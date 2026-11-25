@@ -233,9 +233,17 @@ class ToastStackView(HasTraits):
             lambda entry: setattr(model, "run_secondary_action", entry)
         )
         card.body_clicked.connect(model.reveal_entry)
+        card.link_clicked.connect(lambda entry, path: self._open_link(path))
         widget.hover_changed.connect(self._pause_all)
 
         return widget
+
+    def _open_link(self, path):
+        """Open a detail link's folder, as a drawer card's link does. The
+        file manager can come up over the toast without the toast seeing
+        the pointer leave, so the countdowns run on rather than stay held."""
+        self.pane_model.open_link = path
+        self._pause_all(False)
 
     def _pause_all(self, hovered):
         """Hovering any toast holds them all: the stack is being read."""
