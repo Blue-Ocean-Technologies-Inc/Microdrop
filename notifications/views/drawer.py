@@ -22,8 +22,10 @@ receives, and asks to close on Esc.
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
 
+# Microdrop style imports.
+from microdrop_style.panel_theme import theme_palette
+
 # Local imports.
-from .theme import theme_palette
 from .view_consts import (
     DRAWER_GRIP_WIDTH,
     DRAWER_OBJECT_NAME,

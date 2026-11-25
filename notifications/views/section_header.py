@@ -26,10 +26,17 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 # Microdrop style imports.
 from microdrop_style.icons.icons import ICON_EXPAND_MORE
 from microdrop_style.palette_helpers import icon_font, scaled_logo, with_alpha
+from microdrop_style.panel_theme import (
+    accent_of,
+    chip_text,
+    chip_tint,
+    disc_tint,
+    muted_text,
+    theme_palette,
+)
+from microdrop_style.typography import CHIP, SECTION_TITLE, role_font
 
 # Local imports.
-from .theme import accent_of, chip_text, chip_tint, disc_tint, muted_text, theme_palette
-from .typography import CHIP, SECTION_TITLE, role_font
 from .view_consts import SECTION_ANIMATION_MS, SECTION_LOGO_HEIGHT
 
 #: Height (px) of a section header, and of its glyph's disc.

@@ -18,9 +18,9 @@ import pytest
 from pyface.qt.QtGui import QColor, QPalette
 from pyface.qt.QtWidgets import QApplication
 
-# Microdrop package imports.
-from notifications.views import colour_roles as roles
-from notifications.views.theme import link_color, role_color, theme_of
+# Microdrop style imports.
+from microdrop_style import colour_roles as roles
+from microdrop_style.panel_theme import link_color, role_color, theme_of
 
 WINDOWS = {roles.LIGHT: "#F3F3F3", roles.DARK: "#1E1E1E"}
 

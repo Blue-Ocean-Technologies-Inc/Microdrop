@@ -30,15 +30,15 @@ from traits.api import Bool, HasTraits, Instance, Int, observe
 from microdrop_status_bar.consts import ICON_PRIORITY_RIGHTMOST
 
 # Microdrop style imports.
+from microdrop_style import colour_roles
 from microdrop_style.color_contrast import label_on
 from microdrop_style.colors import INFO_COLOR
 from microdrop_style.icons.icons import ICON_NOTIFICATIONS, ICON_NOTIFICATIONS_ACTIVE
 from microdrop_style.palette_helpers import icon_font, text_font
+from microdrop_style.panel_theme import accent_of, muted_text, role_color, theme_palette
 
 # Local imports.
 from ..models.notifications_pane_model import ALERT_SEVERITY, NotificationsPaneModel
-from . import colour_roles
-from .theme import accent_of, muted_text, role_color, theme_palette
 from .view_consts import BADGE_MAX_COUNT, BELL_PULSE_MS
 
 #: Pixel size of the bell glyph.

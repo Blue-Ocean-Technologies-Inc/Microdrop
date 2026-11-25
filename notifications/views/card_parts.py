@@ -15,13 +15,10 @@ its footer of buttons, and the style sheet all cards share."""
 from pyface.qt import QtCore, QtGui, QtWidgets
 
 # Microdrop style imports.
+from microdrop_style import colour_roles
 from microdrop_style.colors import INFO_COLOR
 from microdrop_style.palette_helpers import css, is_dark, rounded_path, with_alpha
-
-# Local imports.
-from . import colour_roles
-from .formatting import format_time
-from .theme import (
+from microdrop_style.panel_theme import (
     accent_of,
     card_border,
     card_fill,
@@ -33,9 +30,11 @@ from .theme import (
     primary_button_style,
     quiet_button_style,
     role_color,
-    theme_palette,
 )
-from .typography import BUTTON, role_font
+from microdrop_style.typography import BUTTON, role_font
+
+# Local imports.
+from .formatting import format_time
 from .view_consts import CARD_RADIUS, DETAIL_MAX_HEIGHT
 
 #: Width (px) of the severity stripe down a card's left edge.
@@ -43,9 +42,6 @@ STRIPE_WIDTH = 4
 
 #: Height (px) of a toast's countdown line along the card's bottom.
 PROGRESS_HEIGHT = 3
-
-#: Diameter (px) of the "new" marker.
-NEW_DOT_SIZE = 8
 
 #: Space (px) between the footer's controls, across and between rows.
 FOOTER_SPACING = 10
@@ -195,23 +191,6 @@ class TracebackView(QtWidgets.QPlainTextEdit):
 
         self.setFixedHeight(min(lines * line_height + 24, DETAIL_MAX_HEIGHT))
         self.show()
-
-
-class NewDot(QtWidgets.QWidget):
-    """The "new" marker: a small filled circle in the strong text colour."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.setFixedSize(NEW_DOT_SIZE + 4, NEW_DOT_SIZE + 4)
-        self.setToolTip("New since you last opened notifications")
-
-    def paintEvent(self, event):
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(theme_palette().color(QtGui.QPalette.ColorRole.Text))
-        painter.drawEllipse(QtCore.QRectF(2, 2, NEW_DOT_SIZE, NEW_DOT_SIZE))
 
 
 class CardFooter(QtWidgets.QWidget):

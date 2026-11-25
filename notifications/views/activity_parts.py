@@ -15,14 +15,20 @@ and the empty state."""
 from pyface.qt import QtCore, QtWidgets
 
 # Microdrop style imports.
+from microdrop_style import colour_roles
 from microdrop_style.color_contrast import label_on
 from microdrop_style.palette_helpers import css, icon_font, style_chip, with_alpha
+from microdrop_style.panel_theme import (
+    accent_of,
+    chip_tint,
+    muted_text,
+    readable_accent,
+    theme_palette,
+)
+from microdrop_style.typography import CARD_TITLE, CHIP, role_font
 
 # Local imports.
 from ..models.own_sections import FILTER_ACTION, FILTER_ALL, FILTER_ERRORS
-from . import colour_roles
-from .theme import accent_of, chip_tint, muted_text, readable_accent, theme_palette
-from .typography import CARD_TITLE, CHIP, role_font
 
 #: The filter chips: (filter, label), left to right.
 FILTER_CHIPS = [

@@ -18,11 +18,11 @@ from traits.api import Any, Bool, HasTraits, Instance, observe
 # Microdrop style imports.
 from microdrop_style.icons.icons import ICON_CLOSE, ICON_DELETE_SWEEP, ICON_DONE_ALL
 from microdrop_style.palette_helpers import css, style_chip, with_alpha
+from microdrop_style.panel_theme import icon_button_style, theme_palette
+from microdrop_style.typography import CHIP, DRAWER_TITLE, role_font
 
 # Local imports.
 from ..models.notifications_pane_model import NotificationsPaneModel
-from .theme import icon_button_style, theme_palette
-from .typography import CHIP, DRAWER_TITLE, role_font
 
 #: The settings button's glyph.
 ICON_SETTINGS = "settings"

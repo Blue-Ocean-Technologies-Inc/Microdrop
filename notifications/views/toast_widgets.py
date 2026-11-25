@@ -16,11 +16,17 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 
 # Microdrop style imports.
 from microdrop_style.palette_helpers import css
+from microdrop_style.panel_theme import (
+    card_border,
+    card_fill,
+    link_color,
+    readable_accent,
+    theme_palette,
+)
+from microdrop_style.typography import CHIP, role_font
 
 # Local imports.
 from .card import NotificationCard
-from .theme import card_border, card_fill, link_color, readable_accent, theme_palette
-from .typography import CHIP, role_font
 
 #: Room (px) around a toast's card for its shadow.
 SHADOW = 12

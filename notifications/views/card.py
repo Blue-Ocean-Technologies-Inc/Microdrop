@@ -31,9 +31,15 @@ from traits.api import Any, HasTraits, Instance, observe
 # Microdrop style imports.
 from microdrop_style.icons.icons import ICON_CLOSE, ICON_HELP
 from microdrop_style.palette_helpers import icon_font
+from microdrop_style.panel_theme import (
+    outlined_button_icon,
+    theme_palette,
+)
+from microdrop_style.typography import BODY_TEXT, CARD_TITLE, META, role_font
 
 # Microdrop utils imports.
 from microdrop_utils.clamped_label import ClampedLabel
+from microdrop_utils.new_marker import NewDot
 
 # Local imports.
 from ..consts import SEVERITY_GLYPHS, HelpAction
@@ -41,7 +47,6 @@ from ..models.notification import Notification
 from .card_parts import (
     STRIPE_WIDTH,
     CardFooter,
-    NewDot,
     TracebackView,
     card_style_sheet,
     meta_text,
@@ -51,11 +56,6 @@ from .card_parts import (
     stripe_color,
 )
 from .formatting import format_exact_time, format_preview
-from .theme import (
-    outlined_button_icon,
-    theme_palette,
-)
-from .typography import BODY_TEXT, CARD_TITLE, META, role_font
 from .view_consts import (
     CARD_BODY_LINES,
     HIGHLIGHT_MS,

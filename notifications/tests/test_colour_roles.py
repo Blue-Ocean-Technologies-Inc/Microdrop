@@ -23,7 +23,6 @@ from notifications.consts import (
     HISTORY_SECTION_ID,
 )
 from notifications.models.own_sections import AttentionSection, HistorySection
-from notifications.views import colour_roles as roles
 from notifications.views.activity_parts import FILTER_CHIP_ACCENTS
 from plugin_management.consts import (
     LOAD_STATUS_SECTION_ACCENT,
@@ -31,6 +30,7 @@ from plugin_management.consts import (
 )
 
 # Microdrop style imports.
+from microdrop_style import colour_roles as roles
 from microdrop_style.color_contrast import blend, contrast, label_on, readable_on
 
 THEMES = (roles.LIGHT, roles.DARK)

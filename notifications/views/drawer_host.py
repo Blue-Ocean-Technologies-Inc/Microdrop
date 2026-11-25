@@ -28,11 +28,13 @@ and ``build_contents()``.
 from pyface.qt import QtCore, QtWidgets
 from traits.api import Any, Bool, HasTraits, Instance, Int, List, observe
 
+# Microdrop style imports.
+from microdrop_style.typography import BODY_TEXT, role_font
+
 # Local imports.
 from ..models.notifications_pane_model import NotificationsPaneModel
 from .drawer import NotificationsDrawer, anchored_drawer_rect
 from .drawer_watch import OpenDrawerWatch
-from .typography import BODY_TEXT, role_font
 from .view_consts import (
     DRAWER_CLOSES_ON_CLICK_OUTSIDE,
     DRAWER_FIT_MS,
