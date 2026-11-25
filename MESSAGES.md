@@ -838,6 +838,17 @@ DeviceViewerDockPane (pane first shown, after the window painted)
 
 Every post: severity warning, `needs_attention`, `pop_up` False (no toast, no sound, counted on the bell), `category_id` `device_viewer.dropbot_maintenance`, `thread_id` `device_viewer.calibration_reminder` (one card, updated in place), `condition_id` `device_viewer.calibration_needed`, help link "How to calibrate" (target "Calibrating the device"). Measuring the filler or liquid capacitance stamps `CalibrationModel.calibrated_on` (ISO day, saved beside the values as `calibration.calibrated_on` in the preferences) before the value, so the card resolves at once.
 
+### device_viewer → notifications drawer: photos and videos (Camera › Captures)
+
+```
+camera panel (CameraControlWidget, GUI thread) ─► CaptureNotificationsController
+  photo saved (ImageSaver.save_complete)   ─► NOTIFICATION_POST "Photo captured" | "N photos captured"
+  no camera frame to grab                  ─► NOTIFICATION_POST "Photo not captured"     (error)
+  recording finalized (recording_stopped)  ─► NOTIFICATION_POST "Video saved"
+```
+
+Every post: `category_id` `device_viewer.camera_captures` (group Camera, label Captures; drawer and pop-up on, tone Soft), `source` `device_viewer`, `category` `camera`. Photos: success, detail the file name ("Latest: <name>" past the first), action `{"kind": "open_path", "label": "Show folder", "path": <the captures folder>}` (opened by the drawer through `microdrop_utils.file_handler.open_file`, no topic). One card per capture session, `thread_id` `device_viewer.camera_captures.photos.<n>`, updated in place with the count: a session is one folder and one protocol run (counted on the main model's `protocol_running` turning on), and outside a run, photos into the same folder within `CAPTURE_SESSION_WINDOW_S` (5 min) of the previous one (`models/capture_session.py`, `continues_capture_session`). Videos: success, detail `<name> (m:ss)` (start to stop of the recording), "Show folder", `thread_id` `device_viewer.camera_captures.video.<path>`. A capture whose request set `show_status_message` False (the protocol's Capture and Record columns, the fluorescence panes) posts with `pop_up` False; the capture button's pop up. The recording's start shows only as the status-bar recording icon; a recording error keeps its dialog (and its logged error card).
+
 ### dropbot_tools_menu → notifications drawer: the self-test reminder (#1133)
 
 ```
