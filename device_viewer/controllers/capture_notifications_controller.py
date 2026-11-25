@@ -13,8 +13,10 @@
 seconds: one card per capture session (see continues_capture_session),
 updated in place, and one per video. Captures a protocol or another plugin
 asked for are posted quietly (no toast, no sound); the user's own pop up.
-Publishing is harmless without the notifications plugin: nothing
-subscribes."""
+A card's Show button shows the capture in its viewer (the Image Viewer, the
+Recording Viewer); while that viewer's plugin is not running it is a Show
+folder button instead. Publishing is harmless without the notifications
+plugin: nothing subscribes."""
 
 # Standard library imports.
 import time
@@ -25,11 +27,16 @@ from traits.api import Any, Callable, HasTraits, Instance, Int, observe
 from traits.observation.api import trait
 
 # Microdrop package imports.
+from image_viewer.consts import LISTENER_NAME as IMAGE_VIEWER_LISTENER_NAME
+from image_viewer.consts import SHOW_IMAGE, ShowImageRequest
 from notifications.consts import (
     SEVERITY_ERROR,
     SEVERITY_SUCCESS,
     notification_publisher,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_controller_base import is_dramatiq_listener_registered
 
 # Local imports.
 from ..consts import CAMERA_CAPTURES_CATEGORY_ID, PKG
@@ -40,13 +47,22 @@ from ..models.capture_session import (
     format_duration,
     photos_card_text,
 )
+from ..recording_viewer_consts import (
+    RECORDING_VIEWER_LISTENER_NAME,
+    SHOW_RECORDING,
+    ShowRecordingRequest,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
-#: The cards' button, opening the folder the capture was saved in.
+#: The cards' button, showing the capture in its viewer.
+SHOW_LABEL = "Show"
+
+#: The cards' button while the capture's viewer is not running, opening the
+#: folder the capture was saved in.
 SHOW_FOLDER_LABEL = "Show folder"
 
 
@@ -62,6 +78,10 @@ class CaptureNotificationsController(HasTraits):
     #: ``post_notification(payload)``: posts a NotificationMessage payload;
     #: publishes it on NOTIFICATION_POST by default (no listener, no-op).
     post_notification = Callable()
+
+    #: ``viewer_running(listener_name)``: whether the viewer listening as
+    #: ``listener_name`` is running, so its card's Show button is heard.
+    viewer_running = Callable(is_dramatiq_listener_registered)
 
     #: The photos the latest card counts; None before the first.
     _session = Instance(CaptureSession)
@@ -107,7 +127,9 @@ class CaptureNotificationsController(HasTraits):
         self._post(
             title,
             detail,
-            folder=folder,
+            action=self._show_action(
+                path, IMAGE_VIEWER_LISTENER_NAME, SHOW_IMAGE, ShowImageRequest
+            ),
             thread_id=session.thread_id,
             pop_up=not quiet,
         )
@@ -158,7 +180,12 @@ class CaptureNotificationsController(HasTraits):
         self._post(
             "Video saved",
             detail,
-            folder=str(path.parent),
+            action=self._show_action(
+                path,
+                RECORDING_VIEWER_LISTENER_NAME,
+                SHOW_RECORDING,
+                ShowRecordingRequest,
+            ),
             thread_id=f"{CAMERA_CAPTURES_CATEGORY_ID}.video.{path}",
             pop_up=not quiet,
         )
@@ -166,12 +193,32 @@ class CaptureNotificationsController(HasTraits):
     # ------------------------------------------------------------------ #
     # Posting                                                              #
     # ------------------------------------------------------------------ #
+    def _show_action(self, path, listener_name, topic, request_class):
+        """The card's button for the capture at ``path``: Show, publishing
+        ``request_class`` on ``topic`` for the viewer listening as
+        ``listener_name``; Show folder while that viewer is not running, as
+        nothing would hear Show."""
+
+        if self.viewer_running(listener_name):
+            return {
+                "kind": "publish",
+                "label": SHOW_LABEL,
+                "topic": topic,
+                "message": request_class(path=str(path)).model_dump_json(),
+            }
+
+        return {
+            "kind": "open_path",
+            "label": SHOW_FOLDER_LABEL,
+            "path": str(path.parent),
+        }
+
     def _post(
         self,
         title,
         detail,
         severity=SEVERITY_SUCCESS,
-        folder="",
+        action=None,
         thread_id="",
         pop_up=True,
     ):
@@ -184,13 +231,7 @@ class CaptureNotificationsController(HasTraits):
             "source": PKG,
             "thread_id": thread_id,
             "pop_up": pop_up,
+            "action": action,
         }
-
-        if folder:
-            payload["action"] = {
-                "kind": "open_path",
-                "label": SHOW_FOLDER_LABEL,
-                "path": folder,
-            }
 
         self.post_notification(payload)
