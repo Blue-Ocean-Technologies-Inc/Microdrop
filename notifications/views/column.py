@@ -198,10 +198,6 @@ class DrawerContents(QtWidgets.QWidget):
         self._binding.follow_sections = True
         self.set_sections(self.model.ordered_sections)
 
-    def needed_width(self):
-        """The least width (px) the contents need: the header's."""
-        return self.header.needed_width()
-
     def natural_height(self):
         """The drawer height (px) showing the whole column unscrolled."""
         layout = self._column_layout

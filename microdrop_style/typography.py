@@ -42,3 +42,17 @@ def role_font(role, weight=None):
     font.setWeight(weight if weight is not None else role.weight)
 
     return font
+
+
+#: Line spacing (px) of BODY_TEXT at 100% text size, against which
+#: ``text_scale`` measures.
+BASE_BODY_LINE_SPACING = 16.0
+
+
+def text_scale():
+    """How much larger than at 100% text renders now (1.0 or more):
+    layout measures scale with it, so a larger text size keeps the same
+    proportions."""
+    spacing = QtGui.QFontMetricsF(role_font(BODY_TEXT)).lineSpacing()
+
+    return max(1.0, spacing / BASE_BODY_LINE_SPACING)

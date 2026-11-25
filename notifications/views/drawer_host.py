@@ -29,7 +29,7 @@ from pyface.qt import QtCore, QtWidgets
 from traits.api import Any, Bool, HasTraits, Instance, Int, List, observe
 
 # Microdrop style imports.
-from microdrop_style.typography import BODY_TEXT, role_font
+from microdrop_style.typography import BODY_TEXT, role_font, text_scale
 
 # Local imports.
 from ..models.notifications_pane_model import NotificationsPaneModel
@@ -322,14 +322,10 @@ class NotificationsDrawerHost(HasTraits):
         )
 
     def _narrowest(self):
-        """The drawer's least width: what its contents need (the header's
-        whole title and buttons at the current font size), at least
-        DRAWER_MIN_WIDTH."""
-        needed = getattr(self._contents, "needed_width", None)
-        margins = self.drawer.layout().contentsMargins() if self.drawer else None
-        frame = margins.left() + margins.right() if margins is not None else 0
-
-        return max(DRAWER_MIN_WIDTH, needed() + frame if needed else 0)
+        """The drawer's least width: DRAWER_MIN_WIDTH at 100% text size,
+        growing with the text so the narrow end keeps its proportions (a
+        lead card's pictures stack there at every text size)."""
+        return round(DRAWER_MIN_WIDTH * text_scale())
 
     # ------------------------------------------------------------------ #
     # Placement                                                           #
