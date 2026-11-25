@@ -272,6 +272,12 @@ class NotificationMessage(BaseModel):
     #: replaced whole and counted once, e.g. a run's step progress.
     thread_id: str = ""
 
+    #: Tells occurrences of one notification apart: posts equal but for
+    #: their occurrence are separate entries, while posts naming the same
+    #: occurrence collapse into one (×N), e.g. a dialog shown again later
+    #: versus a burst of the same dialog.
+    occurrence: str = ""
+
     #: The condition that raised it, e.g. "dropbot.chip_missing": a
     #: NOTIFICATION_RESOLVE naming it clears the card, no button pressed.
     condition_id: str = ""
@@ -413,6 +419,7 @@ class NotificationCategorySpec(BaseModel):
 #: This plugin's own kinds of notification.
 CATEGORY_ID_LOG = f"{PKG}.log"
 CATEGORY_ID_PLUGIN_LOAD_FAILED = f"{PKG}.plugin_load_failed"
+CATEGORY_ID_DIALOG_ALERTS = f"{PKG}.dialog_alerts"
 CATEGORIES_GROUP = "MicroDrop"
 
 NOTIFICATIONS_CATEGORIES = [
@@ -430,6 +437,17 @@ NOTIFICATIONS_CATEGORIES = [
         label="Plugin load failures",
         description="A plugin could not start.",
         tone=TONE_ALERT,
+        critical=True,
+    ),
+    # The dialog is the interruption: its entry only lists and counts it.
+    NotificationCategorySpec(
+        id=CATEGORY_ID_DIALOG_ALERTS,
+        group=CATEGORIES_GROUP,
+        label="Errors and warnings shown in a dialog",
+        description="A device halt, a failed action and the like, kept "
+        "after the dialog is closed.",
+        popup=False,
+        tone=TONE_NONE,
         critical=True,
     ),
 ]
@@ -589,6 +607,12 @@ LOG_IGNORE_RULES = (
     ("plugin_management.deferred_loader", r"Deferred plugin \S+ failed to import"),
     ("plugin_management.deferred_loader", r"Deferred plugin \S+ could not be added"),
 )
+
+#: A record carrying this attribute set True is not forwarded: its event is
+#: already listed another way, e.g. by the dialog shown for it. Pass
+#: ``extra=LOG_RECORDED_EXTRA`` with the one record that repeats it.
+LOG_RECORDED_ATTR = "notification_recorded"
+LOG_RECORDED_EXTRA = {LOG_RECORDED_ATTR: True}
 
 #: Records arriving within this many milliseconds reach the pane together.
 LOG_FLUSH_INTERVAL_MS = 250
