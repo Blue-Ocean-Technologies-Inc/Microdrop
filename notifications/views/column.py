@@ -16,6 +16,10 @@ pinned there, pushed up by the next section's header as it arrives, and
 still collapses its section when clicked. It is a copy, laid over the
 viewport and moved on every scroll: the real header scrolls on beneath.
 
+Sections come and go in place: a section contributed while the drawer is
+open (a plugin loaded later) is built where its order puts it, the others
+left as they are.
+
 The drawer builds DrawerContents directly (``follow_model_sections()``);
 the TraitsUI view is for running it standalone against just a model::
 
@@ -31,6 +35,9 @@ from traitsui.qt.editor import Editor
 # Microdrop style imports.
 from microdrop_style.colors import INFO_COLOR
 from microdrop_style.palette_helpers import with_alpha
+
+# Microdrop utils imports.
+from microdrop_utils.gui_pacing import invoke_paced
 
 # Local imports.
 from ..consts import ATTENTION_SECTION_ID, HISTORY_SECTION_ID
@@ -135,8 +142,17 @@ class DrawerContents(QtWidgets.QWidget):
         super().__init__(parent)
 
         self.model = model
-        self._sections = []
         self._height_queued = False
+
+        #: The section views shown, top first, and the sections wanted.
+        self._sections = []
+        self._wanted = []
+
+        #: Whether new sections are built one per paced GUI turn, and those
+        #: queued for one; nothing is built once disposed.
+        self._paced = False
+        self._queued = []
+        self._disposed = False
 
         #: The section whose header is pinned, if any.
         self._pinned_section = None
@@ -192,9 +208,12 @@ class DrawerContents(QtWidgets.QWidget):
 
         self._binding = _ContentsBinding(model=model, view=self)
 
-    def follow_model_sections(self):
+    def follow_model_sections(self, paced=False):
         """List the model's sections from now on, and as they change: the
-        drawer does so, with no TraitsUI UI around the contents."""
+        drawer does so, with no TraitsUI UI around the contents. ``paced``,
+        each section is built on a paced GUI turn of its own, top first, so
+        no turn builds them all."""
+        self._paced = paced
         self._binding.follow_sections = True
         self.set_sections(self.model.ordered_sections)
 
@@ -212,22 +231,88 @@ class DrawerContents(QtWidgets.QWidget):
         return self.height() - self.scroll.viewport().height() + column
 
     def set_sections(self, sections):
-        """Show ``sections``, top first."""
-        self._dispose_sections()
+        """Show ``sections``, top first. Sections already shown keep their
+        views, as built; a section no longer listed goes; a new one is built
+        in its place in the order, at once or on a paced turn."""
+        self._wanted = list(sections)
+        gone = [view for view in self._sections if view.section not in self._wanted]
 
-        for position, section in enumerate(sections):
-            view = ColumnSection(section, self.model, self.column)
-            view.toggle_requested.connect(self._toggle)
-            view.header_changed.connect(self._follow_scroll)
-            self._column_layout.insertWidget(position, view)
-            self._sections.append(view)
+        for view in gone:
+            self._sections.remove(view)
+            self._dispose_view(view)
+
+        self._follow_order()
+
+        shown = [view.section for view in self._sections]
+        new = [s for s in self._wanted if s not in shown and s not in self._queued]
+
+        for section in new:
+            if self._paced:
+                self._queued.append(section)
+                invoke_paced(self._add_section, section)
+
+            else:
+                self._add_section(section)
 
         self._follow_scroll()
 
     def dispose(self):
+        self._disposed = True
+        self._queued = []
         self._binding.model = None
         self.header.dispose()
         self._dispose_sections()
+
+    # ------------------------------------------------------------------ #
+    # Listing the sections                                                #
+    # ------------------------------------------------------------------ #
+
+    def _add_section(self, section):
+        """Build ``section``'s view where the wanted order puts it, unless it
+        is no longer wanted, already shown, or the contents are gone."""
+
+        if section in self._queued:
+            self._queued.remove(section)
+
+        shown = [view.section for view in self._sections]
+
+        if self._disposed or section not in self._wanted or section in shown:
+            return
+
+        rank = self._wanted.index(section)
+        position = sum(self._wanted.index(other) < rank for other in shown)
+
+        # Queued, the contents may have gone with their window meanwhile.
+        try:
+            view = ColumnSection(section, self.model, self.column)
+
+        except RuntimeError as error:
+            logger.debug(f"Drawer contents gone before section {section.id}: {error}")
+
+            return
+
+        view.toggle_requested.connect(self._toggle)
+        view.header_changed.connect(self._follow_scroll)
+        self._column_layout.insertWidget(position, view)
+        self._sections.insert(position, view)
+
+        self._follow_scroll()
+
+    def _follow_order(self):
+        """Lay the views out in the wanted order, if a section's order
+        changed."""
+        ordered = sorted(self._sections, key=lambda v: self._wanted.index(v.section))
+
+        if ordered == self._sections:
+            return
+
+        for view in ordered:
+            self._column_layout.removeWidget(view)
+
+        for position, view in enumerate(ordered):
+            self._column_layout.insertWidget(position, view)
+
+        self._sections = ordered
 
     # ------------------------------------------------------------------ #
     # Collapsing                                                          #
@@ -361,11 +446,14 @@ class DrawerContents(QtWidgets.QWidget):
     def _dispose_sections(self):
 
         for view in self._sections:
-            view.dispose()
-            view.hide()
-            view.deleteLater()
+            self._dispose_view(view)
 
         self._sections = []
+
+    def _dispose_view(self, view):
+        view.dispose()
+        view.hide()
+        view.deleteLater()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
