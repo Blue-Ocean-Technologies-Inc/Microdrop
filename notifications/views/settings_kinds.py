@@ -23,6 +23,7 @@ clearing it folds them back as they were. Runs standalone::
 # Enthought library imports.
 from pyface.qt import QtCore, QtWidgets
 from traits.api import Any, Bool, HasTraits, Instance, observe
+from traitsui.api import UI
 
 # Local imports.
 from ..consts import PKG
@@ -43,6 +44,10 @@ class _KindsBinding(HasTraits):
 
     panel = Any()
 
+    #: The TraitsUI window showing the panel, if any: disposing of it hides
+    #: the panel and only deletes it later, so the settings are let go then.
+    ui = Instance(UI)
+
     #: Whether a rebuild is queued.
     _queued = Bool(False)
 
@@ -58,6 +63,12 @@ class _KindsBinding(HasTraits):
             self._queued = True
             QtCore.QTimer.singleShot(0, self._rebuild)
 
+    @observe("ui:destroyed")
+    def _ui_disposed(self, event):
+
+        if event.new:
+            self.release()
+
     def release(self):
         """Stop following the settings: the panel is gone."""
         self.settings = None
@@ -71,9 +82,11 @@ class _KindsBinding(HasTraits):
 
 class KindsPanel(QtWidgets.QWidget):
     """The filter, then every group's section in a scrolling column; or only
-    the group ``group_name``, with no filter."""
+    the group ``group_name``, with no filter. Inside a TraitsUI window,
+    ``ui`` is that window's UI: the panel lets the settings go as it is
+    disposed of."""
 
-    def __init__(self, settings, window, group_name="", parent=None):
+    def __init__(self, settings, window, group_name="", parent=None, ui=None):
         super().__init__(parent)
 
         self.settings = settings
@@ -127,7 +140,7 @@ class KindsPanel(QtWidgets.QWidget):
         self._column_layout.addStretch(1)
         self.scroll.setWidget(self._column)
 
-        self._binding = _KindsBinding(settings=settings, panel=self)
+        self._binding = _KindsBinding(settings=settings, panel=self, ui=ui)
         self.destroyed.connect(lambda *args, binding=self._binding: binding.release())
 
         self.show_sections()
@@ -207,5 +220,10 @@ class KindsPanel(QtWidgets.QWidget):
 
 def kinds_panel(parent, editor, window, group_name):
     """A TraitsUI ``CustomEditor`` factory: the panel over the settings the
-    editor's item belongs to."""
-    return KindsPanel(editor.object, window, group_name, parent)
+    editor's item belongs to.
+
+    ``parent`` is the QLayout the item goes into, not a QWidget (traitsui.qt
+    passes the layout), so it cannot be the panel's parent: TraitsUI
+    reparents the returned widget as it adds it to that layout.
+    """
+    return KindsPanel(editor.object, window, group_name, ui=editor.ui)
