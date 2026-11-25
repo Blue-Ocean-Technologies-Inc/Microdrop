@@ -200,7 +200,7 @@ ol.legend { padding-left: 1.6em; margin: 4px 0; font-size: .88rem; color: var(--
 <figure class="still">
 <div class="still-wrap"><img data-media src="getting_started_media/dropbot-status.webp" width="613" height="193" alt="Real screenshot of the Dropbot Status pane: Connection Active, Chip Status Present, the green Realtime On button, voltage and frequency readings and setpoints, capacitance, volume, force and dielectric"><svg viewBox="0 0 613 193" aria-hidden="true"><circle cx="114" cy="54" r="10" class="ann-n"/><text x="114" y="58" class="ann-nt">1</text><circle cx="120" cy="112" r="10" class="ann-n"/><text x="120" y="116" class="ann-nt">2</text><circle cx="267" cy="35" r="10" class="ann-n"/><text x="267" y="39" class="ann-nt">3</text><circle cx="472" cy="35" r="10" class="ann-n"/><text x="472" y="39" class="ann-nt">4</text><circle cx="275" cy="113" r="10" class="ann-n"/><text x="275" y="117" class="ann-nt">5</text><circle cx="468" cy="172" r="10" class="ann-n"/><text x="468" y="176" class="ann-nt">6</text></svg></div>
 <figcaption>The <span class="ui">Dropbot Status</span> pane (④):
-<ol class="legend"><li><span class="ui">Connection</span> and <span class="ui">Chip Status</span>.</li><li><span class="ui">Realtime On</span> / <span class="ui">Realtime Off</span> (<kbd>T</kbd>).</li><li>What the DropBot measures: voltage, frequency and capacitance.</li><li>The voltage and frequency you ask for.</li><li>A droplet readout (<span class="ui">Volume</span>, <span class="ui">Fill</span> or <span class="ui">Covered area</span>) and the force.</li><li><span class="ui">Dielectric</span>: pick your chip's coating (see chapter 2).</li></ol></figcaption>
+<ol class="legend"><li><span class="ui">Connection</span> and <span class="ui">Chip Status</span>.</li><li><span class="ui">Realtime On</span> / <span class="ui">Realtime Off</span> (<kbd>T</kbd>).</li><li>What the DropBot measures: voltage, frequency and capacitance.</li><li>The voltage and frequency you ask for.</li><li>A droplet readout (<span class="ui">Volume</span>, <span class="ui">Fill</span> or <span class="ui">Covered area</span>) and the force.</li><li><span class="ui">Dielectric</span>: pick your chip's coating (see chapter 3).</li></ol></figcaption>
 </figure>
 <figure class="still">
 <div class="still-wrap"><img data-media src="getting_started_media/mode-buttons.webp" width="450" height="165" alt="Real screenshot of the mode buttons: Mode: Draw, with Draw selected, then Edit, Autoroute and Edit Electrode Channels, and below them Clear Electrode States, Clear Routes, Undo and Redo"><svg viewBox="0 0 450 165" aria-hidden="true"><circle cx="21" cy="51" r="10" class="ann-n"/><text x="21" y="55" class="ann-nt">1</text><circle cx="116" cy="51" r="10" class="ann-n"/><text x="116" y="55" class="ann-nt">2</text><circle cx="213" cy="51" r="10" class="ann-n"/><text x="213" y="55" class="ann-nt">3</text><circle cx="309" cy="51" r="10" class="ann-n"/><text x="309" y="55" class="ann-nt">4</text><circle cx="21" cy="113" r="10" class="ann-n"/><text x="21" y="117" class="ann-nt">5</text><circle cx="116" cy="113" r="10" class="ann-n"/><text x="116" y="117" class="ann-nt">6</text><circle cx="213" cy="113" r="10" class="ann-n"/><text x="213" y="117" class="ann-nt">7</text><circle cx="309" cy="113" r="10" class="ann-n"/><text x="309" y="117" class="ann-nt">8</text></svg></div>
@@ -288,8 +288,12 @@ camera position; MicroDrop remembers it.</p>
 in <span class="ui">Camera Controls</span> (<kbd>R</kbd>). The pictures in this tutorial show the chip the way MicroDrop shows it:
 the eight large reservoirs on the left and right, and the grid of small electrodes running down the middle.</div>
 
-<h3>Capacitance calibration (optional, recommended)</h3>
-<p>The <span class="ui">Calibration</span> section at the bottom of the side panel teaches MicroDrop what the filler and your
+</section>
+
+<!-- ============================================================ -->
+<section data-part id="capacitance-calibration">
+<h2>3. Capacitance calibration (optional, recommended)</h2>
+<p class="intro">The <span class="ui">Calibration</span> section at the bottom of the side panel teaches MicroDrop what the filler and your
 liquid look like electrically, which powers the volume and force readings.</p>
 <figure class="clip lead">
 <video class="ui" style="max-width:min(720px, 100%)" data-clip muted loop playsinline controls preload="metadata" width="720" height="480" poster="getting_started_media/calibration.webp" aria-label="Screen recording of a capacitance calibration: filler measured, the droplet moved onto the switched-on electrode, liquid measured, then a dielectric picked">
@@ -308,7 +312,7 @@ Waits are cut out.</figcaption>
   <li>Switch on one electrode that has only filler on it, next to a droplet. Click
   <i data-glyph="airwave" data-inline></i> <em>Measure filler Capacitance</em> (①). C<sub>f</sub> shows the reading in
   pF/mm².</li>
-  <li>Move the droplet onto that electrode (switch it on next door, then switch off where it was, as in chapter 5).</li>
+  <li>Move the droplet onto that electrode (switch it on next door, then switch off where it was, as in chapter 6).</li>
   <li>Click <i data-glyph="humidity_high" data-inline></i> <em>Measure Liquid Capacitance</em> (②). C<sub>l</sub> shows the
   reading.</li>
   <li>In <span class="ui">Dropbot Status</span>, open <span class="ui">Pick a dielectric...</span> and choose your chip's
@@ -321,7 +325,7 @@ covers this in detail.</p>
 
 <!-- ============================================================ -->
 <section data-part id="load">
-<h2>3. Load a reservoir</h2>
+<h2>4. Load a reservoir</h2>
 <p class="intro">The large electrodes at the sides are reservoirs. Liquid goes in at the edge of the glass top plate, not on
 top of the plate and not into the middle of the chip.</p>
 
@@ -361,7 +365,7 @@ pulled in).</div>
 
 <!-- ============================================================ -->
 <section data-part id="dispense">
-<h2>4. Dispense a droplet by hand</h2>
+<h2>5. Dispense a droplet by hand</h2>
 <p class="intro">A droplet is pulled out of the reservoir along the row of electrodes leading from it, then cut off. Each click
 switches one electrode on or off, and with Realtime on the DropBot follows straight away.</p>
 
@@ -397,7 +401,7 @@ and area). The pictures here label electrodes by channel number, the same number
 
 <!-- ============================================================ -->
 <section data-part id="move">
-<h2>5. Move a droplet by clicking</h2>
+<h2>6. Move a droplet by clicking</h2>
 <p class="intro">A droplet moves onto a switched-on electrode next to it. Switch on the electrode in front, then switch off the
 one behind.</p>
 
@@ -449,7 +453,7 @@ one behind.</p>
 
 <h3>How much liquid is that?</h3>
 <p>The <span class="ui">Volume</span> readout in <span class="ui">Dropbot Status</span> estimates the liquid on the electrodes
-that are switched on, from the capacitance and the calibration of chapter 2. Its menu switches between
+that are switched on, from the capacitance and the calibration of chapter 3. Its menu switches between
 <span class="ui">Volume</span>, <span class="ui">Fill</span> and <span class="ui">Covered area</span>; the pop-out button
 beside it, <em>Show all droplet readouts</em>, opens a small <strong>Droplet Readouts</strong> window that shows them all and
 stays open while you work.</p>
@@ -464,7 +468,7 @@ switched on: one droplet reads about 2 µL, and the total grows to about 9 µL a
 
 <!-- ============================================================ -->
 <section data-part id="routes">
-<h2>6. Routes: let MicroDrop do the clicking</h2>
+<h2>7. Routes: let MicroDrop do the clicking</h2>
 <p class="intro">A route is a line drawn across the electrodes. When it runs, MicroDrop switches the electrodes along it on and
 off in turn, and the droplet rides along. Routes are how you move, mix and park droplets without clicking every step.</p>
 <div class="callout">The small looping clips are the real app. The larger pictures are simulations you can step through: the
@@ -686,7 +690,7 @@ MicroDrop's own rules.</div>
 
 <!-- ============================================================ -->
 <section data-part id="split">
-<h2>7. Split a droplet</h2>
+<h2>8. Split a droplet</h2>
 <p class="intro">Hold the part you want to keep where it is and pull the rest away: the droplet tears in one piece. The quickest
 split, the one in the clip, takes one electrode's worth off a larger droplet in a few seconds.</p>
 
@@ -719,7 +723,7 @@ split, the one in the clip, takes one electrode's worth off a larger droplet in 
   16, 24 and 25. If the neck lingers, switch on one more electrode further away from 97. A tiny bead of liquid can be left
   between the two droplets; move one of them over it and it is picked up again.</li>
   <li>The new droplet on 97 is a droplet like any other: move it by switching on the electrode next to it and then switching
-  off the one it sits on, as in chapter 5.</li>
+  off the one it sits on, as in chapter 6.</li>
 </ol>
 <div class="callout">To halve a droplet instead, pull its two halves apart: switch on the electrodes beyond both ends and switch
 off the middle ones; the middle thins and snaps. With the keyboard: switch on the droplet's electrodes, hold
@@ -736,7 +740,7 @@ too small to split.</div>
 
 <!-- ============================================================ -->
 <section data-part id="protocol">
-<h2>8. Design a protocol</h2>
+<h2>9. Design a protocol</h2>
 <p class="intro">Everything so far you did by hand. A protocol writes it down as a list of <strong>steps</strong>, so MicroDrop
 can repeat it exactly, as often as you like.</p>
 
@@ -938,7 +942,7 @@ can repeat it exactly, as often as you like.</p>
 
 <!-- ============================================================ -->
 <section data-part id="run">
-<h2>9. Run the protocol</h2>
+<h2>10. Run the protocol</h2>
 <p class="intro">The buttons at the top of the protocol pane run your steps, much like a media player.</p>
 
 <figure class="still">
