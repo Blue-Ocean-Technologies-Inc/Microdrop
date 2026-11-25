@@ -22,6 +22,7 @@ Qt-free."""
 import json
 import threading
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # Enthought library imports.
 from traits.api import Any, Bool, Callable, HasTraits, Instance, Int, List, Str
@@ -34,7 +35,18 @@ from device_viewer.consts import (
     MediaCaptureMessageModel,
 )
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
-from pluggable_protocol_tree.consts import DEFAULT_LOGS_SETTLING_SECONDS
+from notifications.consts import (
+    LOG_RECORDED_EXTRA,
+    SEVERITY_SUCCESS,
+    notification_publisher,
+)
+from pluggable_protocol_tree.consts import (
+    DEFAULT_LOGS_SETTLING_SECONDS,
+    PKG,
+    RUN_REPORT_CARD_TITLE,
+    RUN_REPORT_SHOW_LABEL,
+    RUN_REPORTS_CATEGORY_ID,
+)
 from pluggable_protocol_tree.services.logging import listener as _listener
 from pluggable_protocol_tree.services.logging.consts import (
     DIELECTRIC_THICKNESS_COLUMN,
@@ -69,6 +81,30 @@ def _threading_flush_scheduler(controller) -> None:
     delay on a plain timer — no Qt (the view injects a Qt/progress-aware
     scheduler in the full app)."""
     threading.Timer(controller.settling_provider(), controller._flush).start()
+
+
+def run_report_card(report_path):
+    """The notification for a run report just written: one card per report
+    (its file name tells it apart), quiet, its name linking to its folder
+    and Show opening it as the Run Summary Generated dialog's link does."""
+    report_path = Path(report_path)
+    experiment_name = report_path.parent.parent.name
+
+    return {
+        "title": RUN_REPORT_CARD_TITLE,
+        "detail": f"{report_path.name}\nExperiment {experiment_name}",
+        "severity": SEVERITY_SUCCESS,
+        "source": PKG,
+        "category_id": RUN_REPORTS_CATEGORY_ID,
+        "occurrence": report_path.name,
+        "pop_up": False,
+        "action": {
+            "kind": "open_path",
+            "label": RUN_REPORT_SHOW_LABEL,
+            "path": str(report_path),
+        },
+        "links": [{"text": report_path.name, "path": str(report_path)}],
+    }
 
 
 def _format_elapsed(delta: timedelta) -> str:
@@ -329,11 +365,21 @@ class ProtocolLoggingController(HasTraits):
                 logger.info(f"Report written to {report_path}")
 
         except Exception as e:
-            logger.error(f"protocol logging flush failed: {e}")
+            # Listed by the Run Summary Failed dialog when one is shown.
+            shown = self._generate_report and self.report_failure_callback is not None
+            logger.error(
+                f"protocol logging flush failed: {e}",
+                extra=LOG_RECORDED_EXTRA if shown else None,
+            )
             report_path = None
             report_error = str(e)
         finally:
             self._ingestion = None
+
+        # Posted where the report is written, so every report has its card.
+        if report_path is not None:
+            self._post_report_card(report_path)
+
         # Notify the GUI (report saved / skipped). Outside the try so a
         # callback error is not misreported as a flush failure.
         if self.completion_callback is not None:
@@ -352,6 +398,16 @@ class ProtocolLoggingController(HasTraits):
                 self.report_failure_callback(report_error)
             except Exception as e:
                 logger.error(f"logging failure callback failed: {e}")
+
+    @staticmethod
+    def _post_report_card(report_path):
+
+        try:
+            notification_publisher.publish(run_report_card(report_path))
+
+        # The report is written whatever happens to its card.
+        except Exception as e:
+            logger.warning(f"run report card not posted: {e}")
 
     # --- listener forwards (may run on a worker thread) ---
     def on_capacitance(self, message) -> None:

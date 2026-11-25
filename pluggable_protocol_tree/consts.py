@@ -42,6 +42,7 @@ from electrode_controller.consts import (
 )
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from microdrop_status_bar.consts import ICON_PRIORITY_DEFAULT
+from notifications.consts import TONE_NONE, NotificationCategorySpec
 from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeAddStepPublisher,
     ProtocolTreeRowSelectedPublisher,
@@ -272,3 +273,20 @@ PROTOCOL_TREE_TUTORIAL_HTML_PATH = (
 PROTOCOL_FILES_TUTORIAL_HTML_PATH = (
     Path(__file__).parent / "resources" / "protocol_files.html"
 )
+
+#: A run report written: its card in the notifications drawer, one per
+#: report, quiet since the Run Summary Generated dialog already said so.
+RUN_REPORTS_CATEGORY_ID = f"{PKG}.run_reports"
+RUN_REPORT_CARD_TITLE = "Report generated"
+RUN_REPORT_SHOW_LABEL = "Show"
+
+NOTIFICATION_CATEGORY_SPECS = [
+    NotificationCategorySpec(
+        id=RUN_REPORTS_CATEGORY_ID,
+        group="Protocol",
+        label="Run reports",
+        description="A run's report written, with a button to open it.",
+        popup=False,
+        tone=TONE_NONE,
+    ),
+]
