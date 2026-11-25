@@ -99,6 +99,18 @@ def outside_press_passes_through(opened_by_app, used_while_open):
     return opened_by_app and not used_while_open
 
 
+def next_section_to_build(queued, opened_by_app):
+    """Which of the ``queued`` sections (oldest first) the drawer builds
+    next: in a drawer the app opened, the first shown expanded at start
+    (News), even if it arrived after the others; else the oldest."""
+    urgent = [section for section in queued if section.expanded_at_start]
+
+    if opened_by_app and urgent:
+        return urgent[0]
+
+    return queued[0]
+
+
 class NotificationsPaneModel(HasTraits):
     """What the drawer, the toasts and the bell show."""
 
@@ -122,8 +134,9 @@ class NotificationsPaneModel(HasTraits):
 
     #: Whether the app opened the drawer (at start-up), not the user: it
     #: then leaves the keyboard focus where it is, closes on Esc anywhere in
-    #: its window, builds its sections one per paced GUI turn, expands the
-    #: ``expanded_at_start`` ones, late arrivals too, and lets a press
+    #: its window, builds its sections one per paced GUI turn, the
+    #: ``expanded_at_start`` ones first (``next_section_to_build``), expands
+    #: those, late arrivals too, and lets a press
     #: outside it through until the user uses it. Off again once it closes.
     opened_by_app = Bool(False)
 

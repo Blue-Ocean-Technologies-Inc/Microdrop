@@ -41,7 +41,10 @@ from microdrop_utils.gui_pacing import invoke_paced
 
 # Local imports.
 from ..consts import ATTENTION_SECTION_ID, HISTORY_SECTION_ID
-from ..models.notifications_pane_model import NotificationsPaneModel
+from ..models.notifications_pane_model import (
+    NotificationsPaneModel,
+    next_section_to_build,
+)
 from .column_section import ColumnSection, card_column_of
 from .drawer_header import DrawerHeader
 from .section_header import HEADER_HEIGHT, SectionHeader
@@ -211,8 +214,8 @@ class DrawerContents(QtWidgets.QWidget):
     def follow_model_sections(self, paced=False):
         """List the model's sections from now on, and as they change: the
         drawer does so, with no TraitsUI UI around the contents. ``paced``,
-        each section is built on a paced GUI turn of its own, top first, so
-        no turn builds them all."""
+        each section is built on a paced GUI turn of its own, top first
+        (``next_section_to_build``), so no turn builds them all."""
         self._paced = paced
         self._binding.follow_sections = True
         self.set_sections(self.model.ordered_sections)
@@ -249,7 +252,7 @@ class DrawerContents(QtWidgets.QWidget):
         for section in new:
             if self._paced:
                 self._queued.append(section)
-                invoke_paced(self._add_section, section)
+                invoke_paced(self._add_next_queued)
 
             else:
                 self._add_section(section)
@@ -266,6 +269,13 @@ class DrawerContents(QtWidgets.QWidget):
     # ------------------------------------------------------------------ #
     # Listing the sections                                                #
     # ------------------------------------------------------------------ #
+
+    def _add_next_queued(self):
+        """Build the queued section ``next_section_to_build`` picks."""
+
+        if self._queued:
+            next_section = next_section_to_build(self._queued, self.model.opened_by_app)
+            self._add_section(next_section)
 
     def _add_section(self, section):
         """Build ``section``'s view where the wanted order puts it, unless it
