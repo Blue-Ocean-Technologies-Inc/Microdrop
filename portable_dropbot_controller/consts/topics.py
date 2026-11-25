@@ -29,12 +29,14 @@ MOTORS_UPDATED = "portable_dropbot/signals/motors_updated"
 CALIBRATION_UPDATED = "portable_dropbot/signals/calibration_updated"
 #: Temp pane feedback: per-channel readings and PID readbacks.
 TEMP_UPDATED = "portable_dropbot/signals/temp_updated"
-#: Heater auto-tune feedback: each reading of a running step capture
-#: (HeaterTuneProgress), the fit and proposed gains or the refusal
-#: (HeaterTuneDone), and an apply's outcome (HeaterTuneApplied).
+#: Heater auto-tune feedback: each reading of a running step capture or
+#: verify run (HeaterTuneProgress), the fit and proposed gains or the
+#: refusal (HeaterTuneDone), an apply's outcome (HeaterTuneApplied), and a
+#: verify run's response metrics or refusal (HeaterTuneVerifyDone).
 HEATER_TUNE_PROGRESS = "portable_dropbot/signals/heater_tune_progress"
 HEATER_TUNE_DONE = "portable_dropbot/signals/heater_tune_done"
 HEATER_TUNE_APPLIED = "portable_dropbot/signals/heater_tune_applied"
+HEATER_TUNE_VERIFY_DONE = "portable_dropbot/signals/heater_tune_verify_done"
 #: PMT pane feedback: power state, gain, acquire results.
 PMT_UPDATED = "portable_dropbot/signals/pmt_updated"
 #: PMT Capture pane: the board's configured spots (PmtSpotsUpdated), per-spot
@@ -67,6 +69,9 @@ MAGNET_APPLIED = "portable_dropbot/signals/magnet_applied"
 TEMPERATURE_REACHED = "portable_dropbot/signals/temperature_reached"
 #: Driver alarm pushes (AlarmRaised): raises AND clears, one report each.
 ALARM_RAISED = "portable_dropbot/signals/alarm"
+#: Outcome of a CLEAR_ALARMS request (AlarmsCleared): per board, the codes
+#: cleared, the codes that failed and the alarms still active after.
+ALARMS_CLEARED = "portable_dropbot/signals/alarms_cleared"
 ERROR_RAISED = "portable_dropbot/signals/error"
 #: A smart chip lock or a pad retract that did not finish (ChipLockFailed).
 CHIP_LOCK_FAILED = "portable_dropbot/signals/chip_lock_failed"
@@ -87,6 +92,9 @@ DISCONNECT = "portable_dropbot/requests/disconnect"
 #: Clear a latched firmware halt (HALT_CLEAR); empty message. HV stays off
 #: until realtime mode enables it again.
 CLEAR_HALT = "portable_dropbot/requests/clear_halt"
+#: Clear latched board alarms (ClearAlarmsRequest; empty message = every
+#: active alarm on both boards); answers on ALARMS_CLEARED.
+CLEAR_ALARMS = "portable_dropbot/requests/clear_alarms"
 SET_VOLTAGE = "portable_dropbot/requests/set_voltage"
 SET_FREQUENCY = "portable_dropbot/requests/set_frequency"
 #: Move the chip tray (MoveTrayRequest). A legacy bare "in"/"out"/"toggle"
@@ -127,11 +135,14 @@ TEMP_SET_PID = "portable_dropbot/requests/temp_set_pid"
 #: on TEMPERATURE_REACHED once the reading is within tolerance.
 PROTOCOL_SET_TEMPERATURE = "portable_dropbot/requests/protocol_set_temperature"
 #: Heater auto-tune: start a step capture (HeaterTuneStartRequest), cancel
-#: it (raw publish_message, empty message, like PMT_CAPTURE_ABORT; the
-#: heater is switched off), and write a proposal (HeaterTuneApplyRequest).
+#: it or a verify run (raw publish_message, empty message, like
+#: PMT_CAPTURE_ABORT; the heater is switched off), write a proposal
+#: (HeaterTuneApplyRequest), and verify the gains on the board with a
+#: regulated run to a set point (HeaterTuneVerifyStartRequest).
 HEATER_TUNE_START = "portable_dropbot/requests/heater_tune_start"
 HEATER_TUNE_CANCEL = "portable_dropbot/requests/heater_tune_cancel"
 HEATER_TUNE_APPLY = "portable_dropbot/requests/heater_tune_apply"
+HEATER_TUNE_VERIFY_START = "portable_dropbot/requests/heater_tune_verify_start"
 # PMT.
 PMT_POWER = "portable_dropbot/requests/pmt_power"
 PMT_SET_GAIN = "portable_dropbot/requests/pmt_set_gain"

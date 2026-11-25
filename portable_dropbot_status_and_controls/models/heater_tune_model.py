@@ -9,8 +9,9 @@
 # Thanks for using Microdrop open source!
 
 """Qt-free state of the heater auto-tune group (More Controls pane): the
-step capture's parameters, the running capture's progress, and the last
-fit with a proposal per tuning style, which Apply writes after a confirm."""
+step capture's parameters, the running run's progress and live plot, the
+last fit with a proposal per tuning style, which Apply writes after a
+confirm, and the verify run that checks the gains on the board."""
 
 # Enthought library imports.
 from traits.api import (
@@ -19,6 +20,7 @@ from traits.api import (
     Dict,
     Enum,
     HasTraits,
+    Instance,
     Int,
     List,
     Property,
@@ -35,9 +37,16 @@ from portable_dropbot_controller.consts import (
     HEATER_TUNE_DURATION_S_BOUNDS,
     HEATER_TUNE_DUTY_PCT_BOUNDS,
     HEATER_TUNE_FITTING_PHASE,
+    HEATER_TUNE_MARGIN_C,
     HEATER_TUNE_MAX_TEMP_C_BOUNDS,
     HEATER_TUNE_STYLES,
+    HEATER_TUNE_VERIFY_DEFAULT_SETPOINT_C,
+    HEATER_TUNE_VERIFY_SETPOINT_C_BOUNDS,
 )
+
+# Local imports.
+from ..consts import HEATER_TUNE_VERIFY_SETPOINT_STEP_C
+from .heater_tune_plot_model import HeaterTunePlot
 
 
 class HeaterTuneModel(HasTraits):
@@ -78,9 +87,18 @@ class HeaterTuneModel(HasTraits):
         "last until the next reboot",
     )
 
+    # ---- Verify run parameters (cap and time limit: the capture's) ----
+    verify_setpoint_c = Range(
+        *HEATER_TUNE_VERIFY_SETPOINT_C_BOUNDS,
+        HEATER_TUNE_VERIFY_DEFAULT_SETPOINT_C,
+        desc="set point the board's own loop regulates to; at least 1 °C above "
+        "the current reading and 1.5 °C below the maximum temperature",
+    )
+
     start_button = Button("Start Auto-tune")
     cancel_button = Button("Cancel")
     apply_button = Button("Apply...")
+    verify_button = Button("Verify")
 
     # ---- Run state and result -----------------------------------------
     #: A capture (or its fit) runs on the backend: from its first progress
@@ -98,6 +116,10 @@ class HeaterTuneModel(HasTraits):
     smith_model = List()
     #: The fit's and the model's notes (quality, clamping).
     notes_display = Str()
+    #: The last verify run's response figures, one line.
+    verify_display = Str("-")
+    #: Live temperature and output of the running (or last) run.
+    plot = Instance(HeaterTunePlot, ())
 
     #: The selected style's proposal, one line.
     proposal_display = Property(Str, observe="proposals, style, smith_model")
@@ -126,17 +148,28 @@ class HeaterTuneModel(HasTraits):
     # ------------------------------------------------------------------ #
 
     def adopt_progress(self, progress):
-        """Show a HeaterTuneProgress."""
+        """Show a HeaterTuneProgress; the first of a run starts its plot."""
+
+        if not self.running:
+            self.plot.begin(progress.setpoint_c)
+
         self.running = True
 
         if progress.phase == HEATER_TUNE_FITTING_PHASE:
             self.status = f"ch{progress.channel}: heater off, fitting the model..."
             return
 
+        self.plot.add_reading(
+            progress.elapsed_s, progress.current_c, float(progress.duty_pct)
+        )
+
         reading = "-" if progress.current_c is None else f"{progress.current_c:.2f} °C"
         driving = f", driving {progress.duty_pct} %" if progress.duty_pct else ""
+        target = (
+            "" if progress.setpoint_c is None else f" to {progress.setpoint_c:g} °C"
+        )
         self.status = (
-            f"ch{progress.channel} {progress.phase}: {reading}{driving}, "
+            f"ch{progress.channel} {progress.phase}{target}: {reading}{driving}, "
             f"{progress.elapsed_s:.0f} s"
         )
 
@@ -161,6 +194,42 @@ class HeaterTuneModel(HasTraits):
         )
         self.notes_display = " ".join(done.notes)
         self.status = f"ch{done.channel} done ({done.reason}); heater off"
+
+        self.plot.overlay_fopdt(fit.gain, fit.tau_s, fit.dead_time_s, fit.y0_c)
+        self._suggest_verify_setpoint()
+
+    def adopt_verify_done(self, done):
+        """Show a HeaterTuneVerifyDone: the response figures (an aborted
+        run's too), or why there are none (a refusal keeps the last ones)."""
+        self.running = False
+
+        if done.metrics is not None:
+            self.verify_display = _verify_summary(done)
+            self._suggest_verify_setpoint()
+
+        if done.ok:
+            self.status = f"ch{done.channel} verify done ({done.reason}); heater off"
+        elif done.metrics is None:
+            self.status = f"ch{done.channel}: verify: no result: {done.reason}"
+        else:
+            self.status = f"ch{done.channel}: verify ended early: {done.reason}"
+
+    def _suggest_verify_setpoint(self):
+        """The next verify's set point: the last reading plus
+        HEATER_TUNE_VERIFY_SETPOINT_STEP_C, held below the cap minus the run
+        margin, where the backend would refuse it."""
+
+        if not self.plot.samples:
+            return
+
+        last_c = self.plot.samples[-1][1]
+        ceiling_c = self.max_temp_c - HEATER_TUNE_MARGIN_C
+        floor_c = HEATER_TUNE_VERIFY_SETPOINT_C_BOUNDS[0]
+        suggested_c = min(
+            max(last_c + HEATER_TUNE_VERIFY_SETPOINT_STEP_C, floor_c), ceiling_c
+        )
+
+        self.verify_setpoint_c = round(suggested_c, 1)
 
     def adopt_applied(self, applied):
         """Show a HeaterTuneApplied, as the vendor panel words it."""
@@ -191,3 +260,29 @@ class HeaterTuneModel(HasTraits):
             )
 
         self.status = f"ch{applied.channel}: {'; '.join(parts)}"
+
+
+def _verify_summary(done):
+    """A HeaterTuneVerifyDone's metrics, one line; figures the record does
+    not show are left out."""
+    metrics = done.metrics
+    parts = []
+
+    if metrics.dead_time_s is not None:
+        parts.append(f"dead time {metrics.dead_time_s:.0f} s")
+
+    if metrics.rise_s is not None:
+        parts.append(f"rise {metrics.rise_s:.0f} s")
+
+    if metrics.overshoot_pct is not None:
+        parts.append(f"overshoot {metrics.overshoot_pct:.1f} %")
+
+    if metrics.settled and metrics.settle_s is not None:
+        parts.append(f"settled in {metrics.settle_s:.0f} s (±{done.band_c:g} °C)")
+    else:
+        parts.append("not settled")
+
+    if metrics.sse_c is not None:
+        parts.append(f"steady-state error {metrics.sse_c:+.2f} °C")
+
+    return f"ch{done.channel} to {done.setpoint_c:g} °C: {', '.join(parts)}"

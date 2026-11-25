@@ -25,10 +25,11 @@ stop and a lost link all end it with the heater switched off (a lost link
 leaves that to the firmware's host-silence failsafe).
 
 The fitted model and proposed gains are only published; the frontend
-writes them with HEATER_TUNE_APPLY after the operator confirms."""
+writes them with HEATER_TUNE_APPLY after the operator confirms. A verify
+run (the heater-tune verify mixin) takes the same claim, so all of the
+above holds for it too."""
 
 # Standard library imports.
-import json
 import threading
 
 # Third-party imports.
@@ -43,7 +44,6 @@ from portable_dropbot_self_tests.consts import SELF_TEST_RUN
 
 # Local imports.
 from ..consts import (
-    DEFAULT_TEMP_CHANNEL,
     DISCONNECT,
     HEATER_TUNE_APPLY,
     HEATER_TUNE_FITTING_PHASE,
@@ -63,6 +63,7 @@ from ..consts import (
     temperature_reached_publisher,
 )
 from ..heater_limits import heater_failsafe_alarms, heater_target_refusal
+from ..heater_tune_board import HeaterTuneBoard, heater_request_channel
 from ..heater_tune_capture import (
     CONNECTION_LOST_REASON,
     HeaterTuneCancel,
@@ -91,54 +92,6 @@ HEATER_TUNE_BLOCKED_TOPICS = (
     SELF_TEST_RUN,
     DISCONNECT,
 )
-
-
-class HeaterTuneBoard(HasTraits):
-    """The board a tune drives (see ``heater_tune_capture``): one driver
-    call per method, each under the controller's proxy lock, except OFF,
-    which must never queue (as HV off)."""
-
-    #: The composed Portable DropBot controller running the tune.
-    controller = Any()
-
-    def attached(self):
-        return self.controller.proxy is not None
-
-    def read(self, channel):
-        """(current °C, output %) of a TEMP_READ_INFO, or None."""
-        ok, info = self.controller._proxy_call(
-            f"heater tune: read ch{channel}",
-            lambda: self.controller.proxy.sig.temp_read_info(channel),
-        )
-
-        if not ok or info is None:
-            return None
-
-        return info.current, info.output
-
-    def drive(self, channel, duty_pct):
-        """Manual duty on ``channel`` (TEMP_HEAT_PWM); the other heater gets
-        0, which leaves a regulating loop alone (it is off: start rule)."""
-        duties = [0, 0]
-        duties[channel] = duty_pct
-        ok, accepted = self.controller._proxy_call(
-            f"heater tune: drive ch{channel} at {duty_pct} %",
-            lambda: self.controller.proxy.sig.temp_heat_pwm(*duties),
-        )
-
-        return bool(ok and accepted)
-
-    def off(self, channel):
-        """TEMP_START_STOP 0: ends a manual drive and a regulated loop."""
-        ok, accepted = self.controller._proxy_call(
-            f"heater tune: ch{channel} off",
-            lambda: self.controller.proxy.sig.temp_start_stop(
-                channel=channel, enable=0
-            ),
-            serialize=False,
-        )
-
-        return bool(ok and accepted)
 
 
 @provides(IPortableDropbotControlMixinService)
@@ -180,12 +133,14 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
         cancel = self._heater_tune_cancel
 
         if topic == HEATER_TUNE_START:
-            self._refuse_heater_tune(_message_channel(message), reason)
+            self._refuse_heater_tune(heater_request_channel(message), reason)
         elif topic == HEATER_TUNE_APPLY:
-            self._publish_heater_tune_applied(_message_channel(message), error=reason)
+            self._publish_heater_tune_applied(
+                heater_request_channel(message), error=reason
+            )
         elif cancel is not None and topic == PROTOCOL_SET_TEMPERATURE:
             temperature_reached_publisher.publish(
-                {"channel": _message_channel(message), "error": reason}
+                {"channel": heater_request_channel(message), "error": reason}
             )
         elif (
             cancel is not None
@@ -263,29 +218,20 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
             request = HeaterTuneStartRequest.model_validate_json(str(message))
         except ValidationError as error:
             self._refuse_heater_tune(
-                _message_channel(message), error.errors()[0]["msg"]
+                heater_request_channel(message), error.errors()[0]["msg"]
             )
             return
 
-        with self._heater_tune_claim:
-            reason = self._heater_tune_start_refusal(request)
-
-            if reason:
-                self._refuse_heater_tune(request.channel, reason)
-                return
-
-            cancel = HeaterTuneCancel()
-            self._heater_tune_cancel = cancel
-            self._heater_tune_channel = request.channel
-
-        thread = threading.Thread(
-            target=self._run_heater_tune,
-            args=(request, cancel),
-            daemon=True,
-            name="heater-tune",
+        started = self._start_heater_tune_run(
+            request,
+            lambda current_c: capture_problem(capture_config(request), current_c),
+            self._run_heater_tune,
+            self._refuse_heater_tune,
+            "heater-tune",
         )
-        self._heater_tune_thread = thread
-        thread.start()
+
+        if not started:
+            return
 
         logger.info(
             f"Portable Dropbot heater auto-tune ch{request.channel}: step "
@@ -310,7 +256,7 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
             request = HeaterTuneApplyRequest.model_validate_json(str(message))
         except ValidationError as error:
             self._publish_heater_tune_applied(
-                _message_channel(message), error=error.errors()[0]["msg"]
+                heater_request_channel(message), error=error.errors()[0]["msg"]
             )
             return
 
@@ -361,9 +307,35 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
     # Start / apply rules                                                 #
     # ------------------------------------------------------------------ #
 
-    def _heater_tune_start_refusal(self, request):
-        """Why a tune must not start (operator text), or ""; the caller
-        holds `_heater_tune_claim`."""
+    def _start_heater_tune_run(self, request, run_problem, run, refuse, name):
+        """Check a run's start rules under the claim (``run_problem(current
+        °C)`` is the vendor's own check), then hand ``run(request, cancel)``
+        to a daemon thread; a refusal is answered with ``refuse(channel,
+        reason)``. Returns whether the run started."""
+
+        with self._heater_tune_claim:
+            reason = self._heater_tune_run_refusal(request, run_problem)
+
+            if reason:
+                refuse(request.channel, reason)
+
+                return False
+
+            cancel = HeaterTuneCancel()
+            self._heater_tune_cancel = cancel
+            self._heater_tune_channel = request.channel
+
+        thread = threading.Thread(
+            target=run, args=(request, cancel), daemon=True, name=name
+        )
+        self._heater_tune_thread = thread
+        thread.start()
+
+        return True
+
+    def _heater_tune_run_refusal(self, request, run_problem):
+        """Why a capture or verify run must not start (operator text), or
+        ""; the caller holds `_heater_tune_claim`."""
         reason = self._heater_tune_busy_reason()
 
         if reason:
@@ -374,13 +346,11 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
         if refusal:
             return f"maximum temperature: {refusal}"
 
-        ok, info = self._proxy_call(
-            f"heater tune: read ch{request.channel}",
-            lambda: self.proxy.sig.temp_read_info(request.channel),
-        )
-        current_c = info.current if ok and info is not None else None
+        current_c, _output_pct = HeaterTuneBoard(controller=self).read(
+            request.channel
+        ) or (None, None)
 
-        return capture_problem(capture_config(request), current_c) or ""
+        return run_problem(current_c) or ""
 
     def _heater_tune_apply_refusal(self, request):
         """Why proposed gains must not be written (operator text), or "";
@@ -393,11 +363,11 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
         return smith_model_refusal(request.channel, request.smith_model)
 
     def _heater_tune_busy_reason(self):
-        """A tune, a protocol step's setpoint or a heater already on: the
-        vendor panel's "both heaters must be off" rule."""
+        """A tune or verify run, a protocol step's setpoint or a heater
+        already on: the vendor panel's "both heaters must be off" rule."""
 
         if self._heater_tune_cancel is not None:
-            return "a heater auto-tune is already running"
+            return "a heater auto-tune or verify run is already running"
 
         step_watch = self._temp_reached_cancel
 
@@ -427,12 +397,9 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
     # ------------------------------------------------------------------ #
 
     def _run_heater_tune(self, request, cancel):
-        """The capture, the fit and the done publish; the claim is released
-        whatever happens, the heater switched off by the capture itself."""
-        channel = request.channel
-        board = HeaterTuneBoard(controller=self)
+        """The capture, the fit and the done publish."""
 
-        try:
+        def capture_and_fit(board):
             capture, off_confirmed = run_step_capture(
                 board,
                 capture_config(request),
@@ -443,13 +410,26 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
             if capture.phase == "done":
                 heater_tune_progress_publisher.publish(
                     {
-                        "channel": channel,
+                        "channel": request.channel,
                         "phase": HEATER_TUNE_FITTING_PHASE,
                         "elapsed_s": 0.0,
                     }
                 )
 
-            outcome = summarize_capture(capture)
+            return summarize_capture(capture), off_confirmed
+
+        self._finish_heater_tune_run(
+            "auto-tune", request.channel, capture_and_fit, heater_tune_done_publisher
+        )
+
+    def _finish_heater_tune_run(self, label, channel, run, done_publisher):
+        """Run ``run(board)``, which returns ``(outcome, off_confirmed)``,
+        and publish the outcome on ``done_publisher``; the claim is released
+        whatever happens, the heater switched off by the run loop itself."""
+        board = HeaterTuneBoard(controller=self)
+
+        try:
+            outcome, off_confirmed = run(board)
             outcome["off_confirmed"] = off_confirmed
 
             if not off_confirmed and board.attached():
@@ -459,12 +439,12 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
                 )
         except Exception as error:
             # Broad by design: any failure must still end in a done publish
-            # and a released claim (the capture already tried the OFF).
-            logger.exception(f"Portable Dropbot heater auto-tune ch{channel} failed")
+            # and a released claim (the run loop already tried the OFF).
+            logger.exception(f"Portable Dropbot heater {label} ch{channel} failed")
             outcome = {
                 "channel": channel,
                 "ok": False,
-                "reason": f"tune failed: {error}",
+                "reason": f"{label} failed: {error}",
                 "off_confirmed": False,
             }
         finally:
@@ -472,10 +452,10 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
                 self._heater_tune_cancel = None
 
         logger.info(
-            f"Portable Dropbot heater auto-tune ch{channel} ended: "
+            f"Portable Dropbot heater {label} ch{channel} ended: "
             f"{'ok' if outcome['ok'] else 'no result'} ({outcome['reason']})"
         )
-        heater_tune_done_publisher.publish(outcome)
+        done_publisher.publish(outcome)
 
     def _publish_heater_tune_progress(self, capture, current_c):
         samples = capture.samples
@@ -507,14 +487,3 @@ class PortableDropbotHeaterTuneMixinService(HasTraits):
             )
 
         heater_tune_applied_publisher.publish({"channel": channel, **outcome})
-
-
-def _message_channel(message):
-    """The heater channel a (possibly invalid) request names, for its reply;
-    the default channel when it names none."""
-    try:
-        channel = int(json.loads(str(message)).get("channel", DEFAULT_TEMP_CHANNEL))
-    except (ValueError, TypeError, AttributeError):
-        return DEFAULT_TEMP_CHANNEL
-
-    return min(max(channel, 0), TEMP_CHANNEL_MAX)

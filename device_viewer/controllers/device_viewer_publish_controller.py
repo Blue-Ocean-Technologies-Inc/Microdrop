@@ -123,13 +123,14 @@ class DeviceViewerPublishController(HasTraits):
 
     @observe("_disable_state_messages")
     def _disable_state_messages_change_log(self, event):
+        # A state, toggled in normal use (route playback, restore): no fault.
         if event.new:
-            logger.warning(
+            logger.debug(
                 "Device viewer will not be processing device view model state "
                 "change since state messages are disabled."
             )
         else:
-            logger.info("Device viewer will process device view model state changes")
+            logger.debug("Device viewer will process device view model state changes")
 
     # ---------------------------------------------------- state message
     @observe("message_buffer")
@@ -192,8 +193,9 @@ class DeviceViewerPublishController(HasTraits):
             # restoring the user-toggled channels.
             return
 
+        # Start-up order: the model changes before its device SVG is in.
         if not self.model.electrodes.svg_model:
-            logger.warning(
+            logger.debug(
                 "Unable to publish device view model yet. Need svg_model to "
                 "fully initialize."
             )
@@ -296,7 +298,9 @@ class DeviceViewerPublishController(HasTraits):
         if not self.model.connected:
             reason += "Device Not connected; "
 
-        logger.critical(
+        # Expected state, not a failure: at start-up no device is connected
+        # and realtime mode is off, and the UI already shows both.
+        logger.debug(
             f"DEVICE VIEWER: Cannot publish electrodes state change; reasons: {reason}"
         )
 
@@ -370,7 +374,6 @@ class DeviceViewerPublishController(HasTraits):
             # In pF/mm^2
             FILLER_CAPACITANCE_KEY: self.model.filler_capacitance_over_area,
         }
-        logger.warning(f"Publishing calibration message: {message}")
         publish_message(topic=CALIBRATION_DATA, message=json.dumps(message))
         logger.info(f"Published calibration message: {message}")
 

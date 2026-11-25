@@ -8,22 +8,30 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import atexit
 import functools
 import time
 
+# Third-party imports.
 import dropbot
 from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPPED
 from apscheduler.triggers.interval import IntervalTrigger
 
+# Enthought library imports.
 from traits.api import Bool, HasTraits, Instance, Str, provides
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_dropbot_serial_proxy import DramatiqDropbotSerialProxy
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.hardware_device_monitoring_helpers import check_devices_available
+from microdrop_utils.hardware_device_monitoring_helpers import (
+    DeviceNotFoundError,
+    check_devices_available,
+)
 
+# Local imports.
 from ..consts import (
     DROPBOT_CONNECTED,
     DROPBOT_DB3_120_HWID,
@@ -33,6 +41,7 @@ from ..consts import (
 )
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -129,10 +138,21 @@ class DropbotMonitorMixinService(HasTraits):
             """
             try:
                 return check_devices_available(hwids_to_check)
+
+            # No DropBot plugged in is the normal idle state; the search
+            # repeats, so it is said once per search, and quietly.
+            except DeviceNotFoundError as e:
+                if not self._error_shown:
+                    logger.info(f"{e}; still looking")
+                    self._error_shown = True
+
+                return None
+
             except Exception as e:
                 if not self._error_shown:
                     logger.error(f"{str(e)}")
                     self._error_shown = True
+
                 return None
 
         scheduler = BackgroundScheduler()

@@ -10,16 +10,19 @@
 
 """The heater auto-tune run, as the vendor's tuning panel drives
 ``dropbot_portable.heater_tune``: read the heater once a second, feed the
-``StepCapture`` state machine, send the commands it returns, then fit and
+run's state machine (``StepCapture`` here, ``VerifyRun`` in
+``heater_tune_verify``), send the commands it returns, then fit and
 propose. GUI- and controller-free: the board is any object with the
-``HeaterTuneBoard`` methods (``attached``, ``read``, ``drive``, ``off``).
+``HeaterTuneBoard`` methods (``attached``, ``read``, ``drive``,
+``set_target``, ``start``, ``off``).
 
 Safety, on top of the state machine's own (never past the cap, bounded
-duration, abort on missing or outage readings): a refused drive aborts the
-run, OFF is resent until acknowledged, and whatever ends the run (cancel,
-error, an exception) the heater is switched off once more unless an OFF was
-already confirmed. A lost link cannot send anything: the firmware's
-host-silence failsafe (alarm 09004) cuts the heater then."""
+duration, abort on missing or outage readings): a refused drive, set point
+or loop start aborts the run, OFF is resent until acknowledged, and
+whatever ends the run (cancel, error, an exception) the heater is switched
+off once more unless an OFF was already confirmed. A lost link cannot send
+anything: the firmware's host-silence failsafe (alarm 09004) cuts the
+heater then."""
 
 # Standard library imports.
 import threading
@@ -30,6 +33,8 @@ from dropbot_portable.heater_tune import (
     CMD_DONE,
     CMD_DRIVE,
     CMD_OFF,
+    CMD_START,
+    CMD_TARGET,
     CaptureConfig,
     StepCapture,
     smith_model,
@@ -49,6 +54,12 @@ CONNECTION_LOST_REASON = (
     "connection lost: the heater could not be switched off from here; the "
     "firmware host-silence failsafe (alarm 09004) cuts it"
 )
+#: Why a run ended on a command the board did not acknowledge.
+COMMAND_REFUSED_REASONS = {
+    CMD_DRIVE: "drive refused",
+    CMD_TARGET: "set point refused",
+    CMD_START: "loop start refused",
+}
 
 
 class HeaterTuneCancel(threading.Event):
@@ -72,55 +83,93 @@ def run_step_capture(
     clock=time.monotonic,
     interval_s=HEATER_TUNE_SAMPLE_INTERVAL_S,
 ):
-    """Run one step capture on ``board`` until the state machine is done,
-    ``cancel`` is set or the link is lost. Returns ``(capture,
-    off_confirmed)``: ``off_confirmed`` is False when the heater may still
-    be driven (OFF never acknowledged, or the link was lost meanwhile)."""
+    """Run one step capture on ``board`` (see ``run_heater_machine``).
+    Returns ``(capture, off_confirmed)``."""
     capture = StepCapture(config, t0=clock())
+
+    return run_heater_machine(
+        board, capture, cancel, publish_progress, clock=clock, interval_s=interval_s
+    )
+
+
+def run_heater_machine(
+    board,
+    machine,
+    cancel,
+    publish_progress,
+    clock=time.monotonic,
+    interval_s=HEATER_TUNE_SAMPLE_INTERVAL_S,
+    first_commands=(),
+):
+    """Send ``first_commands``, then drive ``machine`` (a vendor run state
+    machine) on ``board`` until it is done, ``cancel`` is set or the link is
+    lost. Returns ``(machine, off_confirmed)``: ``off_confirmed`` is False
+    when the heater may still be driven (OFF never acknowledged, or the link
+    was lost meanwhile)."""
+    channel = machine.cfg.channel
     state = {"driven": False}
 
     try:
-        while capture.active:
+        _execute(board, machine, first_commands, state)
+
+        while machine.active:
             if cancel.wait(interval_s):
-                _execute(board, capture, capture.abort(cancel.reason), state)
+                _execute(board, machine, machine.abort(cancel.reason), state)
 
                 break
 
             if not board.attached():
-                capture.abort(CONNECTION_LOST_REASON)
+                machine.abort(CONNECTION_LOST_REASON)
 
                 break
 
-            current_c, output_pct = board.read(config.channel) or (None, None)
-            commands = capture.feed(clock(), current_c, output_pct)
-            publish_progress(capture, current_c)
-            _execute(board, capture, commands, state)
+            current_c, output_pct = board.read(channel) or (None, None)
+            commands = machine.feed(clock(), current_c, output_pct)
+            publish_progress(machine, current_c)
+            _execute(board, machine, commands, state)
     finally:
         if state["driven"] and board.attached():
-            _switch_off(board, config.channel, state)
-
-    return capture, not state["driven"]
-
-
-def _execute(board, capture, commands, state):
-    """Send the state machine's commands; a refused drive aborts the run
-    (its OFF is sent right after)."""
-    channel = capture.cfg.channel
-
-    for command in commands:
-        if command[0] == CMD_DRIVE:
-            state["driven"] = True
-
-            if not board.drive(channel, int(command[1])):
-                _execute(board, capture, capture.abort("drive refused"), state)
-
-                return
-
-        elif command[0] == CMD_OFF and board.attached():
             _switch_off(board, channel, state)
 
-        elif command[0] == CMD_DONE:
+    return machine, not state["driven"]
+
+
+def _execute(board, machine, commands, state):
+    """Send the state machine's commands; a refused drive, set point or loop
+    start aborts the run (its OFF is sent right after)."""
+    channel = machine.cfg.channel
+
+    for command in commands:
+        if command[0] == CMD_DONE:
             return
+
+        if command[0] == CMD_OFF:
+            if board.attached():
+                _switch_off(board, channel, state)
+
+            continue
+
+        if command[0] in (CMD_DRIVE, CMD_START):
+            state["driven"] = True
+
+        if not _send(board, channel, command):
+            refusal = COMMAND_REFUSED_REASONS[command[0]]
+            _execute(board, machine, machine.abort(refusal), state)
+
+            return
+
+
+def _send(board, channel, command):
+    """Send one drive, set point or loop start; whether it was
+    acknowledged."""
+
+    if command[0] == CMD_DRIVE:
+        return board.drive(channel, int(command[1]))
+
+    if command[0] == CMD_TARGET:
+        return board.set_target(channel, float(command[1]))
+
+    return board.start(channel)
 
 
 def _switch_off(board, channel, state):
@@ -173,6 +222,7 @@ def summarize_capture(capture):
             "r2": fit.r2,
             "rmse_c": fit.rmse,
             "reached": fit.reached,
+            "y0_c": fit.y0,
         },
         "proposals": proposals,
         "smith_model": model,

@@ -258,12 +258,16 @@ class DeviceViewMainModel(HasTraits):
         """Restore the last measured calibration capacitances so the sidebar
         starts at the previous session's values. Data-only, mirroring the
         camera reference-rect persistence -- no preferences-pane view."""
-        l_cap_pref = str(
-            self.preferences.preferences.get("calibration.liquid_capacitance_over_area")
-        )
-        f_cap_pref = str(
-            self.preferences.preferences.get("calibration.filler_capacitance_over_area")
-        )
+        saved = self.preferences.preferences
+        l_cap_pref = str(saved.get("calibration.liquid_capacitance_over_area"))
+        f_cap_pref = str(saved.get("calibration.filler_capacitance_over_area"))
+
+        # Never calibrated on this machine (absent, or saved as None before a
+        # first calibration): the normal state, not a failure.
+        if l_cap_pref == f_cap_pref == "None":
+            logger.info("No calibration data saved in preferences yet")
+
+            return
 
         try:
             self.calibration.liquid_capacitance_over_area = float(l_cap_pref)
@@ -626,8 +630,9 @@ class DeviceViewMainModel(HasTraits):
             # will find it without reaching into this plugin's preferences.
             if self.preferences is not None:
                 app_globals[DEVICE_REPO_DIR_KEY] = str(self.preferences.DEVICE_REPO_DIR)
+        # Start-up order: the filename observer fires before the SVG is in.
         else:
-            logger.warning(
+            logger.debug(
                 "Unable to push svg filename to globals yet. Need svg_model "
                 "to fully initialize."
             )
@@ -731,6 +736,12 @@ class DeviceViewMainModel(HasTraits):
     @observe("electrode_scale, preferences:gap_height_um", post_init=True)
     def _sync_volume_estimate(self, event=None):
         """Feed the volume estimate the latest reading, area and calibration."""
+
+        # traits_init assigns ``electrodes`` (firing ``electrode_scale``)
+        # before ``calibration`` exists; it syncs once both do.
+        if self.calibration is None:
+            return
+
         self.volume_estimate.trait_set(
             capacitance_pf=self.calibration.last_capacitance,
             actuated_area_mm2=self.electrodes.get_activated_electrode_area_mm2(),

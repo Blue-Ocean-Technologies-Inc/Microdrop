@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from pyface.api import YES
+from pyface.api import GUI, YES
 from traits.api import observe
 from traitsui.api import Controller
 
@@ -129,8 +129,11 @@ class AdvancedControlsController(Controller):
             title="Home direction and polarity",
         )
 
+        # Deferred: the text editor that made this edit ignores a value set
+        # while it is still committing it, so a direct revert leaves the old
+        # text on screen.
         if answer != YES:
-            setattr(self.model, event.name, baseline)
+            GUI.invoke_later(setattr, self.model, event.name, baseline)
 
     @observe("model:preset_button")
     def _preset(self, event):

@@ -32,6 +32,7 @@ from portable_dropbot_controller.consts import (
     TempSetPidRequest,
     heater_tune_apply_publisher,
     heater_tune_start_publisher,
+    heater_tune_verify_start_publisher,
     temp_set_pid_publisher,
 )
 
@@ -125,6 +126,22 @@ class MoreControlsController(Controller):
             {
                 "channel": int(self.model.temp_channel),
                 "duty_pct": tune.duty_pct,
+                "max_temp_c": tune.max_temp_c,
+                "max_duration_s": tune.max_duration_s,
+            }
+        )
+
+    @observe("model:heater_tune:verify_button")
+    def _verify_heater_tune(self, event):
+        """Regulate the selected channel to the verify set point with the
+        gains on the board, under the capture's cap and time limit."""
+        tune = self.model.heater_tune
+        tune.status = "Starting verify..."
+
+        heater_tune_verify_start_publisher.publish(
+            {
+                "channel": int(self.model.temp_channel),
+                "setpoint_c": tune.verify_setpoint_c,
                 "max_temp_c": tune.max_temp_c,
                 "max_duration_s": tune.max_duration_s,
             }

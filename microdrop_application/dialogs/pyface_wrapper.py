@@ -27,10 +27,12 @@ Usage:
         do_something()
 """
 
+# Standard library imports.
 import html
 import traceback
 from typing import Optional, Sequence
 
+# Third-party imports.
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QFileDialog, QWidget
 
@@ -50,18 +52,17 @@ except ImportError:
 
 from .base_message_dialog import BaseMessageDialog
 from .message_dialog_types import (
+    DisclaimerDialog,
     ErrorAlertDialog,
     InformationDialog,
     SuccessDialog,
-    WarningAlertDialog, DisclaimerDialog,
+    WarningAlertDialog,
 )
 
 
 def format_traceback_detail(exc: BaseException) -> str:
     """Full formatted traceback for a dialog's collapsible ``detail`` slot."""
-    return "".join(
-        traceback.format_exception(type(exc), exc, exc.__traceback__)
-    )
+    return "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
 
 def escape_html_multiline(text: str) -> str:
@@ -80,8 +81,8 @@ def _prepare_dialog(
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
     detail_collapsible: Optional[bool] = True,
-    modal: Optional[bool] =True,
-    **kwargs
+    modal: Optional[bool] = True,
+    **kwargs,
 ) -> BaseMessageDialog:
     """
     Helper to create and prepare a dialog with common logic for
@@ -89,7 +90,9 @@ def _prepare_dialog(
     """
     # Use informative as main message if provided, otherwise use message
     main_message = informative if informative else message
-    is_html = (text_format == "auto" and informative is not None) or (informative is not None)
+    is_html = (text_format == "auto" and informative is not None) or (
+        informative is not None
+    )
 
     # When both informative and detail are provided, disable scrolling for
     # main message so informative stays in non-scrollable area
@@ -100,7 +103,13 @@ def _prepare_dialog(
     )
 
     # Create the dialog
-    dialog = dialog_factory(parent=parent, title=title, message=main_message, disable_main_scrolling=disable_main_scrolling, **kwargs)
+    dialog = dialog_factory(
+        parent=parent,
+        title=title,
+        message=main_message,
+        disable_main_scrolling=disable_main_scrolling,
+        **kwargs,
+    )
 
     if not modal:
         dialog.setWindowModality(Qt.NonModal)
@@ -111,19 +120,26 @@ def _prepare_dialog(
 
     # Add detail in collapsible section if provided
     if detail:
-        dialog.add_details_with_copy(detail, "Details:", collapsible=detail_collapsible, visible_lines=detail_visible_lines)
+        dialog.add_details_with_copy(
+            detail,
+            "Details:",
+            collapsible=detail_collapsible,
+            visible_lines=detail_visible_lines,
+        )
 
     return dialog
 
 
 def _with_checkbox(dialog, result):
-    """If *dialog* has a checkbox, return ``(result, checked)``; otherwise just *result*."""
+    """Return ``(result, checked)`` if *dialog* has a checkbox, else *result*."""
     if dialog.checkbox is not None:
         return result, dialog.checkbox.isChecked()
     return result
 
 
-def _apply_ok_cancel_labels(dialog, ok_label: str = "OK", cancel_label: str = "Exit") -> None:
+def _apply_ok_cancel_labels(
+    dialog, ok_label: str = "OK", cancel_label: str = "Exit"
+) -> None:
     """Rename the affirmative ("OK") and dismiss ("Exit") buttons of a styled
     OK/Cancel dialog.
 
@@ -150,7 +166,7 @@ def confirm(
     detail_visible_lines: Optional[int] = None,
     informative: Optional[str] = None,
     text_format: Optional[str] = None,
-    **kwargs
+    **kwargs,
 ):
     """
     Pyface-compatible confirm dialog using styled BaseMessageDialog.
@@ -172,17 +188,34 @@ def confirm(
     buttons[yes_label] = {"action": lambda: close_result(BaseMessageDialog.RESULT_YES)}
 
     if cancel:
-        buttons[cancel_label] = {"action": lambda: close_result(BaseMessageDialog.RESULT_CANCEL), "role": "exit"}
+        buttons[cancel_label] = {
+            "action": lambda: close_result(BaseMessageDialog.RESULT_CANCEL),
+            "role": "exit",
+        }
 
     if no_label:
-        buttons[no_label] = {"action": lambda: close_result(BaseMessageDialog.RESULT_NO), "role": "exit"}
-
+        buttons[no_label] = {
+            "action": lambda: close_result(BaseMessageDialog.RESULT_NO),
+            "role": "exit",
+        }
 
     # Factory function to create BaseMessageDialog
     def create_dialog(**opts):
-        return BaseMessageDialog(dialog_type=BaseMessageDialog.TYPE_QUESTION, buttons=buttons, **opts)
+        return BaseMessageDialog(
+            dialog_type=BaseMessageDialog.TYPE_QUESTION, buttons=buttons, **opts
+        )
 
-    dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
+    dialog = _prepare_dialog(
+        create_dialog,
+        parent,
+        title,
+        message,
+        detail,
+        detail_visible_lines,
+        informative,
+        text_format,
+        **kwargs,
+    )
     dialog_ref[0] = dialog
 
     # Show dialog and get result
@@ -248,8 +281,7 @@ def choose(
     if len(set(choices)) != len(choices):
         raise ValueError(f"choose() choices must be unique, got {choices}")
     if cancel and cancel_label in choices:
-        raise ValueError(
-            f"cancel_label {cancel_label!r} collides with a choice")
+        raise ValueError(f"cancel_label {cancel_label!r} collides with a choice")
 
     dialog_ref = [None]  # mutable closure reference, as in confirm()
 
@@ -270,12 +302,21 @@ def choose(
     def create_dialog(**opts):
         return BaseMessageDialog(
             dialog_type=BaseMessageDialog.TYPE_QUESTION,
-            buttons=buttons, **opts,
+            buttons=buttons,
+            **opts,
         )
 
-    dialog = _prepare_dialog(create_dialog, parent, title, message, detail,
-                             detail_visible_lines, informative, text_format,
-                             **kwargs)
+    dialog = _prepare_dialog(
+        create_dialog,
+        parent,
+        title,
+        message,
+        detail,
+        detail_visible_lines,
+        informative,
+        text_format,
+        **kwargs,
+    )
     dialog_ref[0] = dialog
 
     result = dialog.exec()
@@ -295,7 +336,7 @@ def information(
     timeout: Optional[int] = 0,
     ok_label: str = "OK",
     cancel_label: str = "Exit",
-    **kwargs
+    **kwargs,
 ):
     """
     Pyface-compatible information dialog using styled BaseMessageDialog.
@@ -312,10 +353,21 @@ def information(
     def create_dialog(**opts):
         return InformationDialog(exit=cancel, **opts)
 
-    dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, detail_collapsible, **kwargs)
+    dialog = _prepare_dialog(
+        create_dialog,
+        parent,
+        title,
+        message,
+        detail,
+        detail_visible_lines,
+        informative,
+        text_format,
+        detail_collapsible,
+        **kwargs,
+    )
     _apply_ok_cancel_labels(dialog, ok_label, cancel_label)
 
-    if timeout: # temp message
+    if timeout:  # temp message
         dialog.show()
         QTimer.singleShot(timeout, dialog.close)
 
@@ -337,7 +389,7 @@ def success(
     timeout: Optional[int] = 0,
     ok_label: str = "OK",
     cancel_label: str = "Exit",
-    **kwargs
+    **kwargs,
 ):
     """
     Pyface-compatible success dialog using styled BaseMessageDialog.
@@ -354,10 +406,20 @@ def success(
     def create_dialog(**opts):
         return SuccessDialog(exit=cancel, **opts)
 
-    dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
+    dialog = _prepare_dialog(
+        create_dialog,
+        parent,
+        title,
+        message,
+        detail,
+        detail_visible_lines,
+        informative,
+        text_format,
+        **kwargs,
+    )
     _apply_ok_cancel_labels(dialog, ok_label, cancel_label)
 
-    if timeout: # temp message
+    if timeout:  # temp message
         dialog.show()
         QTimer.singleShot(timeout, dialog.close)
 
@@ -378,7 +440,7 @@ def warning(
     text_format: Optional[str] = None,
     ok_label: str = "OK",
     cancel_label: str = "Exit",
-    **kwargs
+    **kwargs,
 ):
     """
     Pyface-compatible warning dialog using styled BaseMessageDialog.
@@ -395,7 +457,17 @@ def warning(
     def create_dialog(**opts):
         return WarningAlertDialog(exit=cancel, **opts)
 
-    dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
+    dialog = _prepare_dialog(
+        create_dialog,
+        parent,
+        title,
+        message,
+        detail,
+        detail_visible_lines,
+        informative,
+        text_format,
+        **kwargs,
+    )
     _apply_ok_cancel_labels(dialog, ok_label, cancel_label)
 
     result = dialog.exec()
@@ -403,12 +475,13 @@ def warning(
     mapped = OK if result == BaseMessageDialog.RESULT_OK else CANCEL
     return _with_checkbox(dialog, mapped)
 
+
 def disclaimer(
-        parent=None,
-        title: str = "Disclaimer",
-        message: str = "Disclaimer text goes here.",
-        ack_button_text: str = "I Understand",
-        **kwargs,
+    parent=None,
+    title: str = "Disclaimer",
+    message: str = "Disclaimer text goes here.",
+    ack_button_text: str = "I Understand",
+    **kwargs,
 ):
     """
     Pyface-compatible disclaimer dialog using styled BaseMessageDialog.
@@ -426,6 +499,7 @@ def disclaimer(
     mapped = OK if result == BaseMessageDialog.RESULT_OK else CANCEL
     return _with_checkbox(dialog, mapped)
 
+
 def error(
     parent: Optional[QWidget] = None,
     message: str = "",
@@ -436,7 +510,7 @@ def error(
     text_format: Optional[str] = None,
     ok_label: str = "OK",
     cancel_label: str = "Exit",
-    **kwargs
+    **kwargs,
 ):
     """
     Pyface-compatible error dialog using styled BaseMessageDialog.
@@ -450,9 +524,21 @@ def error(
     """
 
     def create_dialog(**opts):
-        return ErrorAlertDialog(error_details=None, **opts)  # Detail is handled by _prepare_dialog
+        return ErrorAlertDialog(
+            error_details=None, **opts
+        )  # Detail is handled by _prepare_dialog
 
-    dialog = _prepare_dialog(create_dialog, parent, title, message, detail, detail_visible_lines, informative, text_format, **kwargs)
+    dialog = _prepare_dialog(
+        create_dialog,
+        parent,
+        title,
+        message,
+        detail,
+        detail_visible_lines,
+        informative,
+        text_format,
+        **kwargs,
+    )
     _apply_ok_cancel_labels(dialog, ok_label, cancel_label)
 
     result = dialog.exec()
@@ -462,7 +548,13 @@ def error(
 
 
 # Optional: FileDialog wrapper if needed
-def file_dialog(parent: Optional[QWidget] = None, action: str = "open", default_path: str = "", wildcard: str = "All files (*.*)", **kwargs):
+def file_dialog(
+    parent: Optional[QWidget] = None,
+    action: str = "open",
+    default_path: str = "",
+    wildcard: str = "All files (*.*)",
+    **kwargs,
+):
     """
     Pyface-compatible file dialog wrapper.
 
@@ -484,13 +576,15 @@ def file_dialog(parent: Optional[QWidget] = None, action: str = "open", default_
     # In the future, could create a styled file dialog.
     if FileDialog is not None:
         if action == "open":
-            dialog = FileDialog(parent=parent, default_path=default_path, wildcard=wildcard)
+            dialog = FileDialog(
+                parent=parent, default_path=default_path, wildcard=wildcard
+            )
         else:
             dialog = FileDialog(
                 parent=parent,
                 default_path=default_path,
                 wildcard=wildcard,
-                action="save",
+                action="save as",
             )
         if dialog.open() == PYFACE_FILE_OK:
             return dialog.path
@@ -498,9 +592,13 @@ def file_dialog(parent: Optional[QWidget] = None, action: str = "open", default_
 
     # Fallback to PySide6 QFileDialog
     if action == "open":
-        path, _ = QFileDialog.getOpenFileName(parent, "Open File", default_path, wildcard)
+        path, _ = QFileDialog.getOpenFileName(
+            parent, "Open File", default_path, wildcard
+        )
     else:
-        path, _ = QFileDialog.getSaveFileName(parent, "Save File", default_path, wildcard)
+        path, _ = QFileDialog.getSaveFileName(
+            parent, "Save File", default_path, wildcard
+        )
     return path if path else None
 
 
