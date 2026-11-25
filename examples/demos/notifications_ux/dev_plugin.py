@@ -28,6 +28,7 @@ from traits.api import Any, Bool, Dict, Instance, List, Str, observe
 
 # Microdrop package imports.
 from microdrop_application.consts import PKG as microdrop_application_PKG
+from news.consts import NEWS_PLUGIN_ID
 from notifications.consts import NOTIFICATION_CATEGORIES, NOTIFICATIONS_PLUGIN_ID
 from notifications.models.settings import NotificationSettings
 
@@ -95,6 +96,9 @@ class NotificationsDevPlugin(Plugin):
 
     #: Answers the cards' demo buttons.
     _responder = Any()
+
+    #: The News actions.
+    _news = Any()
 
     #: The open group settings windows, by title.
     _settings_uis = Dict()
@@ -174,6 +178,7 @@ class NotificationsDevPlugin(Plugin):
                 id="notifications_ux_demo.device",
                 name="Device",
             ),
+            SGroup(*self._news_actions().actions(), id="notifications_ux_demo.news"),
             SGroup(*self._settings_actions(), id="notifications_ux_demo.settings"),
             SGroup(
                 _action("Toggle theme", self._toggle_theme),
@@ -215,6 +220,26 @@ class NotificationsDevPlugin(Plugin):
                 "Start, one step entry updating in place, finish",
             ),
         ]
+
+    def _news_actions(self):
+        """Feed creator, reload and pushes, on the news plugin's section."""
+        from .news_actions import NewsFeedActions
+
+        self._news = NewsFeedActions(
+            get_section=self._news_section, window=self._window_control
+        )
+
+        return self._news
+
+    def _news_section(self):
+        plugin = self.application.get_plugin(NEWS_PLUGIN_ID)
+
+        return plugin.sections[0] if plugin is not None else None
+
+    def _window_control(self):
+        window = self.application.active_window
+
+        return getattr(window, "control", None)
 
     def _settings_actions(self):
         return [

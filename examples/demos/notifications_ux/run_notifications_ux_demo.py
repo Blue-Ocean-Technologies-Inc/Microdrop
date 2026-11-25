@@ -51,6 +51,7 @@ def run(open_drawer):
     from microdrop_application.application import MicrodropApplication
     from microdrop_application.plugin import MicrodropPlugin
     from microdrop_status_bar.plugin import StatusBarPlugin
+    from news.plugin import NewsPlugin
     from notifications.plugin import NotificationsPlugin
 
     from microdrop_style.helpers import style_app
@@ -61,7 +62,7 @@ def run(open_drawer):
     )
     from microdrop_utils.deferred_plugins import DeferredPlugin
 
-    from .demo_plugins import DemoPluginManagementPlugin, NewsPlugin, StandInPanesPlugin
+    from .demo_plugins import DemoPluginManagementPlugin, StandInPanesPlugin
     from .dev_plugin import NotificationsDevPlugin
 
     from logger.plugin import LoggerPlugin

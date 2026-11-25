@@ -131,18 +131,3 @@ PLUGINS_CATEGORIES = [
         tone=TONE_SOFT,
     ),
 ]
-
-# ---------------------------------------------------------------------------
-# News (the news feed's consts.py)
-# ---------------------------------------------------------------------------
-NEWS_NEW_POSTS = "news.new_posts"
-
-NEWS_CATEGORIES = [
-    NotificationCategorySpec(
-        id=NEWS_NEW_POSTS,
-        group="News",
-        label="New posts",
-        description="A newsletter, announcement or release note arrives.",
-        tone=TONE_SOFT,
-    ),
-]
