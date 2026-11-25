@@ -72,6 +72,7 @@ from microdrop_application.dialogs.pyface_wrapper import (
     error,
     warning,
 )
+from notifications.consts import SEVERITY_INFO, notification_publisher
 
 # Local imports.
 from ..consts import (
@@ -82,6 +83,7 @@ from ..consts import (
     ALIGNMENT_PRESET_SCOPE_CAMERA_DEVICE,
     APPLY_ALIGNMENT_PRESET_DIALOG_TITLE,
     BEFORE_APPLY_PRESET_NAME_TEMPLATE,
+    CAMERA_ALIGNMENT_CATEGORY_ID,
     CONFIRM_AND_SAVE_CHOICE,
     DELETE_ALIGNMENT_PRESET_DIALOG_TITLE,
     ENDPOINT_ONLY_PRESET_NOTE,
@@ -90,6 +92,7 @@ from ..consts import (
     NO_SAVED_ALIGNMENT_TEMPLATE,
     NOTHING_CONFIRMED_MESSAGE,
     PENDING_PANE_EDITS_MESSAGE,
+    PKG,
     PRESET_DEVICE_SIZE_UNKNOWN_NOTE,
     PRESET_ENDPOINT_ONLY_NOTE,
     PRESET_INVALID_FRAME_SIZE_NOTE,
@@ -176,6 +179,10 @@ class CameraAlignmentWorkflowController(HasTraits):
 
     #: Shows a message in the application status bar.
     statusbar_message = Callable()
+
+    #: ``post_notification(payload)``: posts a NotificationMessage payload;
+    #: publishes it on NOTIFICATION_POST by default (no listener, no-op).
+    post_notification = Callable()
 
     #: Returns the selected camera's label ("" with none); stands in for
     #: ``camera_model`` until the pane hands that over.
@@ -1314,7 +1321,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         if not self.model.editable:
             self._restore_pending = True
             self._restore_with_saved_frame = saved_frame
-            self.statusbar_message(RESTORE_DEFERRED_MESSAGE)
+            self._notify_restore(camera, RESTORE_DEFERRED_MESSAGE)
 
             return
 
@@ -1357,7 +1364,7 @@ class CameraAlignmentWorkflowController(HasTraits):
                 camera=quoted, device_key=device_key, name=source.name
             )
 
-            self.statusbar_message(f"{message}: {note}" if note else message)
+            self._notify_restore(camera, f"{message}: {note}" if note else message)
 
             return
 
@@ -1369,7 +1376,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         )
 
         self._show_setup_notice(notice)
-        self.statusbar_message(notice)
+        self._notify_restore(camera, notice)
 
     def _put_on_live_alignment(
         self, preset, device_key, camera_quad, mapping, scene_quad
@@ -1545,6 +1552,28 @@ class CameraAlignmentWorkflowController(HasTraits):
         )
 
         return camera, str(setup.get("device_key", "")), bool(setup.get("owned"))
+
+    def _post_notification_default(self):
+        return notification_publisher.publish
+
+    def _notify_restore(self, camera, text):
+        """Say what restoring the alignment did as a notification, one entry
+        per camera that each restore updates in place: the text up to its
+        first ": " as the title, the rest as the detail."""
+        title, _, detail = text.partition(": ")
+        camera_key = camera.camera_id or camera.label
+
+        self.post_notification(
+            {
+                "title": title,
+                "detail": detail,
+                "severity": SEVERITY_INFO,
+                "category": "camera",
+                "category_id": CAMERA_ALIGNMENT_CATEGORY_ID,
+                "source": PKG,
+                "thread_id": f"{CAMERA_ALIGNMENT_CATEGORY_ID}.{camera_key}",
+            }
+        )
 
     def _show_setup_notice(self, notice):
         self._setup_notice = notice

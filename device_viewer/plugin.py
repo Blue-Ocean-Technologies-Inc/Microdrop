@@ -25,6 +25,7 @@ from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
 from microdrop_status_bar.consts import STATUS_BAR_ICONS
+from notifications.consts import NOTIFICATION_CATEGORIES
 from user_help_plugin.consts import TUTORIAL_ORDER_DEVICE, TUTORIALS, TutorialEntry
 
 # Local imports.
@@ -35,6 +36,7 @@ from .consts import (
     DEVICE_FILES_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_BASICS_TUTORIAL_HTML_PATH,
     DEVICE_VIEWER_LAYERS,
+    NOTIFICATION_CATEGORY_SPECS,
     PKG,
     RECORDING_VIEWER_TUTORIAL_HTML_PATH,
     ZONES_TUTORIAL_HTML_PATH,
@@ -61,6 +63,11 @@ class DeviceViewerPlugin(Plugin):
     #### Contributions to extension points made by this plugin ################
     # This plugin contributes some actors that can be called using certain routing keys.
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
+
+    #: The device viewer's kinds of notification.
+    notification_categories = List(
+        NOTIFICATION_CATEGORY_SPECS, contributes_to=NOTIFICATION_CATEGORIES
+    )
 
     task_id_to_contribute_view = Str(default_value=f"{microdrop_application_PKG}.task")
 
