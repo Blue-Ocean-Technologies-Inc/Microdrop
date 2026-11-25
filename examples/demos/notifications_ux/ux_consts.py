@@ -34,7 +34,7 @@ from plugin_management.consts import LOAD_STATUS_SECTION_ID
 # Microdrop style imports.
 from microdrop_style.colors import PRIMARY_COLOR, PRIMARY_SHADE, SLATE
 from microdrop_style.icons.icons import ICON_HISTORY
-from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
+from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_MARKS
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
@@ -304,7 +304,7 @@ SECTION_STYLES = {
         "extension", HEADER_ACCENTS[LOAD_STATUS_SECTION_ID]
     ),
     NEWS_SECTION_ID: SectionStyle(
-        "newspaper", HEADER_ACCENTS[NEWS_SECTION_ID], str(BLUE_OCEAN_SCI_BOTS_LOGO)
+        "newspaper", HEADER_ACCENTS[NEWS_SECTION_ID], str(BLUE_OCEAN_SCI_BOTS_MARKS)
     ),
     HISTORY_SECTION_ID: SectionStyle(ICON_HISTORY, HEADER_ACCENTS[HISTORY_SECTION_ID]),
 }

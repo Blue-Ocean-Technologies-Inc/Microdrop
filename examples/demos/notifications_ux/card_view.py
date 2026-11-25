@@ -39,7 +39,7 @@ from notifications.views.formatting import format_exact_time, format_preview
 # Microdrop style imports.
 from microdrop_style.colors import INFO_COLOR
 from microdrop_style.icons.icons import ICON_CLOSE, ICON_HELP
-from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_LOGO
+from microdrop_style.icons.logos import BLUE_OCEAN_SCI_BOTS_MARKS
 
 # Local imports.
 from . import colour_roles
@@ -307,7 +307,7 @@ class NotificationCard(QtWidgets.QFrame):
         # A new post's toast: News's brand mark, at its own width.
         if entry.feed_post_id:
             logo = scaled_logo(
-                BLUE_OCEAN_SCI_BOTS_LOGO, GLYPH_SIZE + 4, self.devicePixelRatioF()
+                BLUE_OCEAN_SCI_BOTS_MARKS, GLYPH_SIZE + 4, self.devicePixelRatioF()
             )
             self._glyph.setFixedWidth(int(logo.deviceIndependentSize().width()))
             self._glyph.setPixmap(logo)
