@@ -8,9 +8,14 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
+from traits.api import Any
+
+# Microdrop package imports.
 from template_status_and_controls.base_plugin import BaseStatusPlugin
 
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+# Local imports.
+from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name, listener_name
 
 
 class MockDropbotStatusPlugin(BaseStatusPlugin):
@@ -21,7 +26,32 @@ class MockDropbotStatusPlugin(BaseStatusPlugin):
 
     def _get_dock_pane_class(self):
         from .dock_pane import MockDropbotStatusDockPane
+
         return MockDropbotStatusDockPane
 
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
+
+    #: The status model and its message listener, made at start: the
+    #: listener's routes are registered at launch, so it must exist before
+    #: any routed message arrives, not wait for the pane, which shows them.
+    status_model = Any()
+    message_handler = Any()
+
+    def start(self):
+        """Make the Qt-free status model and its message listener."""
+        from .message_handler import MockDropbotMessageHandler
+        from .model import MockDropbotStatusModel
+
+        self.status_model = MockDropbotStatusModel()
+        self.message_handler = MockDropbotMessageHandler(
+            model=self.status_model,
+            name=listener_name,
+        )
+
+    def stop(self):
+        """Release the message listener, so a restart can register it anew."""
+
+        if self.message_handler is not None:
+            self.message_handler.teardown()
+            self.message_handler = None
