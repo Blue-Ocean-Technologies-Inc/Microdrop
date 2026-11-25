@@ -29,7 +29,7 @@ from pyface.qt import QtCore, QtWidgets
 from traits.api import Any, Bool, HasTraits, Instance, Int, List, observe
 
 # Microdrop style imports.
-from microdrop_style.typography import BODY_TEXT, role_font, text_scale
+from microdrop_style.typography import BODY_TEXT, role_font
 
 # Local imports.
 from ..models.notifications_pane_model import NotificationsPaneModel
@@ -57,13 +57,13 @@ logger = get_logger(__name__)
 BACKDROP_SETTLE_MS = 250
 
 
-def drawer_width_for(window_width, wanted, narrowest=DRAWER_MIN_WIDTH):
-    """The drawer's width in a ``window_width`` window, for ``wanted``, and
-    never under ``narrowest`` (what its header needs) while the window has
-    the room."""
-    widest = max(min(DRAWER_MAX_WIDTH, window_width - WINDOW_LEFT_IN_VIEW), narrowest)
+def drawer_width_for(window_width, wanted):
+    """The drawer's width in a ``window_width`` window, for ``wanted``."""
+    widest = max(
+        min(DRAWER_MAX_WIDTH, window_width - WINDOW_LEFT_IN_VIEW), DRAWER_MIN_WIDTH
+    )
 
-    return min(max(wanted, narrowest), widest, window_width)
+    return min(max(wanted, DRAWER_MIN_WIDTH), widest, window_width)
 
 
 class NotificationsDrawerHost(HasTraits):
@@ -161,9 +161,7 @@ class NotificationsDrawerHost(HasTraits):
         between its top bars and its status bar): at the right, inset, at
         the model's width, as tall as ``natural_height`` allows, its bottom
         by the status bar. Override to place it elsewhere."""
-        width = drawer_width_for(
-            available.width(), self.model.drawer_width, self._narrowest()
-        )
+        width = drawer_width_for(available.width(), self.model.drawer_width)
         room = max(available.height() - 2 * DRAWER_INSET, 0)
         height = min(max(natural_height, DRAWER_MIN_HEIGHT), room)
         right = available.right() + 1 - DRAWER_INSET
@@ -317,15 +315,7 @@ class NotificationsDrawerHost(HasTraits):
             logger.debug(f"Notifications drawer contents already deleted: {error}")
 
     def _resize_to(self, width):
-        self.model.drawer_width = drawer_width_for(
-            self.window.width(), width, self._narrowest()
-        )
-
-    def _narrowest(self):
-        """The drawer's least width: DRAWER_MIN_WIDTH at 100% text size,
-        growing with the text so the narrow end keeps its proportions (a
-        lead card's pictures stack there at every text size)."""
-        return round(DRAWER_MIN_WIDTH * text_scale())
+        self.model.drawer_width = drawer_width_for(self.window.width(), width)
 
     # ------------------------------------------------------------------ #
     # Placement                                                           #

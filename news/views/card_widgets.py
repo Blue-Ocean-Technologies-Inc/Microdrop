@@ -16,9 +16,6 @@ picture preview window."""
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
 
-# Microdrop style imports.
-from microdrop_style.typography import text_scale
-
 # Local imports.
 from .card_style import (
     CORNER_RADIUS,
@@ -282,11 +279,6 @@ class PicturePair(QtWidgets.QWidget):
         self.updateGeometry()
         self.update()
 
-    @staticmethod
-    def _stack_below():
-        """The width under which the pictures stack, at the text's size."""
-        return round(PAIR_MIN_WIDTH * text_scale())
-
     def _aspects(self):
         """Each picture's width over height; PAIR_ASPECT until loaded."""
         aspects = []
@@ -309,7 +301,7 @@ class PicturePair(QtWidgets.QWidget):
     def _rects(self, width):
         """Where each picture goes at ``width``."""
         cells, _height = picture_pair_cells(
-            width, self._caption_height(), self._aspects(), self._stack_below()
+            width, self._caption_height(), self._aspects()
         )
 
         return [QtCore.QRect(*cell) for cell in cells]
@@ -318,11 +310,7 @@ class PicturePair(QtWidgets.QWidget):
         return True
 
     def heightForWidth(self, width):
-        cells = picture_pair_cells(
-            width, self._caption_height(), self._aspects(), self._stack_below()
-        )
-
-        return cells[1]
+        return picture_pair_cells(width, self._caption_height(), self._aspects())[1]
 
     def sizeHint(self):
         width = self.width() if self.width() > 0 else PAIR_MIN_WIDTH

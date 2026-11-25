@@ -44,10 +44,7 @@ THUMBNAIL_SIZE = (11 * GRID, 7 * GRID)
 #: PAIR_ASPECT_RANGE; PAIR_ASPECT until they have loaded.
 PAIR_ASPECT = 4 / 3
 PAIR_ASPECT_RANGE = (3 / 4, 2.0)
-#: The stack threshold scales with the text, as the drawer's least width
-#: does (320 px at 100%); kept close enough to it that the narrow end of
-#: the drawer always stacks, the card's fixed margins included.
-PAIR_MIN_WIDTH = 300
+PAIR_MIN_WIDTH = 35 * GRID
 
 #: A picture's preview: at most this share of its screen.
 PREVIEW_SCREEN_SHARE = 0.8
@@ -207,21 +204,16 @@ def pair_aspect(aspects):
     return min(max(aspect, low), high)
 
 
-def picture_pair_cells(
-    width,
-    caption_height,
-    aspects=(PAIR_ASPECT, PAIR_ASPECT),
-    stack_below=PAIR_MIN_WIDTH,
-):
+def picture_pair_cells(width, caption_height, aspects=(PAIR_ASPECT, PAIR_ASPECT)):
     """Where a lead card's two pictures go in a ``width`` wide area, each
     with ``caption_height`` beneath: ``(x, y, w, h)`` per picture, and the
-    area's height. Side by side (``stack_below`` or wider) they are equal
+    area's height. Side by side (PAIR_MIN_WIDTH or wider) they are equal
     halves either side of a GRID gap at their shared ``pair_aspect``;
     narrower they stack, each full width at its own aspect, as tall as
     ``picture_cap`` allows. ``aspects`` are the pictures' width over
     height."""
 
-    if width < stack_below:
+    if width < PAIR_MIN_WIDTH:
         cells = []
         top = 0
 
