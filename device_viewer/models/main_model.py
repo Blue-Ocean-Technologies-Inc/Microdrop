@@ -731,6 +731,12 @@ class DeviceViewMainModel(HasTraits):
     @observe("electrode_scale, preferences:gap_height_um", post_init=True)
     def _sync_volume_estimate(self, event=None):
         """Feed the volume estimate the latest reading, area and calibration."""
+
+        # traits_init assigns ``electrodes`` (firing ``electrode_scale``)
+        # before ``calibration`` exists; it syncs once both do.
+        if self.calibration is None:
+            return
+
         self.volume_estimate.trait_set(
             capacitance_pf=self.calibration.last_capacitance,
             actuated_area_mm2=self.electrodes.get_activated_electrode_area_mm2(),
