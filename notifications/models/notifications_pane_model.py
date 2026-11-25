@@ -90,6 +90,15 @@ def bell_summary(entries, shown):
     return len(attention) + len(new), severity, accent, len(attention), len(new)
 
 
+def outside_press_passes_through(opened_by_app, used_while_open):
+    """Whether a press outside the open drawer, which closes it, also
+    reaches what was pressed: yes for a drawer the app opened and the user
+    has not clicked or scrolled in yet, so their first click in the window
+    is not lost; no for a drawer that is the user's, where the press is
+    used up and never also actuates what lies beneath."""
+    return opened_by_app and not used_while_open
+
+
 class NotificationsPaneModel(HasTraits):
     """What the drawer, the toasts and the bell show."""
 
@@ -113,10 +122,15 @@ class NotificationsPaneModel(HasTraits):
 
     #: Whether the app opened the drawer (at start-up), not the user: it
     #: then leaves the keyboard focus where it is, closes on Esc anywhere in
-    #: its window, builds its sections one per paced GUI turn, and expands
-    #: the ``expanded_at_start`` ones, late arrivals too. Off again once it
-    #: closes.
+    #: its window, builds its sections one per paced GUI turn, expands the
+    #: ``expanded_at_start`` ones, late arrivals too, and lets a press
+    #: outside it through until the user uses it. Off again once it closes.
     opened_by_app = Bool(False)
+
+    #: Whether the user has clicked or scrolled inside the open drawer: an
+    #: app-opened drawer is then theirs (``outside_press_passes_through``).
+    #: Off again once it closes.
+    used_while_open = Bool(False)
 
     #: The drawer's width (px), for the session.
     drawer_width = Int(DRAWER_WIDTH)
@@ -198,7 +212,7 @@ class NotificationsPaneModel(HasTraits):
     def _forget_who_opened(self, event):
 
         if not event.new:
-            self.opened_by_app = False
+            self.trait_set(opened_by_app=False, used_while_open=False)
 
     # ------------------------------------------------------------------ #
     # Opened by the app                                                   #

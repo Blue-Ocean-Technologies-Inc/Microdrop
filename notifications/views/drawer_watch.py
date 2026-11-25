@@ -28,7 +28,10 @@ from pyface.qt import QtCore, QtGui
 from traits.api import Any, Bool, Callable, Float, HasTraits, Instance, List
 
 # Local imports.
-from ..models.notifications_pane_model import NotificationsPaneModel
+from ..models.notifications_pane_model import (
+    NotificationsPaneModel,
+    outside_press_passes_through,
+)
 from .view_consts import DRAWER_BACKDROP_PAINTS_PER_S
 
 # Logger import.
@@ -40,6 +43,9 @@ logger = get_logger(__name__)
 BACKDROP_SAME_FRAME_S = 0.015
 
 _PRESSES = (QtCore.QEvent.Type.MouseButtonPress, QtCore.QEvent.Type.MouseButtonDblClick)
+
+#: Input that, inside the drawer, makes the drawer the user's.
+_USES = (*_PRESSES, QtCore.QEvent.Type.Wheel)
 
 #: Window events after which the open drawer is placed again.
 _PLACING_EVENTS = (
@@ -184,8 +190,11 @@ class OpenDrawerWatch(HasTraits):
 
     def _on_window_input(self, watched, event):
         """Close the drawer on a press elsewhere in its window, using up the
-        press and its release. Dialogs, menus and floating panes are other
-        windows: their input never comes here."""
+        press and its release, unless ``outside_press_passes_through``: the
+        press then goes on to what was pressed, once, as it would have with
+        the drawer closed. A press or wheel turn inside the drawer marks it
+        used. Dialogs, menus and floating panes are other windows: their
+        input never comes here."""
         event_type = event.type()
         releasing = event_type == QtCore.QEvent.Type.MouseButtonRelease
 
@@ -197,16 +206,27 @@ class OpenDrawerWatch(HasTraits):
 
             return True
 
+        if event_type not in _USES or not self.model.is_open:
+            return False
+
+        if self.drawer.geometry().contains(event.position().toPoint()):
+            self.model.used_while_open = True
+
+            return False
+
         if event_type not in _PRESSES or not self.closes_on_click_outside:
             return False
 
-        if not self.model.is_open or not self._is_outside(event.position()):
+        if not self._is_outside(event.position()):
             return False
 
-        self._swallow_release = True
+        passes = outside_press_passes_through(
+            self.model.opened_by_app, self.model.used_while_open
+        )
+        self._swallow_release = not passes
         self.model.is_open = False
 
-        return True
+        return not passes
 
     def _is_outside(self, position):
         """Whether a press at ``position`` (window coordinates) is outside

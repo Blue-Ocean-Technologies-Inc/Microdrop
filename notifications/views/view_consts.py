@@ -38,7 +38,9 @@ DRAWER_OPACITY = 0.92
 DRAWER_BACKDROP_PAINTS_PER_S = 4
 
 #: Whether a click in the main window outside the drawer closes it. The
-#: click is then used up, so it never also actuates what lies beneath.
+#: click is then used up, so it never also actuates what lies beneath;
+#: except on a drawer the app opened and the user has not used yet, where
+#: it also reaches what was clicked (``outside_press_passes_through``).
 DRAWER_CLOSES_ON_CLICK_OUTSIDE = True
 
 #: Duration (ms) of the drawer's slide in from the right; 0 opens it at once.
