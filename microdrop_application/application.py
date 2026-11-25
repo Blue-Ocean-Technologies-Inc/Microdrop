@@ -342,11 +342,12 @@ class MicrodropApplication(TasksApplication):
     def _news_shows_release_notes(self):
         """Whether the news plugin is loaded, or will be once the window has
         painted (a deferred plugin)."""
-        ids = {plugin.id for plugin in self.plugins}
-        specs = [deferred.spec for deferred in self.deferred_plugins]
+        if self.get_plugin(NEWS_PLUGIN_ID) is not None:
+            return True
 
-        return NEWS_PLUGIN_ID in ids or any(
-            spec.startswith(f"{NEWS_PKG}.") for spec in specs
+        return any(
+            deferred.spec.startswith(f"{NEWS_PKG}.")
+            for deferred in self.deferred_plugins
         )
 
     ############################# Initialization #############################
