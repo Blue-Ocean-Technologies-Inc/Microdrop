@@ -11,8 +11,14 @@
 # Standard library imports.
 from pathlib import Path
 
+# Third-party imports.
+from pydantic import BaseModel, ConfigDict, Field
+
 # Enthought library imports.
-from traits.api import HasTraits, Instance, Int, Str
+from traits.api import HasTraits, Instance, Int, Property, Str
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
 # This module's package.
 PKG = ".".join(__name__.split(".")[:-1])
@@ -94,3 +100,74 @@ class TutorialEntry(HasTraits):
     #: Place in the menu, lower first: a ``TUTORIAL_ORDER_*`` section plus an
     #: offset. Entries that share an order are sorted by title.
     order = Int(TUTORIAL_ORDER_DEFAULT)
+
+    #: Its id for OPEN_TUTORIAL: the page's file name without ``.html``,
+    #: e.g. "dropbot_status" (``tutorial_id``).
+    id = Property(Str, observe="path")
+
+    def _get_id(self):
+        return tutorial_id(self.path) if self.path else ""
+
+
+def tutorial_id(path):
+    """The id OPEN_TUTORIAL names the tutorial page at ``path`` by: its file
+    name without the extension, e.g. "dropbot_status" for
+    ``.../resources/dropbot_status.html``. A contributor can name its own
+    tutorial with ``tutorial_id(ITS_TUTORIAL_HTML_PATH)``."""
+    return Path(path).stem
+
+
+#: The tutorial an unknown id opens instead: the start of the learning path.
+GETTING_STARTED_TUTORIAL_ID = tutorial_id(GETTING_STARTED_TUTORIAL_HTML_PATH)
+
+# ---------------------------------------------------------------------------
+# Opening a tutorial from anywhere
+# ---------------------------------------------------------------------------
+#: Open the tutorial ``tutorial_id`` names, scrolled to the section with the
+#: id ``anchor`` if given, as Help > Tutorials opens it. An unknown id opens
+#: Getting Started instead. Handled on the frontend by this plugin while it
+#: is loaded, which it announces on HELP_AVAILABILITY; e.g. a notification's
+#: help link, or a pane's help button.
+OPEN_TUTORIAL = "ui/help/open_tutorial"
+
+#: Whether tutorials can be opened now: True when this plugin has started
+#: (its OPEN_TUTORIAL listener exists), False when it stops. Help controls
+#: elsewhere follow it, disabled until it is True.
+HELP_AVAILABILITY = "ui/help/availability"
+
+#: Payload validators build on first use: many plugins import this module.
+_DEFERRED_BUILD = ConfigDict(defer_build=True)
+
+
+class OpenTutorialRequest(BaseModel):
+    """Open a tutorial, at a section if given."""
+
+    model_config = _DEFERRED_BUILD
+
+    #: The tutorial's id (``tutorial_id``), e.g. "dropbot_status".
+    tutorial_id: str = Field(min_length=1)
+
+    #: The ``id`` of a section in the tutorial's page, e.g. "self-tests";
+    #: None opens it at the top.
+    anchor: str | None = None
+
+
+class HelpAvailability(BaseModel):
+    """Whether tutorials can be opened (OPEN_TUTORIAL is handled) now."""
+
+    model_config = _DEFERRED_BUILD
+
+    available: bool
+
+
+open_tutorial_publisher = ValidatedTopicPublisher(
+    topic=OPEN_TUTORIAL, validator_class=OpenTutorialRequest
+)
+help_availability_publisher = ValidatedTopicPublisher(
+    topic=HELP_AVAILABILITY, validator_class=HelpAvailability
+)
+
+#: This plugin's message listener, which opens the tutorials.
+LISTENER_NAME = f"{PKG}_listener"
+
+ACTOR_TOPIC_DICT = {LISTENER_NAME: [OPEN_TUTORIAL]}
