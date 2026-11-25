@@ -13,6 +13,7 @@ from functools import partial
 from pathlib import Path
 
 # Enthought library imports.
+from pyface.api import GUI
 from pyface.qt.QtCore import QPointF, QRectF, QSizeF, Qt, QTimer
 from pyface.qt.QtGui import QBrush, QColor, QFont, QGraphicsScene, QImage, QPainter
 from pyface.qt.QtMultimediaWidgets import QGraphicsVideoItem
@@ -60,6 +61,7 @@ from microdrop_style.icon_styles import STATUSBAR_ICON_POINT_SIZE
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.file_handler import safe_copy_file
+from microdrop_utils.first_paint import call_after_first_paint
 from microdrop_utils.keyboard_shortcuts_view import show_keyboard_shortcuts
 from microdrop_utils.lazy_dock_pane import LazyContentDockPane
 from microdrop_utils.pyface_helpers import app_statusbar_message_from_dock_pane
@@ -303,12 +305,11 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
         ############## load last-session calibration data ##############################
         self.model.load_calibration_data_from_preferences()
 
-        # Its reminder (Needs attention), once the data has loaded: this
-        # runs as the pane is first shown, after the window has painted.
+        # Its reminder (Needs attention), started by create() once the
+        # window has painted.
         self.calibration_reminder = CalibrationReminderController(
             calibration=self.model.calibration
         )
-        self.calibration_reminder.start()
 
         ################################################################################################
         # ----------- Setup device view widget ----------------- #
@@ -874,7 +875,21 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
         """
         self._set_up_device_model()
 
+        # Model-side too, so it is posted whether or not the view is ever
+        # built; off the launch path, after the window's first paint.
+        if parent.isVisible():
+            GUI.invoke_later(self._start_calibration_reminder)
+
+        else:
+            call_after_first_paint(parent, self._start_calibration_reminder)
+
         super().create(parent)
+
+    def _start_calibration_reminder(self):
+
+        # The pane may have gone before the window painted.
+        if self.control is not None:
+            self.calibration_reminder.start()
 
     def _set_up_device_model(self):
         """Load the preferred device, publish the first state message, and

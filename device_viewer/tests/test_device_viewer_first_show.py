@@ -45,6 +45,7 @@ from device_viewer.consts import (
     DEVICE_VIEWER_STATE_CHANGED,
     MASTER_SVG_FILE,
 )
+from notifications.consts import NOTIFICATION_POST
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
 
 # Microdrop utils imports.
@@ -156,7 +157,8 @@ def device_viewer(window):
 
 def normalised(publishes):
     """The publishes, comparable from window to window: neighbour lists come
-    from sets, ordered by string hashing."""
+    from sets, ordered by string hashing, and a notification is stamped with
+    the time it was posted."""
     result = []
 
     for topic, message in publishes:
@@ -166,6 +168,11 @@ def normalised(publishes):
                 electrode_id: sorted(adjacent)
                 for electrode_id, adjacent in data["neighbours"].items()
             }
+            message = json.dumps(data, sort_keys=True)
+
+        elif topic == NOTIFICATION_POST:
+            data = json.loads(message)
+            data.pop("timestamp")
             message = json.dumps(data, sort_keys=True)
 
         result.append((topic, message))
@@ -317,6 +324,9 @@ def test_launch_publishes_the_same_whether_the_view_is_built_or_not(
     assert len(builds) == 2
     assert unbuilt_at_launch == built_at_launch
     assert published_by_the_build == []
+
+    # No calibration is saved: its reminder is posted, the view unbuilt.
+    assert NOTIFICATION_POST in [topic for topic, _message in unbuilt_at_launch]
 
 
 def test_a_display_state_before_the_build_shows_once_built(behind):
