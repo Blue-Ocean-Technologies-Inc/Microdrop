@@ -47,8 +47,10 @@ FEED_SCHEMA_PATH = RESOURCES_DIR / "feed.schema.json"
 #: committed (excluded locally, not in .gitignore).
 LOCAL_POSTS_PATH = RESOURCES_DIR / "local" / "local_posts.json"
 
-#: The "seen" state, in the application home: written only by this plugin,
-#: the moment it changes.
+#: The "seen" state, in the notifications data folder
+#: (``notifications.consts.notifications_data_dir``): written only by this
+#: plugin, the moment it changes. It used to sit in the application home
+#: itself, and is moved on first use.
 NEWS_STATE_FILENAME = "news_state.json"
 
 # ---------------------------------------------------------------------------

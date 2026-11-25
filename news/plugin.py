@@ -17,7 +17,8 @@ machine, ``news/resources/local/local_posts.json``) and CHANGELOG.md, and
 contributes the section through ``notifications.consts`` alone. Posts not
 seen before are new: they are marked in the drawer, and a launch toasts at
 most twice, once for this version's release notes and once for the rest.
-What has been seen is kept in ``news_state.json`` in the application home.
+What has been seen is kept in ``news_state.json`` in the notifications data
+folder (``notifications.consts.notifications_data_dir``).
 
 While this plugin is loaded, MicroDrop does not open its What's New dialog
 at launch: the release notes are the What's new sub-section and its toast.
@@ -38,7 +39,14 @@ from traits.etsconfig.api import ETSConfig
 
 # Microdrop package imports.
 from microdrop_application.consts import CHANGELOG_PATH, PREVIOUS_CHANGELOG_FILENAME
-from notifications.consts import NOTIFICATION_CATEGORIES, NOTIFICATION_SECTIONS
+from notifications.consts import (
+    NOTIFICATION_CATEGORIES,
+    NOTIFICATION_SECTIONS,
+    notifications_data_dir,
+)
+
+# Microdrop utils imports.
+from microdrop_utils.json_state_file import move_state_file
 
 # Local imports.
 from .consts import NEWS_CATEGORIES, NEWS_PLUGIN_ID, NEWS_STATE_FILENAME, PKG_name
@@ -78,12 +86,16 @@ class NewsPlugin(Plugin):
 
         section = self.sections[0]
         home = Path(ETSConfig.application_home)
+        state_path = notifications_data_dir() / NEWS_STATE_FILENAME
         releases = [
             p.id for p in section.controller.model.posts if release_version(p.id)
         ]
 
+        # It used to sit in the application home itself.
+        move_state_file(home / NEWS_STATE_FILENAME, state_path)
+
         state = NewsSeenState(
-            path=str(home / NEWS_STATE_FILENAME),
+            path=str(state_path),
             changelog_path=str(CHANGELOG_PATH),
             previous_changelog_path=str(home / PREVIOUS_CHANGELOG_FILENAME),
         )

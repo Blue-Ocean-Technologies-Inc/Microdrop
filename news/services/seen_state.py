@@ -10,8 +10,8 @@
 
 """What the user has already seen of the news, across launches. Qt-free.
 
-A small JSON file in the application home, written only by the news plugin
-and the moment it changes: ``preferences.ini`` is rewritten by every
+A small JSON file in the notifications data folder, written only by the
+news plugin and the moment it changes: ``preferences.ini`` is rewritten by every
 process when it stops, which would undo a change made meanwhile. It holds
 the ids of the posts already seen and the last MicroDrop version whose
 release notes were shown.
@@ -23,12 +23,14 @@ counts as shown.
 """
 
 # Standard library imports.
-import json
 import re
 from pathlib import Path
 
 # Enthought library imports.
 from traits.api import Bool, File, HasTraits, Set, Str
+
+# Microdrop utils imports.
+from microdrop_utils.json_state_file import read_json_state, write_json_state
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -81,12 +83,9 @@ class NewsSeenState(HasTraits):
 
             return
 
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+        data = read_json_state(path)
 
-        except (OSError, ValueError) as error:
-            logger.warning(f"News state {path} could not be read ({error}); reset")
-
+        if data is None:
             return
 
         self.seen_post_ids = set(data.get(SEEN_POST_IDS_KEY, []))
@@ -120,20 +119,11 @@ class NewsSeenState(HasTraits):
         if not self.path:
             return
 
-        path = Path(self.path)
         data = {
             SEEN_POST_IDS_KEY: sorted(self.seen_post_ids),
             RELEASE_NOTES_SHOWN_KEY: self.release_notes_shown_version,
         }
-
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            partial = path.with_suffix(".tmp")
-            partial.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            partial.replace(path)
-
-        except OSError as error:
-            logger.error(f"Could not save the news state to {path}: {error}")
+        write_json_state(self.path, data)
 
     def _refresh_previous_changelog(self):
 

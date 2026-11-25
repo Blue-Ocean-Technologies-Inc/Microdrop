@@ -24,6 +24,7 @@ Any plugin posts a notification by importing only this module::
 # Standard library imports.
 import logging
 import time
+from pathlib import Path
 from typing import Annotated, Literal, Union
 
 # Third-party imports.
@@ -31,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Enthought library imports.
 from traits.api import Bool, Callable, Event, HasTraits, Instance, Int, List, Str, Tuple
+from traits.etsconfig.api import ETSConfig
 
 # Microdrop style imports.
 from microdrop_style.colors import (
@@ -252,6 +254,24 @@ class NotificationResolveRequest(BaseModel):
 
     #: What cleared it, shown on the cards, e.g. "Chip detected".
     resolution: str = "Resolved"
+
+
+# ---------------------------------------------------------------------------
+# Where the notifications feature keeps its state
+# ---------------------------------------------------------------------------
+#: The folder, in the application home, for everything the notifications
+#: feature persists: one small JSON file per concern, each written only by
+#: the plugin that owns it (news_state.json by the news plugin,
+#: self_test.json by the DropBot tools menu; the drawer's settings.json
+#: when they persist).
+NOTIFICATIONS_DATA_DIRNAME = "notifications"
+
+
+def notifications_data_dir():
+    """The notifications feature's data folder. Resolved at call time, after
+    the application has configured ``ETSConfig``; made on the first write,
+    by ``microdrop_utils.json_state_file.write_json_state``."""
+    return Path(ETSConfig.application_home) / NOTIFICATIONS_DATA_DIRNAME
 
 
 notification_publisher = ValidatedTopicPublisher(
