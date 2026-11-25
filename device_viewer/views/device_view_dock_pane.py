@@ -83,6 +83,9 @@ from ..consts import (
     camera_place_status_message_text,
     device_modified_tag,
 )
+from ..controllers.calibration_reminder_controller import (
+    CalibrationReminderController,
+)
 from ..controllers.camera_alignment_controller import (
     CameraAlignmentWorkflowController,
 )
@@ -238,6 +241,9 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
     #: ``loaded_path`` and ``modified``.
     svg_persistence = Instance(SvgPersistenceService)
 
+    #: Posts the calibration reminder to the notifications drawer.
+    calibration_reminder = Instance(CalibrationReminderController)
+
     #: Restarted by each sidebar edit while auto-commit is due; commits the
     #: edits once they settle.
     _auto_commit_timer = Instance(QTimer)
@@ -295,6 +301,13 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
 
         ############## load last-session calibration data ##############################
         self.model.load_calibration_data_from_preferences()
+
+        # Its reminder (Needs attention), once the data has loaded: this
+        # runs as the pane is first shown, after the window has painted.
+        self.calibration_reminder = CalibrationReminderController(
+            calibration=self.model.calibration
+        )
+        self.calibration_reminder.start()
 
         ################################################################################################
         # ----------- Setup device view widget ----------------- #
@@ -1052,6 +1065,9 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
         """Detach the contributed layers before the pane's widgets go."""
         if self.layer_host is not None:
             self.layer_host.remove_all()
+
+        if self.calibration_reminder is not None:
+            self.calibration_reminder.stop()
 
         super().destroy()
 

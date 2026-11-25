@@ -1173,6 +1173,11 @@ RECORDING_VIEWER_TUTORIAL_HTML_PATH = (
 #: load: restored, applied a default, held back, or nothing saved.
 CAMERA_ALIGNMENT_CATEGORY_ID = f"{PKG}.camera_alignment"
 
+#: Reminders to keep the DropBot calibrated and self-tested: a calibration
+#: missing or old (here), a self test never run or old (dropbot_tools_menu,
+#: which reuses this id).
+DROPBOT_MAINTENANCE_CATEGORY_ID = f"{PKG}.dropbot_maintenance"
+
 NOTIFICATION_CATEGORY_SPECS = [
     NotificationCategorySpec(
         id=CAMERA_ALIGNMENT_CATEGORY_ID,
@@ -1181,4 +1186,27 @@ NOTIFICATION_CATEGORY_SPECS = [
         description="A camera's alignment restored, or none saved for it.",
         tone=TONE_SOFT,
     ),
+    NotificationCategorySpec(
+        id=DROPBOT_MAINTENANCE_CATEGORY_ID,
+        group="DropBot",
+        label="Maintenance reminders",
+        description="No calibration saved or an old one; a self test never "
+        "run or an old one.",
+        tone=TONE_SOFT,
+    ),
 ]
+
+# ---------------------------------------------------------------------------
+# Calibration reminder (Needs attention)
+# ---------------------------------------------------------------------------
+#: A saved calibration older than this many days is stale. A constant for
+#: now; a preference can replace it.
+CALIBRATION_STALE_DAYS = 7
+
+#: The reminder's card: one thread, updated in place (missing, stale, gone),
+#: and one condition, resolved the moment a calibration is saved.
+CALIBRATION_REMINDER_THREAD_ID = f"{PKG}.calibration_reminder"
+CALIBRATION_REMINDER_CONDITION_ID = f"{PKG}.calibration_needed"
+
+#: The tutorial its help link names.
+CALIBRATION_HELP_TARGET = "Calibrating the device"
