@@ -12,8 +12,8 @@
 
 Contributed to the notifications plugin's NOTIFICATION_SECTIONS extension
 point; without that plugin the contribution is simply unused. The section's
-summary follows the load records, and its contents — the load-status panel's
-view — are built the first time it is expanded.
+summary follows the load records, and its contents — the records' table —
+are built the first time it is expanded.
 """
 
 # Enthought library imports.
