@@ -68,6 +68,22 @@ from device_viewer.models.messages import (
 from device_viewer.models.step_params_commit import (
     StepParamsCommitMessage as StepParamsCommitMessage,
 )
+from device_viewer.notification_consts import (
+    # The kinds of notification live in their own module, re-exported here.
+    CAMERA_ALIGNMENT_CATEGORY_ID as CAMERA_ALIGNMENT_CATEGORY_ID,
+)
+from device_viewer.notification_consts import (
+    CAMERA_CAPTURES_CATEGORY_ID as CAMERA_CAPTURES_CATEGORY_ID,
+)
+from device_viewer.notification_consts import (
+    CAPTURE_SESSION_WINDOW_S as CAPTURE_SESSION_WINDOW_S,
+)
+from device_viewer.notification_consts import (
+    DROPBOT_MAINTENANCE_CATEGORY_ID as DROPBOT_MAINTENANCE_CATEGORY_ID,
+)
+from device_viewer.notification_consts import (
+    NOTIFICATION_CATEGORY_SPECS as NOTIFICATION_CATEGORY_SPECS,
+)
 from dropbot_controller.consts import (
     CAPACITANCE_UPDATED,
     CHIP_INSERTED,
@@ -78,7 +94,6 @@ from dropbot_controller.consts import (
     HALTED,
     REALTIME_MODE_UPDATED,
 )
-from notifications.consts import TONE_SOFT, NotificationCategorySpec
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
@@ -1165,36 +1180,6 @@ DEVICE_FILES_TUTORIAL_HTML_PATH = (
 RECORDING_VIEWER_TUTORIAL_HTML_PATH = (
     Path(__file__).parent / "resources" / "recording_viewer.html"
 )
-
-# ---------------------------------------------------------------------------
-# The device viewer's kinds of notification (NOTIFICATION_CATEGORIES)
-# ---------------------------------------------------------------------------
-#: What restoring a camera's alignment did on a camera switch or a device
-#: load: restored, applied a default, held back, or nothing saved.
-CAMERA_ALIGNMENT_CATEGORY_ID = f"{PKG}.camera_alignment"
-
-#: Reminders to keep the DropBot calibrated and self-tested: a calibration
-#: missing or old (here), a self test never run or old (dropbot_tools_menu,
-#: which reuses this id).
-DROPBOT_MAINTENANCE_CATEGORY_ID = f"{PKG}.dropbot_maintenance"
-
-NOTIFICATION_CATEGORY_SPECS = [
-    NotificationCategorySpec(
-        id=CAMERA_ALIGNMENT_CATEGORY_ID,
-        group="Camera",
-        label="Alignment",
-        description="A camera's alignment restored, or none saved for it.",
-        tone=TONE_SOFT,
-    ),
-    NotificationCategorySpec(
-        id=DROPBOT_MAINTENANCE_CATEGORY_ID,
-        group="DropBot",
-        label="Maintenance reminders",
-        description="No calibration saved or an old one; a self test never "
-        "run or an old one.",
-        tone=TONE_SOFT,
-    ),
-]
 
 # ---------------------------------------------------------------------------
 # Calibration reminder (Needs attention)
