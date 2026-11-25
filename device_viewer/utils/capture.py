@@ -98,18 +98,35 @@ class ImageSaver(QRunnable):
     GUI when run inline). Callers must hand over an image they will not paint
     into afterwards (pass ``image.copy()`` if unsure) — QImage is implicitly
     shared, so holding the reference is enough and copying here would put a
-    second full-frame memcpy on the caller's (GUI) thread."""
+    second full-frame memcpy on the caller's (GUI) thread.
 
-    def __init__(self, image, save_path):
+    ``image_format`` names another format (e.g. "JPG"); ``longest_side``
+    (px) scales the image down to it first, on the worker too."""
+
+    def __init__(self, image, save_path, image_format="PNG", longest_side=None):
         super().__init__()
         self.image = image
         self.save_path = save_path
+        self.image_format = image_format
+        self.longest_side = longest_side
         self.signals = SaveSignals()
 
     def run(self):
         try:
-            # 1. Heavy PNG encode + disk I/O happens here.
-            if self.image.save(self.save_path, "PNG"):
+            image = self.image
+
+            if self.longest_side and max(image.width(), image.height()) > (
+                self.longest_side
+            ):
+                image = image.scaled(
+                    self.longest_side,
+                    self.longest_side,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+
+            # 1. Heavy encode + disk I/O happens here.
+            if image.save(self.save_path, self.image_format):
                 logger.info(f"Saved image to: {self.save_path}")
                 # 2. Tell the UI we are done (queued back to the GUI thread).
                 self.signals.save_complete.emit(self.save_path)

@@ -15,8 +15,10 @@ updated in place, and one per video. Captures a protocol or another plugin
 asked for are posted quietly (no toast, no sound); the user's own pop up.
 A card's Show button shows the capture in its viewer (the Image Viewer, the
 Recording Viewer); while that viewer's plugin is not running it is a Show
-folder button instead. Publishing is harmless without the notifications
-plugin: nothing subscribes."""
+folder button instead. A card's thumbnail is the photo (the latest of a
+session) or the recording's poster, and the file name in its text links to
+the folder. Publishing is harmless without the notifications plugin:
+nothing subscribes."""
 
 # Standard library imports.
 import time
@@ -132,6 +134,8 @@ class CaptureNotificationsController(HasTraits):
             ),
             thread_id=session.thread_id,
             pop_up=not quiet,
+            thumbnail=str(path),
+            linked_file=path,
         )
 
     def photo_failed(self, reason):
@@ -166,9 +170,11 @@ class CaptureNotificationsController(HasTraits):
         else:
             self._recording_stopped_at = now
 
-    def video_saved(self, saved_path, quiet=False):
+    def video_saved(self, saved_path, quiet=False, poster_path=None):
         """Post the recording now at ``saved_path``, with its length;
-        ``quiet`` when the user did not ask for it (no toast)."""
+        ``quiet`` when the user did not ask for it (no toast). Its card's
+        thumbnail is ``poster_path`` (a still saved beside it), else the
+        recording itself, which the card shows as a film glyph."""
         path = Path(saved_path)
         started_at = self._recording_started_at
         stopped_at = self._recording_stopped_at
@@ -188,6 +194,8 @@ class CaptureNotificationsController(HasTraits):
             ),
             thread_id=f"{CAMERA_CAPTURES_CATEGORY_ID}.video.{path}",
             pop_up=not quiet,
+            thumbnail=str(poster_path or path),
+            linked_file=path,
         )
 
     # ------------------------------------------------------------------ #
@@ -221,7 +229,16 @@ class CaptureNotificationsController(HasTraits):
         action=None,
         thread_id="",
         pop_up=True,
+        thumbnail="",
+        linked_file=None,
     ):
+        """Post a card; ``linked_file``'s name in the detail links to its
+        folder (the file's path is the link's tooltip)."""
+        links = []
+
+        if linked_file is not None:
+            links.append({"text": linked_file.name, "path": str(linked_file)})
+
         payload = {
             "title": title,
             "detail": detail,
@@ -232,6 +249,8 @@ class CaptureNotificationsController(HasTraits):
             "thread_id": thread_id,
             "pop_up": pop_up,
             "action": action,
+            "thumbnail": thumbnail,
+            "links": links,
         }
 
         self.post_notification(payload)

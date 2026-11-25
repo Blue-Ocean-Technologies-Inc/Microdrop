@@ -399,6 +399,12 @@ RECORDING_TRANSFORM_SIDECAR_SUFFIX = ".transform.json"
 RECORDING_OVERLAY_SIDECAR_SUFFIX = ".overlay.json"
 RECORDING_OVERLAY_SIDECAR_VERSION = 1
 
+# Poster written next to a recording when it stops: the last frame shown,
+# small, for the recording's notification card. Not a recording container,
+# so the Recording Viewer does not list it.
+RECORDING_POSTER_SUFFIX = ".poster.jpg"
+RECORDING_POSTER_LONGEST_SIDE = 320
+
 # ---------------------------------------------------------------------------
 # Video recording preferences (camera preferences node). The recorder is
 # rebuilt from these at every recording start, so changes apply live.

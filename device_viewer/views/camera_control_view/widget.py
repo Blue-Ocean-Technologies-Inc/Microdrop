@@ -13,6 +13,9 @@ recorders and frame grabs. Decisions and publishing live in
 CameraController, state in CameraModel; the QCamera/QMediaCaptureSession
 pair lives in QtCameraDevice, owned here because it is Qt."""
 
+# Standard library imports.
+from pathlib import Path
+
 # Enthought library imports.
 from apptools.preferences.api import Preferences
 from pyface.qt.QtCore import QThreadPool, QTimer, Signal, Slot
@@ -60,6 +63,8 @@ from ...consts import (
     HIGH_RESOLUTION_WARNING_THRESHOLD,
     MIN_RECORDING_FPS,
     NO_CAMERA_LABEL,
+    RECORDING_POSTER_LONGEST_SIDE,
+    RECORDING_POSTER_SUFFIX,
     SHOW_ALL_RESOLUTIONS_LABEL,
     SHOW_COMMON_RESOLUTIONS_LABEL,
 )
@@ -144,6 +149,9 @@ class CameraControlWidget(QWidget):
         # signals QObject) cannot be garbage-collected before its completion
         # signal is delivered back to the GUI thread.
         self._pending_image_savers = set()
+        # The frame shown when the recording was stopped, saved as its
+        # poster once the recording is on disk; None for none.
+        self._poster_frame = None
 
         self.scene.addItem(self.video_item)
 
@@ -990,13 +998,15 @@ class CameraControlWidget(QWidget):
         # the recorder keeps painting into — snapshot it before handing off.
         self._start_image_saver(image.copy(), str(save_path), _post_image_capture)
 
-    def _start_image_saver(self, image, save_path, on_saved, on_failed=None):
+    def _start_image_saver(
+        self, image, save_path, on_saved, on_failed=None, **saver_options
+    ):
         """Run an ImageSaver on the global thread pool — PNG-encoding a
         full-resolution frame inline visibly freezes the GUI. The worker is
         kept referenced until one of its completion signals (delivered queued
         on the GUI thread) has fired; ``on_saved``/``on_failed`` then run on
-        the GUI thread."""
-        worker = ImageSaver(image, save_path)
+        the GUI thread. ``saver_options`` go to the ImageSaver."""
+        worker = ImageSaver(image, save_path, **saver_options)
         self._pending_image_savers.add(worker)
 
         def _finish(saved_path, callback):
@@ -1393,6 +1403,12 @@ class CameraControlWidget(QWidget):
 
     def video_record_stop(self):
         logger.info("Stopping video recorder...")
+
+        # The frame on screen now, for the recording's poster: a frame the
+        # sink already holds, so the video file is never decoded for it.
+        if self.recorder.is_recording:
+            self._poster_frame = self.video_item.videoSink().videoFrame().toImage()
+
         self.recorder.stop()
 
     @Slot(str)
@@ -1418,7 +1434,30 @@ class CameraControlWidget(QWidget):
 
         # An empty path is a recording that got no frames (logged).
         if recording_output_path:
+            self._post_video_saved(recording_output_path)
+
+    def _post_video_saved(self, video_path):
+        """Post the recording at ``video_path``: once its poster is saved
+        beside it, when a frame was shown at the stop; else at once, without
+        one."""
+        quiet = not self.camera_model.recording.show_status_message
+        frame, self._poster_frame = self._poster_frame, None
+
+        def post(poster_path=None):
             self.capture_notifications.video_saved(
-                recording_output_path,
-                quiet=not self.camera_model.recording.show_status_message,
+                video_path, quiet=quiet, poster_path=poster_path
             )
+
+        if frame is None or frame.isNull():
+            post()
+
+            return
+
+        self._start_image_saver(
+            frame,
+            str(Path(video_path).with_suffix(RECORDING_POSTER_SUFFIX)),
+            post,
+            on_failed=lambda _path: post(),
+            image_format="JPG",
+            longest_side=RECORDING_POSTER_LONGEST_SIDE,
+        )
