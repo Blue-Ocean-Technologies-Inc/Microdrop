@@ -47,7 +47,8 @@ class RecordingModel(HasTraits):
     #: camera is switched back off after the recording when it was not.
     camera_was_on = Bool(True)
 
-    #: Link the finished recording in the status bar.
+    #: The user asked for the recording: its "Video saved" card pops up.
+    #: Off (a protocol's recording), the card is posted quietly.
     show_status_message = Bool(True)
 
     #: File the current (or last) recording writes to.

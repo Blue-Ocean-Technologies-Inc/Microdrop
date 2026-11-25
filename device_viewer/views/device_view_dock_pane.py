@@ -989,7 +989,6 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
             self.video_item,
             self.scene,
             self.app_preferences,
-            status_bar_manager=self.task.window.status_bar_manager,
             source_providers=self._camera_source_providers,
             on_align_camera=self.camera_alignment_controller.open_camera_alignment,
             on_go_to_endpoint=self.camera_alignment_controller.go_to_endpoint,
@@ -1542,8 +1541,7 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
 
     def _connect_recording_icon(self):
         """Once both the recording icon and the camera panel exist, the
-        record button drives the icon and the panel's media-capture
-        notifications go to the status bar."""
+        record button drives the icon."""
         recording_icon = getattr(self, "recording_icon", None)
 
         if recording_icon is None or self.camera_control_widget is None:
@@ -1551,5 +1549,4 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
 
         widget = self.camera_control_widget
 
-        widget.status_bar_manager = self.task.window.status_bar_manager
         widget.record_toggle_button.toggled.connect(recording_icon.set_enabled)

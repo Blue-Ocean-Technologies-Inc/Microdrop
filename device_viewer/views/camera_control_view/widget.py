@@ -64,17 +64,18 @@ from ...consts import (
     SHOW_COMMON_RESOLUTIONS_LABEL,
 )
 from ...controllers.camera_controller import CameraController
+from ...controllers.capture_notifications_controller import (
+    CaptureNotificationsController,
+)
 from ...default_settings import video_key
 from ...models.camera import CameraModel
 from ...models.camera_identity import v4l2_stable_camera_id
-from ...models.media import MediaType
 from ...models.recording_overlay import RecordingOverlayTimeline
 from ...utils.capture import ImageSaver, get_transformed_frame
 from ...utils.frame_luma import frame_centre_luma
 from ...utils.recording.factory import build_recorder
 from ..electrode_view.electrode_scene import ElectrodeScene
 from .qt_camera_device import QtCameraDevice
-from .utils import _show_media_capture_status_message
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -106,7 +107,6 @@ class CameraControlWidget(QWidget):
         video_item: QGraphicsVideoItem,
         scene: ElectrodeScene,
         preferences: Preferences,
-        status_bar_manager=None,
         source_providers=None,
     ):
         super().__init__()
@@ -114,9 +114,6 @@ class CameraControlWidget(QWidget):
         self.video_item = video_item
         self.scene = scene
         self.preferences = CameraPreferences(preferences=preferences)
-        # May be None at construction time — the dock pane re-pushes this
-        # once the trait fires `task:window:status_bar_manager`.
-        self.status_bar_manager = status_bar_manager
 
         self.preferences.observe(
             self._preferred_video_format_change, "preferred_video_format"
@@ -163,6 +160,9 @@ class CameraControlWidget(QWidget):
             preferences=self.preferences,
             camera=self.camera_device,
             turn_camera_on=self.turn_on_camera,
+        )
+        self.capture_notifications = CaptureNotificationsController(
+            camera_model=self.camera_model, main_model=model
         )
 
         # 1. Initialize Recorder. The backend (Qt MediaRecorder vs FFmpeg
@@ -972,17 +972,19 @@ class CameraControlWidget(QWidget):
         image = self.get_screen_shot()
 
         if not image or image.isNull():
+            self.capture_notifications.photo_failed(
+                "The camera showed no picture: check that it is on and streaming."
+            )
+
             return
 
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
         def _post_image_capture(saved_path):
             self.controller.image_saved(saved_path, request_id)
-
-            if show_status_message:
-                _show_media_capture_status_message(
-                    MediaType.IMAGE, saved_path, self.status_bar_manager
-                )
+            self.capture_notifications.photo_saved(
+                saved_path, quiet=not show_status_message
+            )
 
         # get_screen_shot may return the recorder's live current_image, which
         # the recorder keeps painting into — snapshot it before handing off.
@@ -1414,8 +1416,9 @@ class CameraControlWidget(QWidget):
         if turn_camera_off and self.camera_device.is_active():
             self.toggle_camera()
 
-        # Show Result
-        if recording_output_path and self.camera_model.recording.show_status_message:
-            _show_media_capture_status_message(
-                MediaType.VIDEO, recording_output_path, self.status_bar_manager
+        # An empty path is a recording that got no frames (logged).
+        if recording_output_path:
+            self.capture_notifications.video_saved(
+                recording_output_path,
+                quiet=not self.camera_model.recording.show_status_message,
             )

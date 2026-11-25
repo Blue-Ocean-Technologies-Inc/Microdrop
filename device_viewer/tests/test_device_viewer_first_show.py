@@ -210,7 +210,6 @@ def camera_widget(monkeypatch):
 
     widget = SimpleNamespace(
         camera_model=CameraModel(),
-        status_bar_manager=None,
         screen_capture_signal=StubSignal(),
     )
 
