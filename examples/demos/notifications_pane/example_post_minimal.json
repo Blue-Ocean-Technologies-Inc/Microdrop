@@ -1,7 +1,0 @@
-{
-  "$schema": "./sci_bots_feed.schema.json",
-  "title": "PLACEHOLDER minimal post — example to push",
-  "date": "2026-11",
-  "kind": "post",
-  "url": "https://www.linkedin.com/company/sci-bots-inc./posts/"
-}

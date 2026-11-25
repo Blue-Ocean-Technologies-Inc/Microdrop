@@ -1,0 +1,28 @@
+{
+  "$schema": "./feed.schema.json",
+  "version": 1,
+  "_readme": "News shown in the News section of MicroDrop's notifications drawer. Edit it with the feed creator (python -m news.feed_creator) or by hand; feed.schema.json describes every field. Newsletters: https://sci-bots.com/en-ca/pages/newsletters",
+  "posts": [
+    {
+      "title": "MicroTAS 2026 and DMF for Multiplexed Sepsis Biomarkers",
+      "kind": "newsletter",
+      "date": "2026-09",
+      "url": "https://mailchi.mp/ca50665d1c53/our-new-product-is-available-now-6758621",
+      "image": "https://sci-bots.com/cdn/shop/files/Newsletter_Header_7.png?v=1757481140&width=800"
+    },
+    {
+      "title": "MicroDrop updates and DMF for prenatal genetic diagnostics",
+      "kind": "newsletter",
+      "date": "2026-08",
+      "url": "https://mailchi.mp/6c3f025ade7e/our-new-product-is-available-now-6758454",
+      "image": "https://sci-bots.com/cdn/shop/files/Newsletter_Header_16.png?v=1786054944&width=800"
+    },
+    {
+      "title": "New Products and Dielectric tradeoff for biologically compatible DMF",
+      "kind": "newsletter",
+      "date": "2026-07",
+      "url": "https://mailchi.mp/572b3ad128d9/our-new-product-is-available-now-6757959",
+      "image": "https://sci-bots.com/cdn/shop/files/Newsletter_Header_15.png?v=1784849990&width=800"
+    }
+  ]
+}
