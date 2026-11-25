@@ -20,6 +20,7 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 from .card_style import (
     CORNER_RADIUS,
     GRID,
+    PAIR_ASPECT,
     PAIR_MIN_WIDTH,
     PREVIEW_SCREEN_SHARE,
     THUMBNAIL_SIZE,
@@ -27,8 +28,10 @@ from .card_style import (
     fitted,
     is_dark,
     picture_pair_cells,
+    placed_picture,
     placeholder_fill,
     rounded_rect_path,
+    whole_picture_box,
 )
 
 _ROLE = QtGui.QPalette.ColorRole
@@ -128,10 +131,12 @@ class CardFrame(QtWidgets.QFrame):
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover)
         self._hovered = False
 
-        # Never taller than its contents: a layout's spare room goes elsewhere.
+        # Its height is its height for its width, every pass: a Maximum
+        # policy capped it at the height for its previous width, so a card
+        # narrowed (its pictures stacking) was cut off below the first.
         policy = QtWidgets.QSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred,
-            QtWidgets.QSizePolicy.Policy.Maximum,
+            QtWidgets.QSizePolicy.Policy.Preferred,
         )
         policy.setHeightForWidth(True)
         self.setSizePolicy(policy)
@@ -238,7 +243,8 @@ class Thumbnail(QtWidgets.QWidget):
 
 class PicturePair(QtWidgets.QWidget):
     """Two captioned pictures, side by side at equal height, or stacked when
-    narrow; each centre-cropped to PAIR_ASPECT. A click on one emits
+    narrow (see ``picture_pair_cells``): side by side cropped as little as
+    their shared aspect needs, stacked each whole. A click on one emits
     ``picture_clicked`` with its index, and goes no further."""
 
     picture_clicked = QtCore.Signal(int)
@@ -266,9 +272,23 @@ class PicturePair(QtWidgets.QWidget):
         self.setMouseTracking(True)
 
     def set_picture(self, index, pixmap):
+        """Show ``pixmap`` as picture ``index``: its aspect sets the cells,
+        so the pair's height may change."""
         self.pixmaps[index] = pixmap
-        self._crops.pop(index, None)
+        self._crops = {}
+        self.updateGeometry()
         self.update()
+
+    def _aspects(self):
+        """Each picture's width over height; PAIR_ASPECT until loaded."""
+        aspects = []
+
+        for pixmap in self.pixmaps[:2]:
+            size = pixmap.deviceIndependentSize() if pixmap is not None else None
+            aspect = size.width() / max(size.height(), 1) if size else PAIR_ASPECT
+            aspects.append(aspect or PAIR_ASPECT)
+
+        return tuple(aspects)
 
     def _caption_height(self):
         """Room for a caption line beneath each picture; none without any."""
@@ -280,7 +300,9 @@ class PicturePair(QtWidgets.QWidget):
 
     def _rects(self, width):
         """Where each picture goes at ``width``."""
-        cells, _height = picture_pair_cells(width, self._caption_height())
+        cells, _height = picture_pair_cells(
+            width, self._caption_height(), self._aspects()
+        )
 
         return [QtCore.QRect(*cell) for cell in cells]
 
@@ -288,7 +310,7 @@ class PicturePair(QtWidgets.QWidget):
         return True
 
     def heightForWidth(self, width):
-        return picture_pair_cells(width, self._caption_height())[1]
+        return picture_pair_cells(width, self._caption_height(), self._aspects())[1]
 
     def sizeHint(self):
         width = self.width() if self.width() > 0 else PAIR_MIN_WIDTH
@@ -304,14 +326,29 @@ class PicturePair(QtWidgets.QWidget):
         self._crops = {}
 
     def _crop(self, index, rect):
-        """Picture ``index`` cover-cropped to ``rect``, made once per size
-        from the loaded picture, sharp at the device pixel ratio."""
+        """Picture ``index`` for ``rect``, made once per size from the loaded
+        picture, sharp at the device pixel ratio: side by side cropped to
+        the shared aspect (as little as it needs), stacked shown whole."""
         crop = self._crops.get(index)
 
-        if crop is None:
-            ratio = self.devicePixelRatioF()
-            crop = cropped(self.pixmaps[index], rect.width(), rect.height(), ratio)
-            self._crops[index] = crop
+        if crop is not None:
+            return crop
+
+        pixmap = self.pixmaps[index]
+        ratio = self.devicePixelRatioF()
+
+        if rect.width() < self.width():
+            crop = cropped(pixmap, rect.width(), rect.height(), ratio)
+
+        else:
+            size = pixmap.deviceIndependentSize()
+            height, (x, _y, width, _h) = whole_picture_box(
+                rect.width(), size.width(), size.height()
+            )
+            place = (x, (rect.height() - height) // 2, width, height)
+            crop = placed_picture(pixmap, rect.width(), rect.height(), place, ratio)
+
+        self._crops[index] = crop
 
         return crop
 

@@ -128,9 +128,14 @@ class NotificationCard(QtWidgets.QFrame):
         self._flash_fade = None
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover, True)
-        self.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Maximum
+        # Its height for its width, every pass: a Maximum policy capped it
+        # at its size hint, taken at another width, cutting wrapped text.
+        policy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Preferred,
         )
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
 
         self._build()
         self._binding = _CardBinding(entry=entry, card=self)
