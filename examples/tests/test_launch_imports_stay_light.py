@@ -41,6 +41,16 @@ LAUNCH_MODULES = (
     "pluggable_protocol_tree.services.logging.controller",
     "ssh_controls.service",
     "user_help_plugin.plugin",
+    # What NotificationsPlugin.start() imports; the drawer, toasts and
+    # settings window are imported on first use, not here.
+    "notifications.plugin",
+    "notifications.controllers.load_failure_notifier",
+    "notifications.controllers.message_handler",
+    "notifications.controllers.section_alerts",
+    "notifications.models.own_sections",
+    "notifications.services.chime",
+    "notifications.services.log_forwarder",
+    "notifications.views.bell",
 )
 
 #: Packages none of them may import. Bare ``scipy`` is not listed: pint, which
@@ -52,6 +62,8 @@ HEAVY_PACKAGES = (
     "scipy.optimize",
     "scipy.special",
     "scipy.stats",
+    # The chime loads Qt Multimedia the first time it sounds.
+    "PySide6.QtMultimedia",
 )
 
 _PROBE = """
