@@ -89,8 +89,8 @@ class CardThumbnail(QtWidgets.QWidget):
 
     def show_entry(self, entry):
         """Follow ``entry``: its thumbnail, and whether a click runs its
-        button."""
-        clickable = entry.action is not None and not entry.acted
+        action; a handled card's button is spent, its thumbnail is not."""
+        clickable = entry.action is not None
 
         self.clickable = clickable
         self.setToolTip(entry.action.label if clickable else "")
