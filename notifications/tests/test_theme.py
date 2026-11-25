@@ -19,10 +19,8 @@ from pyface.qt.QtGui import QColor, QPalette
 from pyface.qt.QtWidgets import QApplication
 
 # Microdrop package imports.
-from examples.demos.notifications_pane.sci_bots_feed_cards import accent_color
-from examples.demos.notifications_pane.sci_bots_feed_groups import FEED_GROUPS
-from examples.demos.notifications_ux import colour_roles as roles
-from examples.demos.notifications_ux.view_styles import link_color, role_color
+from notifications.views import colour_roles as roles
+from notifications.views.theme import link_color, role_color, theme_of
 
 WINDOWS = {roles.LIGHT: "#F3F3F3", roles.DARK: "#1E1E1E"}
 
@@ -47,8 +45,6 @@ def test_roles_resolve_for_the_palette_theme(theme):
 
 
 @pytest.mark.parametrize("theme", [roles.LIGHT, roles.DARK])
-def test_sub_section_accents_resolve_for_the_palette_theme(theme):
-    palette = _palette(theme)
-
-    for spec in FEED_GROUPS:
-        assert accent_color(spec, palette).name().upper() == spec.accent[theme].upper()
+def test_the_theme_follows_the_palette_asked_with(theme):
+    """One source: the palette passed, never a cached or widget palette."""
+    assert theme_of(_palette(theme)) == theme

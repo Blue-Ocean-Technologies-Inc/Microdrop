@@ -15,16 +15,14 @@ repeat included; it is silent only when nothing is seen."""
 import pytest
 
 # Microdrop package imports.
-from examples.demos.notifications_ux.ux_consts import (
-    SKIP_QUIET,
-    SKIP_READ,
-    SKIP_START_UP,
-)
-from examples.demos.notifications_ux.ux_controllers import (
+from notifications.controllers.toast_controller import (
     ARRIVAL_IN_DRAWER,
     ARRIVAL_POP_UP,
     ARRIVAL_REFRESH,
     RINGING_ARRIVALS,
+    SKIP_QUIET,
+    SKIP_READ,
+    SKIP_START_UP,
     arrival_outcome,
 )
 

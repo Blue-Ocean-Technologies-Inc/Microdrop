@@ -36,8 +36,8 @@ from traits.api import Bool, Callable, HasTraits, Instance, Int, List, Str, Tupl
 from microdrop_style.colors import (
     ERROR_COLOR,
     INFO_COLOR,
-    SLATE,
     SUCCESS_COLOR,
+    TAUPE,
     WARNING_COLOR,
 )
 from microdrop_style.icons.icons import (
@@ -355,9 +355,9 @@ NOTIFICATION_SECTIONS = f"{PKG}.sections"
 ATTENTION_SECTION_ID = f"{PKG}.attention"
 HISTORY_SECTION_ID = f"{PKG}.history"
 
-#: A contributed section's look when it sets none: a slate puzzle piece.
+#: A contributed section's look when it sets none: a taupe puzzle piece.
 DEFAULT_SECTION_GLYPH = "widgets"
-DEFAULT_SECTION_ACCENT = (SLATE["light"], SLATE["dark"])
+DEFAULT_SECTION_ACCENT = (TAUPE["light"], TAUPE["dark"])
 
 
 class SectionAlert(HasTraits):

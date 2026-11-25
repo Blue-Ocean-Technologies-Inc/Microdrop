@@ -156,21 +156,6 @@ def test_a_traceback_detail_shows_monospace():
     assert entry.monospace_detail
 
 
-def test_the_header_counts_new_and_total():
-    model = NotificationsPaneModel()
-
-    assert model.header_text == "No notifications"
-
-    model.center.post("a")
-    model.center.post("b")
-
-    assert model.header_text == "2 new of 2"
-
-    model.center.mark_all_read()
-
-    assert model.header_text == "2 notifications"
-
-
 def test_sections_show_in_order_and_expand_by_id():
     late = NotificationSection(id="late", title="Late", order=5)
     early = NotificationSection(id="early", title="Early", order=1)

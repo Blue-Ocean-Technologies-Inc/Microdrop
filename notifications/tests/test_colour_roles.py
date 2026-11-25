@@ -17,11 +17,32 @@ read paler."""
 import pytest
 
 # Microdrop package imports.
-from examples.demos.notifications_ux import colour_roles as roles
-from examples.demos.notifications_ux.column_parts import FILTER_CHIP_ACCENTS
-from examples.demos.notifications_ux.ux_consts import HEADER_ACCENTS
+from notifications.consts import (
+    ATTENTION_SECTION_ID,
+    DEFAULT_SECTION_ACCENT,
+    HISTORY_SECTION_ID,
+)
+from notifications.models.own_sections import AttentionSection, HistorySection
+from notifications.views import colour_roles as roles
+from notifications.views.activity_parts import FILTER_CHIP_ACCENTS
+from plugin_management.consts import (
+    LOAD_STATUS_SECTION_ACCENT,
+    LOAD_STATUS_SECTION_ID,
+)
+
+# Microdrop style imports.
+from microdrop_style.color_contrast import blend, contrast, label_on, readable_on
 
 THEMES = (roles.LIGHT, roles.DARK)
+
+#: Every section header's accent: the drawer's own, the default, and the
+#: Plugins section's.
+HEADER_ACCENTS = {
+    ATTENTION_SECTION_ID: AttentionSection().accent,
+    HISTORY_SECTION_ID: HistorySection().accent,
+    "default": DEFAULT_SECTION_ACCENT,
+    LOAD_STATUS_SECTION_ID: LOAD_STATUS_SECTION_ACCENT,
+}
 
 
 def text_pairs():
@@ -37,11 +58,11 @@ def text_pairs():
 
             # Accent text (coloured titles, kickers) is made readable first.
             for header, accent in HEADER_ACCENTS.items():
-                text = roles.readable_on(accent[theme], surface, minimum)
+                text = readable_on(accent[theme], surface, minimum)
                 yield theme, f"{header} accent text on {name}", text, surface
 
-                chip = roles.blend(accent[theme], surface, roles.CHIP_TINT[theme])
-                text = roles.readable_on(accent[theme], chip, minimum)
+                chip = blend(accent[theme], surface, roles.CHIP_TINT[theme])
+                text = readable_on(accent[theme], chip, minimum)
                 yield theme, f"{header} chip on {name}", text, chip
 
         yield (
@@ -53,13 +74,13 @@ def text_pairs():
 
         for name, accent in FILTER_CHIP_ACCENTS.items():
             fill = accent[theme]
-            yield theme, f"chosen {name} chip label", roles.label_on(fill), fill
+            yield theme, f"chosen {name} chip label", label_on(fill), fill
 
     # The bell's badge sits on the status bar, not the drawer: WCAG's floor.
     for theme in THEMES:
         for severity, colour in roles.SEVERITY.items():
             fill = colour[theme]
-            yield roles.DARK, f"{severity} bell badge label", roles.label_on(fill), fill
+            yield roles.DARK, f"{severity} bell badge label", label_on(fill), fill
 
 
 def icon_pairs():
@@ -81,12 +102,12 @@ def icon_pairs():
 
 @pytest.mark.parametrize("theme, what, text, background", list(text_pairs()))
 def test_text_contrast(theme, what, text, background):
-    assert roles.contrast(text, background) >= roles.TEXT_CONTRAST[theme], what
+    assert contrast(text, background) >= roles.TEXT_CONTRAST[theme], what
 
 
 @pytest.mark.parametrize("theme, what, colour, background", list(icon_pairs()))
 def test_icon_contrast(theme, what, colour, background):
-    assert roles.contrast(colour, background) >= roles.ICON_CONTRAST[theme], what
+    assert contrast(colour, background) >= roles.ICON_CONTRAST[theme], what
 
 
 def test_header_accents_are_one_per_header():
