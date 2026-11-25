@@ -105,6 +105,7 @@ Receiving: (Via handlers)
 - DEVICE_VIEWER_CAMERA_SELECT_SOURCE "ui/device_viewer/camera/select_source" (see the camera source selection flow below)
 - DEVICE_VIEWER_CAMERA_APPLY_SETTINGS "ui/device_viewer/camera/apply_settings" (a step's capture setup; see the per-step capture camera settings flow below)
 - DISABLED_CHANNELS_CHANGED "hardware/signals/disabled_channels_changed" (replaces the hardware-disabled set only; see the disabled channels flow below)
+- SHOW_RECORDING "ui/device_viewer/recording_viewer/show_recording" — play the recording at `path` in the Recording Viewer, its pane brought forward (`ShowRecordingRequest`, via `show_recording_publisher`, in `recording_viewer_consts.py`; the video cards' Show button; heard by `RecordingViewerMessageHandler`, made at the plugin's start); see the camera captures flow below
 
 Sending: (Via publish_method)
 - ELECTRODES_STATE_CHANGE "dropbot/requests/electrodes_state_change"
@@ -125,6 +126,7 @@ Sending: (Via publish_method)
 
 Receiving: (Via handlers, image_viewer/message_handler.py)
 - PROTOCOL_RUNNING "microdrop/protocol_running" — sets the ROI analysis model's `protocol_running` on the GUI thread: Calculate/Export/AI Detect/Track ask before starting, the ROI batch computes at most 2 images at once, and a draw/edit holds the view (no auto-follow, no refit)
+- SHOW_IMAGE "ui/image_viewer/show_image" — show the image file at `path` (`ShowImageRequest`, via `show_image_publisher`; the photo cards' Show button) in its Capture Session, the Image Viewer pane brought forward (`microdrop_utils.dock_pane_presenting`); see the camera captures flow below
 
 ### notifications
 
@@ -845,9 +847,18 @@ camera panel (CameraControlWidget, GUI thread) ─► CaptureNotificationsContro
   photo saved (ImageSaver.save_complete)   ─► NOTIFICATION_POST "Photo captured" | "N photos captured"
   no camera frame to grab                  ─► NOTIFICATION_POST "Photo not captured"     (error)
   recording finalized (recording_stopped)  ─► NOTIFICATION_POST "Video saved"
+
+card's Show (drawer, GUI thread)
+  photo card ─► SHOW_IMAGE {path: latest photo}     ─► image_viewer listener ─► ImageViewerPlugin._show_image
+  video card ─► SHOW_RECORDING {path: the video}    ─► RecordingViewerMessageHandler ─► DeviceViewerPlugin._show_recording
+      file missing ─► logger.warning "File not found: <path>" (a warning card, via the log forwarder); else
+      present_dock_pane(pane): on screen (docked, behind a tab, floating) ─► raised where it is
+                               closed ─► popped out floating, centred over the main window
+      ─► once the pane's contents exist (a lazy pane is built first):
+         ImageViewerController.show_image(path) | VideoViewerDockPane.show_recording(path)
 ```
 
-Every post: `category_id` `device_viewer.camera_captures` (group Camera, label Captures; drawer and pop-up on, tone Soft), `source` `device_viewer`, `category` `camera`. Photos: success, detail the file name ("Latest: <name>" past the first), action `{"kind": "open_path", "label": "Show folder", "path": <the captures folder>}` (opened by the drawer through `microdrop_utils.file_handler.open_file`, no topic). One card per capture session, `thread_id` `device_viewer.camera_captures.photos.<n>`, updated in place with the count: a session is one folder and one protocol run (counted on the main model's `protocol_running` turning on), and outside a run, photos into the same folder within `CAPTURE_SESSION_WINDOW_S` (5 min) of the previous one (`models/capture_session.py`, `continues_capture_session`). Videos: success, detail `<name> (m:ss)` (start to stop of the recording), "Show folder", `thread_id` `device_viewer.camera_captures.video.<path>`. A capture whose request set `show_status_message` False (the protocol's Capture and Record columns, the fluorescence panes) posts with `pop_up` False; the capture button's pop up. The recording's start shows only as the status-bar recording icon; a recording error keeps its dialog (and its logged error card).
+Every post: `category_id` `device_viewer.camera_captures` (group Camera, label Captures; drawer and pop-up on, tone Soft), `source` `device_viewer`, `category` `camera`. The photo and video cards' button is Show, a `PublishAction` on the viewer's request topic with `{"path": <the file>}` (the latest photo on a photos card); while the viewer's plugin is not running in this process (its listener actor is not registered, `is_dramatiq_listener_registered`) it is `{"kind": "open_path", "label": "Show folder", "path": <the file's folder>}` instead (opened by the drawer through `microdrop_utils.file_handler.open_file`, no topic), decided on each post. A card has no second folder link: a card's second button is only a help link or "Later". "On screen" is the dock widget's own state: a closed pane's widget is hidden, one behind a tab only moved out of sight (pyface's `visible` stays True for it); a docked pane's `raise_()` selects its tab. The Image Viewer shows the photo in its Capture Session (the selected Image Group when it holds it, else "All"; the filter cleared if it hides it), or alone when the browsed folder does not hold it; the Recording Viewer browses the video's folder and picks it. Photos: success, detail the file name ("Latest: <name>" past the first). One card per capture session, `thread_id` `device_viewer.camera_captures.photos.<n>`, updated in place with the count: a session is one folder and one protocol run (counted on the main model's `protocol_running` turning on), and outside a run, photos into the same folder within `CAPTURE_SESSION_WINDOW_S` (5 min) of the previous one (`models/capture_session.py`, `continues_capture_session`). Videos: success, detail `<name> (m:ss)` (start to stop of the recording), `thread_id` `device_viewer.camera_captures.video.<path>`. A capture whose request set `show_status_message` False (the protocol's Capture and Record columns, the fluorescence panes) posts with `pop_up` False; the capture button's pop up. The recording's start shows only as the status-bar recording icon; a recording error keeps its dialog (and its logged error card).
 
 ### dropbot_tools_menu → notifications drawer: the self-test reminder (#1133)
 
