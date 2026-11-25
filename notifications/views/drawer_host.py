@@ -57,13 +57,13 @@ logger = get_logger(__name__)
 BACKDROP_SETTLE_MS = 250
 
 
-def drawer_width_for(window_width, wanted):
-    """The drawer's width in a ``window_width`` window, for ``wanted``."""
-    widest = max(
-        min(DRAWER_MAX_WIDTH, window_width - WINDOW_LEFT_IN_VIEW), DRAWER_MIN_WIDTH
-    )
+def drawer_width_for(window_width, wanted, narrowest=DRAWER_MIN_WIDTH):
+    """The drawer's width in a ``window_width`` window, for ``wanted``, and
+    never under ``narrowest`` (what its header needs) while the window has
+    the room."""
+    widest = max(min(DRAWER_MAX_WIDTH, window_width - WINDOW_LEFT_IN_VIEW), narrowest)
 
-    return min(max(wanted, DRAWER_MIN_WIDTH), widest, window_width)
+    return min(max(wanted, narrowest), widest, window_width)
 
 
 class NotificationsDrawerHost(HasTraits):
@@ -161,7 +161,9 @@ class NotificationsDrawerHost(HasTraits):
         between its top bars and its status bar): at the right, inset, at
         the model's width, as tall as ``natural_height`` allows, its bottom
         by the status bar. Override to place it elsewhere."""
-        width = drawer_width_for(available.width(), self.model.drawer_width)
+        width = drawer_width_for(
+            available.width(), self.model.drawer_width, self._narrowest()
+        )
         room = max(available.height() - 2 * DRAWER_INSET, 0)
         height = min(max(natural_height, DRAWER_MIN_HEIGHT), room)
         right = available.right() + 1 - DRAWER_INSET
@@ -315,7 +317,19 @@ class NotificationsDrawerHost(HasTraits):
             logger.debug(f"Notifications drawer contents already deleted: {error}")
 
     def _resize_to(self, width):
-        self.model.drawer_width = drawer_width_for(self.window.width(), width)
+        self.model.drawer_width = drawer_width_for(
+            self.window.width(), width, self._narrowest()
+        )
+
+    def _narrowest(self):
+        """The drawer's least width: what its contents need (the header's
+        whole title and buttons at the current font size), at least
+        DRAWER_MIN_WIDTH."""
+        needed = getattr(self._contents, "needed_width", None)
+        margins = self.drawer.layout().contentsMargins() if self.drawer else None
+        frame = margins.left() + margins.right() if margins is not None else 0
+
+        return max(DRAWER_MIN_WIDTH, needed() + frame if needed else 0)
 
     # ------------------------------------------------------------------ #
     # Placement                                                           #

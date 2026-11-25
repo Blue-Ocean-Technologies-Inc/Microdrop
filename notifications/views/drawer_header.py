@@ -17,12 +17,19 @@ from traits.api import Any, Bool, HasTraits, Instance, observe
 
 # Microdrop style imports.
 from microdrop_style.icons.icons import ICON_CLOSE, ICON_DELETE_SWEEP, ICON_DONE_ALL
-from microdrop_style.palette_helpers import css, style_chip, with_alpha
+from microdrop_style.palette_helpers import CHIP_PADDING, css, style_chip, with_alpha
 from microdrop_style.panel_theme import icon_button_style, theme_palette
 from microdrop_style.typography import CHIP, DRAWER_TITLE, role_font
 
+# Microdrop utils imports.
+from microdrop_utils.clamped_label import ElidedLabel
+
 # Local imports.
 from ..models.notifications_pane_model import NotificationsPaneModel
+
+#: The drawer's title, and the room (px) between it and the count chip.
+TITLE_TEXT = "Notifications"
+CHIP_GAP = 8
 
 #: The settings button's glyph.
 ICON_SETTINGS = "settings"
@@ -44,10 +51,14 @@ class DrawerHeader(QtWidgets.QWidget):
         layout.setContentsMargins(10, 8, 4, 8)
         layout.setSpacing(2)
 
-        self._title = QtWidgets.QLabel("Notifications", self)
+        # Elided, never cut through a glyph; it gives way last.
+        self._title = ElidedLabel(TITLE_TEXT, self, title=True)
         self._title.setFont(role_font(DRAWER_TITLE))
         layout.addWidget(self._title)
-        layout.addSpacing(8)
+        layout.addSpacing(CHIP_GAP)
+
+        #: The chip's text in full ("2 new"), and short ("2").
+        self._chip_texts = ("", "")
 
         self._chip = QtWidgets.QLabel(self)
         self._chip.setFont(role_font(CHIP))
@@ -81,15 +92,51 @@ class DrawerHeader(QtWidgets.QWidget):
         attention = len(center.attention_entries)
 
         if new:
-            text = f"{new} new"
+            self._chip_texts = (f"{new} new", str(new))
 
         else:
-            text = str(total) if total else ""
+            self._chip_texts = (str(total), str(total)) if total else ("", "")
+
+        self._fit_chip()
+        self.mark_all_read.setEnabled(bool(new or center.unread_count))
+        self.clear_all.setEnabled(total > attention)
+
+    def needed_width(self):
+        """The width (px) showing the whole title and every button: the
+        drawer is never narrower. The chip shortens, then goes, first."""
+        margins = self.layout().contentsMargins()
+        buttons = sum(button.sizeHint().width() for button in self._buttons())
+        spacing = self.layout().spacing() * (len(self._buttons()) + 1)
+        title = QtGui.QFontMetrics(self._title.font()).horizontalAdvance(TITLE_TEXT)
+
+        return margins.left() + margins.right() + title + CHIP_GAP + spacing + buttons
+
+    def _fit_chip(self):
+        """The chip in full while it fits beside the whole title, short
+        when only that fits, else hidden."""
+        room = self.width() - self.needed_width() + CHIP_GAP
+        full, short = self._chip_texts
+        text = ""
+
+        for candidate in (full, short):
+            if candidate and self._chip_width(candidate) <= room:
+                text = candidate
+
+                break
 
         self._chip.setText(text)
         self._chip.setVisible(bool(text))
-        self.mark_all_read.setEnabled(bool(new or center.unread_count))
-        self.clear_all.setEnabled(total > attention)
+
+    def _chip_width(self, text):
+        metrics = QtGui.QFontMetrics(self._chip.font())
+
+        return metrics.horizontalAdvance(text) + 2 * CHIP_PADDING[1] + 2 + CHIP_GAP
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        if event.size().width() != event.oldSize().width():
+            self._fit_chip()
 
     def restyle(self):
         palette = theme_palette()
