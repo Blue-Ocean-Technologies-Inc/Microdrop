@@ -23,6 +23,7 @@ settings.json in the notifications data folder
 
 # Enthought library imports.
 from traits.api import (
+    Any,
     Bool,
     Button,
     Dict,
@@ -117,11 +118,26 @@ class NotificationCategory(HasTraits):
     #: The tone its arrivals play.
     tone = Enum(*TONES)
 
+    #: The owner's declared choices, by trait name: what ``reset`` restores.
+    defaults = Dict(Str, Any)
+
+    #: Whether any choice differs from its declared default.
+    changed = Property(Bool, observe="in_drawer, popup, tone, defaults")
+
     #: The settings' row label, saying when the drawer switch is locked.
     row_label = Property(Str, observe="label, critical")
 
+    def _get_changed(self):
+        return any(
+            getattr(self, name) != value for name, value in self.defaults.items()
+        )
+
     def _get_row_label(self):
         return f"{self.label} (always kept)" if self.critical else self.label
+
+    def reset(self):
+        """Restore the declared defaults."""
+        self.trait_set(**self.defaults)
 
     @observe("in_drawer")
     def _keep_critical_listed(self, event):
@@ -132,15 +148,20 @@ class NotificationCategory(HasTraits):
 
 def category_from_spec(spec):
     """A category with its owner's defaults."""
+    defaults = {
+        "in_drawer": spec.drawer or spec.critical,
+        "popup": spec.popup,
+        "tone": spec.tone,
+    }
+
     return NotificationCategory(
         id=spec.id,
         group=spec.group,
         label=spec.label,
         description=spec.description,
         critical=spec.critical,
-        in_drawer=spec.drawer or spec.critical,
-        popup=spec.popup,
-        tone=spec.tone,
+        defaults=defaults,
+        **defaults,
     )
 
 
@@ -150,6 +171,18 @@ class NotificationCategoryGroup(HasTraits):
     name = Str()
 
     categories = List(Instance(NotificationCategory))
+
+    #: How many of its categories differ from their defaults.
+    changed_count = Property(Int, observe="categories.items.changed")
+
+    def _get_changed_count(self):
+        return sum(category.changed for category in self.categories)
+
+    def reset(self):
+        """Restore every category's declared defaults."""
+
+        for category in self.categories:
+            category.reset()
 
 
 class NotificationSettings(HasTraits):
@@ -277,3 +310,10 @@ class NotificationSettings(HasTraits):
     def category(self, category_id):
         """The category ``category_id``, or None (uncategorised, unknown)."""
         return self._by_id.get(category_id)
+
+    def reset_categories(self):
+        """Restore every category's declared defaults; the general settings
+        keep the user's choices."""
+
+        for group in self.groups:
+            group.reset()
