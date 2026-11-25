@@ -120,6 +120,10 @@ def tutorial_id(path):
 #: The tutorial an unknown id opens instead: the start of the learning path.
 GETTING_STARTED_TUTORIAL_ID = tutorial_id(GETTING_STARTED_TUTORIAL_HTML_PATH)
 
+#: Its capacitance calibration chapter (an id in the page), with the clip:
+#: where other plugins' "How to calibrate" help links open.
+CALIBRATION_TUTORIAL_ANCHOR = "capacitance-calibration"
+
 # ---------------------------------------------------------------------------
 # Opening a tutorial from anywhere
 # ---------------------------------------------------------------------------

@@ -23,16 +23,16 @@ from pyface.timer.api import CallbackTimer
 from traits.api import Any, HasTraits, Instance, observe
 
 # Microdrop package imports.
-from dropbot_status_and_controls.consts import (
-    CALIBRATION_TUTORIAL_ANCHOR,
-    DROPBOT_STATUS_TUTORIAL_ID,
-)
 from notifications.consts import (
     SEVERITY_WARNING,
     HelpAction,
     help_target,
     notification_publisher,
     notification_resolve_publisher,
+)
+from user_help_plugin.consts import (
+    CALIBRATION_TUTORIAL_ANCHOR,
+    GETTING_STARTED_TUTORIAL_ID,
 )
 
 # Local imports.
@@ -140,7 +140,7 @@ class CalibrationReminderController(HasTraits):
                 "secondary_action": HelpAction(
                     label="How to calibrate",
                     target=help_target(
-                        DROPBOT_STATUS_TUTORIAL_ID, CALIBRATION_TUTORIAL_ANCHOR
+                        GETTING_STARTED_TUTORIAL_ID, CALIBRATION_TUTORIAL_ANCHOR
                     ),
                 ),
                 "needs_attention": True,

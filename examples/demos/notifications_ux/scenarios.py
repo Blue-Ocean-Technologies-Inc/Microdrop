@@ -29,7 +29,6 @@ from traits.api import Callable, HasTraits, Instance
 
 # Microdrop package imports.
 from dropbot_status_and_controls.consts import (
-    CALIBRATION_TUTORIAL_ANCHOR,
     CHIP_STATUS_TUTORIAL_ANCHOR,
     CONNECTION_TUTORIAL_ANCHOR,
     DROPBOT_STATUS_TUTORIAL_ID,
@@ -50,6 +49,10 @@ from notifications.consts import (
     notification_publisher,
 )
 from notifications.models.notification_center import NotificationCenter
+from user_help_plugin.consts import (
+    CALIBRATION_TUTORIAL_ANCHOR,
+    GETTING_STARTED_TUTORIAL_ID,
+)
 
 # Local imports.
 from .demo_categories import (
@@ -102,7 +105,7 @@ CALIBRATION_DETAIL = (
 #: Calibration has no command yet: the card carries only its how-to.
 CALIBRATION_HELP = HelpAction(
     label="How to calibrate",
-    target=help_target(DROPBOT_STATUS_TUTORIAL_ID, CALIBRATION_TUTORIAL_ANCHOR),
+    target=help_target(GETTING_STARTED_TUTORIAL_ID, CALIBRATION_TUTORIAL_ANCHOR),
 )
 
 #: Days without a self test before it is stale, and how long the demo's

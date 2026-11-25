@@ -91,11 +91,9 @@ DROPBOT_STATUS_TUTORIAL_HTML_PATH = (
 )
 
 #: The tutorial's id for OPEN_TUTORIAL, and the sections (ids in its page)
-#: other plugins' help links open: measuring filler and liquid capacitance,
-#: connecting, inserting a chip, the volume readout, and the Tools > Dropbot
-#: self tests.
+#: other plugins' help links open: connecting, inserting a chip, the volume
+#: readout, and the Tools > Dropbot self tests.
 DROPBOT_STATUS_TUTORIAL_ID = tutorial_id(DROPBOT_STATUS_TUTORIAL_HTML_PATH)
-CALIBRATION_TUTORIAL_ANCHOR = "tb-calibration"
 CONNECTION_TUTORIAL_ANCHOR = "connection"
 CHIP_STATUS_TUTORIAL_ANCHOR = "chip-status"
 VOLUME_TUTORIAL_ANCHOR = "volume"
