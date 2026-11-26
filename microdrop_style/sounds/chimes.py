@@ -30,3 +30,19 @@ CHIME_DISCONNECTED = SOUNDS_DIR / "chime_disconnected.wav"
 
 #: Three even beeps, longer and stronger, for something finished.
 CHIME_COMPLETION = SOUNDS_DIR / "chime_completion.wav"
+
+#: The chimes' names, as the chime designer's melodies know them, and each
+#: shipped chime's file by name.
+CHIME_NAMES = ("gentle", "alert", "connected", "disconnected", "completion")
+SHIPPED_CHIMES = dict(
+    zip(
+        CHIME_NAMES,
+        (
+            CHIME_GENTLE,
+            CHIME_ALERT,
+            CHIME_CONNECTED,
+            CHIME_DISCONNECTED,
+            CHIME_COMPLETION,
+        ),
+    )
+)

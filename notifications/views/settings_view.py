@@ -9,7 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """The notification settings window, opened from the drawer's gear: the
-panel at start-up, toasts, sound, and each owner's kinds of notification;
+panel at start-up, toasts, sound, how the tones sound (the chime
+designer), and each owner's kinds of notification;
 and one owner's page listing only its kinds. Both edit the same category
 objects, so they stay in step. Run standalone against just the model::
 
@@ -30,6 +31,7 @@ from traitsui.api import (
     EnumEditor,
     Handler,
     HGroup,
+    InstanceEditor,
     Item,
     OKButton,
     RangeEditor,
@@ -45,6 +47,7 @@ from ..models.settings_window import (
     SettingsWindowState,
     fitted_window_size,
 )
+from .chime_designer_view import CHIME_DESIGNER_VIEW
 from .settings_kinds import kinds_panel
 
 #: The tone choices, in order, as EnumEditor wants them.
@@ -186,6 +189,17 @@ GENERAL_GROUPS = [
         Item("last_sound", show_label=False, style="readonly"),
         Item("last_skipped", show_label=False, style="readonly"),
         label="Sound",
+        show_border=True,
+        scrollable=True,
+    ),
+    VGroup(
+        Item(
+            "chime",
+            show_label=False,
+            style="custom",
+            editor=InstanceEditor(view=CHIME_DESIGNER_VIEW),
+        ),
+        label="Sounds",
         show_border=True,
         scrollable=True,
     ),

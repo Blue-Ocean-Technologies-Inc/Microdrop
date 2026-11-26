@@ -24,38 +24,34 @@ The three sounds load together the first time anything arrives after
 start-up or the settings open, not at launch; each tone has its own
 effect, restarted cleanly when played again. Without Qt Multimedia or an
 audio device the chime logs one warning and stays silent.
+
+Each tone plays its shipped sound until the chime designer gives it a
+design of its own; the designed sounds are rendered (``chime_sounds``) the
+next time a sound is needed after a change, not on every slider step.
 """
 
 # Standard library imports.
 import time
+from pathlib import Path
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui
 from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, List, Str, observe
 
-# Microdrop style imports.
-from microdrop_style.sounds.chimes import (
-    CHIME_ALERT,
-    CHIME_COMPLETION,
-    CHIME_CONNECTED,
-    CHIME_DISCONNECTED,
-    CHIME_GENTLE,
-)
-
 # Local imports.
 from ..consts import (
+    CHIME_SOUNDS_DIRNAME,
     SEVERITY_ERROR,
     SEVERITY_WARNING,
     TONE_ALERT,
-    TONE_COMPLETION,
-    TONE_CONNECTED,
-    TONE_DISCONNECTED,
     TONE_LABELS,
     TONE_SOFT,
+    notifications_data_dir,
 )
 from ..controllers.toast_controller import SKIP_START_UP
 from ..models.notifications_pane_model import NotificationsPaneModel
 from . import chime_trace
+from .chime_sounds import SHIPPED_TONE_SOUNDS, remove_stale_sounds, tone_sound_paths
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -76,15 +72,9 @@ SKIP_VOLUME_ZERO = "volume 0"
 PLAY_RETRIES = 1
 SKIP_FLAP = "state changing again"
 
-#: Each tone's sound, weakest first: within CHIME_OVERLAP_S only a
+#: Each tone's shipped sound, weakest first: within CHIME_OVERLAP_S only a
 #: stronger tone than the last one sounds.
-TONE_SOUNDS = {
-    TONE_SOFT: CHIME_GENTLE,
-    TONE_CONNECTED: CHIME_CONNECTED,
-    TONE_DISCONNECTED: CHIME_DISCONNECTED,
-    TONE_ALERT: CHIME_ALERT,
-    TONE_COMPLETION: CHIME_COMPLETION,
-}
+TONE_SOUNDS = SHIPPED_TONE_SOUNDS
 
 #: A state that keeps changing (a connection flapping) chimes at most once
 #: in this time (s), unless the change is stronger than the last one.
@@ -126,6 +116,13 @@ class NotificationChime(HasTraits):
 
     pane_model = Instance(NotificationsPaneModel)
 
+    #: Where the designed sounds are rendered.
+    sounds_dir = Instance(Path)
+
+    #: Each tone's sound file as designed; empty until needed after a
+    #: design change.
+    _sounds = Dict()
+
     #: QSoundEffects by sound path, one per tone, made on first use.
     _effects = Dict()
 
@@ -148,6 +145,9 @@ class NotificationChime(HasTraits):
 
     #: Set when Qt Multimedia cannot be imported: warned once, then silent.
     _unavailable = Bool(False)
+
+    def _sounds_dir_default(self):
+        return notifications_data_dir() / CHIME_SOUNDS_DIRNAME
 
     def traits_init(self):
 
@@ -217,7 +217,7 @@ class NotificationChime(HasTraits):
         settings.last_sound = (
             f"Last sound: {TONE_LABELS[tone]} · {entry.title} · {_clock()}"
         )
-        self.play(TONE_SOUNDS[tone])
+        self.play(self.sound(tone))
 
     @observe("pane_model:silenced")
     def _silenced(self, event):
@@ -239,7 +239,17 @@ class NotificationChime(HasTraits):
         tone = self.pane_model.center.settings.test_tone
 
         chime_trace.trace("test", tone=tone)
-        self.play(TONE_SOUNDS[tone])
+        self.play(self.sound(tone))
+
+    @observe("pane_model:center:settings:chime:preview")
+    def _preview(self, event):
+        """A tone as the designer now has it, at the chosen volume."""
+        chime_trace.trace("preview", tone=event.new)
+        self.play(self.sound(event.new))
+
+    @observe("pane_model:center:settings:chime:updated")
+    def _design_changed(self, event):
+        self._sounds = {}
 
     def _skip(self, entry, reason):
         logger.debug(f"Chime for {entry.title!r}: skipped ({reason})")
@@ -262,8 +272,44 @@ class NotificationChime(HasTraits):
         """Load every tone's sound now, so a first chime is not also a
         first load."""
 
-        for path in TONE_SOUNDS.values():
-            self._effect(path)
+        for tone in TONE_SOUNDS:
+            self._effect(self.sound(tone))
+
+    def sound(self, tone):
+        """The sound file ``tone`` plays, rendering the designed sounds
+        first if they changed since last needed."""
+
+        if not self._sounds:
+            self._render_sounds()
+
+        return self._sounds[tone]
+
+    def _render_sounds(self):
+        """Each tone's sound as designed; the shipped ones if rendering
+        fails. Effects and files of sounds no longer used are let go."""
+        designer = self.pane_model.center.settings.chime
+
+        try:
+            sounds = tone_sound_paths(designer, self.sounds_dir)
+
+        # A design that cannot be rendered or written must never silence
+        # a notification: the shipped sounds play instead.
+        except Exception as error:
+            logger.warning(f"Designed chimes not used: {error}")
+            sounds = dict(TONE_SOUNDS)
+
+        self._sounds = sounds
+        kept = set(sounds.values())
+        unused = [path for path in self._effects if path not in kept]
+
+        for path in unused:
+            self._pending.pop(path, None)
+            self._effects.pop(path).deleteLater()
+
+        remove_stale_sounds(self.sounds_dir, kept)
+        chime_trace.trace(
+            "sounds", sounds={tone: path.name for tone, path in sounds.items()}
+        )
 
     def play(self, path):
         """Start ``path`` at the settings' volume, from its start if still

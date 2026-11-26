@@ -26,6 +26,7 @@ import struct
 import wave
 
 # Local imports.
+from .chime_synth import FADE_MS, LEAD_IN_MS, PEAK, ROOM_ECHOES
 from .chimes import (
     CHIME_ALERT,
     CHIME_COMPLETION,
@@ -37,32 +38,15 @@ from .chimes import (
 #: Samples per second: plenty for tones under 4 kHz, and small files.
 SAMPLE_RATE = 22050
 
-#: The loudest chime's peak (of full scale) once normalised: the volume
-#: setting scales it down, so the files themselves are not quiet.
-PEAK = 0.9
-
-#: Silence (ms) before each chime: an audio output waking from idle can
-#: swallow the first moments of a sound, and this is all it swallows.
-LEAD_IN_MS = 120
-
-#: Milliseconds of rise at a note's start and fall at the file's end.
+#: Milliseconds of rise at a note's start; the fall at the file's end, the
+#: lead-in, the peak and the room echoes are the chime designer's
+#: (``chime_synth``), so a designed set sounds of a piece with this one.
 ATTACK_MS = 14
-FADE_MS = 60
 
 #: How much faster a partial decays than the fundamental: its decay time
 #: is divided by its frequency ratio to this power, so the upper partials
 #: fade first and the tail settles into a warm fundamental.
 PARTIAL_DECAY_EXPONENT = 1.0
-
-#: The room: (delay ms, level) echoes added under each chime for depth.
-ROOM_ECHOES = [
-    (23, 0.22),
-    (41, 0.18),
-    (59, 0.14),
-    (83, 0.11),
-    (113, 0.08),
-    (151, 0.05),
-]
 
 #: The gentle chime (info, success, news): one soft E4 over a quiet
 #: sub-octave, with a little of its octave, ringing out over a second.
