@@ -95,6 +95,7 @@ from pluggable_protocol_tree.consts import (
     ELECTRODES_COL_ID,
     PHASE_NAVIGATION_MODE,
     PHASE_NAVIGATION_STATE,
+    PREFLIGHT_HARDWARE_TOPICS,
     PROTOCOL_TREE_ADD_STEP,
     PROTOCOL_TREE_DISPLAY_STATE,
     PROTOCOL_TREE_SET_CELL,
@@ -346,6 +347,9 @@ class DeviceViewerSyncController(HasTraits):
     #: app-globals mirror, since a connection made before this listener
     #: existed is never signalled again.
     connected = Bool()
+
+    #: Fired (worker thread) on a ``PREFLIGHT_HARDWARE_TOPICS`` signal.
+    hardware_state_changed = Event()
 
     actuated_channels = Set(Int)
     # Mirror of the operator's Advanced Mode toggle (ADVANCED_MODE_CHANGE).
@@ -624,6 +628,8 @@ class DeviceViewerSyncController(HasTraits):
         elif topic == DROPBOT_DISCONNECTED:
             self.connected = False
             self.realtime_mode = False
+        elif topic in PREFLIGHT_HARDWARE_TOPICS:
+            self.hardware_state_changed = True
         elif topic == ADVANCED_MODE_CHANGE:
             # Qt-free trait — the dock pane's dispatch="ui" observer marshals
             # the GUI-thread work (tree editability, live ctx update).
