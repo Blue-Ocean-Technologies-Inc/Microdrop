@@ -625,6 +625,10 @@ LOG_IGNORE_RULES = (
     ("apscheduler.executors.default", r"Run time of job .* was missed"),
 )
 
+#: Traits logs a failing notification handler on this logger, as a long
+#: event description; its entry is titled by the exception's last line.
+LOG_TRAITS_LOGGER_NAME = "traits"
+
 #: A record carrying this attribute set True is not forwarded: its event is
 #: already listed another way, e.g. by the dialog shown for it. Pass
 #: ``extra=LOG_RECORDED_EXTRA`` with the one record that repeats it.

@@ -14,6 +14,7 @@ failure on the way ever logging back into the handler."""
 
 # Standard library imports.
 import logging
+import sys
 import threading
 
 # Third-party imports.
@@ -168,6 +169,33 @@ def test_an_exception_shows_its_traceback_and_keys_on_its_last_line(forwarding):
 
     assert entry.title == "Handler failed"
     assert "ValueError: bad value" in entry.detail
+    assert entry.monospace_detail
+
+
+def test_a_traits_handler_failure_is_titled_by_its_exception(forwarding):
+    center, source, timer = forwarding
+
+    try:
+        raise TypeError("unsupported operand")
+
+    except TypeError:
+        record = source.makeRecord(
+            "traits",
+            logging.ERROR,
+            __file__,
+            1,
+            "Exception occurred in traits notification handler for event object",
+            None,
+            sys.exc_info(),
+        )
+
+    source.handle(record)
+    timer.run_all()
+
+    entry = center.entries[0]
+
+    assert entry.title == "TypeError: unsupported operand"
+    assert entry.detail.startswith("Exception occurred in traits notification")
     assert entry.monospace_detail
 
 

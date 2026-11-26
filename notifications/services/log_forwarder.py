@@ -44,6 +44,7 @@ from ..consts import (
     LOG_IGNORE_RULES,
     LOG_MIN_LEVEL,
     LOG_RECORDED_ATTR,
+    LOG_TRAITS_LOGGER_NAME,
     MAX_ENTRIES,
     PKG,
     SEVERITY_ERROR,
@@ -101,6 +102,7 @@ def snapshot_record(record):
         "message": message,
         "traceback": traceback_text,
         "created": record.created,
+        "exception_line": exception_line,
         "key": (CATEGORY_LOG, name, record.levelno, str(record.msg), exception_line),
     }
 
@@ -135,7 +137,13 @@ def collapse_snapshots(snapshots, collapsed=None):
 def post_arguments(item):
     """``NotificationCenter.post`` keywords for a collapsed item."""
     snapshot = item["snapshot"]
-    title, detail = title_and_detail(snapshot["message"], snapshot["traceback"])
+    text, detail = snapshot["message"], snapshot["traceback"]
+
+    # The event description traits logs says nothing of what went wrong.
+    if snapshot["name"] == LOG_TRAITS_LOGGER_NAME and snapshot["exception_line"]:
+        text, detail = snapshot["exception_line"], f"{text}\n\n{detail}"
+
+    title, detail = title_and_detail(text, detail)
     severity = (
         SEVERITY_ERROR if snapshot["levelno"] >= logging.ERROR else SEVERITY_WARNING
     )
