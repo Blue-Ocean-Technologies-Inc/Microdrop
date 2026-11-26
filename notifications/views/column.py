@@ -77,6 +77,10 @@ class _ContentsBinding(HasTraits):
     def _reveal(self, event):
         self.view.reveal(event.new)
 
+    @observe("model:folded_all")
+    def _show_from_top(self, event):
+        self.view.show_from_top()
+
     @observe("model:ordered_sections")
     def _show_sections(self, event):
 
@@ -294,6 +298,12 @@ class DrawerContents(QtWidgets.QWidget):
 
         if self._pinned_section is not None:
             self._toggle(self._pinned_section)
+
+    def show_from_top(self):
+        """Scroll to the column's top: after every section collapsed or
+        expanded at once, its top is what to see."""
+        self._reveal_scroll.stop()
+        self.scroll.verticalScrollBar().setValue(0)
 
     # ------------------------------------------------------------------ #
     # The pinned header, and loading as the scroll nears the end         #
