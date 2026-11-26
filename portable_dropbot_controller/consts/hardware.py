@@ -20,11 +20,11 @@ DEFAULT_BAUD_RATE = 115200
 DEFAULT_NUM_CHANNELS = 200
 
 #: HV actuation defaults (both Int end-to-end, like every device) and
-#: UI setpoint bounds, carried over from the original portable pane
-#: (which drove this same hardware).
+#: UI setpoint bounds. The portable's HV supply does not go below 40 V,
+#: unlike the DropBot's 30 V floor.
 DEFAULT_VOLTAGE = 100
 DEFAULT_FREQUENCY = 10_000
-VOLTAGE_BOUNDS = (30, 200)
+VOLTAGE_BOUNDS = (40, 200)
 FREQUENCY_BOUNDS = (50, 60_000)
 
 #: Illumination LED brightness (%), applied on connect and from the
