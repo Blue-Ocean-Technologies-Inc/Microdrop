@@ -155,7 +155,10 @@ def main(plugins, contexts, application, persist, splash_screen=None):
 
         # A headless Application's run() stops it the moment it starts; keep
         # its plugins running until a signal reaches stop_app.
-        app.start()
+        if not app.start():
+            logger.error("The backend application did not start.")
+
+            return
 
         while True:
             time.sleep(0.001)
