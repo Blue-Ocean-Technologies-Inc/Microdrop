@@ -108,7 +108,7 @@ def sync_remote_worktrees(args):
         f"git cat-file -e {commit}^{{commit}} 2>/dev/null || git fetch -q origin; "
         f"[ -d ../{REMOTE_WORKTREE} ] || "
         f"git worktree add -q --detach ../{REMOTE_WORKTREE} {commit}; "
-        f"cd ../{REMOTE_WORKTREE}; git reset -q --hard {commit}; "
+        f"cd ../{REMOTE_WORKTREE}; git reset -q --hard {commit}; git clean -fdq; "
         f"{'git apply --whitespace=nowarn' if patch else 'true'}"
     )
 
