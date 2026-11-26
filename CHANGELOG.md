@@ -1,3 +1,21 @@
+## [v1.53.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.53.0) (2026-11-26)
+
+### Feat
+
+- **notifications**: add a Sounds tab with the chime designer ([`18e06ac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/18e06ac1b5ad7fa4cd20b03f8fc192c476fa8ca4))
+- **notifications**: play chimes from the user's chime design ([`e7b1a0f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e7b1a0f0c0697cc5afa8422902e86b8fd9e801e0))
+- **style**: add numpy chime synthesis for the designer ([`0452f44`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0452f4446c435d6417cd22cb7a2e7e872f25a3c0))
+- **pluggable_protocol_tree**: chime when a protocol finishes ([`11c4080`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/11c40809378f3bd194889b30edbcd3601ab81930))
+- **dropbot_status_and_controls**: notify chip inserted and removed ([`71a3727`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/71a3727a983817d776b4dafc566b85540b3068db))
+- **dropbot_status_and_controls**: notify DropBot connect and disconnect ([`be8b0aa`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/be8b0aa2c046dee6e3c677fff8119d8c938cd084))
+- **microdrop_style**: lower, warmer notification chimes ([`5d53c89`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5d53c895eb1386e1e933f9d962c5e7ed0bf97624))
+
+### Fix
+
+- **notifications**: fall back to shipped chimes on any render error ([`f0fb7a2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f0fb7a2c3803d48c787ec00e095b50b0e19c52ec))
+- **plugin_management**: deepen the Plugins blue on light themes ([`323a3bb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/323a3bb4ede2b99710b1af02cb12a8af7f008464))
+- **microdrop_application**: list the 290 px sidebar default ([`7f25966`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7f25966f4b79007b12061fb1d852f16a91011832))
+
 ## [v1.52.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.52.0) (2026-11-26)
 
 ### Feat
