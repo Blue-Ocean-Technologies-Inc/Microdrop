@@ -298,6 +298,11 @@ class CameraControlWidget(QWidget):
         self.button_reset.clicked.connect(self.reset)
         self.capture_image_button.clicked.connect(self.capture_button_handler)
         self.record_toggle_button.clicked.connect(self.toggle_recording)
+        self.record_toggle_button.toggled.connect(
+            lambda recording: self.record_toggle_button.setToolTip(
+                "Stop Recording Video" if recording else "Start Recording Video"
+            )
+        )
         self.camera_refresh_button.clicked.connect(self.initialize_camera_list)
         self.model.observe(self.on_mode_changed, "mode")
         self.camera_device.observe(
