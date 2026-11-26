@@ -190,12 +190,20 @@ class ImportedExperimentsViewerController(HasTraits):
         "model:experiments.items, model:experiments:items:[label,align_to_run_start]"
     )
     def _store(self, event):
+        """Keep the set, less the experiments read with no measured ROI
+        intensities — as add_experiment refuses them — so one shown only
+        because it was current does not pile up launch after launch
+        (#1072)."""
         if self.viewer_model is None:
             return
 
         preferences = self.viewer_model.preferences
         text = payloads_as_text(
-            [experiment.as_payload() for experiment in self.model.experiments]
+            [
+                experiment.as_payload()
+                for experiment in self.model.experiments
+                if experiment.live or experiment.loading or experiment.paths
+            ]
         )
 
         if preferences.plotted_experiments != text:
