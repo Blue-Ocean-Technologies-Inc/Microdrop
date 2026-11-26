@@ -843,14 +843,17 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
 
     @observe(
         "device_viewer_preferences:[DEVICE_VIEWER_SIDEBAR_WIDTH, "
-        "ALPHA_VIEW_MIN_HEIGHT, LAYERS_VIEW_MIN_HEIGHT, "
+        "LAYERS_VIEW_MIN_HEIGHT, "
         "ZONES_VIEW_MIN_HEIGHT]",
         post_init=True,
     )
     def _set_device_view_layout_width(self, event=None):
 
         if self.scroll_area and self.scroll_content:
-            self.scroll_area.setMaximumWidth(
+            # Fixed, not just capped: on a small screen the zoomable device
+            # view gives up the width, rather than the sidebar clipping its
+            # controls.
+            self.scroll_area.setFixedWidth(
                 self.device_viewer_preferences.DEVICE_VIEWER_SIDEBAR_WIDTH
             )
             self.scroll_content.setMaximumWidth(
