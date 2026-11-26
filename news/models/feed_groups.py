@@ -69,7 +69,7 @@ FEED_GROUPS = (
     FeedGroupSpec(
         id="pinned",
         title="Top stories",
-        kinds=("announcement", "product", "newsletter", "post", "release"),
+        kinds=("announcement", "product", "offer", "newsletter", "post", "release"),
         pinned=True,
         accent=(ROSE["light"], ROSE["dark"]),
         glyph="push_pin",
@@ -99,7 +99,7 @@ FEED_GROUPS = (
     FeedGroupSpec(
         id="announcements",
         title="Announcements",
-        kinds=("announcement", "product"),
+        kinds=("announcement", "product", "offer"),
         pinned=False,
         accent=(ORCHID["light"], ORCHID["dark"]),
         glyph="campaign",

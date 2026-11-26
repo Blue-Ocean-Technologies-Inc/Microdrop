@@ -72,6 +72,7 @@ SMALL_POINTS = -1
 KIND_LABELS = {
     "announcement": "Announcement",
     "product": "Product",
+    "offer": "Offer",
     "newsletter": "Newsletter",
     "post": "Post",
     "release": "Release",

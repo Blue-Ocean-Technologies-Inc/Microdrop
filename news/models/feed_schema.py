@@ -55,7 +55,7 @@ logger = get_logger(__name__)
 FEED_SCHEMA_VERSION = 1
 
 #: What a post is.
-FEED_KINDS = ("announcement", "product", "newsletter", "post", "release")
+FEED_KINDS = ("announcement", "product", "offer", "newsletter", "post", "release")
 
 #: How exactly a post's date is known: its day, or only its month.
 PRECISION_DAY = "day"

@@ -172,7 +172,7 @@ def test_the_shipped_files_validate():
     assert {post.kind for post in feed.posts} == {
         "newsletter",
         "product",
-        "announcement",
+        "offer",
     }
     assert (len(announcement.posts), announcement.errors) == (1, [])
     assert (len(rich.posts), rich.errors) == (1, [])

@@ -76,7 +76,14 @@ def test_empty_groups_are_left_out_and_order_is_kept():
 def test_every_kind_has_a_group():
     kinds = {kind for spec in FEED_GROUPS if not spec.pinned for kind in spec.kinds}
 
-    assert kinds == {"announcement", "product", "newsletter", "post", "release"}
+    assert kinds == {
+        "announcement",
+        "product",
+        "offer",
+        "newsletter",
+        "post",
+        "release",
+    }
 
 
 def test_a_group_shows_its_first_few_until_show_all():
