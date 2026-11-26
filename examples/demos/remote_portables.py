@@ -8,16 +8,6 @@
 #
 # Thanks for using Microdrop open source!
 
-# (C) Copyright 2026-2026 Blue Ocean Technologies, Inc., Toronto, ON
-# All rights reserved.
-#
-# This software is provided without warranty under the terms of the AGPL-3.0
-# license included in LICENSE and may be redistributed only under the
-# conditions described in the aforementioned license. The license is also
-# available online at https://www.gnu.org/licenses/agpl-3.0.txt
-#
-# Thanks for using Microdrop open source!
-
 """Drive portable DropBots from this machine: GUI and Redis here, backends on the Pis.
 
 Each Pi runs on a mirror of this checkout (its commit plus uncommitted edits)
@@ -34,7 +24,8 @@ whichever board spoke last — demo boards should be set up alike.
 Stop the Microdrop app on each Pi first — it holds the board's serial port and
 its own Redis on the tunnel's port. Then, from ``microdrop-py/src``::
 
-    pixi run python -m examples.demos.remote_portables [--mirror] [HOST ...]
+    pixi run python -m examples.demos.remote_portables \
+        [--mirror] [--identity KEY] HOST [HOST ...]
 
 ``--mirror`` runs the full app on each Pi's own screen instead of the bare
 backend: every GUI follows the boards (status, capacitance, alarms, protocol
@@ -65,9 +56,6 @@ from microdrop_utils.broker_server_helpers import (
 )
 from microdrop_utils.source_update_startup import SKIP_GIT_UPDATE_ENV_VAR
 
-DEFAULT_HOST = "portable-dropbot-user@dropbot"
-DEFAULT_IDENTITY = Path.home() / ".ssh" / "id_rsa_portable_dropbot_1"
-
 #: Each Pi's launcher checkout; the demo worktree sits beside its ``src``.
 REMOTE_LAUNCHER = "~/Desktop/pixi-microdrop/microdrop-py"
 REMOTE_WORKTREE = "src-remote-demo"
@@ -89,7 +77,7 @@ def ssh_command(args, host, remote_command, *options):
     """Build an ssh invocation of ``remote_command`` on ``host``."""
     command = ["ssh", "-o", "ConnectTimeout=10", *options]
 
-    if args.identity.exists():
+    if args.identity:
         command += ["-i", str(args.identity)]
 
     return [*command, host, remote_command]
@@ -161,7 +149,7 @@ def remote_app_command(mirror):
     """
     if mirror:
         plugins = "frontend backend"
-        qt_env = "DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000"
+        qt_env = "DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/$(id -u)"
 
     else:
         plugins = "backend"
@@ -233,13 +221,21 @@ def stop_remote_apps(processes):
 
     deadline = time.monotonic() + STOP_TIMEOUT_S
 
-    for process in running:
-        try:
-            process.wait(timeout=max(0.0, deadline - time.monotonic()))
+    # Any exit from the waits, a second Ctrl+C included, must not leave an ssh
+    # (its own process group) alive holding the Pi's board.
+    try:
+        for process in running:
+            try:
+                process.wait(timeout=max(0.0, deadline - time.monotonic()))
 
-        except subprocess.TimeoutExpired:
-            process.terminate()
-            process.wait()
+            except subprocess.TimeoutExpired:
+                process.terminate()
+                process.wait()
+
+    finally:
+        for process in running:
+            if process.poll() is None:
+                process.terminate()
 
 
 @contextmanager
@@ -275,15 +271,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "hosts",
-        nargs="*",
-        default=[DEFAULT_HOST],
-        help=f"ssh destinations of the Pis (default: {DEFAULT_HOST})",
+        nargs="+",
+        help="ssh destinations of the Pis (users and keys come from ssh config)",
     )
     parser.add_argument(
         "--identity",
         type=Path,
-        default=DEFAULT_IDENTITY,
-        help="ssh key, used when the file exists",
+        default=None,
+        help="ssh key to pass with -i, when the ssh config does not supply one",
     )
     parser.add_argument(
         "--mirror",
@@ -307,7 +302,7 @@ def main():
         try:
             frontend.wait(timeout=STOP_TIMEOUT_S)
 
-        except subprocess.TimeoutExpired:
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
             frontend.terminate()
 
 
