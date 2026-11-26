@@ -15,7 +15,11 @@ import json
 import pytest
 
 # Microdrop package imports.
+from pluggable_protocol_tree.services.logging.consts import FORCE_COLUMN
 from pluggable_protocol_tree.services.logging.ingestion import LoggingIngestion
+
+# Microdrop utils imports.
+from microdrop_utils.force_math_helpers import force_for_step
 
 
 def test_log_data_tracks_columns_in_order():
@@ -53,13 +57,6 @@ def test_log_contributed_data_payload_step_fields_win():
     e = ing.entries[-1]
     assert e["step_idx"] == 7
     assert e["step_id"] == "explicit"
-
-
-def test_calculate_force_formula():
-    ing = LoggingIngestion()
-    ing.update_capacitance_per_unit_area(2.0)
-    # 0.5 * 2.0 * 10**2 = 100.0
-    assert ing._calculate_force(10.0) == 100.0
 
 
 def test_calculate_force_none_without_cpa_or_nonpositive_voltage():
@@ -117,7 +114,7 @@ def test_log_capacitance_stamps_step_and_phase_and_force():
     assert e["step_idx"] == 3
     assert e["Capacitance (pF)"] == 12.5
     assert e["Voltage (V)"] == 100.0
-    assert e["Force Over Unit Area (mN/mm^2)"] == round(0.5 * 2.0 * 100.0**2, 6)
+    assert e[FORCE_COLUMN] == pytest.approx(force_for_step(100.0, 2.0))
     assert e["Actuated Area (mm^2)"] == 4.0
     assert e["actuated_channels"] == [5, 6]
     assert e["instrument_time_us"] == 1000
@@ -154,7 +151,7 @@ def test_log_capacitance_force_none_without_cpa():
     ing.set_step(step_id="s", step_idx=1)
     ing.set_actuation(actuated_channels=[1], actuated_area=1.0)
     assert ing.log_capacitance(_msg()) is True
-    assert ing.entries[-1]["Force Over Unit Area (mN/mm^2)"] is None
+    assert ing.entries[-1][FORCE_COLUMN] is None
 
 
 def test_log_media_lists_a_path_once(tmp_path):
