@@ -572,6 +572,12 @@ class NotificationSection(HasTraits):
         highlight; None if there is none. Override to support reveal."""
         return None
 
+    def set_all_expanded(self, expanded):
+        """Expand (or collapse) the section's own sub-sections, if it has
+        any: the drawer's "Expand all" (or "Collapse all") calls it on every
+        section, after setting ``expanded``. Override to follow it; by
+        default nothing happens."""
+
 
 # ---------------------------------------------------------------------------
 # Entries
