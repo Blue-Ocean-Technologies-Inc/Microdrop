@@ -20,9 +20,9 @@ from typing import NamedTuple
 
 # Microdrop style imports.
 from microdrop_style.colors import (
+    ORCHID,
     PRIMARY_SHADE,
     ROSE,
-    SECONDARY_SHADE,
     TAUPE,
     TEAL,
 )
@@ -101,7 +101,7 @@ FEED_GROUPS = (
         title="Announcements",
         kinds=("announcement", "product"),
         pinned=False,
-        accent=(SECONDARY_SHADE[700], SECONDARY_SHADE[300]),
+        accent=(ORCHID["light"], ORCHID["dark"]),
         glyph="campaign",
         subtitle=SUBTITLE_COUNT,
         noun=("update", "updates"),

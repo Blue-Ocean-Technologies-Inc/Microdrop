@@ -72,3 +72,4 @@ ROSE = {"light": "#AD1F78", "dark": "#D86FC9"}
 TEAL = {"light": "#00747F", "dark": "#4DD0E1"}
 SLATE = {"light": "#5B6B7F", "dark": "#A7B4C4"}
 TAUPE = {"light": "#7A6658", "dark": "#C2AE9F"}
+ORCHID = {"light": "#9C47B2", "dark": "#C77DDA"}

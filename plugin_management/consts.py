@@ -96,7 +96,7 @@ LOAD_STATUS_SECTION_ORDER = 0
 
 #: The section header's glyph and accent ``(light theme, dark theme)``.
 LOAD_STATUS_SECTION_GLYPH = "extension"
-LOAD_STATUS_SECTION_ACCENT = ("#9C47B2", "#C77DDA")
+LOAD_STATUS_SECTION_ACCENT = (INFO_COLOR, INFO_COLOR)
 
 #: Muted text colour of a deferred pane's placeholder while its plugin loads,
 #: by whether the colour scheme is dark.
