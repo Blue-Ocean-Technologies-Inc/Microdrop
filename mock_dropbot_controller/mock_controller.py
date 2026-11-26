@@ -18,11 +18,20 @@ from datetime import UTC, datetime
 import dramatiq
 
 # Enthought library imports.
-from traits.api import Bool, Dict, Float, HasTraits, Instance, Int, Set, Str
+from traits.api import Bool, Dict, Float, HasTraits, Instance, Int, Set, Str, observe
 
 # Microdrop package imports.
 from device_viewer.consts import user_disabled_channels_mirror
-from dropbot_controller.consts import FREQUENCY_APPLIED, VOLTAGE_APPLIED
+from dropbot_controller.consts import (
+    DROPBOT_CHIP_INSERTED_KEY,
+    DROPBOT_CONNECTION_STATE_KEY,
+    DROPBOT_NO_POWER_KEY,
+    DROPBOT_STATE_KEYS,
+    FREQUENCY_APPLIED,
+    VOLTAGE_APPLIED,
+    dropbot_state_updated_publisher,
+)
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
@@ -67,6 +76,7 @@ from .consts import (
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__, level="INFO")
+app_globals = get_microdrop_redis_globals_manager()
 
 
 class MockDropbotController(HasTraits):
@@ -111,9 +121,37 @@ class MockDropbotController(HasTraits):
             class_method=self.listener_actor_routine,
         )
 
+        # The observer below only fires on change; a crashed session may
+        # have left the keys behind.
+        self._mirror_state_to_app_globals()
+
     def cleanup(self):
         logger.info("Cleaning up MockDropbotController resources")
         self.stop_stream()
+
+        # A clean stop leaves no state for the next session to misread, as
+        # the real DropBot backend's does.
+        for key in DROPBOT_STATE_KEYS:
+            if key in app_globals:
+                del app_globals[key]
+
+    @observe("connected, chip_inserted")
+    def _mirror_state_to_app_globals(self, event=None):
+        """Write the mock's state to the DropBot's app_globals keys and
+        announce it, as the real backend does, before any signal it sends."""
+        chip_inserted = self.chip_inserted if self.connected else None
+
+        app_globals[DROPBOT_CONNECTION_STATE_KEY] = self.connected
+        app_globals[DROPBOT_CHIP_INSERTED_KEY] = chip_inserted
+        app_globals[DROPBOT_NO_POWER_KEY] = False
+
+        dropbot_state_updated_publisher.publish(
+            {
+                "connected": self.connected,
+                "chip_inserted": chip_inserted,
+                "no_power": False,
+            }
+        )
 
     # ---- Dramatiq listener dispatch ----
 
@@ -177,6 +215,7 @@ class MockDropbotController(HasTraits):
         self.on_start_device_monitoring_request(message)
 
     def on_chip_check_request(self, message):
+        self._mirror_state_to_app_globals()
         publish_message(topic=CHIP_INSERTED, message=str(self.chip_inserted))
 
     def on_set_voltage_request(self, message):
