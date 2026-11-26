@@ -19,7 +19,17 @@ from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Local imports.
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    HARDWARE_DEFAULT_MAX_FREQUENCY,
+    HARDWARE_DEFAULT_MAX_VOLTAGE,
+    HARDWARE_MIN_FREQUENCY,
+    HARDWARE_MIN_VOLTAGE,
+    PKG,
+    PROTOCOL_FREQUENCY_RANGE_KEY,
+    PROTOCOL_VOLTAGE_RANGE_KEY,
+    PKG_name,
+)
 from .dropbot_controller_base import DropbotControllerBase
 from .interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 from .services.dropbot_monitor_mixin_service import DropbotMonitorMixinService
@@ -127,6 +137,18 @@ class DropbotControllerPlugin(Plugin):
         # push all preferences to globals
         app_globals = get_microdrop_redis_globals_manager()
         app_globals.update(self.dropbot_controller.preferences.preferences_name_map)
+
+        # Overwrite, never seed: app_globals outlives the session, so a
+        # previous device's range would otherwise bound the protocol columns.
+        # The monitor refines the maxima once the DropBot reports its own.
+        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = [
+            HARDWARE_MIN_VOLTAGE,
+            HARDWARE_DEFAULT_MAX_VOLTAGE,
+        ]
+        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = [
+            HARDWARE_MIN_FREQUENCY,
+            HARDWARE_DEFAULT_MAX_FREQUENCY,
+        ]
 
     def stop(self):
         """Cleanup when the plugin is stopped."""

@@ -81,6 +81,15 @@ PROTOCOL_SET_FREQUENCY = "dropbot/requests/protocol_set_frequency"
 VOLTAGE_APPLIED = "dropbot/signals/voltage_applied"
 FREQUENCY_APPLIED = "dropbot/signals/frequency_applied"
 
+#: app_globals keys holding the active device's protocol setpoint range as
+#: ``[low, high]`` Ints (V / Hz), one key per pair so a reader never sees a
+#: half-updated range. Written by whichever backend serves the protocol
+#: voltage/frequency topics, overwritten at its plugin start (and refined on
+#: connect where the device reports its own limits); the protocol Voltage
+#: and Frequency columns bound their spin boxes with them.
+PROTOCOL_VOLTAGE_RANGE_KEY = "protocol_voltage_range"
+PROTOCOL_FREQUENCY_RANGE_KEY = "protocol_frequency_range"
+
 SET_REALTIME_MODE = "hardware/requests/set_realtime_mode"
 # app_globals key mirroring the current realtime-mode state (the status
 # panel writes it on every REALTIME_MODE_UPDATED signal); consumers read
@@ -122,6 +131,8 @@ APP_GLOBALS_KEYS = [
     CAPACITANCE_UPDATE_INTERVAL_KEY,
     HARDWARE_MAX_VOLTAGE_KEY,
     HARDWARE_MAX_FREQUENCY_KEY,
+    PROTOCOL_VOLTAGE_RANGE_KEY,
+    PROTOCOL_FREQUENCY_RANGE_KEY,
 ]
 
 RUN_ALL_TESTS = "dropbot/requests/run_all_tests"
@@ -163,6 +174,12 @@ HARDWARE_DEFAULT_FREQUENCY = 10_000  # Hz
 # Known hardware minimum limits for DropBot DB3-120
 HARDWARE_MIN_VOLTAGE = 30  # V
 HARDWARE_MIN_FREQUENCY = 100  # Hz
+
+#: Protocol setpoint maxima assumed until a DropBot reports its own
+#: (proxy.config) on connect: the DB3-120 nominal 140 V, and 100 kHz to
+#: match dropbot_preferences_ui's ui_max_frequency Range high.
+HARDWARE_DEFAULT_MAX_VOLTAGE = 140  # V
+HARDWARE_DEFAULT_MAX_FREQUENCY = 100_000  # Hz
 
 # Convenience publisher singleton, so call sites can do:
 #   from dropbot_controller.consts import shorts_detected_publisher
