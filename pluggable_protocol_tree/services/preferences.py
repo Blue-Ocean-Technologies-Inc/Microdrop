@@ -44,6 +44,7 @@ from ..consts import (
     ACK_WAIT_FOREVER,
     DEFAULT_LOGS_SETTLING_SECONDS,
     DEFAULT_REALTIME_SETTLING_SECONDS,
+    PROTOCOL_TREE_PREFERENCES_PANE_ID,
     PROTOCOL_TREE_PREFERENCES_TAB_ID,
     SETTLING_TIME_MAX_S,
     SETTLING_TIME_MIN_S,
@@ -89,10 +90,20 @@ class ProtocolPreferences(PreferencesHelper):
     prompt_to_restore_realtime_mode = Bool(True)
     keep_realtime_mode_after_protocol = Bool(True)
 
-    #: Hide the run-start notice listing the columns whose protocol start/end
-    #: actions a run skipped because none of its steps uses them. Set by the
-    #: notice's "Do not show again" checkbox.
+    #: Hide the pre-flight check's unused-column warnings (columns whose
+    #: protocol start/end actions a run skips because none of its steps
+    #: uses them) wholesale. Formerly the run-start notice's "Do not show
+    #: again" checkbox, so earlier choices carry over.
     suppress_unused_column_hooks_information = Bool(False)
+
+    #: Check a run before it starts (the pre-flight pill and card); off
+    #: hides the pill and starts every run unchecked.
+    preflight_enabled = Bool(True)
+
+    #: Programmatic preference (no Settings-dialog item): ids of the
+    #: pre-flight warnings muted "Always". Reassign it to persist a change;
+    #: an in-place edit is not saved.
+    preflight_always_allowed = List(Str)
 
     #: Programmatic preference (no Settings-dialog item): the AutoSave
     #: glyph in the app status bar (#966). On by default.
@@ -230,6 +241,34 @@ class ProtocolPreferences(PreferencesHelper):
             self.protocol_tree_column_names = default_column_names
 
 
+#: The ack-wait grid: the Settings pane's section, and the pre-flight
+#: card's settings face, which edits the live preferences through
+#: ``ack_times_view``.
+ack_times_grid = Group(
+    Item(
+        "protocol_tree_ack_times",
+        show_label=False,
+        editor=DictFloatTableEditor(
+            key_label="Column",
+            value_label="Wait Time (s)",
+            key_labels_name="protocol_tree_column_names",
+            low=ACK_TIMEOUT_MIN_S,
+            high=ACK_TIMEOUT_MAX_S,
+            decimals=1,
+            step=0.5,
+            allow_infinity=True,
+            infinity_value=ACK_WAIT_FOREVER,
+            infinity_text="∞ (wait forever)",
+        ),
+    ),
+    label="Column Ack Wait Times (0 = don't wait)",
+    show_border=True,
+    style_sheet=preferences_group_style_sheet,
+)
+
+ack_times_view = View(ack_times_grid)
+
+
 protocol_tree_tab = PreferencesCategory(
     id=PROTOCOL_TREE_PREFERENCES_TAB_ID,
     name="Protocol Settings",
@@ -248,6 +287,8 @@ class ProtocolPreferencesPane(PreferencesPane):
     model_factory = ProtocolPreferences
 
     category = protocol_tree_tab.id
+
+    id = PROTOCOL_TREE_PREFERENCES_PANE_ID
 
     general_protocol_settings_grid = create_grid_group(
         items=["realtime_mode_settling_time_s", "logs_settling_time_s"],
@@ -270,29 +311,8 @@ class ProtocolPreferencesPane(PreferencesPane):
 
     dialog_settings = Group(
         Item("suppress_unused_column_hooks_information"),
+        Item("preflight_enabled", label="Pre-flight check before runs"),
         label="Dialog Settings",
-        show_border=True,
-        style_sheet=preferences_group_style_sheet,
-    )
-
-    ack_times_grid = Group(
-        Item(
-            "protocol_tree_ack_times",
-            show_label=False,
-            editor=DictFloatTableEditor(
-                key_label="Column",
-                value_label="Wait Time (s)",
-                key_labels_name="protocol_tree_column_names",
-                low=ACK_TIMEOUT_MIN_S,
-                high=ACK_TIMEOUT_MAX_S,
-                decimals=1,
-                step=0.5,
-                allow_infinity=True,
-                infinity_value=ACK_WAIT_FOREVER,
-                infinity_text="∞ (wait forever)",
-            ),
-        ),
-        label="Column Ack Wait Times (0 = don't wait)",
         show_border=True,
         style_sheet=preferences_group_style_sheet,
     )
