@@ -10,6 +10,7 @@
 
 # Standard library imports.
 import json
+import threading
 from datetime import UTC, datetime
 
 # Third-party imports.
@@ -71,6 +72,22 @@ logger = get_logger(__name__, level="INFO")
 app_globals = get_microdrop_redis_globals_manager()
 
 
+def describe_proxy(proxy):
+    """Tag a proxy and the calling thread for proxy-lifecycle trace logs.
+
+    A disconnect keeps the old proxy object with its monitor cleared, and a
+    reconnect replaces it — the object id tells the two apart in the log.
+    """
+    thread = threading.current_thread().name
+
+    if proxy is None:
+        return f"[thread={thread} proxy=None]"
+
+    state = "live" if getattr(proxy, "monitor", None) is not None else "dead"
+
+    return f"[thread={thread} proxy=0x{id(proxy):x} {state}]"
+
+
 @provides(IDropbotControllerBase)
 class DropbotControllerBase(HasTraits):
     """
@@ -102,6 +119,7 @@ class DropbotControllerBase(HasTraits):
         logger.info("Cleaning up DropbotController resources")
         if self.proxy is not None:
             try:
+                logger.info(f"Terminating dropbot proxy {describe_proxy(self.proxy)}")
                 self.proxy.terminate()
                 logger.info("Dropbot proxy terminated")
             except Exception as e:
@@ -132,7 +150,8 @@ class DropbotControllerBase(HasTraits):
 
         logger.info(
             f"DROPBOT BACKEND LISTENER: Received message: '{timestamped_message}' "
-            f"from topic: {topic} at {timestamped_message.timestamp}"
+            f"from topic: {topic} at {timestamped_message.timestamp} "
+            f"{describe_proxy(self.proxy)}"
         )
 
         # find the topics hierarchy: first element is the head topic. Last
@@ -202,6 +221,8 @@ class DropbotControllerBase(HasTraits):
             self.timestamps[topic] = timestamped_message.timestamp_dt
 
             err_msg = invoke_class_method(self, requested_method, timestamped_message)
+
+            logger.debug(f"Finished {requested_method} {describe_proxy(self.proxy)}")
 
             if err_msg:
                 logger.error(

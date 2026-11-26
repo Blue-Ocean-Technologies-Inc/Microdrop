@@ -42,6 +42,7 @@ from ..consts import (
     NO_DROPBOT_AVAILABLE,
     NO_POWER,
 )
+from ..dropbot_controller_base import describe_proxy
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
 # Logger import.
@@ -51,16 +52,33 @@ logger = get_logger(__name__)
 
 
 def wait_for_proxy(timeout=2, poll_interval=0.1):
-    """Decorator that polls until self.proxy is available, with a timeout."""
+    """Decorator that polls until self.proxy is live, with a timeout.
+
+    A disconnect keeps the old proxy but clears its monitor, and the new
+    proxy's constructor emits ``connected`` before it is assigned — so a
+    non-None proxy alone may be the dead one from the last connection.
+    """
 
     def decorator(func):
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
+            def proxy_is_live():
+                return self.proxy and getattr(self.proxy, "monitor", None)
+
             elapsed = 0
-            while not self.proxy and elapsed < timeout:
+            logger.info(
+                f"{func.__name__}: waiting for proxy {describe_proxy(self.proxy)}"
+            )
+
+            while not proxy_is_live() and elapsed < timeout:
                 time.sleep(poll_interval)
                 elapsed += poll_interval
-            if not self.proxy:
+
+            logger.info(
+                f"{func.__name__}: waited {elapsed:.1f}s {describe_proxy(self.proxy)}"
+            )
+
+            if not proxy_is_live():
                 logger.warning(f"Timed out waiting for proxy after {timeout}s")
                 return None
             return func(self, *args, **kwargs)
@@ -215,6 +233,8 @@ class DropbotMonitorMixinService(HasTraits):
 
         # Terminate the proxy monitor and reset it to None to allow new
         # connection to set the monitor.
+        logger.info(f"Disconnected signal {describe_proxy(self.proxy)}")
+
         if self.proxy is not None:
             if self.proxy.monitor is not None:
                 self.proxy.terminate()
@@ -245,6 +265,8 @@ class DropbotMonitorMixinService(HasTraits):
             self.dropbot_connection_active = True
 
         # Expose hardware limits as readonly info on the preferences model
+        logger.info(f"Reading hardware limits {describe_proxy(self.proxy)}")
+
         try:
             with self.proxy.transaction_lock:
                 self.preferences._hardware_max_voltage = self.proxy.config.max_voltage
@@ -300,8 +322,12 @@ class DropbotMonitorMixinService(HasTraits):
             )
 
             try:
+                logger.info(f"Replacing proxy {describe_proxy(self.proxy)}")
                 self.proxy = DramatiqDropbotSerialProxy(port=port_name)
-                logger.info(f"DropBot connected on port {port_name}")
+                logger.info(
+                    f"DropBot connected on port {port_name} "
+                    f"{describe_proxy(self.proxy)}"
+                )
 
                 # this will send out a connected signal to the message router
                 # if successful
