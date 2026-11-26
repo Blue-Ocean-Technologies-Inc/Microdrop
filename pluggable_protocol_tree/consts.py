@@ -42,7 +42,7 @@ from electrode_controller.consts import (
 )
 from microdrop_application.consts import ADVANCED_MODE_CHANGE
 from microdrop_status_bar.consts import ICON_PRIORITY_DEFAULT
-from notifications.consts import TONE_NONE, NotificationCategorySpec
+from notifications.consts import TONE_COMPLETION, TONE_NONE, NotificationCategorySpec
 from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeAddStepPublisher,
     ProtocolTreeRowSelectedPublisher,
@@ -280,7 +280,19 @@ RUN_REPORTS_CATEGORY_ID = f"{PKG}.run_reports"
 RUN_REPORT_CARD_TITLE = "Report generated"
 RUN_REPORT_SHOW_LABEL = "Show"
 
+#: A run that finished all its steps, with the completion chime; an
+#: aborted or failed run is not posted here.
+PROTOCOL_FINISHED_CATEGORY_ID = f"{PKG}.protocol_finished"
+PROTOCOL_FINISHED_CARD_TITLE = "Protocol finished"
+
 NOTIFICATION_CATEGORY_SPECS = [
+    NotificationCategorySpec(
+        id=PROTOCOL_FINISHED_CATEGORY_ID,
+        group="Protocol",
+        label="Protocol finished",
+        description="A run finishes all of its steps.",
+        tone=TONE_COMPLETION,
+    ),
     NotificationCategorySpec(
         id=RUN_REPORTS_CATEGORY_ID,
         group="Protocol",

@@ -32,9 +32,13 @@ from traits.api import Any, Callable, HasTraits, Instance
 
 # Microdrop package imports.
 from microdrop_application.helpers import is_advanced_mode
+from notifications.consts import SEVERITY_SUCCESS, notification_publisher
 from pluggable_protocol_tree.consts import (
     ELECTRODE_TO_CHANNEL_KEY,
     ELECTRODES_STATE_CHANGE,
+    PKG,
+    PROTOCOL_FINISHED_CARD_TITLE,
+    PROTOCOL_FINISHED_CATEGORY_ID,
     PROTOCOL_TREE_DISPLAY_STATE,
 )
 from pluggable_protocol_tree.models.display_state import ProtocolTreeDisplayMessage
@@ -92,7 +96,7 @@ class ProtocolStatusController(HasTraits):
             ("ack_wait_started", self._on_ack_wait_started),
             ("ack_wait_finished", self._on_ack_wait_finished),
             ("protocol_repetition_finished", self._on_repetition_finished),
-            ("protocol_finished", self._on_stopped),
+            ("protocol_finished", self._on_finished),
             ("protocol_aborted", self._on_stopped),
             ("protocol_error", self._on_error),
         )
@@ -185,6 +189,25 @@ class ProtocolStatusController(HasTraits):
         # executor's on_post_protocol_end teardown, i.e. once the whole run
         # (all repeats) is done -- reset the trackers back to idle here.
         self.model.reset()
+
+    def _on_finished(self, event):
+        """A run that completed: post it, with the completion chime."""
+        try:
+            notification_publisher.publish(
+                {
+                    "title": PROTOCOL_FINISHED_CARD_TITLE,
+                    "severity": SEVERITY_SUCCESS,
+                    "category": "protocol",
+                    "category_id": PROTOCOL_FINISHED_CATEGORY_ID,
+                    "source": PKG,
+                }
+            )
+
+        # The run is over whatever happens to its card.
+        except Exception as e:
+            logger.warning(f"protocol finished card not posted: {e}")
+
+        self._on_stopped(event)
 
     def _on_error(self, event):
         self.model.reset()
