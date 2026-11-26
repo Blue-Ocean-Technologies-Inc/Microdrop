@@ -37,11 +37,14 @@ alpha_table_editor = TableEditor(
             label="",
             horizontal_alignment="center",
         ),
+        # Stretches to the table's width, so the table fits the sidebar
+        # instead of scrolling sideways.
         ObjectColumn(
             name="key",
             label="",
             editable=False,
             horizontal_alignment="left",
+            resize_mode="stretch",
         ),
         RangeColumn(
             name="alpha",
@@ -72,6 +75,8 @@ alpha_table_view = View(
         show_border=True,
     ),
     handler=AlphaTableHandler(),
+    # Not frozen at its first size: the table grows to every row once fitted.
+    resizable=True,
 )
 
 if __name__ == "__main__":

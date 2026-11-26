@@ -20,6 +20,9 @@ from traitsui.api import UI
 # Microdrop style imports.
 from microdrop_style.button_styles import TEXT_BUTTON_STYLE
 
+# Microdrop utils imports.
+from microdrop_utils.item_view_fitting import fit_item_views
+
 # Local imports.
 from ...consts import CAMERA_PROPERTIES_LOADING_TEXT
 from ..alpha_view.alpha_table import alpha_table_view
@@ -45,13 +48,14 @@ class CameraControlsSection(SizedSidebarSection):
     #: they are still being looked up.
     camera_properties_button = Instance(QPushButton)
 
-    #: Layer opacity table UI, sized from preferences.
+    #: Layer opacity table UI; tall enough for every row, as wide as the
+    #: sidebar.
     alpha_view_ui = Instance(UI)
 
     def apply_sizes(self, preferences):
-        control = self.alpha_view_ui.control
-        control.setMinimumHeight(preferences.ALPHA_VIEW_MIN_HEIGHT)
-        control.setMaximumWidth(preferences.DEVICE_VIEWER_SIDEBAR_WIDTH)
+        self.alpha_view_ui.control.setMaximumWidth(
+            preferences.DEVICE_VIEWER_SIDEBAR_WIDTH
+        )
 
     @observe(
         "camera_properties_button, "
@@ -101,6 +105,10 @@ def build_camera_controls(
         Handlers for the Align Camera and Go To Endpoint buttons.
     """
     alpha_view_ui = model.edit_traits(view=alpha_table_view)
+
+    # Every layer row shown: the sidebar already scrolls, and a nested
+    # scroll area is awkward to drag on the portable's touchscreen.
+    fit_item_views(alpha_view_ui.control)
 
     camera_control_widget = CameraControlWidget(
         model,

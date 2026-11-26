@@ -12,6 +12,7 @@
 """Assemble the device viewer sidebar from its sections."""
 
 # Enthought library imports.
+from pyface.qt.QtCore import Qt
 from pyface.qt.QtWidgets import (
     QPushButton,
     QScrollArea,
@@ -37,6 +38,9 @@ def build_sidebar(sections):
     scroll_area = QScrollArea()
     scroll_area.setWidgetResizable(True)
     scroll_area.setVisible(True)
+
+    # Sections fit the sidebar's width; it scrolls only up and down.
+    scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
     scroll_content = QWidget()
     scroll_layout = QVBoxLayout(scroll_content)
