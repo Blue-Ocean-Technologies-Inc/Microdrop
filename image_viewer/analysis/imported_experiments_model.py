@@ -159,6 +159,13 @@ class ImportedExperiment(HasTraits):
     #: the read experiment takes its place in the set.
     loading = Bool(False)
 
+    #: Its saved analysis could not be read, so what it holds is unknown.
+    read_failed = Bool(False)
+
+    #: Whether it is worth plotting: live, still loading, unread, or
+    #: with measured images of its run to plot.
+    worth_plotting = Property(Bool, observe="live, loading, read_failed, paths.items")
+
     #: What was found to plot, "<n> images, <m> ROIs".
     summary = Property(Str, observe="paths.items, session, loading")
 
@@ -177,6 +184,9 @@ class ImportedExperiment(HasTraits):
 
     def _label_default(self):
         return Path(self.directory).name
+
+    def _get_worth_plotting(self):
+        return self.live or self.loading or self.read_failed or bool(self.paths)
 
     def _get_any_roi_shown(self):
         return any(roi.style.visible for roi in self.session.positive_rois)
@@ -442,7 +452,7 @@ class ImportedExperimentsModel(HasTraits):
         """Put each experiment read in place of its loading one (the
         ``arrived`` pairs), still listed — not gone live, removed or
         restored away meanwhile — with the label and alignment that one
-        has now. One that could not be read is listed empty."""
+        has now. One that could not be read is listed empty, read_failed."""
         experiments = list(self.experiments)
         index_of = {
             id(experiment): index for index, experiment in enumerate(experiments)
@@ -457,7 +467,7 @@ class ImportedExperimentsModel(HasTraits):
             traits = loading.as_payload()
 
             if read_experiment is None:
-                read_experiment = ImportedExperiment(**traits)
+                read_experiment = ImportedExperiment(read_failed=True, **traits)
             else:
                 read_experiment.trait_set(**traits)
 
@@ -496,7 +506,7 @@ class ImportedExperimentsModel(HasTraits):
 
         experiment = load_imported_experiment(folder)
 
-        if not experiment.paths:
+        if not experiment.worth_plotting:
             return (
                 f"{folder.name} has no measured ROI intensities to plot. "
                 "Open it in the image viewer and Calculate first."

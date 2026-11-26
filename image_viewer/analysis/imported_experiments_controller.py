@@ -190,10 +190,8 @@ class ImportedExperimentsViewerController(HasTraits):
         "model:experiments.items, model:experiments:items:[label,align_to_run_start]"
     )
     def _store(self, event):
-        """Keep the set, less the experiments read with no measured ROI
-        intensities — as add_experiment refuses them — so one shown only
-        because it was current does not pile up launch after launch
-        (#1072)."""
+        """Keep the set in the preferences, less the experiments not
+        worth plotting (see ImportedExperiment.worth_plotting)."""
         if self.viewer_model is None:
             return
 
@@ -202,7 +200,7 @@ class ImportedExperimentsViewerController(HasTraits):
             [
                 experiment.as_payload()
                 for experiment in self.model.experiments
-                if experiment.live or experiment.loading or experiment.paths
+                if experiment.worth_plotting
             ]
         )
 
