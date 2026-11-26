@@ -77,6 +77,16 @@ FEED_GROUPS = (
         noun=("story", "stories"),
     ),
     FeedGroupSpec(
+        id="announcements",
+        title="Announcements",
+        kinds=("announcement", "product", "offer"),
+        pinned=False,
+        accent=(ORCHID["light"], ORCHID["dark"]),
+        glyph="campaign",
+        subtitle=SUBTITLE_COUNT,
+        noun=("update", "updates"),
+    ),
+    FeedGroupSpec(
         id="releases",
         title="Releases",
         kinds=("release",),
@@ -95,16 +105,6 @@ FEED_GROUPS = (
         glyph="mail",
         subtitle=SUBTITLE_COUNT,
         noun=("issue", "issues"),
-    ),
-    FeedGroupSpec(
-        id="announcements",
-        title="Announcements",
-        kinds=("announcement", "product", "offer"),
-        pinned=False,
-        accent=(ORCHID["light"], ORCHID["dark"]),
-        glyph="campaign",
-        subtitle=SUBTITLE_COUNT,
-        noun=("update", "updates"),
     ),
     FeedGroupSpec(
         id="posts",

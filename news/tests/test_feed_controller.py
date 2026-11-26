@@ -278,8 +278,8 @@ def test_posts_are_grouped_under_their_headers(tmp_path):
 
     assert groups == [
         ("pinned", ["pin"]),
-        ("newsletters", ["n1"]),
         ("announcements", ["a1"]),
+        ("newsletters", ["n1"]),
         ("posts", ["p1"]),
     ]
 

@@ -56,9 +56,9 @@ def test_each_post_goes_in_the_first_group_that_takes_it():
 
     assert _ids(group_posts(posts)) == [
         ("pinned", ["pinned-release"]),
+        ("announcements", ["a1", "pr1"]),
         ("releases", ["r1"]),
         ("newsletters", ["n1"]),
-        ("announcements", ["a1", "pr1"]),
         ("posts", ["p1"]),
     ]
 
