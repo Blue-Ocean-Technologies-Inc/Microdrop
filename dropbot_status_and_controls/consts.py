@@ -44,6 +44,11 @@ DROPBOT_CONNECTED_CATEGORY_ID = f"{PKG}.connected"
 DROPBOT_DISCONNECTED_CATEGORY_ID = f"{PKG}.disconnected"
 DROPBOT_CONNECTION_THREAD_ID = f"{PKG}.connection"
 
+#: A chip put in or taken out, the same way on its own card.
+DROPBOT_CHIP_INSERTED_CATEGORY_ID = f"{PKG}.chip_inserted"
+DROPBOT_CHIP_REMOVED_CATEGORY_ID = f"{PKG}.chip_removed"
+DROPBOT_CHIP_THREAD_ID = f"{PKG}.chip"
+
 NOTIFICATION_CATEGORY_SPECS = [
     NotificationCategorySpec(
         id=DROPBOT_CONNECTED_CATEGORY_ID,
@@ -57,6 +62,20 @@ NOTIFICATION_CATEGORY_SPECS = [
         group="DropBot",
         label="Disconnected",
         description="The DropBot is unplugged or its connection is lost.",
+        tone=TONE_DISCONNECTED,
+    ),
+    NotificationCategorySpec(
+        id=DROPBOT_CHIP_INSERTED_CATEGORY_ID,
+        group="DropBot",
+        label="Chip inserted",
+        description="A chip is detected in the DropBot.",
+        tone=TONE_CONNECTED,
+    ),
+    NotificationCategorySpec(
+        id=DROPBOT_CHIP_REMOVED_CATEGORY_ID,
+        group="DropBot",
+        label="Chip removed",
+        description="The chip is taken out of a connected DropBot.",
         tone=TONE_DISCONNECTED,
     ),
 ]

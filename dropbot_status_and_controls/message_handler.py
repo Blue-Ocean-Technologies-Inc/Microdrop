@@ -40,6 +40,9 @@ from microdrop_utils.ureg_helpers import get_ureg_magnitude, ureg
 
 # Local imports.
 from .consts import (
+    DROPBOT_CHIP_INSERTED_CATEGORY_ID,
+    DROPBOT_CHIP_REMOVED_CATEGORY_ID,
+    DROPBOT_CHIP_THREAD_ID,
     DROPBOT_CONNECTED_CATEGORY_ID,
     DROPBOT_CONNECTION_THREAD_ID,
     DROPBOT_DISCONNECTED_CATEGORY_ID,
@@ -138,15 +141,43 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         """Post the DropBot connecting or disconnecting; both update one
         card, each with its own chime."""
         if event.new:
-            title = "DropBot connected"
-            severity = SEVERITY_SUCCESS
-            category_id = DROPBOT_CONNECTED_CATEGORY_ID
+            self._post_hardware(
+                "DropBot connected",
+                SEVERITY_SUCCESS,
+                DROPBOT_CONNECTED_CATEGORY_ID,
+                DROPBOT_CONNECTION_THREAD_ID,
+            )
 
         else:
-            title = "DropBot disconnected"
-            severity = SEVERITY_WARNING
-            category_id = DROPBOT_DISCONNECTED_CATEGORY_ID
+            self._post_hardware(
+                "DropBot disconnected",
+                SEVERITY_WARNING,
+                DROPBOT_DISCONNECTED_CATEGORY_ID,
+                DROPBOT_CONNECTION_THREAD_ID,
+            )
 
+    @observe("model:chip_inserted")
+    def _notify_chip(self, event):
+        """Post a chip put in or taken out, on its own card. A chip cleared
+        because the DropBot went away is not posted: "DropBot disconnected"
+        already says so."""
+        if event.new:
+            self._post_hardware(
+                "Chip inserted",
+                SEVERITY_SUCCESS,
+                DROPBOT_CHIP_INSERTED_CATEGORY_ID,
+                DROPBOT_CHIP_THREAD_ID,
+            )
+
+        elif self.model.connected:
+            self._post_hardware(
+                "Chip removed",
+                SEVERITY_WARNING,
+                DROPBOT_CHIP_REMOVED_CATEGORY_ID,
+                DROPBOT_CHIP_THREAD_ID,
+            )
+
+    def _post_hardware(self, title, severity, category_id, thread_id):
         notification_publisher.publish(
             {
                 "title": title,
@@ -154,7 +185,7 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
                 "category": "hardware",
                 "category_id": category_id,
                 "source": PKG,
-                "thread_id": DROPBOT_CONNECTION_THREAD_ID,
+                "thread_id": thread_id,
             }
         )
 
