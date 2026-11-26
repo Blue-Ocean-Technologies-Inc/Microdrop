@@ -32,9 +32,16 @@ from dropbot_controller.consts import (
     FREQUENCY_APPLIED as FREQUENCY_APPLIED,
 )
 from dropbot_controller.consts import (
+    # The protocol columns' device-range keys this backend writes.
+    PROTOCOL_FREQUENCY_RANGE_KEY as PROTOCOL_FREQUENCY_RANGE_KEY,
+)
+from dropbot_controller.consts import (
     PROTOCOL_SET_FREQUENCY as PROTOCOL_SET_FREQUENCY,
 )
 from dropbot_controller.consts import PROTOCOL_SET_VOLTAGE as PROTOCOL_SET_VOLTAGE
+from dropbot_controller.consts import (
+    PROTOCOL_VOLTAGE_RANGE_KEY as PROTOCOL_VOLTAGE_RANGE_KEY,
+)
 from dropbot_controller.consts import VOLTAGE_APPLIED as VOLTAGE_APPLIED
 
 # Local imports.

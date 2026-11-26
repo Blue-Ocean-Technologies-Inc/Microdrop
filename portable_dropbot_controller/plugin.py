@@ -19,7 +19,15 @@ from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Local imports.
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    FREQUENCY_BOUNDS,
+    PKG,
+    PROTOCOL_FREQUENCY_RANGE_KEY,
+    PROTOCOL_VOLTAGE_RANGE_KEY,
+    VOLTAGE_BOUNDS,
+    PKG_name,
+)
 from .interfaces.i_portable_dropbot_control_mixin_service import (
     IPortableDropbotControlMixinService,
 )
@@ -220,6 +228,11 @@ class PortableDropbotControllerPlugin(Plugin):
         app_globals.update(
             self.portable_dropbot_controller.preferences.preferences_name_map
         )
+
+        # Overwrite, never seed: app_globals outlives the session, so a
+        # previous device's range would otherwise bound the protocol columns.
+        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = list(VOLTAGE_BOUNDS)
+        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = list(FREQUENCY_BOUNDS)
 
         self.portable_dropbot_controller.on_start_device_monitoring_request()
 
