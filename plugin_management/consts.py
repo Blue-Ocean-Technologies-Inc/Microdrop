@@ -98,6 +98,9 @@ LOAD_STATUS_SECTION_ORDER = 0
 LOAD_STATUS_SECTION_GLYPH = "extension"
 LOAD_STATUS_SECTION_ACCENT = (INFO_COLOR, INFO_COLOR)
 
+#: The header's glyph while any plugin has failed (in the failed colour).
+LOAD_STATUS_SECTION_FAILED_GLYPH = "extension_off"
+
 #: Muted text colour of a deferred pane's placeholder while its plugin loads,
 #: by whether the colour scheme is dark.
 PLACEHOLDER_LOADING_COLORS = {False: GREY["dark"], True: GREY["lighter"]}

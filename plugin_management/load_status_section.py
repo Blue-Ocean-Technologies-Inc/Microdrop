@@ -23,15 +23,17 @@ from traits.api import Instance, observe
 from notifications.consts import NotificationSection
 
 # Microdrop utils imports.
-from microdrop_utils.plugin_load_status import PluginLoadStatus
+from microdrop_utils.plugin_load_status import LOAD_FAILED, PluginLoadStatus
 
 # Local imports.
 from .consts import (
     LOAD_STATUS_SECTION_ACCENT,
+    LOAD_STATUS_SECTION_FAILED_GLYPH,
     LOAD_STATUS_SECTION_GLYPH,
     LOAD_STATUS_SECTION_ID,
     LOAD_STATUS_SECTION_ORDER,
     LOAD_STATUS_SECTION_TITLE,
+    PLUGIN_LOAD_STATE_COLORS,
 )
 from .load_status_model import PluginLoadStatusPanelModel
 
@@ -64,3 +66,18 @@ class PluginLoadStatusSection(NotificationSection):
     @observe("status.summary")
     def _follow_summary(self, event):
         self.summary = self.status.summary
+
+    @observe("status.state")
+    def _flag_failure(self, event):
+        """Show a crossed-out puzzle piece, in the status bar's failure red,
+        while any plugin has failed."""
+        if self.status.state != LOAD_FAILED:
+            self.glyph = LOAD_STATUS_SECTION_GLYPH
+            self.accent = LOAD_STATUS_SECTION_ACCENT
+
+            return
+
+        failed_color = PLUGIN_LOAD_STATE_COLORS[LOAD_FAILED]
+
+        self.glyph = LOAD_STATUS_SECTION_FAILED_GLYPH
+        self.accent = (failed_color, failed_color)
