@@ -304,7 +304,7 @@ class CameraAlignmentWorkflowController(HasTraits):
                 for x, y in event.new
             ]
         except RuntimeError as exc:
-            error(None, str(exc), title="Select Device Outline")
+            error(None, str(exc), title="Device Outline")
             return
 
         perspective = self.model.camera_perspective
@@ -325,8 +325,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         if endpoint is None:
             warning(
                 None,
-                "No saved endpoint for this device — set "
-                "one in View/Edit Endpoint first.",
+                "No saved endpoint for this device — set one in Align Camera first.",
                 title="Go To Endpoint",
             )
             return
@@ -336,7 +335,8 @@ class CameraAlignmentWorkflowController(HasTraits):
         if len(perspective.transformed_reference_rect) != 4:
             warning(
                 None,
-                "No start points are marked on the feed — Select Device Outline first.",
+                "No start points are marked on the feed — mark the Device "
+                "Outline in Align Camera first.",
                 title="Go To Endpoint",
             )
             return
