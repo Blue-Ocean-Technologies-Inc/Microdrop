@@ -1,3 +1,33 @@
+## [v1.52.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.52.0) (2026-11-26)
+
+### Feat
+
+- **news**: list Announcements right below Top stories ([`918dc5f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/918dc5f539453297634ebf2ffcf7f4e51c2cda88))
+- **news**: add an offer kind for sales and promotions ([`e984165`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e984165c7d8a37c058a8f7976318d4c0b74bfa48))
+- **plugin_management**: flag a failed plugin on the Plugins header ([`68c0400`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/68c0400a88950bfbfb35dc75e320fa83b77265b6))
+- **logger**: dump native-crash stacks beside the session log ([`68ada1d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/68ada1ddc89827d5a7202c04dcfabe98c4e10cd7))
+- **news**: fold the feed's sub-sections with collapse or expand all ([`c5e9a69`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c5e9a69e7a5dcf8358e1f67924656110cfa3a800))
+- **notifications**: collapse or expand every section from the header ([`167b7d0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/167b7d061976e330809761288021b114e153c3b1))
+- **notifications**: let a section follow collapse or expand all ([`ce07b4c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ce07b4c95e7de7365a8fb84a1bc02828e0fd72ce))
+- **style**: name the unfold_more and unfold_less glyphs ([`345b52e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/345b52ec5df4f46ce061c8fe26a4e50296aeca08))
+
+### Fix
+
+- **notifications**: give Announcements and Plugins distinct colours ([`07e1ec9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/07e1ec955292507319cf07b09ace995659e2d1c4))
+- **electrode_controller**: clear channels even with realtime mode off ([`90a5e08`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/90a5e08f50085a2f7df290bc76a019355e33228c))
+- **notifications**: keep every header button visible when narrow ([`714e988`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/714e98892e82bfa96316910c99c7658c1e9b355d))
+- **device_viewer**: narrow the default sidebar to 290 px ([`54ff0ac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/54ff0ac1688ac4b4aee3bfa2f3a8814a295ea89e))
+- **dropbot**: read hardware limits from the live proxy ([`734033d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/734033d9b3113e27d46d75fddf5f7432907c6703))
+- **news**: fetch feed thumbnails over Schannel on Windows ([`86d9880`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/86d98804c61a23956c337eb346253d99d2d5e86d))
+
+### Refactor
+
+- **notifications**: move the reveal highlight to its own module ([`51b7674`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/51b7674a9a8f6dd3f763093978d470fb05382636))
+
+### CI
+
+- stop the automatic Claude review on every PR ([`0b132ae`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0b132ae5ecd6ca4965db5bb0769863b72397de07))
+
 ## [v1.51.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.51.0) (2026-11-25)
 
 ### Feat
