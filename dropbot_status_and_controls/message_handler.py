@@ -16,7 +16,7 @@ import math
 from PySide6.QtCore import QObject, Signal
 
 # Enthought library imports.
-from traits.api import Bool, Instance, List
+from traits.api import Bool, Instance, List, observe
 
 # Microdrop package imports.
 from device_viewer.consts import (
@@ -25,6 +25,11 @@ from device_viewer.consts import (
     VolumeEstimateMessage,
 )
 from dropbot_controller.consts import RETRY_CONNECTION
+from notifications.consts import (
+    SEVERITY_SUCCESS,
+    SEVERITY_WARNING,
+    notification_publisher,
+)
 from template_status_and_controls.base_message_handler import BaseMessageHandler
 
 # Microdrop utils imports.
@@ -34,7 +39,16 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.ureg_helpers import get_ureg_magnitude, ureg
 
 # Local imports.
-from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
+from .consts import (
+    DROPBOT_CHIP_INSERTED_CATEGORY_ID,
+    DROPBOT_CHIP_REMOVED_CATEGORY_ID,
+    DROPBOT_CHIP_THREAD_ID,
+    DROPBOT_CONNECTED_CATEGORY_ID,
+    DROPBOT_CONNECTION_THREAD_ID,
+    DROPBOT_DISCONNECTED_CATEGORY_ID,
+    NUM_CAPACITANCE_READINGS_AVERAGED,
+    PKG,
+)
 from .model import DropbotStatusAndControlsModel
 
 # Logger import.
@@ -117,6 +131,63 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         if self._no_power:
             self._no_power = False
             self.dialog_signals.close_no_power_dialog.emit()
+
+    # ------------------------------------------------------------------ #
+    # Connection notifications                                             #
+    # ------------------------------------------------------------------ #
+
+    @observe("model:connected")
+    def _notify_connection(self, event):
+        """Post the DropBot connecting or disconnecting; both update one
+        card, each with its own chime."""
+        if event.new:
+            self._post_hardware(
+                "DropBot connected",
+                SEVERITY_SUCCESS,
+                DROPBOT_CONNECTED_CATEGORY_ID,
+                DROPBOT_CONNECTION_THREAD_ID,
+            )
+
+        else:
+            self._post_hardware(
+                "DropBot disconnected",
+                SEVERITY_WARNING,
+                DROPBOT_DISCONNECTED_CATEGORY_ID,
+                DROPBOT_CONNECTION_THREAD_ID,
+            )
+
+    @observe("model:chip_inserted")
+    def _notify_chip(self, event):
+        """Post a chip put in or taken out, on its own card. A chip cleared
+        because the DropBot went away is not posted: "DropBot disconnected"
+        already says so."""
+        if event.new:
+            self._post_hardware(
+                "Chip inserted",
+                SEVERITY_SUCCESS,
+                DROPBOT_CHIP_INSERTED_CATEGORY_ID,
+                DROPBOT_CHIP_THREAD_ID,
+            )
+
+        elif self.model.connected:
+            self._post_hardware(
+                "Chip removed",
+                SEVERITY_WARNING,
+                DROPBOT_CHIP_REMOVED_CATEGORY_ID,
+                DROPBOT_CHIP_THREAD_ID,
+            )
+
+    def _post_hardware(self, title, severity, category_id, thread_id):
+        notification_publisher.publish(
+            {
+                "title": title,
+                "severity": severity,
+                "category": "hardware",
+                "category_id": category_id,
+                "source": PKG,
+                "thread_id": thread_id,
+            }
+        )
 
     # ------------------------------------------------------------------ #
     # DropBot-specific handlers                                            #
