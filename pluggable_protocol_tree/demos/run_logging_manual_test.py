@@ -42,6 +42,9 @@ import sys
 from pathlib import Path
 
 # Microdrop package imports.
+from pluggable_protocol_tree.services.logging.consts import (
+    DIELECTRIC_THICKNESS_COLUMN,
+)
 from pluggable_protocol_tree.services.logging.controller import (
     ProtocolLoggingController,
 )
@@ -87,6 +90,8 @@ EXPECTED_COLUMNS = [
     "Voltage (V)",
     "Force (mN/m)",
     "Actuated Area (mm^2)",
+    "Capacitance Over Area (pF/mm^2)",
+    DIELECTRIC_THICKNESS_COLUMN,
     "actuated_channels",
 ]
 EXPECTED_DATA = [
@@ -98,6 +103,8 @@ EXPECTED_DATA = [
     [100.0, 100.0, 100.0, 120.0],  # Voltage (V)
     [10.0, 10.0, 10.0, 14.4],  # Force (mN/m)
     [1.0, 2.0, 1.0, 3.0],  # Actuated Area (mm^2)
+    [12.0, 7.0, 12.5, 20.0 / 3.0],  # Capacitance Over Area (pF/mm^2)
+    [None, None, None, None],  # Dielectric Thickness (um)
     [[1], [2], [1], [5, 6]],  # actuated_channels
 ]
 
