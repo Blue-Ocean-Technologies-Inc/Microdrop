@@ -337,7 +337,6 @@ RAW_CAPTURES_SUBDIR = "16bit_raw"
 # GUI configuration
 # ---------------------------------------------------------------------------
 DEVICE_VIEWER_SIDEBAR_WIDTH = 290
-ALPHA_VIEW_MIN_HEIGHT = 180
 LAYERS_VIEW_MIN_HEIGHT = 250
 ZONES_VIEW_MIN_HEIGHT = 250
 

@@ -48,6 +48,11 @@ def fit_item_views(widget):
             model.layoutChanged,
         )
 
+        # A table's rows can also grow after it is fitted, when a style or
+        # font applied later changes their height.
+        if isinstance(view, QtWidgets.QTableView):
+            signals += (view.verticalHeader().sectionResized,)
+
         for signal in signals:
             signal.connect(lambda *args, view=view: _fit_later(view))
 

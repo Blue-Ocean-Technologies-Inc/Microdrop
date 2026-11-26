@@ -66,7 +66,6 @@ from .consts import (
     ALIGNMENT_SNAP_RADIUS_MAX_PX,
     ALIGNMENT_SNAP_RADIUS_MIN_PX,
     ALIGNMENT_SNAP_RADIUS_PX,
-    ALPHA_VIEW_MIN_HEIGHT,
     AUTO_FIT_MARGIN_SCALE,
     DEFAULT_GAP_HEIGHT_UM,
     DEVICE_VIEWER_SIDEBAR_WIDTH,
@@ -119,7 +118,6 @@ class DeviceViewerPreferences(PreferencesHelper):
     DEVICE_VIEWER_SIDEBAR_WIDTH = Range(
         value=DEVICE_VIEWER_SIDEBAR_WIDTH, low=0, high=10000
     )
-    ALPHA_VIEW_MIN_HEIGHT = Range(value=ALPHA_VIEW_MIN_HEIGHT, low=0, high=10000)
     LAYERS_VIEW_MIN_HEIGHT = Range(value=LAYERS_VIEW_MIN_HEIGHT, low=0, high=10000)
     ZONES_VIEW_MIN_HEIGHT = Range(value=ZONES_VIEW_MIN_HEIGHT, low=0, high=10000)
 
@@ -320,7 +318,6 @@ device_viewer_tab = PreferencesCategory(
 # This is the list of trait names for the grid layout
 sidebar_setting_items = [
     "DEVICE_VIEWER_SIDEBAR_WIDTH",
-    "ALPHA_VIEW_MIN_HEIGHT",
     "LAYERS_VIEW_MIN_HEIGHT",
     "ZONES_VIEW_MIN_HEIGHT",
 ]
