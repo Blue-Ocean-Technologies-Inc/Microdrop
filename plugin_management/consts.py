@@ -94,9 +94,11 @@ LOAD_STATUS_SECTION_ID = f"{PKG}.load_status"
 LOAD_STATUS_SECTION_TITLE = "Plugins"
 LOAD_STATUS_SECTION_ORDER = 0
 
-#: The section header's glyph and accent ``(light theme, dark theme)``.
+#: The section header's glyph and accent ``(light theme, dark theme)``:
+#: the status bar's plugin-loading blue, a shade deeper on light themes so
+#: the glyph keeps its contrast on the drawer's pale backgrounds.
 LOAD_STATUS_SECTION_GLYPH = "extension"
-LOAD_STATUS_SECTION_ACCENT = (INFO_COLOR, INFO_COLOR)
+LOAD_STATUS_SECTION_ACCENT = ("#2266CC", INFO_COLOR)
 
 #: The header's glyph while any plugin has failed (in the failed colour).
 LOAD_STATUS_SECTION_FAILED_GLYPH = "extension_off"
