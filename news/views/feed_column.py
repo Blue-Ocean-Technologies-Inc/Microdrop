@@ -40,8 +40,8 @@ FeedStatusView = View(
 
 
 class _FeedBinding(HasTraits):
-    """Rebuilds the sub-sections when the feed's groups change, and the
-    "new" marks when the alerts do."""
+    """Rebuilds the sub-sections when the feed's groups change, the "new"
+    marks when the alerts do, and the folds when the collapsed groups do."""
 
     section = Instance(NewsSection)
 
@@ -54,6 +54,10 @@ class _FeedBinding(HasTraits):
     @observe("section:alerts:items:[unread, is_new]")
     def _show_new(self, event):
         self.view.show_new()
+
+    @observe("section:collapsed_groups")
+    def _show_collapsed(self, event):
+        self.view.follow_collapsed()
 
 
 class FeedColumn(QtWidgets.QWidget):
@@ -122,6 +126,13 @@ class FeedColumn(QtWidgets.QWidget):
 
         for subsection in self._subsections:
             subsection.show_new()
+
+    def follow_collapsed(self):
+        """Show the sub-sections folded or not as the model now has them,
+        as after the drawer's Collapse or Expand all."""
+
+        for subsection in self._subsections:
+            subsection.follow_collapsed()
 
     def frame_for(self, post_id):
         """The frame of the post with ``post_id``, its sub-section opened."""

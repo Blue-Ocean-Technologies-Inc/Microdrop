@@ -31,6 +31,7 @@ from ..consts import (
     NEWS_SECTION_TITLE,
 )
 from ..controllers.feed_controller import SciBotsFeedController
+from .feed_groups import FEED_GROUPS
 
 
 class NewsSection(NotificationSection):
@@ -70,6 +71,11 @@ class NewsSection(NotificationSection):
         from ..views.feed_column import FeedColumn
 
         return FeedColumn(self, parent)
+
+    def set_all_expanded(self, expanded):
+        """Unfold (or fold) every sub-section with the drawer's Expand (or
+        Collapse) all; the feed's column follows ``collapsed_groups``."""
+        self.collapsed_groups = set() if expanded else {spec.id for spec in FEED_GROUPS}
 
     def alert_widget(self, contents, alert):
         """The post's frame, its sub-section opened up; for an alert summing
