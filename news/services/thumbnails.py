@@ -20,6 +20,7 @@ http.
 """
 
 # Standard library imports.
+import sys
 from functools import partial
 from threading import Thread
 from urllib.parse import urlparse
@@ -37,6 +38,27 @@ logger = get_logger(__name__)
 FETCH_TIMEOUT_MS = 10_000
 
 _NO_ERROR = QtNetwork.QNetworkReply.NetworkError.NoError
+
+
+def _use_native_tls_on_windows():
+    """Make Qt's https use Windows' own TLS (Schannel), not OpenSSL.
+
+    The environment holds two OpenSSL builds: conda's in ``Library/bin``,
+    which Python's ``ssl`` loads first, and the MinGW one the conda ``git``
+    package ships in ``Library/mingw64/bin``. When that folder precedes
+    ``Library/bin`` on PATH, Qt's OpenSSL backend loads the MinGW libssl,
+    which binds to the already-loaded conda libcrypto; tearing a connection
+    down then frees across the two builds and corrupts the heap, killing the
+    process at a random later moment. Must run before the first TLS use.
+    """
+    if sys.platform != "win32":
+        return
+
+    if not QtNetwork.QSslSocket.setActiveBackend("schannel"):
+        logger.warning(
+            "Schannel TLS backend unavailable; feed thumbnails use "
+            f"{QtNetwork.QSslSocket.activeBackend()}"
+        )
 
 
 class ThumbnailLoader(QtCore.QObject):
@@ -94,6 +116,7 @@ class ThumbnailLoader(QtCore.QObject):
 
     def _fetch(self, url):
         if self._network is None:
+            _use_native_tls_on_windows()
             self._network = QtNetwork.QNetworkAccessManager(self)
 
         request = QtNetwork.QNetworkRequest(QtCore.QUrl(url))
