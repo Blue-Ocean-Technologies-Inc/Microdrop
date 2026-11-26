@@ -13,6 +13,8 @@ nothing but logs go, never the current one."""
 
 # Standard library imports.
 import sys
+from functools import partial
+from types import SimpleNamespace
 
 # Third-party imports.
 import pytest
@@ -20,13 +22,14 @@ from send2trash import TrashPermissionError
 
 # Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME
-from image_viewer import discovery, menus
+from image_viewer import discovery, menus, prune_job
 from image_viewer.consts import (
     EXPERIMENT_LOGS_DIR_NAME,
     TRASH_FEATURE,
     TRASH_PACKAGE,
 )
 from microdrop_application.dialogs.pyface_wrapper import CANCEL, YES
+from notifications.consts import SEVERITY_SUCCESS
 
 # Microdrop utils imports.
 from microdrop_utils import environment_update_dialog
@@ -137,8 +140,11 @@ def test_prune_action_without_send2trash_offers_an_update(tmp_path, monkeypatch)
         lambda *args, **kwargs: pytest.fail("nothing was pruned"),
     )
 
-    menus.PruneExperimentsAction().perform(None)
+    action, cards = _inline_prune_action(monkeypatch)
+    action.perform(None)
 
+    assert cards == []
+    assert not action.job.running
     assert offers == [
         environment_update_dialog.missing_package_message(TRASH_FEATURE, TRASH_PACKAGE)
     ]
@@ -151,7 +157,7 @@ def _prune_action(monkeypatch, tmp_path, ready):
     experiment and what the flow did."""
     current = _logs_only_experiment(tmp_path, "current")
     logs_only = _logs_only_experiment(tmp_path, "logs_only")
-    record = {"confirms": 0, "offers": [], "informed": [], "errors": []}
+    record = {"confirms": 0, "offers": [], "errors": []}
 
     def confirm(**kwargs):
         record["confirms"] += 1
@@ -167,19 +173,41 @@ def _prune_action(monkeypatch, tmp_path, ready):
     monkeypatch.setattr(menus, "confirm", confirm)
     monkeypatch.setattr(menus, "offer_environment_update", offer)
     monkeypatch.setattr(
-        menus,
-        "information",
-        lambda parent, message, **kwargs: record["informed"].append(message),
-    )
-    monkeypatch.setattr(
         environment_update_dialog,
         "error",
         lambda parent, message, **kwargs: record["errors"].append(message),
     )
 
-    menus.PruneExperimentsAction().perform(None)
+    action, record["cards"] = _inline_prune_action(monkeypatch)
+    action.perform(None)
 
     return logs_only, record
+
+
+class _InlineThread:
+    """A thread that runs its target when started, in the caller's thread."""
+
+    def __init__(self, target, args=(), **kwargs):
+        self._run = partial(target, *args)
+
+    def start(self):
+        self._run()
+
+
+def _inline_prune_action(monkeypatch):
+    """A Prune Experiments action whose job runs in the test's thread and
+    hands back at once; return it and the list its cards are posted to."""
+    cards = []
+
+    monkeypatch.setattr(prune_job.threading, "Thread", _InlineThread)
+    monkeypatch.setattr(
+        prune_job, "GUI", SimpleNamespace(invoke_later=lambda f, *args: f(*args))
+    )
+    monkeypatch.setattr(
+        prune_job, "notification_publisher", SimpleNamespace(publish=cards.append)
+    )
+
+    return menus.PruneExperimentsAction(job=prune_job.PruneExperimentsJob()), cards
 
 
 def test_prune_action_retries_once_the_update_makes_send2trash_available(
@@ -203,7 +231,9 @@ def test_prune_action_retries_once_the_update_makes_send2trash_available(
     assert record["confirms"] == 1
     assert record["offers"] == [(TRASH_FEATURE, TRASH_PACKAGE)]
     assert trashed == [str(logs_only)]
-    assert record["informed"] == ["Moved 1 experiment folder(s) to the trash."]
+    [card] = record["cards"]
+    assert card["title"] == "Moved 1 experiment folder(s) to the trash"
+    assert card["severity"] == SEVERITY_SUCCESS
     assert record["errors"] == []
 
 
@@ -217,5 +247,5 @@ def test_prune_action_does_not_loop_when_send2trash_stays_missing(
     assert len(record["offers"]) == 1
     [message] = record["errors"]
     assert "pixi install" in message
-    assert record["informed"] == []
+    assert record["cards"] == []
     assert (logs_only / EXPERIMENT_LOGS_DIR_NAME / "app.log").is_file()
