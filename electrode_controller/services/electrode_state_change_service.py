@@ -8,7 +8,8 @@
 #
 # Thanks for using Microdrop open source!
 
-# library imports
+# Standard library imports.
+import json
 
 # Third-party imports.
 import numpy as np
@@ -69,10 +70,7 @@ class ElectrodeStateChangeMixinService(HasTraits):
                 return
 
             elif not self.realtime_mode:
-                logger.warning(
-                    "Cannot process actuations since realtime mode is disabled. "
-                    "Will process message when realtime mode on"
-                )
+                self._clear_or_ignore_while_realtime_off(message)
                 return
 
             # Use safe proxy access for electrode state changes
@@ -135,3 +133,24 @@ class ElectrodeStateChangeMixinService(HasTraits):
             )
         except Exception as e:
             logger.error(f"Error processing electrode state change: {e}", exc_info=True)
+
+    ###################### Protected methods #########################
+
+    def _clear_or_ignore_while_realtime_off(self, message):
+        """Honour a clear-all request even with realtime mode off; ignore
+        any request that would switch channels on.
+
+        Realtime off only drops the HV output; the selected channels stay
+        latched in the firmware and come back energized the moment realtime
+        mode turns on again. The protocol's end-of-run clear can arrive just
+        after realtime mode went off, so it must still be applied.
+        """
+        if json.loads(message).get("channels"):
+            logger.warning("Electrode actuation ignored: realtime mode is off")
+            return
+
+        with self.proxy.transaction_lock:
+            self.proxy.turn_off_all_channels()
+
+        app_globals[LAST_CHANNELS_REQUESTED_KEY] = message
+        logger.info("Realtime mode off: cleared all channels")
