@@ -33,6 +33,7 @@ from traits.api import Bool, Instance, List, Set, Str, provides
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
+from ..actuation_limits import connect_actuation_setpoints
 from ..board_firmware import BoardFirmwareMixin
 from ..connect_attempt import (
     ConnectAttempt,
@@ -436,8 +437,10 @@ class PortableDropbotMonitorMixinService(StatusEventsMixin, BoardFirmwareMixin):
             # Alarms stream in unsolicited; hand them straight to the
             # status pane as the driver's decoded strings.
             session.uart.on_alarm = self._publish_alarm
-            self.voltage = int(self.preferences.default_voltage)
-            self.frequency = int(self.preferences.default_frequency)
+            self.voltage, self.frequency = connect_actuation_setpoints(
+                int(self.preferences.default_voltage),
+                int(self.preferences.default_frequency),
+            )
             self.light_intensity = int(self.preferences.default_light_intensity)
             self._apply_actuation()
             self._apply_light_intensity()

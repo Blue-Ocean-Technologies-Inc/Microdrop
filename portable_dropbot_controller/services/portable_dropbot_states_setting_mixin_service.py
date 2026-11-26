@@ -15,14 +15,20 @@ from pydantic import ValidationError
 # Enthought library imports.
 from traits.api import HasTraits, Str, provides
 
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
 # Local imports.
+from ..actuation_limits import frequency_refusal, voltage_refusal
 from ..board_alarms import clear_board_alarms, summarize_alarms_cleared
 from ..consts import (
     FLUORESCENCE_LED_RAW_MAX,
+    FREQUENCY_APPLIED,
     HV_ENABLE_STATUS_OFF,
     HV_ENABLE_STATUS_ON,
     LIGHT_INTENSITY_RAW_MAX,
     RGB_LIGHT_STATES,
+    VOLTAGE_APPLIED,
     AlarmsCleared,
     ClearAlarmsRequest,
     alarms_cleared_publisher,
@@ -171,14 +177,66 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
         )
 
     def on_set_voltage_request(self, message):
-        self.voltage = int(float(str(message)))
-        self._apply_actuation()
-        logger.info(f"Portable Dropbot voltage set to {self.voltage} V")
+        self._set_voltage(int(float(str(message))))
 
     def on_set_frequency_request(self, message):
-        self.frequency = int(float(str(message)))
-        self._apply_actuation()
-        logger.info(f"Portable Dropbot frequency set to {self.frequency} Hz")
+        self._set_frequency(int(float(str(message))))
+
+    def on_protocol_set_voltage_request(self, message):
+        """A protocol step's voltage, on the DropBot's shared topic: acked
+        on VOLTAGE_APPLIED (the volts, as the DropBot does) only once the
+        board took it, so a refused setpoint fails the step on its ack
+        wait."""
+        voltage = int(float(str(message)))
+
+        if self._set_voltage(voltage):
+            publish_message(topic=VOLTAGE_APPLIED, message=str(voltage))
+
+    def on_protocol_set_frequency_request(self, message):
+        """A protocol step's frequency, acked on FREQUENCY_APPLIED like the
+        voltage (see on_protocol_set_voltage_request)."""
+        frequency = int(float(str(message)))
+
+        if self._set_frequency(frequency):
+            publish_message(topic=FREQUENCY_APPLIED, message=str(frequency))
+
+    def _set_voltage(self, voltage):
+        """Apply a voltage setpoint and return whether the board took it.
+        One the HV supply would refuse is reported and the current setpoint
+        kept."""
+        refusal = voltage_refusal(voltage)
+
+        if refusal:
+            self._publish_error("set voltage", f"{refusal}; kept {self.voltage} V")
+
+            return False
+
+        self.voltage = voltage
+        applied = self._apply_actuation()
+
+        if applied:
+            logger.info(f"Portable Dropbot voltage set to {self.voltage} V")
+
+        return applied
+
+    def _set_frequency(self, frequency):
+        """Apply a frequency setpoint and return whether the board took it.
+        One the HV supply would refuse is reported and the current setpoint
+        kept."""
+        refusal = frequency_refusal(frequency)
+
+        if refusal:
+            self._publish_error("set frequency", f"{refusal}; kept {self.frequency} Hz")
+
+            return False
+
+        self.frequency = frequency
+        applied = self._apply_actuation()
+
+        if applied:
+            logger.info(f"Portable Dropbot frequency set to {self.frequency} Hz")
+
+        return applied
 
     def on_set_light_intensity_request(self, message):
         self.light_intensity = int(float(str(message)))

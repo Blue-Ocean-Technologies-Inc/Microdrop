@@ -479,14 +479,17 @@ class PortableDropbotControllerBase(HasTraits):
         return motor_snapshot_picture(reply) if ok else None
 
     def _apply_actuation(self):
-        """Push the current HV setpoints (both Int) to the device."""
+        """Push the current HV setpoints (both Int) to the device; return
+        whether the board took them."""
         logger.debug(
             f"Applying actuation setpoints: {self.voltage} V, {self.frequency} Hz"
         )
-        self._proxy_call(
+        ok, _ = self._proxy_call(
             "set actuation",
             lambda: self.proxy.set_actuation(int(self.voltage), int(self.frequency)),
         )
+
+        return ok
 
     def _apply_light_intensity(self):
         """Push the light brightness to the device: the % setpoint

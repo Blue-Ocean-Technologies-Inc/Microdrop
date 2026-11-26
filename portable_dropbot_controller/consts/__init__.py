@@ -27,6 +27,15 @@ from dropbot_controller.consts import (
     # The shared reply topic, re-exported for this plugin's services.
     DROPLETS_DETECTED as DROPLETS_DETECTED,
 )
+from dropbot_controller.consts import (
+    # The protocol Voltage / Frequency columns' requests and acks.
+    FREQUENCY_APPLIED as FREQUENCY_APPLIED,
+)
+from dropbot_controller.consts import (
+    PROTOCOL_SET_FREQUENCY as PROTOCOL_SET_FREQUENCY,
+)
+from dropbot_controller.consts import PROTOCOL_SET_VOLTAGE as PROTOCOL_SET_VOLTAGE
+from dropbot_controller.consts import VOLTAGE_APPLIED as VOLTAGE_APPLIED
 
 # Local imports.
 from .board_health import ALARM_BOARDS as ALARM_BOARDS
@@ -449,6 +458,9 @@ ACTOR_TOPIC_DICT = {
         "hardware/requests/#",
         # Find liquid and the droplet-check columns use the DropBot's topic.
         DETECT_DROPLETS,
+        # So do the protocol Voltage / Frequency columns.
+        PROTOCOL_SET_VOLTAGE,
+        PROTOCOL_SET_FREQUENCY,
         PORTABLE_DROPBOT_CONNECTED,
         PORTABLE_DROPBOT_DISCONNECTED,
         # A heater failsafe alarm fails a waiting protocol temperature step.
