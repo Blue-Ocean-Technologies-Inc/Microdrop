@@ -174,3 +174,15 @@ def test_unusable_values_keep_their_defaults():
         f"categories.{SPEC.id}.tone",
         "open_at_start",
     ]
+
+
+def test_a_chime_design_change_is_saved(tmp_path):
+    path = tmp_path / "settings.json"
+    store, later = _store(path)
+    store.load()
+
+    store.settings.chime.timbre = "marimba"
+    later.run()
+    saved = json.loads(path.read_text(encoding="utf-8"))
+
+    assert saved["chime"]["base"]["timbre"] == "marimba"

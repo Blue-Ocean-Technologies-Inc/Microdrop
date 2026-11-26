@@ -10,8 +10,8 @@
 
 """The notification settings kept in settings.json in the notifications data
 folder: loaded once, after the main window first paints, then saved shortly
-after each change, a slider's drag written once. A missing or unreadable
-file means the defaults."""
+after each change (the chime design's included), a slider's drag written
+once. A missing or unreadable file means the defaults."""
 
 # Standard library imports.
 from pathlib import Path
@@ -95,6 +95,7 @@ class NotificationSettingsStore(HasTraits):
     # ------------------------------------------------------------------ #
 
     @observe(f"settings:[{', '.join(SAVED_SETTINGS)}]")
+    @observe("settings:chime:updated")
     @observe(
         f"settings:groups:items:categories:items:[{', '.join(SAVED_CATEGORY_CHOICES)}]"
     )

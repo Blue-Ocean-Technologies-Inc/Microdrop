@@ -15,6 +15,7 @@ A category is a kind of notification a plugin posts, like a phone's
 notification channel. Its owner declares it in its ``consts.py`` (a
 ``NotificationCategorySpec``) with the defaults; the user then decides per
 category whether it is kept in the drawer, pops up, and which tone it plays.
+How the tones sound is the chime designer's (``chime_designer``).
 
 The choices are saved as a plain dict (``to_state``/``apply_state``), in
 settings.json in the notifications data folder
@@ -42,6 +43,7 @@ from traits.api import (
 
 # Local imports.
 from ..consts import OPEN_AT_START_ENV, TONE_NONE, TONES
+from .chime_designer import ChimeDesigner
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -66,8 +68,10 @@ SAVED_SETTINGS = (
 )
 SAVED_CATEGORY_CHOICES = ("in_drawer", "popup", "tone")
 
-#: The key of the categories' choices in the saved dict.
+#: The key of the categories' choices in the saved dict, and of the chime
+#: designer's.
 CATEGORIES_KEY = "categories"
+CHIME_KEY = "chime"
 
 
 def opens_at_start(saved, environ):
@@ -206,6 +210,9 @@ class NotificationSettings(HasTraits):
     sound_enabled = Bool(True)
     sound_volume = Range(0, 100, DEFAULT_VOLUME)
 
+    #: How the tones sound: the base design and each tone's own.
+    chime = Instance(ChimeDesigner, ())
+
     #: The tone the Test button plays.
     test_tone = Enum(*[tone for tone in TONES if tone != TONE_NONE])
     test_sound = Button("Test")
@@ -264,6 +271,7 @@ class NotificationSettings(HasTraits):
 
         state = {name: getattr(self, name) for name in SAVED_SETTINGS}
         state[CATEGORIES_KEY] = choices
+        state[CHIME_KEY] = self.chime.to_state()
 
         return state
 
@@ -287,7 +295,16 @@ class NotificationSettings(HasTraits):
         for category in self._by_id.values():
             rejected += self._take_saved_choices(category)
 
+        rejected += self._take_chime_design(state.get(CHIME_KEY, {}))
+
         return rejected
+
+    def _take_chime_design(self, design):
+
+        if not isinstance(design, dict):
+            return [CHIME_KEY]
+
+        return [f"{CHIME_KEY}.{key}" for key in self.chime.apply_state(design)]
 
     def _take_saved_choices(self, category):
         choices = self._saved_choices.get(category.id, {})

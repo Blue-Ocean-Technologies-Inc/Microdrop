@@ -335,6 +335,10 @@ NOTIFICATIONS_DATA_DIRNAME = "notifications"
 #: The user's notification settings, in the data folder.
 NOTIFICATION_SETTINGS_FILENAME = "settings.json"
 
+#: The folder, in the data folder, of the chimes rendered from the user's
+#: chime design; the shipped chimes play while the design is the default.
+CHIME_SOUNDS_DIRNAME = "chimes"
+
 #: "1" opens the drawer at start-up, "0" keeps it closed, whatever the saved
 #: setting: for tests, demos and automation.
 OPEN_AT_START_ENV = "MICRODROP_NOTIFICATIONS_OPEN_AT_START"
