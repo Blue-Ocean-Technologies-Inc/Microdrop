@@ -17,13 +17,15 @@ priority 30 so the voltage is applied before any electrode actuation.
 """
 
 # Enthought library imports.
-from traits.api import Int
+from traits.api import Int, TraitError
 
 # Microdrop package imports.
 from dropbot_controller.consts import (
+    HARDWARE_DEFAULT_MAX_VOLTAGE,
     HARDWARE_MAX_VOLTAGE_KEY,
     HARDWARE_MIN_VOLTAGE,
     PROTOCOL_SET_VOLTAGE,
+    PROTOCOL_VOLTAGE_RANGE_KEY,
     VOLTAGE_APPLIED,
 )
 from dropbot_controller.preferences import DropbotPreferences
@@ -32,7 +34,6 @@ from pluggable_protocol_tree.models.column import (
     BaseColumnModel,
     Column,
 )
-from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -44,12 +45,12 @@ from ..services.preflight_checks import (
     dropbot_connection_check,
     hardware_limit_check,
 )
+from .device_range_spinbox_view import DeviceRangeIntSpinBoxColumnView
 
-# Static spinbox upper. Hardware-reported max isn't known at column
-# construction time (DropBot reports via app_globals only after connect),
-# and the trait can't be re-bounded after instantiation. The backend
-# validates the actual write against proxy.config.max_voltage anyway.
-_DEFAULT_HARDWARE_MAX_V = 140  # DropBot DB3-120 nominal max
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 
 
 class VoltageColumnModel(BaseColumnModel):
@@ -86,9 +87,19 @@ class VoltageHandler(BaseColumnHandler):
         Must return the super's return value so QtTreeModel.setData
         signals dataChanged and the manager fires rows_changed — without
         it the protocol state tracker never sees voltage edits.
+
+        The preference is a DropBot Range, narrower than some devices'
+        (the portable's), so a value outside it is applied to the cell but
+        not remembered.
         """
         result = super().on_interact(row, model, value)
-        DropbotPreferences().last_voltage = int(value)
+
+        try:
+            DropbotPreferences().last_voltage = int(value)
+
+        except TraitError:
+            logger.info(f"Not saving {value} V as the last voltage: out of range")
+
         return result
 
     def on_step(self, row, ctx):
@@ -136,9 +147,10 @@ def make_voltage_column():
             col_name="Voltage (V)",
             default_value=int(prefs.last_voltage),
         ),
-        view=IntSpinBoxColumnView(
-            low=HARDWARE_MIN_VOLTAGE,
-            high=_DEFAULT_HARDWARE_MAX_V,
+        view=DeviceRangeIntSpinBoxColumnView(
+            range_key=PROTOCOL_VOLTAGE_RANGE_KEY,
+            fallback_range=(HARDWARE_MIN_VOLTAGE, HARDWARE_DEFAULT_MAX_VOLTAGE),
+            unit="V",
         ),
         handler=VoltageHandler(),
     )
