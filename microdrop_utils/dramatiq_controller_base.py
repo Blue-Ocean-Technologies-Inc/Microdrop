@@ -10,7 +10,6 @@
 
 # Standard library imports.
 import re
-import traceback
 import warnings
 
 # Third-party imports.
@@ -248,13 +247,8 @@ def basic_listener_actor_routine(
     # Compute the handler method name using the provided pattern.
     requested_method = handler_name_pattern.format(topic=topic_key)
 
-    err_msg = invoke_class_method(parent_obj, requested_method, timestamped_message)
-
-    if err_msg:
-        logger.error(
-            f"{parent_obj.name}: Received message: {timestamped_message} "
-            f"from topic: {topic} Failed to execute due to error: {err_msg}"
-        )
+    # A failing handler is logged, with its traceback, by invoke_class_method.
+    invoke_class_method(parent_obj, requested_method, timestamped_message)
 
 
 def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
@@ -283,14 +277,12 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
             try:
                 class_method(*args, **kwargs)
                 return error_msg
-            except Exception:
-                stack_trace = traceback.format_exc()
-                error_msg = (
-                    f"Error executing '{requested_method}': "
-                    f"\nArguments: {args, kwargs}\n {stack_trace}"
+            except Exception as error:
+                logger.exception(
+                    f"{type(parent_obj).__name__}.{requested_method} failed"
                 )
-                logger.error(error_msg)
-                return error_msg
+
+                return f"{requested_method} raised {type(error).__name__}: {error}"
         else:
             error_msg = (
                 f"{parent_obj}: Attribute '{requested_method}' "
