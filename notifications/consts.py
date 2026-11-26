@@ -612,6 +612,13 @@ LOG_IGNORE_RULES = (
     ("microdrop_utils.deferred_content", r".* could not be built"),
     ("plugin_management.deferred_loader", r"Deferred plugin \S+ failed to import"),
     ("plugin_management.deferred_loader", r"Deferred plugin \S+ could not be added"),
+    # A DropBot unplugged, as the serial library sees it: its waiting read
+    # is aborted and the reconnect cannot open the port. The DropBot status
+    # plugin posts "DropBot disconnected", with its own chime, instead.
+    ("asyncserial", r"Serial read aborted"),
+    ("asyncserial", r"Failed to open serial port"),
+    # The device scan held up while a connection attempt runs.
+    ("apscheduler.executors.default", r"Run time of job .* was missed"),
 )
 
 #: A record carrying this attribute set True is not forwarded: its event is

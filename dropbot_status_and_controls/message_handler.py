@@ -16,7 +16,7 @@ import math
 from PySide6.QtCore import QObject, Signal
 
 # Enthought library imports.
-from traits.api import Bool, Instance, List
+from traits.api import Bool, Instance, List, observe
 
 # Microdrop package imports.
 from device_viewer.consts import (
@@ -25,6 +25,11 @@ from device_viewer.consts import (
     VolumeEstimateMessage,
 )
 from dropbot_controller.consts import RETRY_CONNECTION
+from notifications.consts import (
+    SEVERITY_SUCCESS,
+    SEVERITY_WARNING,
+    notification_publisher,
+)
 from template_status_and_controls.base_message_handler import BaseMessageHandler
 
 # Microdrop utils imports.
@@ -34,7 +39,13 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.ureg_helpers import get_ureg_magnitude, ureg
 
 # Local imports.
-from .consts import NUM_CAPACITANCE_READINGS_AVERAGED
+from .consts import (
+    DROPBOT_CONNECTED_CATEGORY_ID,
+    DROPBOT_CONNECTION_THREAD_ID,
+    DROPBOT_DISCONNECTED_CATEGORY_ID,
+    NUM_CAPACITANCE_READINGS_AVERAGED,
+    PKG,
+)
 from .model import DropbotStatusAndControlsModel
 
 # Logger import.
@@ -117,6 +128,35 @@ class DropbotStatusAndControlsMessageHandler(BaseMessageHandler):
         if self._no_power:
             self._no_power = False
             self.dialog_signals.close_no_power_dialog.emit()
+
+    # ------------------------------------------------------------------ #
+    # Connection notifications                                             #
+    # ------------------------------------------------------------------ #
+
+    @observe("model:connected")
+    def _notify_connection(self, event):
+        """Post the DropBot connecting or disconnecting; both update one
+        card, each with its own chime."""
+        if event.new:
+            title = "DropBot connected"
+            severity = SEVERITY_SUCCESS
+            category_id = DROPBOT_CONNECTED_CATEGORY_ID
+
+        else:
+            title = "DropBot disconnected"
+            severity = SEVERITY_WARNING
+            category_id = DROPBOT_DISCONNECTED_CATEGORY_ID
+
+        notification_publisher.publish(
+            {
+                "title": title,
+                "severity": severity,
+                "category": "hardware",
+                "category_id": category_id,
+                "source": PKG,
+                "thread_id": DROPBOT_CONNECTION_THREAD_ID,
+            }
+        )
 
     # ------------------------------------------------------------------ #
     # DropBot-specific handlers                                            #

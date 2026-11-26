@@ -13,6 +13,7 @@ from envisage.api import PREFERENCES_CATEGORIES, PREFERENCES_PANES
 from traits.api import Any, List
 
 # Microdrop package imports.
+from notifications.consts import NOTIFICATION_CATEGORIES
 from template_status_and_controls.base_plugin import BaseStatusPlugin
 from user_help_plugin.consts import TUTORIAL_ORDER_HARDWARE, TUTORIALS, TutorialEntry
 
@@ -20,6 +21,7 @@ from user_help_plugin.consts import TUTORIAL_ORDER_HARDWARE, TUTORIALS, Tutorial
 from .consts import (
     ACTOR_TOPIC_DICT,
     DROPBOT_STATUS_TUTORIAL_HTML_PATH,
+    NOTIFICATION_CATEGORY_SPECS,
     PKG,
     PKG_name,
     listener_name,
@@ -37,6 +39,11 @@ class DropbotStatusAndControlsPlugin(BaseStatusPlugin):
 
     #: Help > Tutorials entries for this plugin's pane.
     tutorials = List(contributes_to=TUTORIALS)
+
+    #: The DropBot connecting and disconnecting, as notification kinds.
+    notification_categories = List(
+        NOTIFICATION_CATEGORY_SPECS, contributes_to=NOTIFICATION_CATEGORIES
+    )
 
     #: The status model, its preferences, the dialog signals and the message
     #: listener, made at start: the listener's routes are registered at

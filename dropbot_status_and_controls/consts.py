@@ -19,6 +19,11 @@ from device_viewer.consts import (
     PROTOCOL_RUNNING,
 )
 from dropbot_preferences_ui.consts import VOLTAGE_FREQUENCY_RANGE_CHANGED
+from notifications.consts import (
+    TONE_CONNECTED,
+    TONE_DISCONNECTED,
+    NotificationCategorySpec,
+)
 from user_help_plugin.consts import tutorial_id
 
 # Microdrop style imports.
@@ -31,6 +36,30 @@ PKG_name = PKG.title().replace("_", " ")
 HELP_PATH = os.path.join(os.path.dirname(__file__), "help")
 
 listener_name = f"{PKG}_listener"
+
+#: The DropBot connecting and disconnecting as notifications, each with its
+#: own chime; both update one card, so unplugging and replugging does not
+#: stack them up.
+DROPBOT_CONNECTED_CATEGORY_ID = f"{PKG}.connected"
+DROPBOT_DISCONNECTED_CATEGORY_ID = f"{PKG}.disconnected"
+DROPBOT_CONNECTION_THREAD_ID = f"{PKG}.connection"
+
+NOTIFICATION_CATEGORY_SPECS = [
+    NotificationCategorySpec(
+        id=DROPBOT_CONNECTED_CATEGORY_ID,
+        group="DropBot",
+        label="Connected",
+        description="The DropBot connects, or connects again.",
+        tone=TONE_CONNECTED,
+    ),
+    NotificationCategorySpec(
+        id=DROPBOT_DISCONNECTED_CATEGORY_ID,
+        group="DropBot",
+        label="Disconnected",
+        description="The DropBot is unplugged or its connection is lost.",
+        tone=TONE_DISCONNECTED,
+    ),
+]
 
 # Single listener subscribing to all dropbot signals + calibration data
 ACTOR_TOPIC_DICT = {
