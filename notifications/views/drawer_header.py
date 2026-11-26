@@ -28,10 +28,8 @@ from microdrop_utils.clamped_label import ElidedLabel
 # Local imports.
 from ..models.notifications_pane_model import NotificationsPaneModel
 
-#: The drawer's title, the least of it shown before buttons fold away,
-#: and the room (px) between it and the count chip.
+#: The drawer's title, and the room (px) between it and the count chip.
 TITLE_TEXT = "Notifications"
-TITLE_STEM = "Notific…"
 CHIP_GAP = 8
 
 #: The settings button's glyph.
@@ -117,17 +115,10 @@ class DrawerHeader(QtWidgets.QWidget):
 
     def _fit_chip(self):
         """Give the whole title room first: the chip shortens ("2 new" to
-        "2"), then hides; then Collapse or Expand all, Mark all read and
-        Clear all fold away, before the title is elided below its readable
-        stem."""
+        "2"), then hides, and past that the title is elided. Every button
+        always shows."""
         full, short = self._chip_texts
-        title_metrics = QtGui.QFontMetrics(self._title.font())
-        whole = title_metrics.horizontalAdvance(TITLE_TEXT)
-        stem = title_metrics.horizontalAdvance(TITLE_STEM)
-
-        for button in self._buttons():
-            button.show()
-
+        whole = QtGui.QFontMetrics(self._title.font()).horizontalAdvance(TITLE_TEXT)
         room = self._title_room()
         text = ""
 
@@ -140,26 +131,14 @@ class DrawerHeader(QtWidgets.QWidget):
         self._chip.setText(text)
         self._chip.setVisible(bool(text))
 
-        for button in self._foldable_buttons():
-            if self._title_room() >= stem:
-                break
-
-            button.hide()
-
     def _title_room(self):
-        """The width (px) left for the title and chip by the shown
-        buttons."""
+        """The width (px) left for the title and chip by the buttons."""
         margins = self.layout().contentsMargins()
-        shown = [button for button in self._buttons() if not button.isHidden()]
-        buttons = sum(button.sizeHint().width() for button in shown)
-        spacing = self.layout().spacing() * (len(shown) + 1)
+        buttons = self._buttons()
+        width = sum(button.sizeHint().width() for button in buttons)
+        spacing = self.layout().spacing() * (len(buttons) + 1)
 
-        return self.width() - margins.left() - margins.right() - buttons - spacing
-
-    def _foldable_buttons(self):
-        """The buttons that fold away when the header is short, least
-        needed first; Settings and Close always stay."""
-        return (self.fold_all, self.mark_all_read, self.clear_all)
+        return self.width() - margins.left() - margins.right() - width - spacing
 
     def _chip_width(self, text):
         metrics = QtGui.QFontMetrics(self._chip.font())
