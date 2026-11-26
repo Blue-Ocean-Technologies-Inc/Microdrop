@@ -624,8 +624,25 @@ The protocol tree's Voltage and Frequency columns (`dropbot_protocol_controls`, 
 
 **Backend (`portable_dropbot_controller/services/portable_dropbot_states_setting_mixin_service.py`)**
 - `on_protocol_set_voltage_request` / `on_protocol_set_frequency_request` go through the same path as `SET_VOLTAGE` / `SET_FREQUENCY` (`portable_dropbot/requests/set_voltage`, `.../set_frequency`): the setpoint is checked against `VOLTAGE_BOUNDS` (40-200 V) / `FREQUENCY_BOUNDS` (50-60000 Hz), then applied with `set_actuation`. The ack goes out only when the board took it.
-- An out-of-range setpoint goes out on `ERROR_RAISED`, keeps the current one and sends no ack, so the step fails on its ack wait. The column's spinbox still allows the DropBot's 30 V floor; the portable's 40 V floor is enforced here.
+- An out-of-range setpoint goes out on `ERROR_RAISED`, keeps the current one and sends no ack, so the step fails on its ack wait. Since #1191 the column's editor already offers only the portable's range (see "Protocol Voltage / Frequency columns: the active device's range" below); this guard still catches a step loaded from a protocol written for another device.
 - The same bounds guard the realtime `SET_VOLTAGE` / `SET_FREQUENCY` requests (no ack), and an out-of-range connect default from the preferences falls back to `DEFAULT_VOLTAGE` / `DEFAULT_FREQUENCY`.
+
+### Protocol Voltage / Frequency columns: the active device's range (#1191)
+
+The columns are built once and shared by every device, so their spin boxes read the active device's setpoint range from app_globals instead of fixed bounds.
+
+**app_globals keys (owned by `dropbot_controller`, constants in `dropbot_controller/consts.py`)**
+- `PROTOCOL_VOLTAGE_RANGE_KEY = "protocol_voltage_range"` / `PROTOCOL_FREQUENCY_RANGE_KEY = "protocol_frequency_range"` — `[low, high]` Ints (V / Hz), one key per pair so a reader never sees a half-updated range.
+
+**Writers (the backend plugin loaded; each overwrites both keys at `start()`, never only when absent, since app_globals outlives the session)**
+- `DropbotControllerPlugin` — `[HARDWARE_MIN_VOLTAGE, HARDWARE_DEFAULT_MAX_VOLTAGE]` (30-140 V) and `[HARDWARE_MIN_FREQUENCY, HARDWARE_DEFAULT_MAX_FREQUENCY]` (100-100000 Hz); `DropbotMonitorMixinService.on_connected_signal` then rewrites the maxima from `proxy.config.max_voltage` / `max_frequency`.
+- `PortableDropbotControllerPlugin` — `VOLTAGE_BOUNDS` (40-200 V) / `FREQUENCY_BOUNDS` (50-60000 Hz).
+- `MockDropbotControllerPlugin` — `MOCK_VOLTAGE_RANGE` (30-150 V) / `MOCK_FREQUENCY_RANGE` (100-20000 Hz), the setpoints the mock accepts.
+- `OpenDropControllerPlugin` — does not serve the protocol topics; writes the DropBot fallback range so a previous device's range never lingers.
+
+**Reader (`dropbot_protocol_controls/protocol_columns/device_range_spinbox_view.py`)**
+- `DeviceRangeIntSpinBoxColumnView.low` / `high` are Properties reading the key on every access (falling back to the DropBot range when it is missing), so the cell editor, the step-pattern bounds and the bulk-set dialog all follow the device. A loaded value outside the range is kept and named in the cell tooltip; the backend guards above still refuse it at run time.
+- An edited value outside the `DropbotPreferences.last_voltage` / `last_frequency` Range (e.g. a portable 50-99 Hz) is applied to the cell but not saved as the last value.
 
 ### Portable DropBot PMT capture, live stream, ADC query, buffered acquire (#601)
 
