@@ -34,6 +34,8 @@ Sending: (Via publish_message)
 - CHIP_INSERTED "dropbot/signals/chip_inserted"
 - NO_DROPBOT_AVAILABLE "dropbot/signals/warnings/no_dropbot_available"
 - NO_POWER "dropbot/signals/warnings/no_power"
+- HARDWARE_LIMITS_UPDATED "dropbot/signals/hardware_limits_updated" (`HardwareLimitsUpdatedMessage`, via `hardware_limits_updated_publisher`, right after `on_connected_signal` writes the maxima to app_globals)
+- DROPBOT_STATE_UPDATED "dropbot/signals/state_updated" (`DropbotStateUpdatedMessage`, via `dropbot_state_updated_publisher`, after every write of the connection, chip or no-power app_globals key)
 - "dropbot/error"
 - DROPBOT_SETUP_SUCCESS "dropbot/signals/setup_success"
 - SELF_TESTS_PROGRESS "dropbot/signals/self_tests_progress"
@@ -799,6 +801,26 @@ Each capturing step stores the resolution and camera properties it captures with
 **Writer (dropbot_status_and_controls) — persists across restarts**
 - `_update_prefs()` does not touch app_globals. It writes the last-applied voltage/frequency straight into the ETS preferences node by path — `get_default_preferences().set(f"{VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH}.ui_default_{voltage|frequency}", value)` — using `VOLTAGE_FREQUENCY_RANGE_PREFERENCES_PATH = "microdrop.ui.voltage_frequency_range"` (a new constant in `dropbot_preferences_ui/consts.py`; `VoltageFrequencyRangePreferences.preferences_path` now reuses the same constant instead of a duplicate literal).
 - This works because `envisage.application.Application.__init__` installs the running app's own `ScopedPreferences` node as apptools' package-global default (`set_default_preferences(self.preferences)`) before any plugin constructs a `PreferencesHelper`, and `PreferencesHelper._preferences_default()` returns that same default — so `get_default_preferences()` here and any `VoltageFrequencyRangePreferences()` instance's `self.preferences` are the identical node. Verified interactively: writing by path updates a live `VoltageFrequencyRangePreferences` instance's trait (via its `preferences.add_preferences_listener` callback), which fires `_publish_to_app_globals` and keeps app_globals in sync — `dropbot_status_and_controls` remains the only writer of `ui_default_voltage`/`ui_default_frequency` in app_globals, it just triggers that write indirectly through the ETS node rather than writing app_globals itself. A fresh `VoltageFrequencyRangePreferences()` instance (e.g. after a full app + Redis restart) reads the same persisted value straight from the ETS-backed `preferences.ini`, so the last-applied value survives restarts exactly as it did before #610.
+
+### DropBot hardware state → protocol pre-flight re-check
+
+The pre-flight check (`pluggable_protocol_tree/preflight/`) reads the DropBot's state from app_globals, never from the signals; the signals only tell it to re-check.
+
+**app_globals keys (constants in `dropbot_controller/consts.py`, listed in `APP_GLOBALS_KEYS`; the first three are `DROPBOT_STATE_KEYS`)**
+- `DROPBOT_CONNECTION_STATE_KEY` — written by `_publish_connection_state` at startup and on every connection change.
+- `DROPBOT_CHIP_INSERTED_KEY = "dropbot_controller.chip_inserted"` — written by `_output_state_changed_wrapper` and `on_chip_check_request` (before `CHIP_INSERTED` is published; the proxy setup runs a chip check on every connection); None ("not read") while disconnected and at the start of each connection attempt (`_attempt_dropbot_port_connection`).
+- `DROPBOT_NO_POWER_KEY = "dropbot_controller.no_power"` — mirrors `DropbotMonitorMixinService._no_power` through an `@observe`; the trait is set before `NO_POWER` is published, and reset at the start of each connection attempt. False at startup.
+- All three go through `mirror_dropbot_state` (`dropbot_controller/services/dropbot_state_mirror.py`), which writes them and then publishes `DROPBOT_STATE_UPDATED`. A clean backend stop (`cleanup`) deletes them (`clear_dropbot_state`), so a reader finds no backend rather than a stale one.
+- `mock_dropbot_controller/mock_controller.py` mirrors the same keys from its `connected`/`chip_inserted` traits (and in `on_chip_check_request`), publishes `DROPBOT_STATE_UPDATED` too, and deletes the keys on cleanup.
+- `HARDWARE_MAX_VOLTAGE_KEY` / `HARDWARE_MAX_FREQUENCY_KEY` — written by `DropbotPreferences._hardware_limit_changed` when `on_connected_signal` reads the proxy config, about a second after connecting.
+
+**Topics (published by dropbot_controller)**
+- `DROPBOT_STATE_UPDATED = "dropbot/signals/state_updated"` — new; `DropbotStateUpdatedMessage` (`connected`, `chip_inserted`, `no_power`) published through `dropbot_state_updated_publisher` once the keys above are written. Unlike `DROPBOT_CONNECTED`, which the backend's own listener turns into the connection key, it never arrives before the key it announces.
+- `HARDWARE_LIMITS_UPDATED = "dropbot/signals/hardware_limits_updated"` — new; `HardwareLimitsUpdatedMessage` (`max_voltage`, `max_frequency`) published through `hardware_limits_updated_publisher` once the maxima are in app_globals.
+
+**Subscriber (pluggable_protocol_tree)**
+- `ACTOR_TOPIC_DICT[SYNC_LISTENER_NAME]` in `pluggable_protocol_tree/consts.py` adds the two topics as `PREFLIGHT_HARDWARE_TOPICS`. `DeviceViewerSyncController._listener_routine` (`services/device_viewer_sync.py`) fires its `hardware_state_changed` Event on either (worker thread).
+- `PreflightHost._invalidate_on_change` (`preflight/host.py`) observes it with `dispatch="ui"` alongside `connected`; the debounced re-check reads the keys above through the voltage and frequency columns' DropBot, chip and limit checks (`dropbot_protocol_controls/services/preflight_checks.py`).
 
 ### Any plugin → notifications drawer: posting a notification (#1077, #1137)
 
