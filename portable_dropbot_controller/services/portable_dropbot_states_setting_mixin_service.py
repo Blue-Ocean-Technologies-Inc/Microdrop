@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from traits.api import HasTraits, Str, provides
 
 # Local imports.
+from ..actuation_limits import frequency_refusal, voltage_refusal
 from ..board_alarms import clear_board_alarms, summarize_alarms_cleared
 from ..consts import (
     FLUORESCENCE_LED_RAW_MAX,
@@ -171,12 +172,32 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
         )
 
     def on_set_voltage_request(self, message):
-        self.voltage = int(float(str(message)))
+        """Apply a voltage setpoint; one the HV supply would refuse is
+        reported and the current setpoint kept."""
+        voltage = int(float(str(message)))
+        refusal = voltage_refusal(voltage)
+
+        if refusal:
+            self._publish_error("set voltage", f"{refusal}; kept {self.voltage} V")
+
+            return
+
+        self.voltage = voltage
         self._apply_actuation()
         logger.info(f"Portable Dropbot voltage set to {self.voltage} V")
 
     def on_set_frequency_request(self, message):
-        self.frequency = int(float(str(message)))
+        """Apply a frequency setpoint; one the HV supply would refuse is
+        reported and the current setpoint kept."""
+        frequency = int(float(str(message)))
+        refusal = frequency_refusal(frequency)
+
+        if refusal:
+            self._publish_error("set frequency", f"{refusal}; kept {self.frequency} Hz")
+
+            return
+
+        self.frequency = frequency
         self._apply_actuation()
         logger.info(f"Portable Dropbot frequency set to {self.frequency} Hz")
 
