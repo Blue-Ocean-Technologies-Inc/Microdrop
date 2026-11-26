@@ -9,7 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """The drawer's fixed header: title, count chip, and its buttons (Mark all
-read, Clear all, Settings, Close), which press the model's buttons."""
+read, Clear all, Collapse or Expand all, Settings, Close), which press the
+model's buttons."""
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtGui, QtWidgets
@@ -73,6 +74,8 @@ class DrawerHeader(QtWidgets.QWidget):
         self.clear_all = self._button(
             ICON_DELETE_SWEEP, "Clear all (keeps Needs attention)", "clear_all_button"
         )
+        # Collapse all or Expand all, as the sections are: show_fold_all.
+        self.fold_all = self._button("", "", "fold_all_button")
         self.settings = self._button(
             ICON_SETTINGS, "Notification settings", "settings_button"
         )
@@ -84,6 +87,7 @@ class DrawerHeader(QtWidgets.QWidget):
         self._binding = _HeaderBinding(model=model, view=self)
         self.restyle()
         self.show_counts()
+        self.show_fold_all()
 
     def show_counts(self):
         """Show the count chip and enable the buttons that would do
@@ -103,10 +107,19 @@ class DrawerHeader(QtWidgets.QWidget):
         self.mark_all_read.setEnabled(bool(new or center.unread_count))
         self.clear_all.setEnabled(total > attention)
 
+    def show_fold_all(self):
+        """Offer to collapse every section while any is expanded, else to
+        expand them all."""
+        _expand, glyph, tooltip = self.model.fold_all
+
+        self.fold_all.setText(glyph)
+        self.fold_all.setToolTip(tooltip)
+
     def _fit_chip(self):
         """Give the whole title room first: the chip shortens ("2 new" to
-        "2"), then hides; then Mark all read and Clear all fold away,
-        before the title is elided below its readable stem."""
+        "2"), then hides; then Collapse or Expand all, Mark all read and
+        Clear all fold away, before the title is elided below its readable
+        stem."""
         full, short = self._chip_texts
         title_metrics = QtGui.QFontMetrics(self._title.font())
         whole = title_metrics.horizontalAdvance(TITLE_TEXT)
@@ -146,7 +159,7 @@ class DrawerHeader(QtWidgets.QWidget):
     def _foldable_buttons(self):
         """The buttons that fold away when the header is short, least
         needed first; Settings and Close always stay."""
-        return (self.mark_all_read, self.clear_all)
+        return (self.fold_all, self.mark_all_read, self.clear_all)
 
     def _chip_width(self, text):
         metrics = QtGui.QFontMetrics(self._chip.font())
@@ -177,7 +190,13 @@ class DrawerHeader(QtWidgets.QWidget):
         self._binding.model = None
 
     def _buttons(self):
-        return (self.mark_all_read, self.clear_all, self.settings, self.close)
+        return (
+            self.mark_all_read,
+            self.clear_all,
+            self.fold_all,
+            self.settings,
+            self.close,
+        )
 
     def _button(self, glyph, tooltip, model_button):
         button = QtWidgets.QToolButton(self)
@@ -205,7 +224,8 @@ class DrawerHeader(QtWidgets.QWidget):
 
 
 class _HeaderBinding(HasTraits):
-    """Keeps the header's counts current, once per burst of changes."""
+    """Keeps the header's counts current, once per burst of changes, and its
+    Collapse or Expand all toggle following the sections."""
 
     model = Instance(NotificationsPaneModel)
 
@@ -227,3 +247,7 @@ class _HeaderBinding(HasTraits):
 
         if self.model is not None:
             self.view.show_counts()
+
+    @observe("model:fold_all")
+    def _show_fold_all(self, event):
+        self.view.show_fold_all()

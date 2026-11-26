@@ -71,6 +71,9 @@ class FeedSubsection(QtWidgets.QWidget):
         self._fold.setEasingCurve(QtCore.QEasingCurve.Type.OutCubic)
         self._fold.finished.connect(self._fold_finished)
 
+        #: Whether the sub-section is shown open, or folding open.
+        self._shown_expanded = self.expanded
+
         self.show_cards()
         self.body.setVisible(self.expanded)
 
@@ -168,8 +171,17 @@ class FeedSubsection(QtWidgets.QWidget):
     # Folding                                                             #
     # ------------------------------------------------------------------ #
 
+    def follow_collapsed(self):
+        """Show at once a fold the model made, as by the drawer's Collapse
+        or Expand all; one already shown, folding from a click, goes on."""
+
+        if self._shown_expanded != self.expanded:
+            self._show_expanded(animate=False)
+
     def _toggle(self):
         spec_id = self.group.spec.id
+        # Folded below, animated: not at once by follow_collapsed.
+        self._shown_expanded = not self.expanded
 
         if self.expanded:
             self.section.collapsed_groups = self.section.collapsed_groups | {spec_id}
@@ -181,6 +193,7 @@ class FeedSubsection(QtWidgets.QWidget):
 
     def _show_expanded(self, animate):
         expanded = self.expanded
+        self._shown_expanded = expanded
 
         self.show_new()
         self._fold.stop()

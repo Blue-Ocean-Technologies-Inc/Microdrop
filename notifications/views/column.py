@@ -27,14 +27,10 @@ the TraitsUI view is for running it standalone against just a model::
 """
 
 # Enthought library imports.
-from pyface.qt import QtCore, QtGui, QtWidgets
+from pyface.qt import QtCore, QtWidgets
 from traits.api import Any, Bool, HasTraits, Instance, observe
 from traitsui.api import BasicEditorFactory, UItem, View
 from traitsui.qt.editor import Editor
-
-# Microdrop style imports.
-from microdrop_style.colors import INFO_COLOR
-from microdrop_style.palette_helpers import with_alpha
 
 # Microdrop utils imports.
 from microdrop_utils.gui_pacing import invoke_paced
@@ -47,13 +43,9 @@ from ..models.notifications_pane_model import (
 )
 from .column_section import ColumnSection, card_column_of
 from .drawer_header import DrawerHeader
+from .highlight import Highlight
 from .section_header import HEADER_HEIGHT, SectionHeader
-from .view_consts import (
-    HIGHLIGHT_MS,
-    LOAD_AHEAD_PX,
-    REVEAL_SCROLL_MS,
-    SECTION_ANIMATION_MS,
-)
+from .view_consts import LOAD_AHEAD_PX, REVEAL_SCROLL_MS, SECTION_ANIMATION_MS
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -66,50 +58,8 @@ SECTIONS_OBJECT_NAME = "notifications.sections"
 #: Room (px) left above a revealed item, under the pinned header.
 REVEAL_MARGIN = 10
 
-#: Corner radius (px) of a highlighted item.
-HIGHLIGHT_RADIUS = 8
-
 #: Milliseconds after asking to reveal before scrolling: the layout settles.
 REVEAL_DELAY_MS = 60
-
-
-class _Highlight(QtWidgets.QWidget):
-    """A tint laid over a revealed item, fading: "this is the one"."""
-
-    def __init__(self, parent):
-        super().__init__(parent)
-
-        self.strength = 0.0
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-        self._fade = QtCore.QVariantAnimation(self)
-        self._fade.setDuration(HIGHLIGHT_MS)
-        self._fade.setStartValue(1.0)
-        self._fade.setEndValue(0.0)
-        self._fade.setEasingCurve(QtCore.QEasingCurve.Type.InQuad)
-        self._fade.valueChanged.connect(self._set_strength)
-        self._fade.finished.connect(self.hide)
-
-    def flash(self, rect):
-        """Tint ``rect`` (in the parent's coordinates), fading out."""
-        self.setGeometry(rect)
-        self.show()
-        self.raise_()
-        self._fade.stop()
-        self._fade.start()
-
-    def _set_strength(self, value):
-        self.strength = value
-        self.update()
-
-    def paintEvent(self, event):
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(with_alpha(INFO_COLOR, 0.3 * self.strength))
-        painter.drawRoundedRect(
-            QtCore.QRectF(self.rect()), HIGHLIGHT_RADIUS, HIGHLIGHT_RADIUS
-        )
 
 
 class _ContentsBinding(HasTraits):
@@ -126,6 +76,10 @@ class _ContentsBinding(HasTraits):
     @observe("model:reveal")
     def _reveal(self, event):
         self.view.reveal(event.new)
+
+    @observe("model:folded_all")
+    def _show_from_top(self, event):
+        self.view.show_from_top()
 
     @observe("model:ordered_sections")
     def _show_sections(self, event):
@@ -192,7 +146,7 @@ class DrawerContents(QtWidgets.QWidget):
         self.pinned.clicked.connect(self._toggle_pinned)
         self.pinned.hide()
 
-        self._highlight = _Highlight(self.column)
+        self._highlight = Highlight(self.column)
         self._highlight.hide()
 
         self._reveal_scroll = QtCore.QPropertyAnimation(
@@ -344,6 +298,12 @@ class DrawerContents(QtWidgets.QWidget):
 
         if self._pinned_section is not None:
             self._toggle(self._pinned_section)
+
+    def show_from_top(self):
+        """Scroll to the column's top: after every section collapsed or
+        expanded at once, its top is what to see."""
+        self._reveal_scroll.stop()
+        self.scroll.verticalScrollBar().setValue(0)
 
     # ------------------------------------------------------------------ #
     # The pinned header, and loading as the scroll nears the end         #

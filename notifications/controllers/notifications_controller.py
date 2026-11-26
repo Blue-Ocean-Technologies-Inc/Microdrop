@@ -95,6 +95,12 @@ class NotificationsController(HasTraits):
     def _clear_all(self, event):
         self.pane_model.center.clear()
 
+    @observe("pane_model:fold_all_button")
+    def _fold_all(self, event):
+        expand, _glyph, _tooltip = self.pane_model.fold_all
+
+        self.pane_model.set_all_sections_expanded(expand)
+
     @observe("pane_model:close_button")
     def _close(self, event):
         self.pane_model.is_open = False

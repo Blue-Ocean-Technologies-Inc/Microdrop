@@ -27,7 +27,10 @@ from traits.api import (
     Tuple,
     observe,
 )
-from traits.observation.api import ListChangeEvent
+from traits.observation.api import ListChangeEvent, trait
+
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_UNFOLD_LESS, ICON_UNFOLD_MORE
 
 # Local imports.
 from ..consts import (
@@ -45,6 +48,20 @@ from .toasts import ToastStackModel
 #: The bell's "severity" while it counts only section alerts (new posts):
 #: below info, drawn in the newest alert's accent.
 ALERT_SEVERITY = "alert"
+
+#: The header's fold-all toggle, ``(expand, glyph, tooltip)``: while any
+#: shown section is expanded, and while none is.
+COLLAPSE_ALL = (False, ICON_UNFOLD_LESS, "Collapse all sections")
+EXPAND_ALL = (True, ICON_UNFOLD_MORE, "Expand all sections")
+
+
+def fold_all_toggle(sections):
+    """What the header's fold-all toggle does for ``sections``:
+    COLLAPSE_ALL while any shown section is expanded, else EXPAND_ALL. A
+    hidden section (Needs attention while empty) does not count."""
+    shown = [section for section in sections if getattr(section, "available", True)]
+
+    return COLLAPSE_ALL if any(section.expanded for section in shown) else EXPAND_ALL
 
 
 def bell_summary(entries, shown):
@@ -147,13 +164,13 @@ class NotificationsPaneModel(HasTraits):
     #: then leaves the keyboard focus where it is, closes on Esc anywhere in
     #: its window, builds its sections one per paced GUI turn, the
     #: ``expanded_at_start`` ones first (``next_section_to_build``), expands
-    #: those, late arrivals too, and lets a press
-    #: outside it through until the user uses it. Off again once it closes.
+    #: those, and late arrivals too, and lets a press outside it through,
+    #: until the user uses it. Off again once it closes.
     opened_by_app = Bool(False)
 
-    #: Whether the user has clicked or scrolled inside the open drawer: an
-    #: app-opened drawer is then theirs (``outside_press_passes_through``).
-    #: Off again once it closes.
+    #: Whether the user has clicked or scrolled inside the open drawer, or
+    #: folded every section at once: an app-opened drawer is then theirs
+    #: (``outside_press_passes_through``). Off again once it closes.
     used_while_open = Bool(False)
 
     #: The drawer's width (px), for the session.
@@ -170,6 +187,27 @@ class NotificationsPaneModel(HasTraits):
     clear_all_button = Button()
     close_button = Button()
     settings_button = Button()
+
+    #: Collapse every section, or expand them all: what ``fold_all`` says.
+    fold_all_button = Button()
+
+    #: What ``fold_all_button`` does now (``fold_all_toggle``):
+    #: ``(expand, glyph, tooltip)``.
+    fold_all = Property(
+        Tuple,
+        observe=[
+            "sections.items.expanded",
+            trait("sections").list_items().trait("available", optional=True),
+        ],
+    )
+
+    #: True while ``set_all_sections_expanded`` changes the sections: the
+    #: views show each change at once, not folding section by section.
+    folding_all = Bool(False)
+
+    #: Fired with the state every section was given (True: expanded), once
+    #: all have it.
+    folded_all = Event(Bool)
 
     #: Fired with the entry the user dismissed.
     dismiss = Event(Instance(Notification))
@@ -215,6 +253,9 @@ class NotificationsPaneModel(HasTraits):
     def _get_ordered_sections(self):
         return sorted(self.sections, key=lambda section: section.order)
 
+    def _get_fold_all(self):
+        return fold_all_toggle(self.sections)
+
     # ------------------------------------------------------------------ #
     # Public interface                                                    #
     # ------------------------------------------------------------------ #
@@ -225,6 +266,26 @@ class NotificationsPaneModel(HasTraits):
 
         if section is not None:
             section.expanded = True
+
+    def set_all_sections_expanded(self, expanded):
+        """Expand (or collapse) every section, and through its
+        ``set_all_expanded`` its own sub-sections, as one change: the views
+        show it at once (``folding_all``), then ``folded_all`` fires. The
+        open drawer is then the user's, so no start-up expansion undoes it."""
+        self.folding_all = True
+
+        try:
+            for section in self.sections:
+                section.expanded = expanded
+                section.set_all_expanded(expanded)
+
+        finally:
+            self.folding_all = False
+
+        if self.is_open:
+            self.used_while_open = True
+
+        self.folded_all = expanded
 
     def section(self, section_id):
         """The section with ``section_id``, or None."""
@@ -255,10 +316,11 @@ class NotificationsPaneModel(HasTraits):
     @observe("sections.items")
     def _expand_arrivals_at_start(self, event):
         """A section arriving in the drawer the app opened (News, from a
-        deferred plugin) shows as if it had been there at the opening; the
-        sections already there keep what the user made of them."""
+        deferred plugin), before the user uses it, shows as if it had been
+        there at the opening; the sections already there keep what the user
+        made of them."""
 
-        if not self.opened_by_app:
+        if not self.opened_by_app or self.used_while_open:
             return
 
         if isinstance(event, ListChangeEvent):

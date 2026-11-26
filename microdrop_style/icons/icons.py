@@ -123,3 +123,5 @@ ICON_ERROR = "error"  # an error notification
 ICON_DONE_ALL = "done_all"  # mark every notification read
 ICON_EXPAND_MORE = "expand_more"  # show a collapsed section or detail
 ICON_EXPAND_LESS = "expand_less"  # hide an expanded section or detail
+ICON_UNFOLD_MORE = "unfold_more"  # expand every section at once
+ICON_UNFOLD_LESS = "unfold_less"  # collapse every section at once

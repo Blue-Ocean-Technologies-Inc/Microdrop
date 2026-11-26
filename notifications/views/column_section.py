@@ -67,9 +67,11 @@ class _SectionBinding(HasTraits):
     def _show_header(self, event):
         self.view.show_header()
 
+    # Every section folding at once shows at once: their folds together
+    # would fight the drawer easing its height to the column.
     @observe("section:expanded")
     def _show_expanded(self, event):
-        self.view.show_expanded(animate=True)
+        self.view.show_expanded(animate=not self.view.pane_model.folding_all)
 
     # Only the drawer's own sections have ``available``.
     @observe(trait("section", notify=False).trait("available", optional=True))
