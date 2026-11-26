@@ -292,8 +292,10 @@ class NotificationChime(HasTraits):
         try:
             sounds = tone_sound_paths(designer, self.sounds_dir)
 
-        except OSError as error:
-            logger.warning(f"Designed chimes could not be written: {error}")
+        # A design that cannot be rendered or written must never silence
+        # a notification: the shipped sounds play instead.
+        except Exception as error:
+            logger.warning(f"Designed chimes not used: {error}")
             sounds = dict(TONE_SOUNDS)
 
         self._sounds = sounds
