@@ -12,7 +12,8 @@
 
 The bounds come from the column's ``DeviceRangeIntColumnModel`` on each
 access, so the cell editor, the step-pattern bounds and the bulk-set dialog
-all follow whichever backend last wrote the range.
+all follow whichever backend last wrote the range. A loaded value outside
+the range is flagged in the tooltip and survives an unedited commit.
 """
 
 # Enthought library imports.
@@ -21,6 +22,9 @@ from traits.api import Int, Property, Str
 # Microdrop package imports.
 from pluggable_protocol_tree.models.row import GroupRow
 from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
+
+#: Qt dynamic property holding a clamped value the user has not edited yet.
+_UNEDITED_VALUE_PROPERTY = "unedited_out_of_range_value"
 
 
 class DeviceRangeIntSpinBoxColumnView(IntSpinBoxColumnView):
@@ -40,6 +44,36 @@ class DeviceRangeIntSpinBoxColumnView(IntSpinBoxColumnView):
 
     def _get_high(self):
         return self.model.device_range()[1]
+
+    def create_editor(self, parent, context):
+        """Return the spinbox, forgetting its loaded value once edited."""
+        editor = super().create_editor(parent, context)
+        editor.valueChanged.connect(
+            lambda: editor.setProperty(_UNEDITED_VALUE_PROPERTY, None)
+        )
+
+        return editor
+
+    def set_editor_data(self, editor, value):
+        """Load ``value``, keeping it for an unedited commit if out of range.
+
+        QSpinBox clamps a value outside the device range to the nearer
+        bound, so opening the cell and committing without typing would
+        silently rewrite a loaded value to that bound.
+        """
+        super().set_editor_data(editor, value)
+
+        clamped = value is not None and editor.value() != int(value)
+        editor.setProperty(_UNEDITED_VALUE_PROPERTY, value if clamped else None)
+
+    def get_editor_data(self, editor):
+        """Return the loaded value if the user never changed the spinbox."""
+        unedited_value = editor.property(_UNEDITED_VALUE_PROPERTY)
+
+        if unedited_value is not None:
+            return unedited_value
+
+        return super().get_editor_data(editor)
 
     def get_tooltip(self, row):
         """Flag a loaded value the active device cannot apply."""
