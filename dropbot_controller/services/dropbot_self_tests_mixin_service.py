@@ -82,6 +82,9 @@ class TestSession:
         self.report_path = report_path
         self.tests = tests
 
+        #: Set when the user cancelled the run, so its end reports it.
+        self.cancelled = False
+
     def __enter__(self):
         # Notify UI to Open Dialog IMMEDIATELY
         publish_message(
@@ -106,7 +109,9 @@ class TestSession:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         # Automatically runs when the loop finishes OR crashes
-        status = "cancelled" if exc_type is KeyboardInterrupt else "completed"
+        cancelled = self.cancelled or exc_type is KeyboardInterrupt
+        status = "cancelled" if cancelled else "completed"
+
         publish_message(
             topic=SELF_TESTS_PROGRESS,
             message=create_test_progress_message(TestEvent.SESSION_END, status=status),
@@ -157,6 +162,21 @@ class DropbotSelfTestsMixinService(HasTraits):
             # name see dropbot.hardware_test
             test_name = "_".join(func.__name__.split("_")[1:-1])
 
+            # The connected flag also follows other hardware's connected
+            # signal (the topic is shared), so it can be set with no proxy.
+            if self.proxy is None:
+                logger.warning(
+                    f"Request for {test_name} denied: Dropbot is disconnected."
+                )
+                publish_message(
+                    topic=SELF_TESTS_PROGRESS,
+                    message=create_test_progress_message(
+                        TestEvent.SESSION_END, status="cancelled"
+                    ),
+                )
+
+                return
+
             # set the report file name in the needed dir based on tests run
             report_path = get_timestamped_results_path(
                 test_name, report_generation_directory
@@ -179,7 +199,12 @@ class DropbotSelfTestsMixinService(HasTraits):
                     self.proxy, tests=tests, report_path=report_path
                 )
 
-            if report_path is not None:
+            if self._self_test_cancelled:
+                logger.info(
+                    "Self-test was cancelled, skipping report and result dialog."
+                )
+
+            elif report_path is not None:
                 # dropbot.self_test imports matplotlib.pyplot, so it loads with
                 # the first report rather than at launch.
                 from dropbot.self_test import generate_report
@@ -203,10 +228,7 @@ class DropbotSelfTestsMixinService(HasTraits):
                 )
 
                 open_html_in_browser(report_path)
-            elif self._self_test_cancelled:
-                logger.info(
-                    "Self-test was cancelled, skipping report and result dialog."
-                )
+
             elif test_name in PLOTTABLE_SELF_TESTS:
                 failed_channels = None
                 if test_name == "test_channels":
@@ -304,6 +326,9 @@ class DropbotSelfTestsMixinService(HasTraits):
                         f"Test '{name}' failed with exception: {e}", exc_info=True
                     )
                     results[name] = "ERROR"
+
+            # A cancel during the last test arrives after the loop's check.
+            session.cancelled = self._self_test_cancelled
 
         return results
 

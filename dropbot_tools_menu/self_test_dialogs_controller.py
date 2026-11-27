@@ -139,6 +139,13 @@ class SelfTestDialogsController(HasTraits):
             if self.wait_for_test_dialog is None:
                 return
 
+            # A cancelled run writes no report: close without claiming one.
+            if payload.get("status") == "cancelled":
+                self.wait_for_test_dialog.finish_cancel()
+                self.wait_for_test_dialog = None
+
+                return
+
             self.wait_for_test_dialog.set_progress_end(
                 "Dropbot Self Test(s) are Complete! \n\n"
                 "Report will be opened shortly..."
