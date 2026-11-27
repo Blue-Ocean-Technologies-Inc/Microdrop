@@ -10,16 +10,18 @@
 
 """REALTIME_MODE_KEY has one writer, the backend: RealtimeModeMixin writes it on
 every assignment of realtime_mode, a DropBot disconnect turns it off, and a
-frontend status model never writes it. No Redis."""
+frontend status model never writes it; a refused enable publishes off without
+ever turning it on. No Redis."""
 
 # Standard library imports.
 import threading
 
 # Enthought library imports.
-from traits.api import Any, Bool
+from traits.api import Any, Bool, List, observe
 
 # Microdrop package imports.
-from dropbot_controller.consts import REALTIME_MODE_KEY
+from dropbot_controller.consts import REALTIME_MODE_KEY, REALTIME_MODE_UPDATED
+from dropbot_controller.services import dropbot_states_setting_mixin_service
 from dropbot_controller.services.dropbot_monitor_mixin_service import (
     DropbotMonitorMixinService,
 )
@@ -40,6 +42,13 @@ class _DropbotMonitor(DropbotMonitorMixinService, RealtimeModeMixin):
 
 class _DropbotStates(DropbotStatesSettingMixinService):
     proxy = Any()
+
+    #: Every realtime mode assigned (each one writes the key), in order.
+    assigned_realtime = List()
+
+    @observe("realtime_mode")
+    def _record_realtime_mode(self, event):
+        self.assigned_realtime.append(event.new)
 
 
 class _TimingOutProxy:
@@ -80,13 +89,22 @@ def test_a_dropbot_disconnect_turns_the_key_off(realtime_mode_key_store):
     assert realtime_mode_key_store == {REALTIME_MODE_KEY: False}
 
 
-def test_a_failed_realtime_enable_leaves_the_key_unset(realtime_mode_key_store):
+def test_a_failed_realtime_enable_publishes_off_and_never_on(
+    realtime_mode_key_store, monkeypatch
+):
+    published = []
+    monkeypatch.setattr(
+        dropbot_states_setting_mixin_service,
+        "publish_message",
+        lambda topic, message: published.append((topic, message)),
+    )
     backend = _DropbotStates(proxy=_TimingOutProxy())
 
     backend.on_set_realtime_mode_request("True")
 
-    assert not backend.realtime_mode
-    assert realtime_mode_key_store == {}
+    assert backend.assigned_realtime == [False]
+    assert realtime_mode_key_store == {REALTIME_MODE_KEY: False}
+    assert published == [(REALTIME_MODE_UPDATED, "False")]
 
 
 def test_a_status_model_never_writes_the_key(monkeypatch):

@@ -10,8 +10,8 @@
 
 """HV_ENABLE reply statuses judged the vendor's way: only "HV on" answers an
 enable and "HV off" a disable; 2-5 are refusals reported as errors, never
-logged as OK, and a refused enable takes realtime mode back off; leaving
-realtime mode skips the proxy lock. Plus the halt-clear request.
+logged as OK, and a refused enable publishes realtime mode off without ever
+turning it on; leaving realtime mode skips the proxy lock. Plus the halt-clear request.
 Hardware-free, no Redis."""
 
 # Standard library imports.
@@ -22,12 +22,15 @@ import pytest
 from dropbot_portable.halt_tool import HaltClear
 
 # Enthought library imports.
-from traits.api import Any, Bool, Dict, HasTraits, Int, List
+from traits.api import Any, Dict, Int, List, observe
 
 # Microdrop package imports.
 from portable_dropbot_controller.services.portable_dropbot_states_setting_mixin_service import (  # noqa: E501
     PortableDropbotStatesSettingMixinService,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.realtime_mode_mixin import RealtimeModeMixin
 
 decode = PortableDropbotStatesSettingMixinService._hv_enable_outcome
 
@@ -57,9 +60,8 @@ def test_refusal_texts_name_the_reason():
     assert "unknown" in decode(True, 9)[1]
 
 
-class _Base(HasTraits):
+class _Base(RealtimeModeMixin):
     proxy = Any()
-    realtime_mode = Bool()
     errors = List()
     #: The HV_ENABLE status byte the fake board answers.
     hv_status = Int()
@@ -69,6 +71,12 @@ class _Base(HasTraits):
     serialized = Dict()
     #: Every realtime mode published, in order.
     published_realtime = List()
+    #: Every realtime mode assigned (each one writes the key), in order.
+    assigned_realtime = List()
+
+    @observe("realtime_mode")
+    def _record_realtime_mode(self, event):
+        self.assigned_realtime.append(event.new)
 
     def _proxy_call(self, context, call, serialize=True):
         self.serialized[context] = serialize
@@ -106,7 +114,7 @@ def test_a_refused_hv_enable_is_published_as_an_error():
 
 
 @pytest.mark.parametrize("status", [2, 3, 4, 5, None])
-def test_a_refused_hv_enable_takes_realtime_mode_back_off(status):
+def test_a_refused_hv_enable_publishes_realtime_off_and_never_on(status):
     harness = _Harness()
     harness._proxy_call = lambda context, call, serialize=True: (
         True,
@@ -116,7 +124,8 @@ def test_a_refused_hv_enable_takes_realtime_mode_back_off(status):
     harness.on_set_realtime_mode_request("True")
 
     assert harness.realtime_mode is False
-    assert harness.published_realtime == [True, False]
+    assert harness.assigned_realtime == [False]
+    assert harness.published_realtime == [False]
     assert len(harness.errors) == 1
 
 
