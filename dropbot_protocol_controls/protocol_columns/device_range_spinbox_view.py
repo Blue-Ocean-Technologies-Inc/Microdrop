@@ -46,11 +46,19 @@ class DeviceRangeIntSpinBoxColumnView(IntSpinBoxColumnView):
         return self.model.device_range()[1]
 
     def create_editor(self, parent, context):
-        """Return the spinbox, forgetting its loaded value once edited."""
+        """Return the spinbox, forgetting its loaded value once edited.
+
+        Typing counts as an edit even when it leaves the value unchanged:
+        typing the bound a loaded value was clamped to fires no
+        ``valueChanged``, yet the user means that bound.
+        """
         editor = super().create_editor(parent, context)
-        editor.valueChanged.connect(
-            lambda: editor.setProperty(_UNEDITED_VALUE_PROPERTY, None)
-        )
+
+        def forget_unedited_value():
+            editor.setProperty(_UNEDITED_VALUE_PROPERTY, None)
+
+        editor.valueChanged.connect(forget_unedited_value)
+        editor.lineEdit().textEdited.connect(forget_unedited_value)
 
         return editor
 
