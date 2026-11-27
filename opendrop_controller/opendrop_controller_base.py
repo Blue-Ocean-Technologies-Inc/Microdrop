@@ -122,9 +122,9 @@ class OpenDropControllerBase(HasTraits):
             ):
                 return
             self.timestamps[topic] = timestamped_message.timestamp_dt
-            err_msg = invoke_class_method(self, requested_method, timestamped_message)
-            if err_msg:
-                logger.error(f"Error handling topic {topic}: {err_msg}")
+            invoke_class_method(
+                self, requested_method, timestamped_message, topic=topic
+            )
 
     def traits_init(self):
         logger.info("Starting OpenDropController listener")

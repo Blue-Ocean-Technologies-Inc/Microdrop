@@ -191,14 +191,9 @@ class PeripheralDeviceControllerBase(HasTraits):
 
             self.timestamps[topic] = timestamped_message.timestamp_dt
 
-            err_msg = invoke_class_method(self, requested_method, timestamped_message)
-
-            if err_msg:
-                logger.error(
-                    f" {self.listener_name}; Received message: "
-                    f"{timestamped_message} from topic: {topic} "
-                    f"Failed to execute due to error: {err_msg}"
-                )
+            invoke_class_method(
+                self, requested_method, timestamped_message, topic=topic
+            )
 
     def traits_init(self):
         """Equivalent to ``__init__`` calling ``super().__init__(**traits)``."""
