@@ -48,6 +48,10 @@ MUTE_ALWAYS = "always"
 #: Quiet time after the last invalidation before re-evaluating, ms.
 DEBOUNCE_MS = 350
 
+#: How long a run waits on a column's acknowledgement before the run face
+#: says so, s: shorter waits pass without a flicker.
+ACK_WAIT_SHOWN_AFTER_S = 1.0
+
 #: Bytes per GB, as the disk check counts them.
 BYTES_PER_GB = 1e9
 

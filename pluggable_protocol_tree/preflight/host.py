@@ -11,6 +11,9 @@
 """The pre-flight check inside the protocol dock pane: the controller, the
 pill and its card, the run gate, and what makes the report stale."""
 
+# Standard library imports.
+import math
+
 # Enthought library imports.
 from envisage.ui.tasks.api import TaskWindow
 from traits.api import (
@@ -35,6 +38,7 @@ from pluggable_protocol_tree.services.device_viewer_sync import (
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 
 # Local imports.
+from .consts import ACK_WAIT_SHOWN_AFTER_S
 from .context import build_preflight_context
 from .controller import PreflightController
 from .models import RunInfo
@@ -246,6 +250,26 @@ class PreflightHost(HasTraits):
             # Nothing was re-checked while the protocol ran.
             self.reset_scope()
             self.invalidate()
+
+    def follow_clock(self, now):
+        """Show the run's elapsed time at ``now`` and, once it has waited
+        ACK_WAIT_SHOWN_AFTER_S on a column's acknowledgement, that column
+        and the seconds left of its wait."""
+        model = self.status_model
+        wait = model.oldest_ack_wait(now)
+        waiting_on, wait_left_s = "", None
+
+        if wait is not None and wait[2] >= ACK_WAIT_SHOWN_AFTER_S:
+            waiting_on, timeout_s, waited_s = wait
+
+            if not math.isinf(timeout_s):
+                wait_left_s = max(math.ceil(timeout_s - waited_s), 0)
+
+        self.run_info.trait_set(
+            elapsed_s=int(model.protocol_clock.elapsed(now)),
+            waiting_on=waiting_on,
+            wait_left_s=wait_left_s,
+        )
 
     def reset_scope(self):
         """Judge what Play would run: the whole protocol from its start."""

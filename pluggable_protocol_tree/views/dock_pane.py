@@ -1648,7 +1648,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # event.new is the tick's monotonic timestamp; direct calls (initial
         # paint, freeze-frame on stop) pass no event and read the clock here.`
         now = event.new if event is not None else time.monotonic()
-        self.preflight.run_info.elapsed_s = int(model.protocol_clock.elapsed(now))
+        self.preflight.follow_clock(now)
 
         status_view.update_total_time(
             elapsed=model.protocol_clock.elapsed(now),

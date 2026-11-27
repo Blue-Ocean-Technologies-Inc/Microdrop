@@ -73,7 +73,7 @@ def pill_face(report, run_info):
         return ICON_PAUSE_CIRCLE, f"Paused · {run_info.progress_line}", "running"
 
     if run_info.active:
-        return ICON_RUNNING, run_info.progress_line, "running"
+        return ICON_RUNNING, run_info.run_line, "running"
 
     overall = report.overall
 
@@ -304,7 +304,7 @@ class PillController(HasTraits):
 
     @observe(
         "report.[overall, warning_count, blocking_count, summary, scope_line, "
-        "stats_line], run_info.[active, paused, progress_line], pill"
+        "stats_line], run_info.[active, paused, run_line], pill"
     )
     def _update_pill(self, event):
         if None in (self.pill, self.report, self.run_info):
@@ -314,7 +314,7 @@ class PillController(HasTraits):
 
         if self.run_info.active:
             state = "Paused" if self.run_info.paused else "Running"
-            self.pill.setToolTip(f"{state} · {self.run_info.progress_line}")
+            self.pill.setToolTip(f"{state} · {self.run_info.run_line}")
 
         else:
             report = self.report
