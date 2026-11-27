@@ -10,7 +10,6 @@
 
 # Standard library imports.
 import re
-import traceback
 import warnings
 
 # Third-party imports.
@@ -248,29 +247,21 @@ def basic_listener_actor_routine(
     # Compute the handler method name using the provided pattern.
     requested_method = handler_name_pattern.format(topic=topic_key)
 
-    err_msg = invoke_class_method(parent_obj, requested_method, timestamped_message)
-
-    if err_msg:
-        logger.error(
-            f"{parent_obj.name}: Received message: {timestamped_message} "
-            f"from topic: {topic} Failed to execute due to error: {err_msg}"
-        )
+    # A failing handler is logged, with its traceback, by invoke_class_method.
+    invoke_class_method(parent_obj, requested_method, timestamped_message, topic=topic)
 
 
-def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
-    """Invoke a requested method defined within a parent object class.
+def invoke_class_method(parent_obj, requested_method: str, *args, topic, **kwargs):
+    """Invoke a requested method defined within a parent object class, logging
+    a failure once, with its traceback.
 
     Args:
         parent_obj: Object containing the method to invoke
         requested_method: Name of the method to invoke
         *args: Positional arguments to pass to the method
+        topic: Topic of the message the method handles, named in the log
         **kwargs: Keyword arguments to pass to the method
-
-    Returns:
-        str: Empty string if the method ran or does not exist; error message
-            if it raised or is not callable.
     """
-    error_msg = ""
 
     # check if parent obj has the requested method
     if hasattr(parent_obj, requested_method):
@@ -278,29 +269,23 @@ def invoke_class_method(parent_obj, requested_method: str, *args, **kwargs):
 
         # Ensure that the attribute is callable before invoking it.
         if callable(class_method):
-            # Invoke the requested method with the provided arguments and log
-            # any errors calling it
             try:
                 class_method(*args, **kwargs)
-                return error_msg
+
             except Exception:
-                stack_trace = traceback.format_exc()
-                error_msg = (
-                    f"Error executing '{requested_method}': "
-                    f"\nArguments: {args, kwargs}\n {stack_trace}"
+                logger.exception(
+                    f"{type(parent_obj).__name__}.{requested_method} failed "
+                    f"on topic {topic}"
                 )
-                logger.error(error_msg)
-                return error_msg
+
         else:
-            error_msg = (
+            logger.warning(
                 f"{parent_obj}: Attribute '{requested_method}' "
                 "exists but is not callable."
             )
-            logger.warning(error_msg)
-            return error_msg
+
     else:
         # Reflective dispatch: a listener may receive topics it has no handler
         # for (e.g. contributed by a hot-loaded plugin group), so a miss is not
-        # an error. Returning "" keeps callers from logging one either.
+        # an error.
         logger.debug(f"Method '{requested_method}' not found for {parent_obj}.")
-        return ""

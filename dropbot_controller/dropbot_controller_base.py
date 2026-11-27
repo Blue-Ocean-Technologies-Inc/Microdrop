@@ -242,15 +242,11 @@ class DropbotControllerBase(HasTraits):
 
             self.timestamps[topic] = timestamped_message.timestamp_dt
 
-            err_msg = invoke_class_method(self, requested_method, timestamped_message)
+            invoke_class_method(
+                self, requested_method, timestamped_message, topic=topic
+            )
 
             logger.debug(f"Finished {requested_method} {describe_proxy(self.proxy)}")
-
-            if err_msg:
-                logger.error(
-                    f" {self.listener_name}; Received message: {timestamped_message} "
-                    f"from topic: {topic} Failed to execute due to error: {err_msg}"
-                )
 
     ### Initial traits values ######
 

@@ -178,16 +178,11 @@ SAMPLE_LOG_RECORDS = (
         "repeats": 4,
         "level": "ERROR",
         "name": "microdrop_utils.dramatiq_controller_base",
-        "message": "SSH Control View Model: Received message: An unexpected "
-        "error occurred: timed out from topic: "
-        "ssh_service/error/ssh_key_upload_error Failed to execute "
-        "due to error: Error executing "
-        "'_on_ssh_key_upload_error_triggered': \n"
-        "Arguments: ((TimestampedMessage('An unexpected error "
-        "occurred: timed out', timestamp=<timestamp>),), {})\n"
-        " Traceback (most recent call last):\n"
+        "message": "SSHControlViewModel._on_ssh_key_upload_error_triggered "
+        "failed on topic ssh_service/error/ssh_key_upload_error",
+        "traceback": "Traceback (most recent call last):\n"
         '  File "src/microdrop_utils/dramatiq_controller_base.py", '
-        "line 256, in invoke_class_method\n"
+        "line 273, in invoke_class_method\n"
         "    class_method(*args, **kwargs)\n"
         "    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n"
         '  File "src/ssh_controls_ui/view_model.py", line 168, in '
@@ -205,6 +200,5 @@ SAMPLE_LOG_RECORDS = (
         "from None\n"
         "json.decoder.JSONDecodeError: Expecting value: line 1 "
         "column 1 (char 0)",
-        "traceback": "",
     },
 )
