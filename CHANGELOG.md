@@ -1,3 +1,99 @@
+## [v1.56.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.56.0) (2026-11-27)
+
+### Feat
+
+- **protocol**: bound Voltage/Frequency cells by the device range ([`d836446`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d8364460ededc6984fa8f38bb44a9062d5154f67))
+- **backends**: publish protocol ranges from OpenDrop and the mock ([`64fddc9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/64fddc9d5a6f84d0e76065e8bf3c9fc1e9f3309b))
+- **portable**: publish the portable's protocol setpoint range ([`bd3a47e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bd3a47ecd1786f154947dd5064675d1d62288a25))
+- **dropbot**: publish the protocol voltage/frequency range ([`6f4f1e4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6f4f1e4a17a76aee1d815c39b92d3c7219e84849))
+- **notifications**: title traits errors by exception ([`abaffcb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/abaffcba815e45f608ed8bb1aef0cfea1d490d89))
+- **image-viewer**: report no experiments to prune in a card ([`a4f9c35`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a4f9c3526f1a59f0cadd854735be8831679ed29d))
+- **image_viewer**: prune experiments in background ([`3b69376`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3b6937678cc315c3c435a655fc9776fbe26ea5c3))
+
+### Fix
+
+- **protocol**: treat typing in a clamped cell as an edit ([`ff11f57`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ff11f57fa4e42522a5e85f595c9d95ccb8094568))
+- **preflight**: check setpoints against the device range ([`37e0f70`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/37e0f70ba37ed1e7fe10c3dbc4c2794aaf968738))
+- **protocol**: keep an out-of-range cell value on an unedited commit ([`5782d25`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5782d256e33ead23461685665337a6664f8f3678))
+- **protocol**: clamp new steps' Voltage/Frequency into the device range ([`d8a68cf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d8a68cf5c105f51d323b25ccc6204c4966025f05))
+- **demos**: stop Redis only after the Pis shut down ([`8494b31`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8494b3148ffea1e98bedc93b5bf99d58b37832f7))
+- **demos**: clean the Pi worktree before applying edits ([`70eec87`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/70eec879fd885122ef237a6ad28f2670c13966ff))
+- **examples**: exit 1 when a headless backend fails to start ([`6e67438`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6e67438115f684781aa48446b48697063a5a07e1))
+- **examples**: exit when a headless backend fails to start ([`e01c17f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e01c17f38873d41f988f7530ddb9823ca13353a7))
+- **examples**: keep a headless backend's plugins running ([`c6a4709`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c6a47095251e90bd31ca84f62d2dd2de0f7c8f4e))
+- **status-controls**: resync realtime icon on every backend echo ([`2b5bfe5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2b5bfe5de9601df26d175a8bb4a09f892dadac8f))
+- **controllers**: publish realtime off when the board refuses it ([`e49e8dd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e49e8dde29809be6ddaeb0117d7179b19fa3413e))
+- **controllers**: log handler failures once, in invoke_class_method ([`82c08cd`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/82c08cd2c79f9ae947b30553772dada72fd41e96))
+- **notifications**: keep the card when an exception's str fails ([`99a58b8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/99a58b8cf125e50c89964dc9852bef22cfc0ab35))
+- **dramatiq**: log a handler failure once, with its topic ([`336a68c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/336a68c7f3cf8dd58d4b8d863579fa429f0a3049))
+- **notifications**: read the exception line off the exception ([`b100001`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b100001cd0fef5e90735bf8498edb19d51079de6))
+- **dramatiq**: log handler failures with traceback ([`a051779`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a05177999d354ada504eea1b52bcf8e7885d1048))
+- **image_viewer**: report every prune outcome ([`a4f9bb9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a4f9bb9eee2ed634772b0fbd0c64c78f4b9df427))
+- **protocol-tree**: repair run-logging manual test demo ([`53d19d0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/53d19d0e3db79bd07dae8702c7e57f8be34d3271))
+- **protocol-tree**: list area and thickness in demo columns ([`5c452c0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5c452c03e66d43da7a23863514d9656763f18023))
+- **protocol-tree**: log force in mN/m via force_for_step ([`6c64c01`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6c64c010760cd1da789a2bb2056e8af900c0f1dc))
+- **image-viewer**: keep experiments whose read failed ([`b57882d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b57882dbb1c704790e1b881b0572bd32df796099))
+- **image_viewer**: stop saving empty plotted experiments ([`6801053`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6801053e1a4b59934d2cfcdca5dd9e03d159ef3e))
+- **device-viewer**: show Stop Recording tooltip while recording ([`9740ac1`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9740ac13a385c52fdc92f0f8a913beb10d8b9279))
+- **device-viewer**: fix device lock tooltip grammar ([`8e8ce75`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8e8ce75adb53f8d7f2270702fccdbd1094514a43))
+- **device-viewer**: point endpoint warnings at Align Camera ([`802252c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/802252cbc6ba934d1d79b139ef3317c0310fdad0))
+- **dropbot-controller**: set realtime mode after the board applies it ([`8a50a43`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/8a50a431de36b179ead85acc6d4e38ec48abe7bb))
+- **status**: stop writing the realtime key from status models ([`9697d01`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/9697d01192c48d737ca3cfa33791085bbac32e09))
+- **backends**: end realtime mode on DropBot and OpenDrop disconnect ([`4fd854d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4fd854dc1352eb8613413ef8c2ef98b1ae53ce27))
+- **backends**: make the backend the realtime key's writer ([`8735813`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/873581335b4244bf8d38006f8c92de8dd6bd702b))
+- **status**: stop resetting realtime key on build ([`e09509a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/e09509a25e88b3306e66c571b29d717d618d5196))
+
+### Refactor
+
+- **backends**: write the default protocol range as a list ([`955c7a3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/955c7a34288b0815e1d1cd84a454ef0b926162cc))
+- **dropbot**: write the protocol range from the limit observer ([`d2083a7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d2083a76c323860e1de3aeae6855e75ff00e4341))
+- **protocol**: share one guard for remembering the last setpoint ([`47857d5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/47857d52765a602fa3d327fca0f6c8f591054fa9))
+- **dropbot**: write the protocol range from the hardware maxima ([`5044ad2`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5044ad204c0f4462758699ba7f9fb77b6a4209b4))
+- **protocol**: one default range constant per quantity ([`a050165`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a050165c5c6f54e4c1ceb6d2ecbcaee9fd813ae2))
+- **demos**: make the Pi launcher and pixi paths options ([`fe60a10`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fe60a10ba3d7020dfd5aef4a18e66b47f7524c09))
+- **demos**: drop personal defaults and harden shutdown ([`74995e5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/74995e5a5bbaa75ae55ba0ac154e4f08a16f1918))
+- ruff-format test_protocol_set_handlers.py ([`cf57e37`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cf57e378145d010f2280500dbb6f59974e7d0990))
+- ruff-format dropbot_states_setting_mixin_service.py ([`668ca3e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/668ca3e9887260aa0442a23035bb012b5d2c84bf))
+- **device-viewer**: record tooltip via method, fix docstring ([`14d6634`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/14d66348cc32bcc76c682bce6178ab256f1df9cc))
+- ruff-format opendrop_controller/plugin.py ([`56ef024`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/56ef02498e4a87c0681d65a61fd8e3590b956ebc))
+- ruff-format opendrop_controller/opendrop_controller_base.py ([`bc16484`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bc164842f40e9c06d73d0743985073dff5899cad))
+- ruff-format mock_dropbot_controller/plugin.py ([`2415e8b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2415e8b4a2a0a8137b187097e1c24e2e58a6c6b7))
+- ruff-format dropbot_controller/plugin.py ([`3971695`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3971695f6f1ad9b4bfff46380292c7cd72417cad))
+- ruff-format dropbot_controller/services/dropbot_states_setting_mixin_service.py ([`bbc2853`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/bbc28539298102533ace600df24f406779bd97d0))
+
+### Docs
+
+- **messages**: note the pre-flight reads the device range ([`5534ccc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5534ccc38603fad4635514d36a4ccb5726083e13))
+- **messages**: update the protocol device-range flow ([`3af4d0b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3af4d0b43fda6f416f019d099bcff9d1c1b1043e))
+- **portable**: document all re-exported DropBot contracts at once ([`c9ec4ec`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/c9ec4ecc6595da85436169e802500db040e994f3))
+- **messages**: document the protocol device-range keys ([`367d36a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/367d36a7502a2d91fe416186d135ffc72c08af70))
+- describe background Prune Experiments ([`678a72e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/678a72e73fd68716a4744a941acde6280d7637cd))
+- **protocol-tree**: update force column label and sample values ([`5896640`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/589664018ffb61699efd26c9ac9992c47d7a57ff))
+- **device-viewer**: update camera tutorial UI texts ([`6cdd76a`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/6cdd76a1932a263943b847c61e8f5b9d97e9e1af))
+- describe the backend-owned realtime key ([`7b7ee46`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7b7ee464cb94fa278902ed20a3ea3eb27c8c606b))
+
+### Test
+
+- **controllers**: expect realtime off, never on, after a refusal ([`ae3b1cc`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/ae3b1ccfed3202ee86fa5ea585df6f76f896f6a0))
+- **device-viewer**: expect handler failures via logger.exception ([`af6f624`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/af6f6249f38eb1407e3e1af18ea97ae9e7c1a266))
+- **image_viewer**: cover prune failures and skips ([`39e8c2f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/39e8c2f1d9cddc10514d58b8bed4a57f2fe8b7e5))
+- **image_viewer**: run prune job inline in tests ([`af8dc7f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/af8dc7f73e64e4e46ea339db1bf4d0d2a86feb87))
+- **protocol-tree**: drop duplicated force check ([`305a09e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/305a09e4c28252f55f61fce497510daf8a517df6))
+- **protocol-tree**: check logged force against force_for_step ([`2b91d30`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2b91d30a97c117df6e2ef0fda361695f6a6ddc57))
+- **image-viewer**: cover which plotted experiments are kept ([`1871e2e`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1871e2ee6207585f8895d20906cacfdc48b6cd84))
+- cover the realtime key's single backend writer ([`f57b3a4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f57b3a46fc2de9fc4ac020eb93023e18c53aaea3))
+
+### Style
+
+- make two backend controller bases ruff-clean ([`1180ea7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/1180ea75d5a6ecdbbafbac6f592ba2fba24f98a3))
+
+### Chore
+
+- ruff-clean the voltage/frequency column tests ([`cf7ac89`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cf7ac89a0f8bb6aaa35f4f92b1f43a52dedc8033))
+- ruff-clean files the device-range change touches ([`b1e1304`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/b1e1304878e5b13ed4a8d49a1cb3b074a16adbb6))
+- **demos**: drive portables from a laptop GUI ([`cc745a8`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cc745a8d0bd6ea9adac706a14e43af1cb65d3912))
+- **demos**: show the new handler-failure log in the sample ([`21581b0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/21581b0db8d6c104e97dcbacf088817ea2df735a))
+
 ## [v1.55.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.55.0) (2026-11-27)
 
 ### Feat
