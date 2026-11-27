@@ -19,6 +19,13 @@ from redis.exceptions import RedisError
 from envisage.api import ExtensionPoint, Plugin
 from traits.api import Dict, Instance, List, Str, observe, on_trait_change
 
+# Microdrop package imports.
+from notifications.consts import (
+    LOG_RECORDED_EXTRA,
+    SEVERITY_WARNING,
+    notification_publisher,
+)
+
 # Microdrop utils imports.
 from microdrop_utils.broker_server_helpers import remove_middleware_from_dramatiq_broker
 from microdrop_utils.dramatiq_pub_sub_helpers import (
@@ -27,6 +34,8 @@ from microdrop_utils.dramatiq_pub_sub_helpers import (
 )
 from microdrop_utils.session_heartbeat import (
     SessionHeartbeat,
+    session_owner,
+    sibling_queues_sharing_actors,
     sweep_dead_listener_queues,
 )
 
@@ -117,6 +126,60 @@ class MessageRouterPlugin(Plugin):
         logger.info(f"router listener queue {self.listener_queue} dropped")
 
         self.heartbeat.stop()
+
+    @observe("application:started")
+    def _warn_if_another_instance_shares_redis(self, event):
+        """Warn when a live sibling session plays this process's role.
+
+        Checked once every plugin has started, so the notifications
+        listener exists to show the warning. A sibling subscribing the same
+        listener actors receives the same requests and signals as this
+        process, and competes with it for the DropBot.
+        """
+        own_actor_names = {
+            actor_name
+            for actor_topics_routes in self.actor_topic_routing
+            for actor_name in actor_topics_routes
+        }
+
+        try:
+            shared = sibling_queues_sharing_actors(
+                self.router_actor.message_router_data.topic_subscriber_map,
+                own_queue=self.listener_queue,
+                own_actor_names=own_actor_names,
+            )
+            client = dramatiq.get_broker().client
+            owners = [session_owner(client, queue) for queue in sorted(shared)]
+        except RedisError:
+            logger.exception("check for another MicroDrop instance failed")
+
+            return
+
+        # An expired heartbeat is a crashed session, not a running one.
+        owners = [owner for owner in owners if owner is not None]
+
+        if not owners:
+            return
+
+        detail = (
+            f"Another MicroDrop instance ({', '.join(owners)}, as host:PID) is "
+            f"connected to the same Redis server. Both receive the same "
+            f"requests and signals and compete for the DropBot, so commands "
+            f"such as a self-test Cancel can reach the wrong instance. Close "
+            f"one of them."
+        )
+        logger.warning(detail, extra=LOG_RECORDED_EXTRA)
+
+        notification_publisher.publish(
+            {
+                "title": "Another MicroDrop instance is running",
+                "detail": detail,
+                "severity": SEVERITY_WARNING,
+                "category": "hardware",
+                "source": PKG,
+                "needs_attention": True,
+            }
+        )
 
     def _update_router_subscriptions(self, added, removed):
         """Apply contribution deltas to the router's topic->subscriber map.
