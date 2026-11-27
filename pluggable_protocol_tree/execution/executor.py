@@ -620,7 +620,7 @@ class ProtocolExecutor(HasTraits):
                         f"they would race for the mailbox."
                     )
                 bucket[topic] = col.model.col_id
-                step_ctx.open_mailbox(topic)
+                step_ctx.open_mailbox(topic, col.model.col_name)
         return step_ctx
 
     # Protocol-level hooks take (ctx); per-step hooks take (row, ctx).
