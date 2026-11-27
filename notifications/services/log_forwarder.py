@@ -93,8 +93,20 @@ def snapshot_record(record):
     if record.stack_info:
         traceback_text = f"{traceback_text}\n{record.stack_info}".strip()
 
+    exception = record.exc_info[1] if record.exc_info else None
+
     # The exception's own line tells apart errors logged from one call site.
-    exception_line = traceback_text.strip().rsplit("\n", 1)[-1]
+    # Read off the exception itself where there is one: a traceback can end
+    # in a multi-line message's last line, in notes or in the stack.
+    if exception is None:
+        exception_line = traceback_text.strip().rsplit("\n", 1)[-1]
+
+    else:
+        first_line = str(exception).strip().partition("\n")[0]
+        exception_line = type(exception).__name__
+
+        if first_line:
+            exception_line = f"{exception_line}: {first_line}"
 
     return {
         "name": name,

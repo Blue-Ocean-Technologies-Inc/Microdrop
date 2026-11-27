@@ -172,13 +172,13 @@ def test_an_exception_shows_its_traceback_and_keys_on_its_last_line(forwarding):
     assert entry.monospace_detail
 
 
-def test_a_traits_handler_failure_is_titled_by_its_exception(forwarding):
-    center, source, timer = forwarding
+def log_traits_handler_failure(source, error):
+    """Log ``error`` on the traits logger as Traits does, with the exception."""
 
     try:
-        raise TypeError("unsupported operand")
+        raise error
 
-    except TypeError:
+    except Exception:
         record = source.makeRecord(
             "traits",
             logging.ERROR,
@@ -190,6 +190,12 @@ def test_a_traits_handler_failure_is_titled_by_its_exception(forwarding):
         )
 
     source.handle(record)
+
+
+def test_a_traits_handler_failure_is_titled_by_its_exception(forwarding):
+    center, source, timer = forwarding
+
+    log_traits_handler_failure(source, TypeError("unsupported operand"))
     timer.run_all()
 
     entry = center.entries[0]
@@ -197,6 +203,35 @@ def test_a_traits_handler_failure_is_titled_by_its_exception(forwarding):
     assert entry.title == "TypeError: unsupported operand"
     assert entry.detail.startswith("Exception occurred in traits notification")
     assert entry.monospace_detail
+
+
+def test_a_multi_line_exception_is_titled_by_its_first_line(forwarding):
+    center, source, timer = forwarding
+    error = ValueError(
+        "1 validation error for StepModel\n"
+        "voltage\n"
+        "  Input should be a valid integer\n"
+        "    For further information visit https://errors.pydantic.dev/2/v/int"
+    )
+
+    log_traits_handler_failure(source, error)
+    timer.run_all()
+
+    assert center.entries[0].title == "ValueError: 1 validation error for StepModel"
+
+
+def test_an_exception_note_does_not_become_the_title(forwarding):
+    center, source, timer = forwarding
+    error = TypeError("unsupported operand")
+    error.add_note("while applying the step")
+
+    log_traits_handler_failure(source, error)
+    timer.run_all()
+
+    entry = center.entries[0]
+
+    assert entry.title == "TypeError: unsupported operand"
+    assert "while applying the step" in entry.detail
 
 
 def test_colour_codes_from_the_console_formatter_are_stripped(forwarding):
