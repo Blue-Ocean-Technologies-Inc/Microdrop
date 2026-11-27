@@ -181,10 +181,20 @@ class DropbotStatesSettingMixinService(RealtimeModeMixin):
                 if message == "True":
                     # Only once the board has applied it: a failed update
                     # must not leave the key reading True over a dead HV.
-                    self.proxy.update_state(
-                        hv_output_selected=True,
-                        hv_output_enabled=True,
-                    )
+                    try:
+                        self.proxy.update_state(
+                            hv_output_selected=True,
+                            hv_output_enabled=True,
+                        )
+
+                    except Exception:
+                        # Publish off so a pane that flipped its toggle on
+                        # optimistically reverts; the outer handler logs.
+                        self.realtime_mode = False
+                        publish_message(topic=REALTIME_MODE_UPDATED, message="False")
+
+                        raise
+
                     self.realtime_mode = True
                     publish_message(topic=REALTIME_MODE_UPDATED, message="True")
                 else:

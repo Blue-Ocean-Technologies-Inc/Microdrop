@@ -73,6 +73,11 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
             logger.info(f"Portable Dropbot realtime mode on; HV enable --> {outcome}")
             return
 
+        # Publish off so a pane that flipped its toggle on optimistically
+        # reverts; True is never written or published.
+        self.realtime_mode = False
+        self._publish_realtime_mode()
+
         # A raised failure has already been reported by _proxy_call.
         if ok:
             self._publish_error("HV enable", outcome)

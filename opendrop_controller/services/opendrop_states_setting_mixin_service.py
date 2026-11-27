@@ -37,6 +37,11 @@ class OpenDropStatesSettingMixinService(HasTraits):
             if self._push_state_to_device(force=True) is None:
                 logger.warning("OpenDrop realtime mode stays off: no state reply")
 
+                # Publish off so a pane that flipped its toggle on
+                # optimistically reverts.
+                self.realtime_mode = False
+                self._publish_realtime_mode()
+
                 return
 
             self.realtime_mode = True
