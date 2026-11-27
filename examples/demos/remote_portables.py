@@ -27,7 +27,8 @@ Stop the Microdrop app on each Pi first — it holds the board's serial port and
 its own Redis on the tunnel's port. Then, from ``microdrop-py/src``::
 
     pixi run python -m examples.demos.remote_portables \
-        [--mirror] [--identity KEY] HOST [HOST ...]
+        [--mirror] [--identity KEY] [--remote-launcher PATH] \
+        [--remote-pixi PATH] HOST [HOST ...]
 
 ``--mirror`` runs the full app on each Pi's own screen instead of the bare
 backend: every GUI follows the boards (status, capacitance, alarms, protocol
@@ -63,6 +64,7 @@ from microdrop_utils.source_update_startup import SKIP_GIT_UPDATE_ENV_VAR
 
 #: Each Pi's launcher checkout; the demo worktree sits beside its ``src``.
 REMOTE_LAUNCHER = "~/Desktop/pixi-microdrop/microdrop-py"
+REMOTE_PIXI = "~/.pixi/bin/pixi"
 REMOTE_WORKTREE = "src-remote-demo"
 
 STOP_TIMEOUT_S = 10
@@ -96,7 +98,7 @@ def sync_remote_worktrees(args):
     patch = git("diff", "--binary", "HEAD")
 
     script = (
-        f"set -e; cd {REMOTE_LAUNCHER}/src; "
+        f"set -e; cd {args.remote_launcher}/src; "
         f"git cat-file -e {commit}^{{commit}} 2>/dev/null || git fetch -q origin; "
         f"[ -d ../{REMOTE_WORKTREE} ] || "
         f"git worktree add -q --detach ../{REMOTE_WORKTREE} {commit}; "
@@ -130,13 +132,13 @@ def start_frontend():
     )
 
 
-def remote_app_command(mirror):
+def remote_app_command(args):
     """Return a Pi's half: the headless backend, or the full app on its screen.
 
     The full app finds the tunnelled Redis already listening, so it starts no
     server of its own and joins the GUI's.
     """
-    if mirror:
+    if args.mirror:
         plugins = "frontend backend"
         qt_env = "DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/$(id -u)"
 
@@ -145,9 +147,9 @@ def remote_app_command(mirror):
         qt_env = "QT_QPA_PLATFORM=offscreen"
 
     return (
-        f"cd {REMOTE_LAUNCHER}/{REMOTE_WORKTREE} && "
+        f"cd {args.remote_launcher}/{REMOTE_WORKTREE} && "
         f"{SKIP_GIT_UPDATE_ENV_VAR}=1 {qt_env} "
-        "exec ~/.pixi/bin/pixi run --manifest-path ../pyproject.toml python -m "
+        f"exec {args.remote_pixi} run --manifest-path ../pyproject.toml python -m "
         f"examples.run_device_viewer_pluggable --device portable --plugins {plugins}"
     )
 
@@ -159,7 +161,7 @@ def start_remote_app(args, host):
     command = ssh_command(
         args,
         host,
-        remote_app_command(args.mirror),
+        remote_app_command(args),
         "-tt",
         "-o",
         "ExitOnForwardFailure=yes",
@@ -268,6 +270,16 @@ def main():
         type=Path,
         default=None,
         help="ssh key to pass with -i, when the ssh config does not supply one",
+    )
+    parser.add_argument(
+        "--remote-launcher",
+        default=REMOTE_LAUNCHER,
+        help="each Pi's launcher checkout (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--remote-pixi",
+        default=REMOTE_PIXI,
+        help="pixi executable on each Pi (default: %(default)s)",
     )
     parser.add_argument(
         "--mirror",
