@@ -296,6 +296,12 @@ The device viewer keeps two disabled sets on `Electrodes`; `disabled_channels` i
 - A change of the user set republishes `ELECTRODES_STATE_CHANGE` through `publish_electrode_update` (same realtime/connected/mode gating as a click), after the app_globals write, so a newly disabled actuated channel stops being driven at once and a re-enabled one resumes.
 - `DETECT_DROPLETS` — the DropBot and portable backends drop user-disabled channels (the DropBot also its `disabled_channels_mask`); an empty request means "every channel minus the disabled", and a request left empty by the filter replies `{"success": true, "detected_channels": []}` without scanning. The mock answers with its (already filtered) actuated channels.
 
+### Realtime mode: backend-owned state key (#1073)
+
+- `SET_REALTIME_MODE` (status pane toggle, T shortcut, manual controls, protocol run) → the active backend applies the mode and publishes `REALTIME_MODE_UPDATED`; status panes and the device viewer update their display from that signal.
+- `REALTIME_MODE_KEY` (app_globals, owned by `dropbot_controller`) — written only by the backend. Every backend controller (DropBot, mock, OpenDrop, portable) mixes in `RealtimeModeMixin` (`microdrop_utils/realtime_mode_mixin.py`), whose `@observe` writes the key on every assignment of `realtime_mode`, an unchanged value included. The backend plugin's `start()` assigns False, overwriting a value an earlier session left in a persistent Redis, and every disconnect sets it False. Frontend models never write it, so a pane built mid-session or a frontend-only restart cannot change it.
+- `RealtimeModeHandler` (`pluggable_protocol_tree/execution/lifecycle/realtime_mode.py`) reads the key at run start: off → `SET_REALTIME_MODE True` for the run and `False` after it; on → keep or turn off afterwards, by prompt or preference.
+
 ### Backend → Microdrop task: shorts detected
 
 One topic carries both the spontaneous hardware shorts signal and the answer to an explicit user check, so the payload has to say which one it is: an empty channel list means "no shorts", and only the publisher knows whether the user is waiting to hear that.
