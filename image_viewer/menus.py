@@ -8,19 +8,17 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
+from functools import partial
+
 # Enthought library imports.
 from pyface.action.api import Action
 from pyface.action.schema.api import SGroup
-from traits.api import Str
+from traits.api import Instance, Str, observe
 
 # Microdrop package imports.
-from microdrop_application.dialogs.pyface_wrapper import (
-    YES,
-    confirm,
-    error,
-    information,
-)
-from notifications.consts import LOG_RECORDED_EXTRA
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
+from notifications.consts import notification_publisher
 
 # Microdrop utils imports.
 from microdrop_utils.environment_update_dialog import (
@@ -33,10 +31,11 @@ from .ai_install import install_ai_support
 from .analysis.roi_model import roi_analysis_model
 from .analysis.sam_detect import sam_available
 from .consts import PRUNE_EXPERIMENTS_DESCRIPTION, TRASH_FEATURE, TRASH_PACKAGE
-from .discovery import (
-    TrashUnavailableError,
-    prunable_experiments,
-    prune_experiments,
+from .discovery import prunable_experiments
+from .prune_job import (
+    PruneExperimentsJob,
+    nothing_to_prune_card,
+    prune_experiments_job,
 )
 from .view import show_image_viewer_shortcuts
 
@@ -72,19 +71,21 @@ class PruneExperimentsAction(Action):
     tooltip = PRUNE_EXPERIMENTS_DESCRIPTION
     description = PRUNE_EXPERIMENTS_DESCRIPTION
 
+    #: Moves the confirmed folders to the trash off the GUI thread.
+    job = Instance(PruneExperimentsJob)
+
+    @observe("job.running")
+    def _disable_while_pruning(self, event):
+        """Grey the action out while a prune runs, so no second one starts."""
+        self.enabled = not self.job.running
+
     def perform(self, event):
         # The viewer's discovery poll drops the pruned folders from its
         # Experiments list on its next rescan; nothing to refresh here.
         targets = prunable_experiments()
 
         if not targets:
-            information(
-                None,
-                "No experiments to prune: every experiment folder holds "
-                "captures or other data.",
-                title="Prune Experiments",
-                cancel=False,
-            )
+            notification_publisher.publish(nothing_to_prune_card())
 
             return
 
@@ -103,42 +104,27 @@ class PruneExperimentsAction(Action):
         self._prune(targets, event)
 
     def _prune(self, targets, event, retry=True):
-        """Move the confirmed ``targets`` to the trash and say how many went.
-        Without send2trash, offer the environment update and, when it makes
-        the package available, try once more."""
-        try:
-            removed = prune_experiments(targets)
-        except TrashUnavailableError:
-            window = getattr(getattr(event, "task", None), "window", None)
-            application = getattr(window, "application", None)
-
-            if not retry:
-                report_package_still_missing(TRASH_PACKAGE)
-            elif offer_environment_update(
-                TRASH_FEATURE, TRASH_PACKAGE, application=application
-            ):
-                self._prune(targets, event, retry=False)
-
-            return
-        except OSError as e:
-            logger.exception(
-                f"Failed to prune experiments: {e}", extra=LOG_RECORDED_EXTRA
-            )
-            error(
-                None,
-                f"Pruning stopped, could not move an experiment folder to the "
-                f"trash: {e}",
-                title="Prune Experiments",
-            )
-
-            return
-
-        information(
-            None,
-            f"Moved {len(removed)} experiment folder(s) to the trash.",
-            title="Prune Experiments",
-            cancel=False,
+        """Move the confirmed ``targets`` to the trash in the background; a
+        notification card reports how it went. Without send2trash, offer the
+        environment update and, when it makes the package available, try
+        once more."""
+        self.job.start(
+            targets, partial(self._offer_trash_update, targets, event, retry)
         )
+
+    def _offer_trash_update(self, targets, event, retry):
+        """Offer the environment update send2trash needs, then prune again
+        if it makes the package available; on a retry, say it is still
+        missing."""
+        window = getattr(getattr(event, "task", None), "window", None)
+        application = getattr(window, "application", None)
+
+        if not retry:
+            report_package_still_missing(TRASH_PACKAGE)
+        elif offer_environment_update(
+            TRASH_FEATURE, TRASH_PACKAGE, application=application
+        ):
+            self._prune(targets, event, retry=False)
 
 
 def help_menu_factory():
@@ -153,4 +139,7 @@ def help_menu_factory():
 
 def prune_menu_factory():
     """File-menu group: bulk removal of experiments holding only logs."""
-    return SGroup(PruneExperimentsAction(), id="image_viewer_prune_actions")
+    return SGroup(
+        PruneExperimentsAction(job=prune_experiments_job),
+        id="image_viewer_prune_actions",
+    )
