@@ -8,21 +8,28 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from envisage.plugin import Plugin
 from traits.api import List
 
+# Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
-from logger.logger_service import get_logger
 
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name, DROPBOT_CONNECTED, CHIP_INSERTED
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# Local imports.
+from .consts import ACTOR_TOPIC_DICT, CHIP_INSERTED, DROPBOT_CONNECTED, PKG, PKG_name
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 
 class MockDropbotControllerPlugin(Plugin):
-    id = PKG + '.plugin'
-    name = f'{PKG_name} Plugin'
+    id = PKG + ".plugin"
+    name = f"{PKG_name} Plugin"
 
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
@@ -37,9 +44,11 @@ class MockDropbotControllerPlugin(Plugin):
         publish_message(topic=CHIP_INSERTED, message="True")
         self.mock_controller.chip_inserted = True
 
-        logger.info("MockDropbotControllerPlugin started — mock device connected with chip")
+        logger.info(
+            "MockDropbotControllerPlugin started — mock device connected with chip"
+        )
 
     def stop(self):
-        if hasattr(self, 'mock_controller'):
+        if hasattr(self, "mock_controller"):
             self.mock_controller.cleanup()
             logger.info("MockDropbotControllerPlugin stopped")
