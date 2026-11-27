@@ -175,10 +175,10 @@ class ProtocolStatusController(HasTraits):
         self.model.resume(self.clock())
 
     def _on_ack_wait_started(self, event):
-        self.model.enter_ack_wait(self.clock())
+        self.model.enter_ack_wait(self.clock(), event.new)
 
     def _on_ack_wait_finished(self, event):
-        self.model.exit_ack_wait(self.clock())
+        self.model.exit_ack_wait(self.clock(), event.new)
 
     def _on_repetition_finished(self, event):
         completed, total = event.new

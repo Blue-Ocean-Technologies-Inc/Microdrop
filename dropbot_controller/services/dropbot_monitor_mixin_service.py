@@ -21,7 +21,7 @@ from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPP
 from apscheduler.triggers.interval import IntervalTrigger
 
 # Enthought library imports.
-from traits.api import Bool, HasTraits, Instance, Str, provides
+from traits.api import Bool, HasTraits, Instance, Str, observe, provides
 
 # Microdrop package imports.
 from notifications.consts import LOG_RECORDED_EXTRA
@@ -36,14 +36,18 @@ from microdrop_utils.hardware_device_monitoring_helpers import (
 
 # Local imports.
 from ..consts import (
+    DROPBOT_CHIP_INSERTED_KEY,
     DROPBOT_CONNECTED,
     DROPBOT_DB3_120_HWID,
     DROPBOT_ERROR,
+    DROPBOT_NO_POWER_KEY,
     NO_DROPBOT_AVAILABLE,
     NO_POWER,
+    hardware_limits_updated_publisher,
 )
 from ..dropbot_controller_base import describe_proxy
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
+from .dropbot_state_mirror import clear_dropbot_state, mirror_dropbot_state
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -109,6 +113,12 @@ class DropbotMonitorMixinService(HasTraits):
         False
     )  # Track if we've shown the error for current disconnection
     _no_power = Bool(False)
+
+    @observe("_no_power")
+    def _mirror_no_power_to_app_globals(self, event):
+        """Mirror the no-power flag to app_globals, as the connection state
+        is: a reader the ``NO_POWER`` signal wakes sees it set."""
+        mirror_dropbot_state({DROPBOT_NO_POWER_KEY: event.new})
 
     ############################ Methods to Expose #############################
 
@@ -201,6 +211,9 @@ class DropbotMonitorMixinService(HasTraits):
         self._shutdown_monitor_scheduler()
         super().cleanup()
 
+        # A clean stop leaves no state for the next session to misread.
+        clear_dropbot_state()
+
     def _shutdown_monitor_scheduler(self):
         """Idempotent scheduler shutdown, shared by cleanup and the
         atexit backstop."""
@@ -287,6 +300,16 @@ class DropbotMonitorMixinService(HasTraits):
         except Exception as e:
             logger.warning(f"Could not read hardware limits from proxy config: {e}")
 
+            return
+
+        # The preferences' observer has written the maxima to app_globals.
+        hardware_limits_updated_publisher.publish(
+            {
+                "max_voltage": self.preferences._hardware_max_voltage,
+                "max_frequency": self.preferences._hardware_max_frequency,
+            }
+        )
+
     ############################ Protected methods #############################
     def _on_dropbot_port_found(self, event):
         """
@@ -315,6 +338,10 @@ class DropbotMonitorMixinService(HasTraits):
         - No power to DropBot - power supply not connected
         """
         self._no_power = False  # Reset no power state when device is found
+
+        # A chip read on a previous connection is stale until this one's
+        # setup reads it again.
+        mirror_dropbot_state({DROPBOT_CHIP_INSERTED_KEY: None})
 
         if self.proxy is None or getattr(self.proxy, "monitor", None) is None:
             ################# Attempt to make a proxy object ##################
@@ -352,8 +379,9 @@ class DropbotMonitorMixinService(HasTraits):
                 logger.critical(
                     "DropBot has no power.", exc_info=True, extra=LOG_RECORDED_EXTRA
                 )
-                publish_message(topic=NO_POWER, message=str(e))
+                # Set (and so mirrored) before the signal a reader wakes on.
                 self._no_power = True
+                publish_message(topic=NO_POWER, message=str(e))
 
             except Exception as e:
                 # This is for any other unexpected error during the connection process.

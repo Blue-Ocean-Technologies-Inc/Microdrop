@@ -1,3 +1,69 @@
+## [v1.55.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.55.0) (2026-11-27)
+
+### Feat
+
+- **message_router**: warn when another instance shares Redis ([`cc6042b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cc6042b06f3959a708d5f1583fd8abb97aa1d9bd))
+- **preflight**: show the ack a run waits on, with a countdown ([`4d1076f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4d1076fb2b870e47fe7cebb32744f7831bd6087a))
+- **execution**: carry the column and timeout of ack waits ([`4fc557b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4fc557b7e7d77d829aa4daea4b2adc6eb7168e93))
+- **device_viewer**: count zone edits as unsaved device changes ([`7cf84c7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7cf84c713c7578129297b505f61f0790e87e66d9))
+- **status-bar**: add a run-progress line along the top edge ([`204a7c9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/204a7c94ee238b129edf453558e63ca2a34f4702))
+- **device-viewer**: show canvas hints in a pill over the canvas ([`88c6f7d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/88c6f7d937255d124e58e48a746150d083801b05))
+- **self-tests**: warn of a disconnected DropBot in the drawer ([`910623c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/910623ca732f99490c963f8f3229ecb7ac54882c))
+
+### Fix
+
+- **self-tests**: end cleanly when no DropBot is connected ([`529bdeb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/529bdeb79813b11236413fe4c9fb0859388adad6))
+- **self-tests**: honour a cancel in the report and the dialog ([`d6422c0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d6422c0da4d50763036c6de01323e908d913895f))
+- **self-tests**: open the report browser out of process on Windows ([`07cc010`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/07cc010d4e808a2f6caf5490f3e897e06454e0c3))
+- **pluggable_protocol_tree**: forward compound pre-flight checks ([`aef1bec`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/aef1bec69eb3c159c542f1f6c51645002480b017))
+
+### Refactor
+
+- **status-bar**: drop the unused centre message API ([`4e3b09b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4e3b09b943ae9b62fc5416103689d2a2e5d28f3a))
+
+## [v1.54.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.54.0) (2026-11-27)
+
+### Feat
+
+- **device-viewer**: device chip in the status bar ([`f9ae2f3`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f9ae2f3680f0368cd88cdb82236af12b8e850b02))
+- **protocol-tree**: tinted pre-flight pill with paused state ([`f4136ef`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f4136ef82602d201aba48db351046f56fd5c09bd))
+- **protocol-tree**: step navigator and protocol chip in the status bar ([`58c3d00`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/58c3d00f11f15f6a6873904a53dc67d42e28dceb))
+- **utils**: shared status chip widget ([`80369c5`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/80369c5f8254b7dbc15915b6f909795e127e08d1))
+- **examples**: pre-flight check demo ([`4b9a45b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4b9a45bf8eed76096abc9600ae5cfd04dd42bd80))
+- **dropbot-protocol**: DropBot pre-flight checks ([`5730f4b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5730f4b9d3d8afa165f8237f8af827a4c339d0a8))
+- **protocol-tree**: gate runs on the pre-flight check ([`9448110`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/94481109e986ee4d3e5577453888a3c4092bf813))
+- **protocol-tree**: preflight_checks column hook and preferences ([`83d06ac`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/83d06accbe5b57c30ac96080a901f358f71b9cb3))
+- **protocol-tree**: pre-flight pill, card and settings views ([`3fccf45`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/3fccf458c9697020f4bb14029b1f06caef85f95b))
+- **protocol-tree**: pre-flight models, checks and controller ([`0169fcb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0169fcb76efe33ed4a30c68d9ffd2207d08f9b2f))
+- **preferences**: open the preferences dialog on a given pane ([`5dbc23d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/5dbc23d3660407d7354e0a46bcb9092c4544fd2d))
+- **status-bar**: left-side slot for contributed widgets ([`86f0ecf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/86f0ecfd8e2906890a19a43eaa8374e0fbaa4e04))
+
+### Fix
+
+- **protocol-tree**: compact ack-wait face and rows that fit the card ([`4584beb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4584beb3984b9c2f6f57b49d6f9bf411c534db70))
+- **mock-dropbot**: mirror DropBot state keys like the real backend ([`0e335f9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/0e335f9db2c74a504533e32c7d3130a0a837def5))
+- **dropbot**: keep connection, chip and power state current in app_globals ([`2e71a09`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/2e71a094075cdf40be85dc6e5842e89a535959ce))
+- **device-viewer**: show every alpha table row ([`f0b162d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/f0b162d4a6e72629f2a947bceceb09ee80ac7c73))
+- **device-viewer**: keep the sidebar at its preferred width ([`912f3a4`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/912f3a4d0789f9aca2ee417b567853a6bb62ed13))
+- **portable**: apply protocol step voltage and frequency ([`8314462`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/83144622e502a5b18fc6e8162fbcffedd798f829))
+- **portable**: reject HV setpoints outside the supply bounds ([`40f6a5c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/40f6a5c105cc7496b52cc3003c3e02ddd057ddc7))
+- **portable**: raise the voltage floor to 40 V ([`fbee539`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/fbee53927a3f468b787dbe840ace96b0245f1eb7))
+
+### Refactor
+
+- **examples**: pre-flight demo uses the real status-bar widgets ([`4d40de0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4d40de02b3e015770015f19eccade78a93ca59b8))
+- **status-bar**: left-slot priority and grouped widgets ([`7f3fa62`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7f3fa627e96c4cda5e52b0a8af51960893be2403))
+- **protocol-tree**: drop the unused-columns notice dialog ([`00b4277`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/00b4277fef91adc58cbea8702e0ebecf86aea0dd))
+- **style**: share drawer metrics in microdrop_style ([`284c0ca`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/284c0ca50231e5dd2c94713dc82cda1bfa2ad34b))
+
+### Docs
+
+- **messages**: document pre-flight and DropBot state topics ([`d60ddaf`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d60ddaf371489aa38d8f7b3ad998cd7a8fd0eff6))
+
+### Chore
+
+- Update Logo. ([`a124786`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/a12478691137e5c77b7c55d4c019568784823bd4))
+
 ## [v1.53.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.53.0) (2026-11-26)
 
 ### Feat

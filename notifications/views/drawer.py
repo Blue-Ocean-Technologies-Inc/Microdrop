@@ -23,6 +23,7 @@ receives, and asks to close on Esc.
 from pyface.qt import QtCore, QtGui, QtWidgets
 
 # Microdrop style imports.
+from microdrop_style.panel_metrics import DRAWER_PADDING_PX, DRAWER_RADIUS
 from microdrop_style.panel_theme import theme_palette
 
 # Local imports.
@@ -31,8 +32,6 @@ from .view_consts import (
     DRAWER_GRIP_WIDTH,
     DRAWER_OBJECT_NAME,
     DRAWER_OPACITY,
-    DRAWER_PADDING_PX,
-    DRAWER_RADIUS,
 )
 
 _ROLE = QtGui.QPalette.ColorRole

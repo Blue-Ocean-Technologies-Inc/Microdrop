@@ -73,6 +73,7 @@ from microdrop_utils.pyside_helpers import (
 from ..consts import (
     ALIGNMENT_DEVICE_RENDER_WIDTH_PX,
     AUTO_COMMIT_DEBOUNCE_MS,
+    CANVAS_HINT_NOTE_MS,
     DEVICE_VIEWER_LAYERS,
     KEYBOARD_SHORTCUT_GROUPS,
     KEYBOARD_SHORTCUTS,
@@ -80,7 +81,6 @@ from ..consts import (
     MASTER_SVG_FILE,
     PKG,
     STEP_PARAMS_COMMIT,
-    ZONE_STATUS_MESSAGE_MS,
     PKG_name,
     camera_edit_status_message_text,
     camera_place_status_message_text,
@@ -105,6 +105,7 @@ from ..controllers.zones_controller import ZonesController
 from ..default_settings import ELECTRODE_OFF, video_key
 from ..interfaces.layer_context import LayerContext
 from ..models.alpha import AlphaValue
+from ..models.canvas_hints import CanvasHints
 from ..models.connections_editor import ConnectionsEditorModel
 from ..models.deferred_sidebar_section import DeferredSidebarSection
 from ..models.electrodes import Electrodes
@@ -128,7 +129,9 @@ from ..services.svg_persistence_service import (
 )
 from ..utils.alignment_geometry import device_render_rect
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
+from .canvas_hint_pill import CanvasHintPill
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
+from .device_chip import DeviceChipController
 from .electrode_view.electrode_layer import ElectrodeLayer
 from .electrode_view.electrode_scene import ElectrodeScene
 from .sidebar.calibration import build_calibration
@@ -240,9 +243,17 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
     #: ``create_contents`` builds the sidebar they join.
     layer_host = Instance(LayerHost)
 
+    #: The hints over the canvas: the active mode's, the layers' and the
+    #: passing notes (#1211); the pill showing them, once the canvas exists.
+    canvas_hints = Instance(CanvasHints, ())
+    canvas_hint_pill = Instance(CanvasHintPill)
+
     #: Reads and writes the device SVG; the pane title follows its
     #: ``loaded_path`` and ``modified``.
     svg_persistence = Instance(SvgPersistenceService)
+
+    #: The device chip in the status bar; None until the bar exists.
+    device_chip = Instance(DeviceChipController)
 
     #: Posts the calibration reminder to the notifications drawer.
     calibration_reminder = Instance(CalibrationReminderController)
@@ -344,7 +355,9 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
             get_electrode_layer=lambda: self.current_electrode_layer,
             render_device_image=self._render_device_image,
             get_dialog_parent=lambda: self.device_view.window(),
-            statusbar_message=self._statusbar_message,
+            show_canvas_note=lambda note: self.canvas_hints.show_for(
+                note, CANVAS_HINT_NOTE_MS
+            ),
             get_camera_label=lambda: (
                 self.camera_control_widget.camera_model.selected_camera
                 if self.camera_control_widget is not None
@@ -431,28 +444,14 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
 
             self._connections_editor_ui = None
 
-    def _statusbar_message(self, message):
-        status_bar_manager = self.task.window.status_bar_manager
-        if status_bar_manager is not None:
-            status_bar_manager.message = message
-
     @observe("model:zones:move_rejected")
     def _on_zone_move_rejected(self, event):
-        """Show the note beside the mode message, not in its place: pyface
-        strings the status-bar messages together, and the note goes away
-        on its own."""
-        status_bar_manager = self.task.window.status_bar_manager
-        if status_bar_manager is None:
-            return
-        message = "Move rejected: regions must stay on the device and contiguous"
-        if message not in status_bar_manager.messages:
-            status_bar_manager.messages.append(message)
-
-        def remove_note():
-            if message in status_bar_manager.messages:
-                status_bar_manager.messages.remove(message)
-
-        QTimer.singleShot(ZONE_STATUS_MESSAGE_MS, remove_note)
+        """Show the note beside the mode's hint, not in its place; it goes
+        away on its own."""
+        self.canvas_hints.show_for(
+            "Move rejected: regions must stay on the device and contiguous",
+            CANVAS_HINT_NOTE_MS,
+        )
 
     ################################################################################################
     # ------- Device View class methods -------------------------
@@ -938,6 +937,9 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
         self._set_device_view_layout_width()
 
         self.layer_host = self._build_layer_host()
+        self.canvas_hint_pill = CanvasHintPill(
+            self.device_view.viewport(), self.canvas_hints
+        )
 
         self.reveal_button = build_reveal_button(self.scroll_area)
 
@@ -1057,7 +1059,7 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
             device_view=self.device_view,
             undo_stack=self.undo_manager.active_stack,
             preferences=self.app_preferences,
-            status_bar_manager=self.task.window.status_bar_manager,
+            status_bar_manager=self.canvas_hints,
             stepping=stepping,
         )
         layer_host = LayerHost(context=context, sidebar=self.scroll_area)
@@ -1074,21 +1076,34 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
 
         return layer_host
 
-    @observe("task:window:status_bar_manager")
-    def _share_status_bar_with_layers(self, event):
-        """The task creates the status bar after this pane; pass it on."""
-        if self.layer_host is not None:
-            self.layer_host.context.status_bar_manager = event.new
-
     def destroy(self):
         """Detach the contributed layers before the pane's widgets go."""
         if self.layer_host is not None:
             self.layer_host.remove_all()
 
+        if self.canvas_hint_pill is not None:
+            self.canvas_hint_pill.detach()
+
         if self.calibration_reminder is not None:
             self.calibration_reminder.stop()
 
+        self._withdraw_status_bar_widgets()
         super().destroy()
+
+    def _withdraw_status_bar_widgets(self):
+        """Take the recording icon and the device chip out of the status
+        bar, which deletes them."""
+        plugin = self.task.window.application.get_plugin(PKG)
+        icons = plugin.status_bar_icons if plugin is not None else []
+        recording_icon = getattr(self, "recording_icon", None)
+
+        if recording_icon is not None and recording_icon in icons:
+            icons.remove(recording_icon)
+
+        if self.device_chip is not None:
+            self.device_chip.withdraw(icons)
+
+        self.device_chip = None
 
     def _show_sidebar_context_menu(self, point):
         """Offer the sidebar layout preferences at the right-clicked point."""
@@ -1458,42 +1473,20 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
             if changed_key == video_key and self.video_item:
                 self.video_item.setOpacity(self.model.get_alpha(video_key))
 
-    @observe("model.step_label")
-    @observe("model.free_mode")
-    @observe("model.editable")
-    @observe("model.protocol_running")
-    def step_label_change(self, event):
-        _status_bar_manager = self.task.window.status_bar_manager
-
-        if _status_bar_manager:
-            if self.model.protocol_running:
-                _status = "Running Protocol"
-                if self.model.editable:
-                    _status += " (Editable)"
-                _status_bar_manager.message = f"{_status}: {self.model.step_label}"
-
-            elif self.model.step_label:
-                _status_bar_manager.message = f"Editing: {self.model.step_label}"
-
-            elif self.model.free_mode:
-                _status_bar_manager.message = "Free Mode"
-
     @observe("model:mode")
     def _mode_changed(self, event):
+        """Show a camera-alignment mode's hint on the canvas while it is
+        active."""
+        hints = {
+            "camera-place": camera_place_status_message_text,
+            "camera-edit": camera_edit_status_message_text,
+        }
 
-        _status_bar_manager = self.task.window.status_bar_manager
-        if _status_bar_manager:
-            if event.new == "camera-place":
-                _status_bar_manager.messages += [camera_place_status_message_text]
+        if event.old in hints:
+            self.canvas_hints.remove(hints[event.old])
 
-            if event.new == "camera-edit":
-                _status_bar_manager.messages += [camera_edit_status_message_text]
-
-            if event.old == "camera-place":
-                _status_bar_manager.remove(camera_place_status_message_text)
-
-            if event.old == "camera-edit":
-                _status_bar_manager.remove(camera_edit_status_message_text)
+        if event.new in hints:
+            self.canvas_hints.messages += [hints[event.new]]
 
     @observe("device_viewer_preferences:_auto_fit_margin_scale ")
     def _auto_fit_margin_scale_change(self, event):
@@ -1549,15 +1542,18 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
         self.recording_icon.status_bar_icon_priority = ICON_PRIORITY_LEFT
         self._connect_recording_icon()
 
-        # Contribute the icon; the microdrop_status_bar plugin owns its
-        # placement, spacing, and removal.
+        # Contribute the icon and the device chip; the microdrop_status_bar
+        # plugin owns their placement, spacing, and removal.
         plugin = self.task.window.application.get_plugin(PKG)
 
         if plugin is None:
             logger.warning(f"{PKG}: plugin not found; status-bar icons not shown")
             return
 
-        plugin.status_bar_icons.append(self.recording_icon)
+        self.device_chip = DeviceChipController(
+            dock_pane=self, persistence=self.svg_persistence
+        )
+        plugin.status_bar_icons.extend([self.recording_icon, self.device_chip.chip])
 
     def _connect_recording_icon(self):
         """Once both the recording icon and the camera panel exist, the

@@ -34,6 +34,8 @@ from dropbot_controller.consts import (
     CAPACITANCE_UPDATED,
     DROPBOT_CONNECTED,
     DROPBOT_DISCONNECTED,
+    DROPBOT_STATE_UPDATED,
+    HARDWARE_LIMITS_UPDATED,
     REALTIME_MODE_UPDATED,
 )
 from electrode_controller.consts import (
@@ -65,6 +67,9 @@ PROTOCOL_COLUMNS = f"{PKG}.protocol_columns"
 # Other plugins anchoring panes to this tab import the constant (the
 # sanctioned constants-only cross-import), not the category object.
 PROTOCOL_TREE_PREFERENCES_TAB_ID = "microdrop.protocol_tree.preferences"
+
+# The Protocol Settings pane's id: what opens the Settings dialog on its tab.
+PROTOCOL_TREE_PREFERENCES_PANE_ID = "microdrop.protocol_tree.preferences_pane"
 
 # File > Experiments submenu id; other plugins add experiment actions to it.
 EXPERIMENTS_MENU_ID = f"{PKG}.experiments_menu"
@@ -230,6 +235,10 @@ protocol_tree_add_step_publisher = ProtocolTreeAddStepPublisher(
 )
 
 SYNC_LISTENER_NAME = "protocol_tree_dv_sync_listener"
+
+# DropBot signals sent once the app-globals state the pre-flight checks read
+# has been written: the sync listener re-checks on them.
+PREFLIGHT_HARDWARE_TOPICS = (HARDWARE_LIMITS_UPDATED, DROPBOT_STATE_UPDATED)
 EXECUTOR_LISTENER_NAME = "pluggable_protocol_tree_executor_listener"
 LOGGING_LISTENER_NAME = "protocol_tree_logging_listener"
 
@@ -247,6 +256,7 @@ ACTOR_TOPIC_DICT = {
         PROTOCOL_TREE_ADD_STEP,
         DROPBOT_CONNECTED,
         DROPBOT_DISCONNECTED,
+        *PREFLIGHT_HARDWARE_TOPICS,
     ],
     LOGGING_LISTENER_NAME: [
         CAPACITANCE_UPDATED,

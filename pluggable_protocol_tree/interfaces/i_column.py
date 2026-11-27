@@ -142,6 +142,10 @@ class IColumnHandler(Interface):
         ProtocolContext (read ``ctx.preview_mode`` directly). Runs on the GUI
         thread — publish fire-and-forget, no ack wait. Default: no-op."""
 
+    def preflight_checks(self, context):
+        """Return this column's pre-flight checks (``ColumnCheck`` rows) of
+        the run ``context`` describes. GUI thread. Default: none."""
+
     def on_pre_protocol_start(self, ctx):
         """Once per run, before the first repetition (and before any
         on_protocol_start). For once-per-run setup that must bracket all

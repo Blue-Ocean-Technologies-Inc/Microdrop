@@ -169,6 +169,7 @@ class SvgPersistenceService(HasTraits):
     # ------------------------------------------------------- observers
     @observe("model:electrodes:svg_model:area_scale", post_init=True)
     @observe("model:electrodes:svg_model:connections_modified")
+    @observe("model:electrodes:svg_model:zone_records")
     @observe("model.electrodes.electrodes.items.channel", post_init=True)
     def _svg_data_changed(self, event):
         logger.debug(f"Svg data changed event: {event}")

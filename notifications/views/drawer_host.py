@@ -28,6 +28,9 @@ and ``build_contents()``.
 from pyface.qt import QtCore, QtWidgets
 from traits.api import Any, Bool, HasTraits, Instance, Int, List, observe
 
+# Microdrop style imports.
+from microdrop_style.panel_metrics import DRAWER_SLIDE_MS
+
 # Local imports.
 from ..models.notifications_pane_model import NotificationsPaneModel
 from .drawer import NotificationsDrawer, anchored_drawer_rect
@@ -40,7 +43,6 @@ from .view_consts import (
     DRAWER_MAX_WIDTH,
     DRAWER_MIN_HEIGHT,
     DRAWER_MIN_WIDTH,
-    DRAWER_SLIDE_MS,
     WINDOW_LEFT_IN_VIEW,
 )
 

@@ -98,7 +98,7 @@ UNUSED_COLUMN_SKIPPED_HOOKS = (
 )
 
 
-def _has_protocol_level_hooks(handler):
+def has_protocol_level_hooks(handler):
     """Return whether ``handler`` overrides any UNUSED_COLUMN_SKIPPED_HOOKS.
 
     Only such a column is worth skipping, logging, or naming to the operator;
@@ -330,9 +330,7 @@ class ProtocolExecutor(HasTraits):
             # run, so the end hooks skip exactly the columns the start hooks
             # skipped even if the protocol is edited mid-run.
             hooked_ids = {
-                column.id
-                for column in cols
-                if _has_protocol_level_hooks(column.handler)
+                column.id for column in cols if has_protocol_level_hooks(column.handler)
             }
             proto_ctx.skipped_column_ids = [
                 col_id
@@ -622,7 +620,7 @@ class ProtocolExecutor(HasTraits):
                         f"they would race for the mailbox."
                     )
                 bucket[topic] = col.model.col_id
-                step_ctx.open_mailbox(topic)
+                step_ctx.open_mailbox(topic, col.model.col_name)
         return step_ctx
 
     # Protocol-level hooks take (ctx); per-step hooks take (row, ctx).

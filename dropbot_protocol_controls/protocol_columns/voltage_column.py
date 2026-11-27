@@ -15,18 +15,35 @@ PROTOCOL_SET_VOLTAGE and waits for VOLTAGE_APPLIED ack from
 dropbot_controller. Priority 20 — runs before RoutesHandler at
 priority 30 so the voltage is applied before any electrode actuation.
 """
+
+# Enthought library imports.
 from traits.api import Int
 
+# Microdrop package imports.
+from dropbot_controller.consts import (
+    HARDWARE_MAX_VOLTAGE_KEY,
+    HARDWARE_MIN_VOLTAGE,
+    PROTOCOL_SET_VOLTAGE,
+    VOLTAGE_APPLIED,
+)
+from dropbot_controller.preferences import DropbotPreferences
 from pluggable_protocol_tree.models.column import (
-    BaseColumnHandler, BaseColumnModel, Column,
+    BaseColumnHandler,
+    BaseColumnModel,
+    Column,
 )
 from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from dropbot_controller.consts import (
-    HARDWARE_MIN_VOLTAGE, PROTOCOL_SET_VOLTAGE, VOLTAGE_APPLIED,
+
+# Local imports.
+from ..consts import PREFLIGHT_VOLTAGE_LIMITS_CHECK
+from ..services.preflight_checks import (
+    chip_check,
+    dropbot_connection_check,
+    hardware_limit_check,
 )
-from dropbot_controller.preferences import DropbotPreferences
 
 # Static spinbox upper. Hardware-reported max isn't known at column
 # construction time (DropBot reports via app_globals only after connect),
@@ -49,6 +66,7 @@ class VoltageHandler(BaseColumnHandler):
     bucket, and strictly before RoutesHandler at priority 30. The ack
     wait comes from the Protocol Settings grid (0 = fire-and-forget).
     """
+
     priority = 20
     wait_for_topics = [VOLTAGE_APPLIED]
     # Provider default for the Protocol Settings ack-wait grid — matches
@@ -93,6 +111,22 @@ class VoltageHandler(BaseColumnHandler):
             return
         publish_message(topic=PROTOCOL_SET_VOLTAGE, message=str(int(row.voltage)))
 
+    def preflight_checks(self, context):
+        """The DropBot's connection and chip, and every run step's voltage against
+        its maximum."""
+        return [
+            dropbot_connection_check(context),
+            chip_check(context),
+            hardware_limit_check(
+                context,
+                PREFLIGHT_VOLTAGE_LIMITS_CHECK,
+                "Voltage",
+                self.model.col_id,
+                HARDWARE_MAX_VOLTAGE_KEY,
+                "V",
+            ),
+        ]
+
 
 def make_voltage_column():
     prefs = DropbotPreferences()
@@ -103,7 +137,8 @@ def make_voltage_column():
             default_value=int(prefs.last_voltage),
         ),
         view=IntSpinBoxColumnView(
-            low=HARDWARE_MIN_VOLTAGE, high=_DEFAULT_HARDWARE_MAX_V,
+            low=HARDWARE_MIN_VOLTAGE,
+            high=_DEFAULT_HARDWARE_MAX_V,
         ),
         handler=VoltageHandler(),
     )

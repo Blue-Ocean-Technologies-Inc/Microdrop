@@ -158,6 +158,16 @@ class BaseColumnHandler(HasTraits):
         executes)."""
         pass
 
+    def preflight_checks(self, context):
+        """Return this column's pre-flight checks of the hardware it drives,
+        as ``pluggable_protocol_tree.preflight.checks.ColumnCheck`` rows.
+
+        ``context`` is the ``PreflightContext`` of the run about to start
+        (its steps, scope and ``preview_mode``). Runs on the GUI thread
+        before every run and after protocol edits, so read app_globals at
+        most once per check, never per step. Default: no checks."""
+        return []
+
     # The execution hooks — all no-ops by default. on_pre_protocol_start /
     # on_post_protocol_end fire once per run (bracketing all repetitions);
     # on_protocol_start / on_protocol_end fire once per repetition.

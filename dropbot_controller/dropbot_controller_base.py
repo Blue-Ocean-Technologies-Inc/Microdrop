@@ -51,7 +51,9 @@ from .consts import (
     CAPACITANCE_UPDATED,
     CHANGE_SETTINGS,
     CHIP_INSERTED,
+    DROPBOT_CHIP_INSERTED_KEY,
     DROPBOT_CONNECTION_STATE_KEY,
+    DROPBOT_NO_POWER_KEY,
     HALT,
     HALTED,
     OUTPUT_ENABLE_PIN,
@@ -63,6 +65,7 @@ from .consts import (
 )
 from .interfaces.i_dropbot_controller_base import IDropbotControllerBase
 from .preferences import DropbotPreferences
+from .services.dropbot_state_mirror import mirror_dropbot_state
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -133,8 +136,27 @@ class DropbotControllerBase(HasTraits):
         """Mirror the connection state to app_globals so any plugin can read
         it synchronously without subscribing to the connected/disconnected
         signals."""
-        app_globals[DROPBOT_CONNECTION_STATE_KEY] = event.new
-        logger.info(f"App Globals Update: {DROPBOT_CONNECTION_STATE_KEY}: {event.new}")
+        self._publish_connection_state()
+
+    def _publish_connection_state(self):
+        """Write the current connection state to app_globals and announce it.
+
+        Also called once at startup: the observer only fires on change, so
+        without it the key stays absent (or stale from a crashed session)
+        until a DropBot connects. With no DropBot connected no chip is read;
+        a connection reads its chip on setup.
+        """
+        updates = {DROPBOT_CONNECTION_STATE_KEY: self.dropbot_connection_active}
+
+        if not self.dropbot_connection_active:
+            updates[DROPBOT_CHIP_INSERTED_KEY] = None
+
+        mirror_dropbot_state(updates)
+
+        logger.info(
+            f"App Globals Update: {DROPBOT_CONNECTION_STATE_KEY}: "
+            f"{self.dropbot_connection_active}"
+        )
 
     def listener_actor_routine(
         self, timestamped_message: TimestampedMessage, topic: str
@@ -233,18 +255,15 @@ class DropbotControllerBase(HasTraits):
     ### Initial traits values ######
 
     def traits_init(self):
-        """
-        This is equivalent to doing:
-
-        def __init__(self, **traits):
-            super().__init__(**traits)
-
-        """
-
+        """Start the listener actor and mirror the startup state."""
         logger.info("Starting DropbotController listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
             listener_name=self.listener_name, class_method=self.listener_actor_routine
         )
+
+        # A crashed session may have left its no-power flag behind.
+        mirror_dropbot_state({DROPBOT_NO_POWER_KEY: False})
+        self._publish_connection_state()
 
     def _on_dropbot_proxy_connected(self) -> bool:
         """
@@ -392,14 +411,18 @@ class DropbotControllerBase(HasTraits):
 
     @staticmethod
     def _output_state_changed_wrapper(signal: dict[str, str]):
-        if signal["event"] == "output_enabled":
-            logger.debug("Publishing Chip Inserted")
-            publish_message(topic=CHIP_INSERTED, message="True")
-        elif signal["event"] == "output_disabled":
-            logger.debug("Publishing Chip Not Inserted")
-            publish_message(topic=CHIP_INSERTED, message="False")
-        else:
-            logger.warn(f"Unknown signal received: {signal}")
+        events = {"output_enabled": True, "output_disabled": False}
+
+        if signal["event"] not in events:
+            logger.warning(f"Unknown signal received: {signal}")
+
+            return
+
+        # Mirrored before the signal, so a reader it wakes sees the new state.
+        chip_inserted = events[signal["event"]]
+        logger.debug(f"Publishing Chip Inserted: {chip_inserted}")
+        mirror_dropbot_state({DROPBOT_CHIP_INSERTED_KEY: chip_inserted})
+        publish_message(topic=CHIP_INSERTED, message=str(chip_inserted))
 
     ###################### Methods to Expose #########################
 
@@ -411,6 +434,7 @@ class DropbotControllerBase(HasTraits):
             if self.proxy.monitor is not None:
                 chip_check_result = not bool(self.proxy.digital_read(OUTPUT_ENABLE_PIN))
                 logger.info(f"Chip check result: {chip_check_result}")
+                mirror_dropbot_state({DROPBOT_CHIP_INSERTED_KEY: chip_check_result})
                 publish_message(topic=CHIP_INSERTED, message=f"{chip_check_result}")
 
     def on_detect_shorts_request(self, message):
