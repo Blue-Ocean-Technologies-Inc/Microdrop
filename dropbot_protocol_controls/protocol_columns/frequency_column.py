@@ -21,10 +21,9 @@ from traits.api import Int, TraitError
 
 # Microdrop package imports.
 from dropbot_controller.consts import (
+    DEFAULT_PROTOCOL_FREQUENCY_RANGE,
     FREQUENCY_APPLIED,
-    HARDWARE_DEFAULT_MAX_FREQUENCY,
     HARDWARE_MAX_FREQUENCY_KEY,
-    HARDWARE_MIN_FREQUENCY,
     PROTOCOL_FREQUENCY_RANGE_KEY,
     PROTOCOL_SET_FREQUENCY,
 )
@@ -133,7 +132,7 @@ def make_frequency_column():
         ),
         view=DeviceRangeIntSpinBoxColumnView(
             range_key=PROTOCOL_FREQUENCY_RANGE_KEY,
-            fallback_range=(HARDWARE_MIN_FREQUENCY, HARDWARE_DEFAULT_MAX_FREQUENCY),
+            fallback_range=DEFAULT_PROTOCOL_FREQUENCY_RANGE,
             unit="Hz",
         ),
         handler=FrequencyHandler(),

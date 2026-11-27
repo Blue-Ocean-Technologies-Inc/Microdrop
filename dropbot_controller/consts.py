@@ -175,11 +175,11 @@ HARDWARE_DEFAULT_FREQUENCY = 10_000  # Hz
 HARDWARE_MIN_VOLTAGE = 30  # V
 HARDWARE_MIN_FREQUENCY = 100  # Hz
 
-#: Protocol setpoint maxima assumed until a DropBot reports its own
-#: (proxy.config) on connect: the DB3-120 nominal 140 V, and 100 kHz to
-#: match dropbot_preferences_ui's ui_max_frequency Range high.
-HARDWARE_DEFAULT_MAX_VOLTAGE = 140  # V
-HARDWARE_DEFAULT_MAX_FREQUENCY = 100_000  # Hz
+#: Protocol setpoint ranges ``(low, high)`` assumed until a DropBot reports
+#: its own maxima (proxy.config) on connect: the DB3-120 nominal 140 V, and
+#: 100 kHz to match dropbot_preferences_ui's ui_max_frequency Range high.
+DEFAULT_PROTOCOL_VOLTAGE_RANGE = (HARDWARE_MIN_VOLTAGE, 140)  # V
+DEFAULT_PROTOCOL_FREQUENCY_RANGE = (HARDWARE_MIN_FREQUENCY, 100_000)  # Hz
 
 # Convenience publisher singleton, so call sites can do:
 #   from dropbot_controller.consts import shorts_detected_publisher

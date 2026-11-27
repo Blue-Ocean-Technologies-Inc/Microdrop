@@ -21,9 +21,8 @@ from traits.api import Int, TraitError
 
 # Microdrop package imports.
 from dropbot_controller.consts import (
-    HARDWARE_DEFAULT_MAX_VOLTAGE,
+    DEFAULT_PROTOCOL_VOLTAGE_RANGE,
     HARDWARE_MAX_VOLTAGE_KEY,
-    HARDWARE_MIN_VOLTAGE,
     PROTOCOL_SET_VOLTAGE,
     PROTOCOL_VOLTAGE_RANGE_KEY,
     VOLTAGE_APPLIED,
@@ -149,7 +148,7 @@ def make_voltage_column():
         ),
         view=DeviceRangeIntSpinBoxColumnView(
             range_key=PROTOCOL_VOLTAGE_RANGE_KEY,
-            fallback_range=(HARDWARE_MIN_VOLTAGE, HARDWARE_DEFAULT_MAX_VOLTAGE),
+            fallback_range=DEFAULT_PROTOCOL_VOLTAGE_RANGE,
             unit="V",
         ),
         handler=VoltageHandler(),

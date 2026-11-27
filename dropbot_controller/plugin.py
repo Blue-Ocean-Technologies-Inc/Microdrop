@@ -21,10 +21,8 @@ from microdrop_application.helpers import get_microdrop_redis_globals_manager
 # Local imports.
 from .consts import (
     ACTOR_TOPIC_DICT,
-    HARDWARE_DEFAULT_MAX_FREQUENCY,
-    HARDWARE_DEFAULT_MAX_VOLTAGE,
-    HARDWARE_MIN_FREQUENCY,
-    HARDWARE_MIN_VOLTAGE,
+    DEFAULT_PROTOCOL_FREQUENCY_RANGE,
+    DEFAULT_PROTOCOL_VOLTAGE_RANGE,
     PKG,
     PROTOCOL_FREQUENCY_RANGE_KEY,
     PROTOCOL_VOLTAGE_RANGE_KEY,
@@ -141,14 +139,8 @@ class DropbotControllerPlugin(Plugin):
         # Overwrite, never seed: app_globals outlives the session, so a
         # previous device's range would otherwise bound the protocol columns.
         # The monitor refines the maxima once the DropBot reports its own.
-        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = [
-            HARDWARE_MIN_VOLTAGE,
-            HARDWARE_DEFAULT_MAX_VOLTAGE,
-        ]
-        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = [
-            HARDWARE_MIN_FREQUENCY,
-            HARDWARE_DEFAULT_MAX_FREQUENCY,
-        ]
+        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = DEFAULT_PROTOCOL_VOLTAGE_RANGE
+        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = DEFAULT_PROTOCOL_FREQUENCY_RANGE
 
     def stop(self):
         """Cleanup when the plugin is stopped."""

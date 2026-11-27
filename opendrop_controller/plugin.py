@@ -16,10 +16,8 @@ from traits.api import List
 
 # Microdrop package imports.
 from dropbot_controller.consts import (
-    HARDWARE_DEFAULT_MAX_FREQUENCY,
-    HARDWARE_DEFAULT_MAX_VOLTAGE,
-    HARDWARE_MIN_FREQUENCY,
-    HARDWARE_MIN_VOLTAGE,
+    DEFAULT_PROTOCOL_FREQUENCY_RANGE,
+    DEFAULT_PROTOCOL_VOLTAGE_RANGE,
     PROTOCOL_FREQUENCY_RANGE_KEY,
     PROTOCOL_VOLTAGE_RANGE_KEY,
 )
@@ -106,14 +104,8 @@ class OpenDropControllerPlugin(Plugin):
         # OpenDrop does not serve the protocol voltage/frequency topics; write
         # the columns' fallback range anyway so a previous device's range
         # (app_globals outlives the session) never bounds them.
-        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = [
-            HARDWARE_MIN_VOLTAGE,
-            HARDWARE_DEFAULT_MAX_VOLTAGE,
-        ]
-        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = [
-            HARDWARE_MIN_FREQUENCY,
-            HARDWARE_DEFAULT_MAX_FREQUENCY,
-        ]
+        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = DEFAULT_PROTOCOL_VOLTAGE_RANGE
+        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = DEFAULT_PROTOCOL_FREQUENCY_RANGE
 
         self.opendrop_controller.on_start_device_monitoring_request()
 
