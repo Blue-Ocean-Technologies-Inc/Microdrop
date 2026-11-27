@@ -16,23 +16,18 @@ dropbot_controller. Priority 20 — runs before RoutesHandler at
 priority 30 so the voltage is applied before any electrode actuation.
 """
 
-# Enthought library imports.
-from traits.api import Int
-
 # Microdrop package imports.
 from dropbot_controller.consts import (
-    HARDWARE_MAX_VOLTAGE_KEY,
-    HARDWARE_MIN_VOLTAGE,
+    DEFAULT_PROTOCOL_VOLTAGE_RANGE,
     PROTOCOL_SET_VOLTAGE,
+    PROTOCOL_VOLTAGE_RANGE_KEY,
     VOLTAGE_APPLIED,
 )
 from dropbot_controller.preferences import DropbotPreferences
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler,
-    BaseColumnModel,
     Column,
 )
-from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -41,22 +36,18 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ..consts import PREFLIGHT_VOLTAGE_LIMITS_CHECK
 from ..services.preflight_checks import (
     chip_check,
+    device_range_check,
     dropbot_connection_check,
-    hardware_limit_check,
 )
-
-# Static spinbox upper. Hardware-reported max isn't known at column
-# construction time (DropBot reports via app_globals only after connect),
-# and the trait can't be re-bounded after instantiation. The backend
-# validates the actual write against proxy.config.max_voltage anyway.
-_DEFAULT_HARDWARE_MAX_V = 140  # DropBot DB3-120 nominal max
+from .device_range_model import DeviceRangeIntColumnModel, remember_last_setpoint
+from .device_range_spinbox_view import DeviceRangeIntSpinBoxColumnView
 
 
-class VoltageColumnModel(BaseColumnModel):
+class VoltageColumnModel(DeviceRangeIntColumnModel):
     """Per-step voltage setpoint stored as an Int on each row."""
 
-    def trait_for_row(self):
-        return Int(int(self.default_value), desc="Step voltage in V")
+    range_key = PROTOCOL_VOLTAGE_RANGE_KEY
+    fallback_range = DEFAULT_PROTOCOL_VOLTAGE_RANGE
 
 
 class VoltageHandler(BaseColumnHandler):
@@ -88,7 +79,8 @@ class VoltageHandler(BaseColumnHandler):
         it the protocol state tracker never sees voltage edits.
         """
         result = super().on_interact(row, model, value)
-        DropbotPreferences().last_voltage = int(value)
+        remember_last_setpoint(DropbotPreferences(), "last_voltage", value, "V")
+
         return result
 
     def on_step(self, row, ctx):
@@ -113,16 +105,16 @@ class VoltageHandler(BaseColumnHandler):
 
     def preflight_checks(self, context):
         """The DropBot's connection and chip, and every run step's voltage against
-        its maximum."""
+        the device range its cells are bounded by."""
         return [
             dropbot_connection_check(context),
             chip_check(context),
-            hardware_limit_check(
+            device_range_check(
                 context,
                 PREFLIGHT_VOLTAGE_LIMITS_CHECK,
                 "Voltage",
                 self.model.col_id,
-                HARDWARE_MAX_VOLTAGE_KEY,
+                self.model.device_range(),
                 "V",
             ),
         ]
@@ -136,9 +128,6 @@ def make_voltage_column():
             col_name="Voltage (V)",
             default_value=int(prefs.last_voltage),
         ),
-        view=IntSpinBoxColumnView(
-            low=HARDWARE_MIN_VOLTAGE,
-            high=_DEFAULT_HARDWARE_MAX_V,
-        ),
+        view=DeviceRangeIntSpinBoxColumnView(unit="V"),
         handler=VoltageHandler(),
     )

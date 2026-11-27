@@ -627,8 +627,27 @@ The protocol tree's Voltage and Frequency columns (`dropbot_protocol_controls`, 
 
 **Backend (`portable_dropbot_controller/services/portable_dropbot_states_setting_mixin_service.py`)**
 - `on_protocol_set_voltage_request` / `on_protocol_set_frequency_request` go through the same path as `SET_VOLTAGE` / `SET_FREQUENCY` (`portable_dropbot/requests/set_voltage`, `.../set_frequency`): the setpoint is checked against `VOLTAGE_BOUNDS` (40-200 V) / `FREQUENCY_BOUNDS` (50-60000 Hz), then applied with `set_actuation`. The ack goes out only when the board took it.
-- An out-of-range setpoint goes out on `ERROR_RAISED`, keeps the current one and sends no ack, so the step fails on its ack wait. The column's spinbox still allows the DropBot's 30 V floor; the portable's 40 V floor is enforced here.
+- An out-of-range setpoint goes out on `ERROR_RAISED`, keeps the current one and sends no ack, so the step fails on its ack wait. Since #1191 the column's editor already offers only the portable's range (see "Protocol Voltage / Frequency columns: the active device's range" below); this guard still catches a step loaded from a protocol written for another device.
 - The same bounds guard the realtime `SET_VOLTAGE` / `SET_FREQUENCY` requests (no ack), and an out-of-range connect default from the preferences falls back to `DEFAULT_VOLTAGE` / `DEFAULT_FREQUENCY`.
+
+### Protocol Voltage / Frequency columns: the active device's range (#1191)
+
+The columns are built once and shared by every device, so their spin boxes read the active device's setpoint range from app_globals instead of fixed bounds.
+
+**app_globals keys (owned by `dropbot_controller`, constants in `dropbot_controller/consts.py`)**
+- `PROTOCOL_VOLTAGE_RANGE_KEY = "protocol_voltage_range"` / `PROTOCOL_FREQUENCY_RANGE_KEY = "protocol_frequency_range"` — `[low, high]` Ints (V / Hz), one key per pair so a reader never sees a half-updated range.
+
+**Writers (the backend plugin loaded; each overwrites both keys at `start()`, never only when absent, since app_globals outlives the session)**
+- `DropbotControllerPlugin` — `DEFAULT_PROTOCOL_VOLTAGE_RANGE` (30-140 V) and `DEFAULT_PROTOCOL_FREQUENCY_RANGE` (100-100000 Hz). On connect the monitor sets `DropbotPreferences._hardware_max_voltage` / `_hardware_max_frequency` from `proxy.config`, and its `_hardware_limit_changed` observer rewrites each range's maximum alongside the `HARDWARE_MAX_*_KEY` mirror — the preferences are the single writer after `start()`.
+- `PortableDropbotControllerPlugin` — `VOLTAGE_BOUNDS` (40-200 V) / `FREQUENCY_BOUNDS` (50-60000 Hz).
+- `MockDropbotControllerPlugin` — `MOCK_VOLTAGE_RANGE` (30-150 V) / `MOCK_FREQUENCY_RANGE` (100-20000 Hz), the setpoints the mock accepts.
+- `OpenDropControllerPlugin` — does not serve the protocol topics; writes the DropBot fallback range so a previous device's range never lingers.
+
+**Reader (`dropbot_protocol_controls/protocol_columns/device_range_model.py`, `device_range_spinbox_view.py`)**
+- `DeviceRangeIntColumnModel.device_range()` reads the key on every call (falling back to the DropBot range when it is missing). The view's `low` / `high` Properties read it, so the cell editor, the step-pattern bounds and the bulk-set dialog all follow the device.
+- A new step's default (`DropbotPreferences.last_voltage` / `last_frequency`) is clamped into the range when the row first reads it, so a DropBot-saved 30-39 V never becomes a portable step's default.
+- A loaded value outside the range is kept and named in the cell tooltip, and an unedited commit leaves it unchanged (the spinbox's clamp is not written back); the backend guards above still refuse it at run time.
+- A committed value outside the `DropbotPreferences.last_voltage` / `last_frequency` Range (a portable 50-99 Hz, or a loaded value committed unedited) is applied to the cell but not saved as the last value.
 
 ### Portable DropBot PMT capture, live stream, ADC query, buffered acquire (#601)
 
@@ -815,7 +834,7 @@ The pre-flight check (`pluggable_protocol_tree/preflight/`) reads the DropBot's 
 - `DROPBOT_NO_POWER_KEY = "dropbot_controller.no_power"` — mirrors `DropbotMonitorMixinService._no_power` through an `@observe`; the trait is set before `NO_POWER` is published, and reset at the start of each connection attempt. False at startup.
 - All three go through `mirror_dropbot_state` (`dropbot_controller/services/dropbot_state_mirror.py`), which writes them and then publishes `DROPBOT_STATE_UPDATED`. A clean backend stop (`cleanup`) deletes them (`clear_dropbot_state`), so a reader finds no backend rather than a stale one.
 - `mock_dropbot_controller/mock_controller.py` mirrors the same keys from its `connected`/`chip_inserted` traits (and in `on_chip_check_request`), publishes `DROPBOT_STATE_UPDATED` too, and deletes the keys on cleanup.
-- `HARDWARE_MAX_VOLTAGE_KEY` / `HARDWARE_MAX_FREQUENCY_KEY` — written by `DropbotPreferences._hardware_limit_changed` when `on_connected_signal` reads the proxy config, about a second after connecting.
+- `HARDWARE_MAX_VOLTAGE_KEY` / `HARDWARE_MAX_FREQUENCY_KEY` — written by `DropbotPreferences._hardware_limit_changed` when `on_connected_signal` reads the proxy config, about a second after connecting; the same observer rewrites `PROTOCOL_VOLTAGE_RANGE_KEY` / `PROTOCOL_FREQUENCY_RANGE_KEY` (#1191), which the setpoint checks read. The pre-flight no longer reads the maxima themselves; the DropBot preferences page still does.
 
 **Topics (published by dropbot_controller)**
 - `DROPBOT_STATE_UPDATED = "dropbot/signals/state_updated"` — new; `DropbotStateUpdatedMessage` (`connected`, `chip_inserted`, `no_power`) published through `dropbot_state_updated_publisher` once the keys above are written. Unlike `DROPBOT_CONNECTED`, which the backend's own listener turns into the connection key, it never arrives before the key it announces.
@@ -823,7 +842,7 @@ The pre-flight check (`pluggable_protocol_tree/preflight/`) reads the DropBot's 
 
 **Subscriber (pluggable_protocol_tree)**
 - `ACTOR_TOPIC_DICT[SYNC_LISTENER_NAME]` in `pluggable_protocol_tree/consts.py` adds the two topics as `PREFLIGHT_HARDWARE_TOPICS`. `DeviceViewerSyncController._listener_routine` (`services/device_viewer_sync.py`) fires its `hardware_state_changed` Event on either (worker thread).
-- `PreflightHost._invalidate_on_change` (`preflight/host.py`) observes it with `dispatch="ui"` alongside `connected`; the debounced re-check reads the keys above through the voltage and frequency columns' DropBot, chip and limit checks (`dropbot_protocol_controls/services/preflight_checks.py`).
+- `PreflightHost._invalidate_on_change` (`preflight/host.py`) observes it with `dispatch="ui"` alongside `connected`; the debounced re-check reads the keys above through the voltage and frequency columns' DropBot, chip and range checks (`dropbot_protocol_controls/services/preflight_checks.py`). The range check judges every run step against the column model's `device_range()`, the same `[low, high]` that bounds the cells, so it applies to every backend, not only a connected DropBot.
 
 ### Any plugin → notifications drawer: posting a notification (#1077, #1137)
 

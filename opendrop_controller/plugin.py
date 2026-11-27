@@ -8,22 +8,35 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from envisage.api import ServiceOffer
 from envisage.ids import SERVICE_OFFERS
 from envisage.plugin import Plugin
 from traits.api import List
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
+from dropbot_controller.consts import (
+    DEFAULT_PROTOCOL_FREQUENCY_RANGE,
+    DEFAULT_PROTOCOL_VOLTAGE_RANGE,
+    PROTOCOL_FREQUENCY_RANGE_KEY,
+    PROTOCOL_VOLTAGE_RANGE_KEY,
+)
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
+# Local imports.
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 from .interfaces.i_opendrop_control_mixin_service import IOpenDropControlMixinService
 from .opendrop_controller_base import OpenDropControllerBase
 from .preferences import OpenDropPreferences
 from .services.opendrop_electrodes_mixin_service import OpenDropElectrodesMixinService
 from .services.opendrop_monitor_mixin_service import OpenDropMonitorMixinService
-from .services.opendrop_states_setting_mixin_service import OpenDropStatesSettingMixinService
+from .services.opendrop_states_setting_mixin_service import (
+    OpenDropStatesSettingMixinService,
+)
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -64,15 +77,21 @@ class OpenDropControllerPlugin(Plugin):
         return OpenDropElectrodesMixinService
 
     def start(self):
-        services = self.application.get_services(IOpenDropControlMixinService) + [OpenDropControllerBase]
+        services = self.application.get_services(IOpenDropControlMixinService) + [
+            OpenDropControllerBase
+        ]
         logger.info(f"Initializing OpenDrop services: {services}")
 
         class OpenDropController(*services):
             pass
 
         self.opendrop_controller = OpenDropController()
-        self.opendrop_controller.preferences = OpenDropPreferences(preferences=self.application.preferences)
-        self.opendrop_controller.feedback_enabled = bool(self.opendrop_controller.preferences.feedback_enabled)
+        self.opendrop_controller.preferences = OpenDropPreferences(
+            preferences=self.application.preferences
+        )
+        self.opendrop_controller.feedback_enabled = bool(
+            self.opendrop_controller.preferences.feedback_enabled
+        )
         self.opendrop_controller.set_temperatures = [
             int(self.opendrop_controller.preferences.temperature_1),
             int(self.opendrop_controller.preferences.temperature_2),
@@ -82,8 +101,15 @@ class OpenDropControllerPlugin(Plugin):
         app_globals = get_microdrop_redis_globals_manager()
         app_globals.update(self.opendrop_controller.preferences.preferences_name_map)
 
-        self.opendrop_controller.on_start_device_monitoring_request()
+        # OpenDrop does not serve the protocol voltage/frequency topics; write
+        # the columns' fallback range anyway so a previous device's range
+        # (app_globals outlives the session) never bounds them.
+        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = list(DEFAULT_PROTOCOL_VOLTAGE_RANGE)
+        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = list(
+            DEFAULT_PROTOCOL_FREQUENCY_RANGE
+        )
 
+        self.opendrop_controller.on_start_device_monitoring_request()
 
     def stop(self):
         if hasattr(self, "opendrop_controller"):

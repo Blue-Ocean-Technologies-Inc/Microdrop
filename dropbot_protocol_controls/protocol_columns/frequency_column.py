@@ -16,44 +16,34 @@ FREQUENCY_APPLIED ack from dropbot_controller. Priority 20 — runs in
 parallel with VoltageHandler in the same bucket.
 """
 
-# Enthought library imports.
-from traits.api import Int
-
 # Microdrop package imports.
 from dropbot_controller.consts import (
+    DEFAULT_PROTOCOL_FREQUENCY_RANGE,
     FREQUENCY_APPLIED,
-    HARDWARE_MAX_FREQUENCY_KEY,
-    HARDWARE_MIN_FREQUENCY,
+    PROTOCOL_FREQUENCY_RANGE_KEY,
     PROTOCOL_SET_FREQUENCY,
 )
 from dropbot_controller.preferences import DropbotPreferences
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler,
-    BaseColumnModel,
     Column,
 )
-from pluggable_protocol_tree.views.columns.spinbox import IntSpinBoxColumnView
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
 from ..consts import PREFLIGHT_FREQUENCY_LIMITS_CHECK
-from ..services.preflight_checks import hardware_limit_check
-
-# Static spinbox upper. Hardware-reported max isn't known at column
-# construction time. Backend validates against proxy.config.max_frequency.
-# 100_000 Hz matches dropbot_preferences_ui/models.py's ui_max_frequency
-# Range high (the UI already lets users raise prefs.last_frequency above
-# 10 kHz) — using a lower cap here would silently clamp those edits.
-_DEFAULT_HARDWARE_MAX_HZ = 100_000
+from ..services.preflight_checks import device_range_check
+from .device_range_model import DeviceRangeIntColumnModel, remember_last_setpoint
+from .device_range_spinbox_view import DeviceRangeIntSpinBoxColumnView
 
 
-class FrequencyColumnModel(BaseColumnModel):
+class FrequencyColumnModel(DeviceRangeIntColumnModel):
     """Per-step frequency setpoint stored as an Int on each row."""
 
-    def trait_for_row(self):
-        return Int(int(self.default_value), desc="Step frequency in Hz")
+    range_key = PROTOCOL_FREQUENCY_RANGE_KEY
+    fallback_range = DEFAULT_PROTOCOL_FREQUENCY_RANGE
 
 
 class FrequencyHandler(BaseColumnHandler):
@@ -78,7 +68,8 @@ class FrequencyHandler(BaseColumnHandler):
         protocol state tracker never sees frequency edits.
         """
         result = super().on_interact(row, model, value)
-        DropbotPreferences().last_frequency = int(value)
+        remember_last_setpoint(DropbotPreferences(), "last_frequency", value, "Hz")
+
         return result
 
     def on_step(self, row, ctx):
@@ -100,14 +91,15 @@ class FrequencyHandler(BaseColumnHandler):
         publish_message(topic=PROTOCOL_SET_FREQUENCY, message=str(int(row.frequency)))
 
     def preflight_checks(self, context):
-        """Every run step's frequency against the DropBot's maximum."""
+        """Every run step's frequency against the device range its cells are
+        bounded by."""
         return [
-            hardware_limit_check(
+            device_range_check(
                 context,
                 PREFLIGHT_FREQUENCY_LIMITS_CHECK,
                 "Frequency",
                 self.model.col_id,
-                HARDWARE_MAX_FREQUENCY_KEY,
+                self.model.device_range(),
                 "Hz",
             ),
         ]
@@ -121,9 +113,6 @@ def make_frequency_column():
             col_name="Frequency (Hz)",
             default_value=int(prefs.last_frequency),
         ),
-        view=IntSpinBoxColumnView(
-            low=HARDWARE_MIN_FREQUENCY,
-            high=_DEFAULT_HARDWARE_MAX_HZ,
-        ),
+        view=DeviceRangeIntSpinBoxColumnView(unit="Hz"),
         handler=FrequencyHandler(),
     )
