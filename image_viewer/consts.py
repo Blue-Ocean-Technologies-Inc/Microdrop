@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Microdrop package imports.
 from device_viewer.consts import PROTOCOL_RUNNING
+from notifications.consts import NotificationCategorySpec
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
@@ -132,6 +133,16 @@ PRUNE_EXPERIMENTS_DESCRIPTION = (
 #: send2trash (microdrop_utils.environment_update_dialog).
 TRASH_FEATURE = "Sending experimental folders to the Trash"
 TRASH_PACKAGE = "send2trash"
+#: The kind of notification Prune Experiments posts, finished or stopped.
+PRUNE_EXPERIMENTS_CATEGORY_ID = f"{PKG}.prune_experiments"
+IMAGE_VIEWER_CATEGORIES = [
+    NotificationCategorySpec(
+        id=PRUNE_EXPERIMENTS_CATEGORY_ID,
+        group=PKG_name,
+        label="Prune Experiments",
+        description="File › Prune Experiments finished or stopped.",
+    ),
+]
 #: Auto-advance cadence while the slideshow is playing (ms).
 SLIDESHOW_INTERVAL_MS = 1_500
 

@@ -18,7 +18,7 @@ end of the job is handed back to the GUI thread, through
 """
 
 # Standard library imports.
-import threading
+from threading import Thread
 
 # Enthought library imports.
 from pyface.api import GUI
@@ -33,7 +33,7 @@ from notifications.consts import (
 )
 
 # Local imports.
-from .consts import PKG
+from .consts import PKG, PRUNE_EXPERIMENTS_CATEGORY_ID
 from .discovery import TrashUnavailableError, prune_experiments
 
 # Logger import.
@@ -57,7 +57,7 @@ class PruneExperimentsJob(HasTraits):
         once the job has ended."""
         self.running = True
 
-        threading.Thread(
+        Thread(
             target=self._prune,
             args=(targets, on_trash_unavailable),
             name="prune-experiments",
@@ -65,20 +65,27 @@ class PruneExperimentsJob(HasTraits):
         ).start()
 
     def _prune(self, targets, on_trash_unavailable):
-        """Worker thread: trash ``targets`` and report how it went."""
+        """Worker thread: trash ``targets`` and report how it went, in a card
+        and in the log, which keeps it when no notifications plugin is
+        loaded."""
+        removed = []
         then = None
 
         try:
-            removed = prune_experiments(targets)
+            for directory in prune_experiments(targets):
+                removed.append(directory)
         except TrashUnavailableError:
             then = on_trash_unavailable
-        except OSError as e:
-            # The error card reports it: the log forwarder must not repeat it.
+        except Exception as e:
+            # A trash failure (OSError) or a bug alike: the error card reports
+            # it, so the log forwarder must not repeat it.
             logger.exception(
-                f"Failed to prune experiments: {e}", extra=LOG_RECORDED_EXTRA
+                f"Pruning experiments stopped after {len(removed)} folder(s): {e}",
+                extra=LOG_RECORDED_EXTRA,
             )
-            notification_publisher.publish(prune_failed_card(e))
+            notification_publisher.publish(prune_failed_card(e, removed))
         else:
+            logger.info(f"Moved {len(removed)} experiment folder(s) to the trash")
             notification_publisher.publish(pruned_card(removed))
         finally:
             GUI.invoke_later(self._finish, then)
@@ -101,17 +108,20 @@ def pruned_card(removed):
         "detail": f"They can be restored from the Recycle Bin / Trash.\n{names}",
         "severity": SEVERITY_SUCCESS,
         "source": PKG,
+        "category_id": PRUNE_EXPERIMENTS_CATEGORY_ID,
     }
 
 
-def prune_failed_card(error):
-    """The notification for a prune that stopped on ``error``; the folders
-    before the failing one are already in the trash."""
+def prune_failed_card(error, removed):
+    """The notification for a prune that stopped on ``error`` after moving
+    the ``removed`` experiment folders to the trash."""
     return {
         "title": "Pruning experiments stopped",
-        "detail": f"Could not move an experiment folder to the trash: {error}",
+        "detail": f"{len(removed)} experiment folder(s) had been moved to the "
+        f"trash when it stopped on this error: {error}",
         "severity": SEVERITY_ERROR,
         "source": PKG,
+        "category_id": PRUNE_EXPERIMENTS_CATEGORY_ID,
     }
 
 
