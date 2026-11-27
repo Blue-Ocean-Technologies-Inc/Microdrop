@@ -15,13 +15,15 @@ menu's entries and the self-test reminder's "Run self test" both take."""
 from types import SimpleNamespace
 
 # Microdrop package imports.
+from device_viewer.consts import DROPBOT_MAINTENANCE_CATEGORY_ID
 from dropbot_controller.consts import TEST_ON_BOARD_FEEDBACK_CALIBRATION, TEST_VOLTAGE
+from notifications.consts import SEVERITY_WARNING, notification_publisher
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.status_bar_utils import set_status_bar_message
 
 # Local imports.
+from .consts import PKG
 from .self_test_dialogs import (
     DropbotDisconnectedDialogAction,
     ShowSelfTestIntroDialogAction,
@@ -39,24 +41,31 @@ _NO_TEST_BOARD_TESTS = (TEST_VOLTAGE, TEST_ON_BOARD_FEEDBACK_CALIBRATION)
 def run_self_tests(plugin, task, topic, report_directory):
     """Request the self tests ``topic`` names (a ``dropbot/requests/...``
     test topic), their report written in ``report_directory``. Without a
-    DropBot it says so instead; for tests that need the test board it asks
-    for the board first, and runs nothing if the user cancels.
+    DropBot it says so instead, in a dialog and a warning notification; for
+    tests that need the test board it asks for the board first, and runs
+    nothing if the user cancels.
 
     Parameters
     ----------
     plugin
         The DropbotToolsMenuPlugin: whether a DropBot is connected.
     task
-        The task whose window parents the dialogs and shows the status.
+        The task whose window parents the dialogs.
     """
-    window = task.window
-
     # The dialogs take the parent from an action event's task.
     event = SimpleNamespace(task=task)
 
     if not plugin.dropbot_connected:
-        set_status_bar_message(
-            "Warning: Cannot start test, Dropbot is disconnected", window
+        # Listed quietly: the dialog below is the interruption.
+        notification_publisher.publish(
+            {
+                "title": "Cannot start self test: DropBot is disconnected",
+                "severity": SEVERITY_WARNING,
+                "category": "hardware",
+                "source": PKG,
+                "category_id": DROPBOT_MAINTENANCE_CATEGORY_ID,
+                "pop_up": False,
+            }
         )
         DropbotDisconnectedDialogAction().perform(event)
 
@@ -64,15 +73,8 @@ def run_self_tests(plugin, task, topic, report_directory):
 
     logger.info("Requesting running self tests for dropbot")
 
-    if topic in _NO_TEST_BOARD_TESTS:
-        set_status_bar_message("Running self tests...", window, 30000)
-
-    else:
-        set_status_bar_message("Click OK to continue", window)
-
+    if topic not in _NO_TEST_BOARD_TESTS:
         if not ShowSelfTestIntroDialogAction().perform(event):
             return
-
-        set_status_bar_message("Running self tests...", window, 15000)
 
     publish_message(topic=topic, message=report_directory)
