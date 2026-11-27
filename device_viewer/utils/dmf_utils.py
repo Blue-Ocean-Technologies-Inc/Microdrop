@@ -454,21 +454,29 @@ class SvgUtil(HasTraits):
         root = tree.getroot()
 
         electrodes = None
+        metadata = None
         for child in root:
             if is_device_layer(child):
                 electrodes = child
 
-            # Add metadata: e.g. area scale.
-            elif child.tag == "{http://www.w3.org/2000/svg}metadata":
-                scale_element = child.find("scale")
-                if scale_element is None:
-                    scale_element = ET.SubElement(child, "scale")
-
-                scale_element.text = str(self.area_scale)
+            elif child.tag == f"{{{NS_SVG}}}metadata":
+                metadata = child
 
         if electrodes is None:
             logger.error("No electrodes found: Not saving to file...")
             return
+
+        # Inkscape files carry a metadata element; others need one for the scale.
+        if metadata is None:
+            metadata = ET.Element(f"{{{NS_SVG}}}metadata")
+            root.insert(0, metadata)
+
+        scale_element = metadata.find("scale")
+
+        if scale_element is None:
+            scale_element = ET.SubElement(metadata, "scale")
+
+        scale_element.text = str(self.area_scale)
 
         ### Add the channels for each electrode ###
         for electrode in list(electrodes):
