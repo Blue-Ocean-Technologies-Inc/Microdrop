@@ -158,7 +158,7 @@ def main(plugins, contexts, application, persist, splash_screen=None):
         if not app.start():
             logger.error("The backend application did not start.")
 
-            return
+            sys.exit(1)
 
         while True:
             time.sleep(0.001)
