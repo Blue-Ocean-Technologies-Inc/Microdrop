@@ -148,7 +148,7 @@ def controller(model, tmp_path, dialogs):
         model=model,
         endpoint_store=endpoint_store,
         preset_store=preset_store,
-        statusbar_message=MagicMock(),
+        show_canvas_note=MagicMock(),
         get_camera_label=lambda: "Cam 1",
         get_video_item=StubVideoItem,
     )
@@ -188,7 +188,7 @@ def test_endpoint_saved_persists_for_the_current_device(controller):
     controller._alignment_model.endpoint_pane.endpoint_saved = ENDPOINT
 
     assert controller.endpoint_store.load("2x3device") == ENDPOINT
-    controller.statusbar_message.assert_called_once_with(
+    controller.show_canvas_note.assert_called_once_with(
         "Saved camera-alignment endpoint for 2x3device"
     )
 
@@ -416,7 +416,7 @@ def _apply(controller, preset):
 
 
 def _status(controller):
-    return controller.statusbar_message.call_args.args[0]
+    return controller.show_canvas_note.call_args.args[0]
 
 
 def _no_retry_delay(monkeypatch):

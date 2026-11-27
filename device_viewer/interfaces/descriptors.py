@@ -41,7 +41,8 @@ class InteractionMode(HasTraits):
     #: (e.g. "zone-select").
     id = Str()
 
-    #: Status-bar hint shown while the mode is active; empty for none.
+    #: Hint shown in the pill over the canvas while the mode is active;
+    #: empty for none.
     status_message = Str()
 
 

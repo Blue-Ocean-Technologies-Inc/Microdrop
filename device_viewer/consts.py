@@ -941,7 +941,7 @@ PIN_MAP_SVG_FILE = Path(__file__).parent / "resources" / "devices" / "pin_map.sv
 
 device_modified_tag = " (modified)"
 
-# statusbar messages
+# Canvas hints shown while a camera-alignment mode is active.
 camera_place_status_message_text = "Select 4 points on image"
 camera_edit_status_message_text = "Drag vertices to align with device outline"
 
@@ -1129,8 +1129,12 @@ ZONE_OUTLINE_GAP_CLOSING_FRACTION = 0.6
 # Gap between a region/selection corner and its floating button strip.
 ZONE_OVERLAY_MARGIN_PX = 8
 
-# How long a transient zone note stays beside the status-bar mode message.
-ZONE_STATUS_MESSAGE_MS = 4000
+# Canvas hint pill (#1211): how long a passing note (a rejected zone move,
+# a saved alignment) stays in it, the gap between it and the canvas's top
+# edge, and what parts two hints shown at once.
+CANVAS_HINT_NOTE_MS = 4000
+CANVAS_HINT_TOP_MARGIN_PX = 10
+CANVAS_HINT_SEPARATOR = "  ·  "
 
 # Zones sidebar tree-table: column order (zone types are parent rows, their
 # regions child rows) and the fixed widths of the non-text columns.

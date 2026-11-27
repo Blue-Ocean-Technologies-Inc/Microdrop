@@ -306,7 +306,7 @@ class LayerHost(HasTraits):
     # ------------------------------------------------------------------ #
 
     def _show_mode_status(self, layer, mode_id, show):
-        """Show or clear the status-bar hint of one of ``layer``'s modes."""
+        """Show or clear the canvas hint of one of ``layer``'s modes."""
         status_bar_manager = self.context.status_bar_manager
         mode = next((mode for mode in layer.modes if mode.id == mode_id), None)
 
