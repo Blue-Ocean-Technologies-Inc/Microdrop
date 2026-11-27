@@ -635,14 +635,16 @@ The columns are built once and shared by every device, so their spin boxes read 
 - `PROTOCOL_VOLTAGE_RANGE_KEY = "protocol_voltage_range"` / `PROTOCOL_FREQUENCY_RANGE_KEY = "protocol_frequency_range"` — `[low, high]` Ints (V / Hz), one key per pair so a reader never sees a half-updated range.
 
 **Writers (the backend plugin loaded; each overwrites both keys at `start()`, never only when absent, since app_globals outlives the session)**
-- `DropbotControllerPlugin` — `[HARDWARE_MIN_VOLTAGE, HARDWARE_DEFAULT_MAX_VOLTAGE]` (30-140 V) and `[HARDWARE_MIN_FREQUENCY, HARDWARE_DEFAULT_MAX_FREQUENCY]` (100-100000 Hz); `DropbotMonitorMixinService.on_connected_signal` then rewrites the maxima from `proxy.config.max_voltage` / `max_frequency`.
+- `DropbotControllerPlugin` — `DEFAULT_PROTOCOL_VOLTAGE_RANGE` (30-140 V) and `DEFAULT_PROTOCOL_FREQUENCY_RANGE` (100-100000 Hz). On connect the monitor sets `DropbotPreferences._hardware_max_voltage` / `_hardware_max_frequency` from `proxy.config`, and observers on those traits rewrite the maxima — the preferences are the single writer after `start()`.
 - `PortableDropbotControllerPlugin` — `VOLTAGE_BOUNDS` (40-200 V) / `FREQUENCY_BOUNDS` (50-60000 Hz).
 - `MockDropbotControllerPlugin` — `MOCK_VOLTAGE_RANGE` (30-150 V) / `MOCK_FREQUENCY_RANGE` (100-20000 Hz), the setpoints the mock accepts.
 - `OpenDropControllerPlugin` — does not serve the protocol topics; writes the DropBot fallback range so a previous device's range never lingers.
 
-**Reader (`dropbot_protocol_controls/protocol_columns/device_range_spinbox_view.py`)**
-- `DeviceRangeIntSpinBoxColumnView.low` / `high` are Properties reading the key on every access (falling back to the DropBot range when it is missing), so the cell editor, the step-pattern bounds and the bulk-set dialog all follow the device. A loaded value outside the range is kept and named in the cell tooltip; the backend guards above still refuse it at run time.
-- An edited value outside the `DropbotPreferences.last_voltage` / `last_frequency` Range (e.g. a portable 50-99 Hz) is applied to the cell but not saved as the last value.
+**Reader (`dropbot_protocol_controls/protocol_columns/device_range_model.py`, `device_range_spinbox_view.py`)**
+- `DeviceRangeIntColumnModel.device_range()` reads the key on every call (falling back to the DropBot range when it is missing). The view's `low` / `high` Properties read it, so the cell editor, the step-pattern bounds and the bulk-set dialog all follow the device.
+- A new step's default (`DropbotPreferences.last_voltage` / `last_frequency`) is clamped into the range when the row first reads it, so a DropBot-saved 30-39 V never becomes a portable step's default.
+- A loaded value outside the range is kept and named in the cell tooltip, and an unedited commit leaves it unchanged (the spinbox's clamp is not written back); the backend guards above still refuse it at run time.
+- A committed value outside the `DropbotPreferences.last_voltage` / `last_frequency` Range (a portable 50-99 Hz, or a loaded value committed unedited) is applied to the cell but not saved as the last value.
 
 ### Portable DropBot PMT capture, live stream, ADC query, buffered acquire (#601)
 
