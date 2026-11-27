@@ -14,12 +14,14 @@ Each Pi runs on a mirror of this checkout (its commit plus uncommitted edits)
 in a side worktree, so whatever branch its own checkout is on stays untouched.
 An SSH reverse tunnel per Pi maps its Redis port onto this machine's, so no
 ``redis_settings.json`` changes and no firewall rule is needed: every Pi
-connects to "its" local Redis and lands on the one the GUI owns.
+connects to "its" local Redis and lands on the one this script owns.
 
 The pub/sub router gives every process its own listener queue, so a request
 from this GUI reaches every Pi's backend and all the boards act together.
 Their signals come back on the same topics, so the status this GUI shows is
-whichever board spoke last — demo boards should be set up alike.
+whichever board spoke last — demo boards should be set up alike. Each process
+clears the shared queues when its workers start, so a command sent while a Pi
+is still starting can be lost — wait for every Pi to come up before driving.
 
 Stop the Microdrop app on each Pi first — it holds the board's serial port and
 its own Redis on the tunnel's port. Then, from ``microdrop-py/src``::
@@ -34,7 +36,8 @@ and protocol-tree edits stay local to the GUI they were made in, so drive from
 this GUI and watch on the others.
 
 Closing this GUI sends a Ctrl+C through each Pi's terminal, so every backend
-shuts its board down cleanly. Host-bound pieces stay on each Pi: cameras have
+shuts its board down cleanly. Redis is owned by this script and stopped only
+after every Pi has shut down. Host-bound pieces stay on each Pi: cameras have
 no stream here, and files a backend saves land in its Pi's experiment folders.
 """
 
@@ -53,6 +56,8 @@ from microdrop_utils.broker_server_helpers import (
     REDIS_HOST,
     REDIS_PORT,
     is_redis_running,
+    start_redis_server,
+    stop_redis_server,
 )
 from microdrop_utils.source_update_startup import SKIP_GIT_UPDATE_ENV_VAR
 
@@ -60,7 +65,6 @@ from microdrop_utils.source_update_startup import SKIP_GIT_UPDATE_ENV_VAR
 REMOTE_LAUNCHER = "~/Desktop/pixi-microdrop/microdrop-py"
 REMOTE_WORKTREE = "src-remote-demo"
 
-REDIS_START_TIMEOUT_S = 60
 STOP_TIMEOUT_S = 10
 CTRL_C = b"\x03"
 SRC = Path(__file__).resolve().parents[2]
@@ -109,7 +113,7 @@ def sync_remote_worktrees(args):
 
 
 def start_frontend():
-    """Start the portable GUI here; it owns the Redis server every Pi uses."""
+    """Start the portable GUI here; it joins the Redis server this script owns."""
     return subprocess.Popen(
         [
             sys.executable,
@@ -124,21 +128,6 @@ def start_frontend():
         # Every side runs the commit it was given: no release switch mid-demo.
         env={**os.environ, SKIP_GIT_UPDATE_ENV_VAR: "1"},
     )
-
-
-def wait_for_redis(frontend):
-    """Block until the GUI's Redis accepts connections."""
-    deadline = time.monotonic() + REDIS_START_TIMEOUT_S
-
-    while not is_redis_running():
-        if frontend.poll() is not None:
-            sys.exit("The GUI stopped before its Redis server came up.")
-
-        if time.monotonic() > deadline:
-            frontend.terminate()
-            sys.exit(f"No Redis on {REDIS_HOST}:{REDIS_PORT} after the GUI started.")
-
-        time.sleep(0.2)
 
 
 def remote_app_command(mirror):
@@ -289,21 +278,29 @@ def main():
 
     sync_remote_worktrees(args)
 
-    frontend = start_frontend()
+    redis = start_redis_server()
 
+    if (redis is not None and redis.poll() is not None) or not is_redis_running():
+        sys.exit(f"Redis did not come up on {REDIS_HOST}:{REDIS_PORT}.")
+
+    # Redis goes last: every Pi's backend must be gone before it stops.
     try:
-        wait_for_redis(frontend)
+        frontend = start_frontend()
 
-        with remote_apps(args) as remotes:
-            watch(frontend, remotes)
+        try:
+            with remote_apps(args) as remotes:
+                watch(frontend, remotes)
+
+        finally:
+            # A console Ctrl+C reaches the GUI too; let it save its layout first.
+            try:
+                frontend.wait(timeout=STOP_TIMEOUT_S)
+
+            except (subprocess.TimeoutExpired, KeyboardInterrupt):
+                frontend.terminate()
 
     finally:
-        # A console Ctrl+C reaches the GUI too; let it save its layout first.
-        try:
-            frontend.wait(timeout=STOP_TIMEOUT_S)
-
-        except (subprocess.TimeoutExpired, KeyboardInterrupt):
-            frontend.terminate()
+        stop_redis_server(redis)
 
 
 if __name__ == "__main__":
