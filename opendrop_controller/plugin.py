@@ -104,8 +104,10 @@ class OpenDropControllerPlugin(Plugin):
         # OpenDrop does not serve the protocol voltage/frequency topics; write
         # the columns' fallback range anyway so a previous device's range
         # (app_globals outlives the session) never bounds them.
-        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = DEFAULT_PROTOCOL_VOLTAGE_RANGE
-        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = DEFAULT_PROTOCOL_FREQUENCY_RANGE
+        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = list(DEFAULT_PROTOCOL_VOLTAGE_RANGE)
+        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = list(
+            DEFAULT_PROTOCOL_FREQUENCY_RANGE
+        )
 
         self.opendrop_controller.on_start_device_monitoring_request()
 

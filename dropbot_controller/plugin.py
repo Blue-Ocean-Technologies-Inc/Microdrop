@@ -140,8 +140,10 @@ class DropbotControllerPlugin(Plugin):
         # previous device's range would otherwise bound the protocol columns.
         # DropbotPreferences refines the maxima once the DropBot reports its
         # own on connect.
-        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = DEFAULT_PROTOCOL_VOLTAGE_RANGE
-        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = DEFAULT_PROTOCOL_FREQUENCY_RANGE
+        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = list(DEFAULT_PROTOCOL_VOLTAGE_RANGE)
+        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = list(
+            DEFAULT_PROTOCOL_FREQUENCY_RANGE
+        )
 
     def stop(self):
         """Cleanup when the plugin is stopped."""
