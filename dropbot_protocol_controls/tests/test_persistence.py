@@ -19,6 +19,7 @@ from unittest.mock import patch
 import pytest
 
 # Microdrop package imports.
+from dropbot_protocol_controls.protocol_columns import device_range_model
 from dropbot_protocol_controls.protocol_columns.force_column import (
     make_force_column,
 )
@@ -105,6 +106,7 @@ class _FakeGlobals:
 def fake_app_globals(monkeypatch):
     fake = _FakeGlobals()
     monkeypatch.setattr(force_math, "app_globals", fake)
+    monkeypatch.setattr(device_range_model, "app_globals", fake)
     return fake
 
 

@@ -13,15 +13,25 @@
 # Standard library imports.
 from unittest.mock import MagicMock, patch
 
+# Third-party imports.
+import pytest
+
 # Enthought library imports.
 from traits.api import HasTraits
 
 # Microdrop package imports.
 from dropbot_controller.consts import FREQUENCY_APPLIED, PROTOCOL_SET_FREQUENCY
+from dropbot_protocol_controls.protocol_columns import device_range_model
 from dropbot_protocol_controls.protocol_columns.frequency_column import (
     FrequencyColumnModel,
     make_frequency_column,
 )
+
+
+@pytest.fixture(autouse=True)
+def no_redis_device_range(monkeypatch):
+    """Read the column's fallback range instead of Redis app_globals."""
+    monkeypatch.setattr(device_range_model, "app_globals", {})
 
 
 def test_frequency_column_model_id_and_name():

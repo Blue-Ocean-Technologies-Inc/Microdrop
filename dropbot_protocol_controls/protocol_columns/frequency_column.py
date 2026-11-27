@@ -17,7 +17,7 @@ parallel with VoltageHandler in the same bucket.
 """
 
 # Enthought library imports.
-from traits.api import Int, TraitError
+from traits.api import TraitError
 
 # Microdrop package imports.
 from dropbot_controller.consts import (
@@ -30,7 +30,6 @@ from dropbot_controller.consts import (
 from dropbot_controller.preferences import DropbotPreferences
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler,
-    BaseColumnModel,
     Column,
 )
 
@@ -40,6 +39,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 # Local imports.
 from ..consts import PREFLIGHT_FREQUENCY_LIMITS_CHECK
 from ..services.preflight_checks import hardware_limit_check
+from .device_range_model import DeviceRangeIntColumnModel
 from .device_range_spinbox_view import DeviceRangeIntSpinBoxColumnView
 
 # Logger import.
@@ -48,11 +48,11 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class FrequencyColumnModel(BaseColumnModel):
+class FrequencyColumnModel(DeviceRangeIntColumnModel):
     """Per-step frequency setpoint stored as an Int on each row."""
 
-    def trait_for_row(self):
-        return Int(int(self.default_value), desc="Step frequency in Hz")
+    range_key = PROTOCOL_FREQUENCY_RANGE_KEY
+    fallback_range = DEFAULT_PROTOCOL_FREQUENCY_RANGE
 
 
 class FrequencyHandler(BaseColumnHandler):
@@ -130,10 +130,6 @@ def make_frequency_column():
             col_name="Frequency (Hz)",
             default_value=int(prefs.last_frequency),
         ),
-        view=DeviceRangeIntSpinBoxColumnView(
-            range_key=PROTOCOL_FREQUENCY_RANGE_KEY,
-            fallback_range=DEFAULT_PROTOCOL_FREQUENCY_RANGE,
-            unit="Hz",
-        ),
+        view=DeviceRangeIntSpinBoxColumnView(unit="Hz"),
         handler=FrequencyHandler(),
     )

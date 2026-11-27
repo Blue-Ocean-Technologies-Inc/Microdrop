@@ -17,7 +17,7 @@ priority 30 so the voltage is applied before any electrode actuation.
 """
 
 # Enthought library imports.
-from traits.api import Int, TraitError
+from traits.api import TraitError
 
 # Microdrop package imports.
 from dropbot_controller.consts import (
@@ -30,7 +30,6 @@ from dropbot_controller.consts import (
 from dropbot_controller.preferences import DropbotPreferences
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler,
-    BaseColumnModel,
     Column,
 )
 
@@ -44,6 +43,7 @@ from ..services.preflight_checks import (
     dropbot_connection_check,
     hardware_limit_check,
 )
+from .device_range_model import DeviceRangeIntColumnModel
 from .device_range_spinbox_view import DeviceRangeIntSpinBoxColumnView
 
 # Logger import.
@@ -52,11 +52,11 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class VoltageColumnModel(BaseColumnModel):
+class VoltageColumnModel(DeviceRangeIntColumnModel):
     """Per-step voltage setpoint stored as an Int on each row."""
 
-    def trait_for_row(self):
-        return Int(int(self.default_value), desc="Step voltage in V")
+    range_key = PROTOCOL_VOLTAGE_RANGE_KEY
+    fallback_range = DEFAULT_PROTOCOL_VOLTAGE_RANGE
 
 
 class VoltageHandler(BaseColumnHandler):
@@ -146,10 +146,6 @@ def make_voltage_column():
             col_name="Voltage (V)",
             default_value=int(prefs.last_voltage),
         ),
-        view=DeviceRangeIntSpinBoxColumnView(
-            range_key=PROTOCOL_VOLTAGE_RANGE_KEY,
-            fallback_range=DEFAULT_PROTOCOL_VOLTAGE_RANGE,
-            unit="V",
-        ),
+        view=DeviceRangeIntSpinBoxColumnView(unit="V"),
         handler=VoltageHandler(),
     )

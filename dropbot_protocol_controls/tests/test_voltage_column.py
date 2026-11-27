@@ -13,15 +13,25 @@
 # Standard library imports.
 from unittest.mock import MagicMock, patch
 
+# Third-party imports.
+import pytest
+
 # Enthought library imports.
 from traits.api import HasTraits
 
 # Microdrop package imports.
 from dropbot_controller.consts import PROTOCOL_SET_VOLTAGE, VOLTAGE_APPLIED
+from dropbot_protocol_controls.protocol_columns import device_range_model
 from dropbot_protocol_controls.protocol_columns.voltage_column import (
     VoltageColumnModel,
     make_voltage_column,
 )
+
+
+@pytest.fixture(autouse=True)
+def no_redis_device_range(monkeypatch):
+    """Read the column's fallback range instead of Redis app_globals."""
+    monkeypatch.setattr(device_range_model, "app_globals", {})
 
 
 def test_voltage_column_model_id_and_name():
