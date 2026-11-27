@@ -29,7 +29,7 @@ from image_viewer.consts import (
     TRASH_PACKAGE,
 )
 from microdrop_application.dialogs.pyface_wrapper import CANCEL, YES
-from notifications.consts import SEVERITY_SUCCESS
+from notifications.consts import SEVERITY_ERROR, SEVERITY_SUCCESS
 
 # Microdrop utils imports.
 from microdrop_utils import environment_update_dialog
@@ -51,6 +51,19 @@ def trashed(monkeypatch):
     monkeypatch.setattr(discovery, "_send2trash", lambda: calls.append)
 
     return calls
+
+
+def _send2trash_refusing(refused, error, trashed):
+    """A send2trash that records the paths it moves in ``trashed`` and raises
+    ``error`` for ``refused``."""
+
+    def send2trash(path):
+        if path == str(refused):
+            raise error
+
+        trashed.append(path)
+
+    return send2trash
 
 
 def test_prunes_only_experiments_holding_nothing_but_logs(
@@ -75,7 +88,7 @@ def test_prunes_only_experiments_holding_nothing_but_logs(
 
     assert targets == [empty_captures, logs_only]
 
-    moved = discovery.prune_experiments(targets)
+    moved = list(discovery.prune_experiments(targets))
 
     assert moved == targets
     assert trashed == [str(empty_captures), str(logs_only)]
@@ -85,21 +98,51 @@ def test_prune_stops_on_a_trash_failure(tmp_path, monkeypatch):
     first = _logs_only_experiment(tmp_path, "first")
     second = _logs_only_experiment(tmp_path, "second")
     trashed = []
-
-    def refuse_second(path):
-        if path == str(second):
-            raise TrashPermissionError(path)
-
-        trashed.append(path)
-
+    refuse_second = _send2trash_refusing(second, TrashPermissionError(""), trashed)
     monkeypatch.setattr(discovery, "_send2trash", lambda: refuse_second)
 
     with pytest.raises(TrashPermissionError):
-        discovery.prune_experiments([first, second])
+        list(discovery.prune_experiments([first, second]))
 
     # No permanent-delete fallback: the failing folder is still on disk.
     assert trashed == [str(first)]
     assert (second / EXPERIMENT_LOGS_DIR_NAME / "app.log").is_file()
+
+
+def test_prune_skips_a_folder_already_gone(tmp_path, trashed):
+    kept = _logs_only_experiment(tmp_path, "kept")
+
+    assert list(discovery.prune_experiments([tmp_path / "gone", kept])) == [kept]
+    assert trashed == [str(kept)]
+
+
+@pytest.mark.parametrize(
+    "error", [TrashPermissionError("refused"), RuntimeError("bug")]
+)
+def test_prune_job_reports_a_failure_and_what_it_moved(tmp_path, monkeypatch, error):
+    first = _logs_only_experiment(tmp_path, "first")
+    second = _logs_only_experiment(tmp_path, "second")
+    refuse_second = _send2trash_refusing(second, error, [])
+    monkeypatch.setattr(discovery, "_send2trash", lambda: refuse_second)
+
+    job, cards = _inline_prune_job(monkeypatch)
+    job.start([first, second], on_trash_unavailable=pytest.fail)
+
+    [card] = cards
+    assert card["severity"] == SEVERITY_ERROR
+    assert card["detail"].startswith("1 experiment folder(s)")
+    assert str(error) in card["detail"]
+    assert not job.running
+
+
+def test_prune_action_is_disabled_while_a_prune_runs():
+    action = menus.PruneExperimentsAction(job=prune_job.PruneExperimentsJob())
+
+    action.job.running = True
+    assert not action.enabled
+
+    action.job.running = False
+    assert action.enabled
 
 
 def test_nothing_prunable_without_an_experiments_root(monkeypatch):
@@ -116,7 +159,7 @@ def test_prune_without_send2trash_moves_nothing(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "send2trash", None)
 
     with pytest.raises(discovery.TrashUnavailableError):
-        discovery.prune_experiments([first])
+        list(discovery.prune_experiments([first]))
 
     assert (first / EXPERIMENT_LOGS_DIR_NAME / "app.log").is_file()
 
@@ -194,12 +237,12 @@ class _InlineThread:
         self._run()
 
 
-def _inline_prune_action(monkeypatch):
-    """A Prune Experiments action whose job runs in the test's thread and
-    hands back at once; return it and the list its cards are posted to."""
+def _inline_prune_job(monkeypatch):
+    """A prune job that runs in the test's thread and hands back at once;
+    return it and the list its cards are posted to."""
     cards = []
 
-    monkeypatch.setattr(prune_job.threading, "Thread", _InlineThread)
+    monkeypatch.setattr(prune_job, "Thread", _InlineThread)
     monkeypatch.setattr(
         prune_job, "GUI", SimpleNamespace(invoke_later=lambda f, *args: f(*args))
     )
@@ -207,7 +250,15 @@ def _inline_prune_action(monkeypatch):
         prune_job, "notification_publisher", SimpleNamespace(publish=cards.append)
     )
 
-    return menus.PruneExperimentsAction(job=prune_job.PruneExperimentsJob()), cards
+    return prune_job.PruneExperimentsJob(), cards
+
+
+def _inline_prune_action(monkeypatch):
+    """A Prune Experiments action over an inline job (_inline_prune_job);
+    return it and the list its cards are posted to."""
+    job, cards = _inline_prune_job(monkeypatch)
+
+    return menus.PruneExperimentsAction(job=job), cards
 
 
 def test_prune_action_retries_once_the_update_makes_send2trash_available(
