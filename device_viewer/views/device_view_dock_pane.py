@@ -129,6 +129,7 @@ from ..services.svg_persistence_service import (
 from ..utils.alignment_geometry import device_render_rect
 from ..utils.auto_fit_graphics_view import AutoFitGraphicsView
 from .connections_editor_view.connections_editor_pane import ConnectionsEditorPane
+from .device_chip import DeviceChipController
 from .electrode_view.electrode_layer import ElectrodeLayer
 from .electrode_view.electrode_scene import ElectrodeScene
 from .sidebar.calibration import build_calibration
@@ -243,6 +244,9 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
     #: Reads and writes the device SVG; the pane title follows its
     #: ``loaded_path`` and ``modified``.
     svg_persistence = Instance(SvgPersistenceService)
+
+    #: The device chip in the status bar; None until the bar exists.
+    device_chip = Instance(DeviceChipController)
 
     #: Posts the calibration reminder to the notifications drawer.
     calibration_reminder = Instance(CalibrationReminderController)
@@ -1088,7 +1092,23 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
         if self.calibration_reminder is not None:
             self.calibration_reminder.stop()
 
+        self._withdraw_status_bar_widgets()
         super().destroy()
+
+    def _withdraw_status_bar_widgets(self):
+        """Take the recording icon and the device chip out of the status
+        bar, which deletes them."""
+        plugin = self.task.window.application.get_plugin(PKG)
+        icons = plugin.status_bar_icons if plugin is not None else []
+        recording_icon = getattr(self, "recording_icon", None)
+
+        if recording_icon is not None and recording_icon in icons:
+            icons.remove(recording_icon)
+
+        if self.device_chip is not None:
+            self.device_chip.withdraw(icons)
+
+        self.device_chip = None
 
     def _show_sidebar_context_menu(self, point):
         """Offer the sidebar layout preferences at the right-clicked point."""
@@ -1458,26 +1478,6 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
             if changed_key == video_key and self.video_item:
                 self.video_item.setOpacity(self.model.get_alpha(video_key))
 
-    @observe("model.step_label")
-    @observe("model.free_mode")
-    @observe("model.editable")
-    @observe("model.protocol_running")
-    def step_label_change(self, event):
-        _status_bar_manager = self.task.window.status_bar_manager
-
-        if _status_bar_manager:
-            if self.model.protocol_running:
-                _status = "Running Protocol"
-                if self.model.editable:
-                    _status += " (Editable)"
-                _status_bar_manager.message = f"{_status}: {self.model.step_label}"
-
-            elif self.model.step_label:
-                _status_bar_manager.message = f"Editing: {self.model.step_label}"
-
-            elif self.model.free_mode:
-                _status_bar_manager.message = "Free Mode"
-
     @observe("model:mode")
     def _mode_changed(self, event):
 
@@ -1549,15 +1549,18 @@ class DeviceViewerDockPane(LazyContentDockPane, TraitsDockPane):
         self.recording_icon.status_bar_icon_priority = ICON_PRIORITY_LEFT
         self._connect_recording_icon()
 
-        # Contribute the icon; the microdrop_status_bar plugin owns its
-        # placement, spacing, and removal.
+        # Contribute the icon and the device chip; the microdrop_status_bar
+        # plugin owns their placement, spacing, and removal.
         plugin = self.task.window.application.get_plugin(PKG)
 
         if plugin is None:
             logger.warning(f"{PKG}: plugin not found; status-bar icons not shown")
             return
 
-        plugin.status_bar_icons.append(self.recording_icon)
+        self.device_chip = DeviceChipController(
+            dock_pane=self, persistence=self.svg_persistence
+        )
+        plugin.status_bar_icons.extend([self.recording_icon, self.device_chip.chip])
 
     def _connect_recording_icon(self):
         """Once both the recording icon and the camera panel exist, the
