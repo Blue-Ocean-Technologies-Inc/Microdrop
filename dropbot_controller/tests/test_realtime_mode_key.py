@@ -12,6 +12,9 @@
 every assignment of realtime_mode, a DropBot disconnect turns it off, and a
 frontend status model never writes it. No Redis."""
 
+# Standard library imports.
+import threading
+
 # Enthought library imports.
 from traits.api import Any, Bool
 
@@ -19,6 +22,9 @@ from traits.api import Any, Bool
 from dropbot_controller.consts import REALTIME_MODE_KEY
 from dropbot_controller.services.dropbot_monitor_mixin_service import (
     DropbotMonitorMixinService,
+)
+from dropbot_controller.services.dropbot_states_setting_mixin_service import (
+    DropbotStatesSettingMixinService,
 )
 from template_status_and_controls.base_model import BaseStatusModel
 
@@ -30,6 +36,17 @@ from microdrop_utils.redis_manager import RedisHashDictProxy
 class _DropbotMonitor(DropbotMonitorMixinService, RealtimeModeMixin):
     proxy = Any()
     dropbot_connection_active = Bool(True)
+
+
+class _DropbotStates(DropbotStatesSettingMixinService):
+    proxy = Any()
+
+
+class _TimingOutProxy:
+    transaction_lock = threading.Lock()
+
+    def update_state(self, **states):
+        raise TimeoutError("no reply from the board")
 
 
 def test_constructing_a_backend_writes_nothing(realtime_mode_key_store):
@@ -61,6 +78,15 @@ def test_a_dropbot_disconnect_turns_the_key_off(realtime_mode_key_store):
     monitor.on_disconnected_signal("")
 
     assert realtime_mode_key_store == {REALTIME_MODE_KEY: False}
+
+
+def test_a_failed_realtime_enable_leaves_the_key_unset(realtime_mode_key_store):
+    backend = _DropbotStates(proxy=_TimingOutProxy())
+
+    backend.on_set_realtime_mode_request("True")
+
+    assert not backend.realtime_mode
+    assert realtime_mode_key_store == {}
 
 
 def test_a_status_model_never_writes_the_key(monkeypatch):
