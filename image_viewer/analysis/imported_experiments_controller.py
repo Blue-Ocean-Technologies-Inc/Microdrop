@@ -190,12 +190,18 @@ class ImportedExperimentsViewerController(HasTraits):
         "model:experiments.items, model:experiments:items:[label,align_to_run_start]"
     )
     def _store(self, event):
+        """Keep the set in the preferences, less the experiments not
+        worth plotting (see ImportedExperiment.worth_plotting)."""
         if self.viewer_model is None:
             return
 
         preferences = self.viewer_model.preferences
         text = payloads_as_text(
-            [experiment.as_payload() for experiment in self.model.experiments]
+            [
+                experiment.as_payload()
+                for experiment in self.model.experiments
+                if experiment.worth_plotting
+            ]
         )
 
         if preferences.plotted_experiments != text:
