@@ -8,18 +8,24 @@
 #
 # Thanks for using Microdrop open source!
 
-from traits.api import provides, HasTraits, Bool, Float, Str
+# Enthought library imports.
+from traits.api import Bool, Float, HasTraits, Str, provides
 
-from logger.logger_service import get_logger
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Local imports.
+from ..consts import (
+    FREQUENCY_APPLIED,
+    HARDWARE_MIN_FREQUENCY,
+    HARDWARE_MIN_VOLTAGE,
+    REALTIME_MODE_UPDATED,
+    VOLTAGE_APPLIED,
+)
 from ..interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 
-from ..consts import (
-    REALTIME_MODE_UPDATED, HARDWARE_MIN_VOLTAGE, HARDWARE_MIN_FREQUENCY,
-    VOLTAGE_APPLIED, FREQUENCY_APPLIED,
-)
-
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -27,18 +33,19 @@ logger = get_logger(__name__)
 @provides(IDropbotControlMixinService)
 class DropbotStatesSettingMixinService(HasTraits):
     """
-    A mixin Class that adds methods to set states for a dropbot connection and get some dropbot information.
+    A mixin Class that adds methods to set states for a dropbot connection and get
+    some dropbot information.
     """
 
-    id = Str('dropbot_states_setting_mixin_service')
-    name = Str('Dropbot States Setting Mixin')
+    id = Str("dropbot_states_setting_mixin_service")
+    name = Str("Dropbot States Setting Mixin")
 
     realtime_mode = Bool(False)
     # TODO: Get these from a config file
     voltage = Float(30)
     frequency = Float(1000)
 
-    ######################################## Methods to Expose #############################################
+    ############################## Methods to Expose ##############################
 
     @property
     def hardware_max_voltage(self):
@@ -72,21 +79,25 @@ class DropbotStatesSettingMixinService(HasTraits):
         """
         try:
             self.voltage = float(message)
-            if self.voltage < HARDWARE_MIN_VOLTAGE or self.voltage > self.hardware_max_voltage:
+            if (
+                self.voltage < HARDWARE_MIN_VOLTAGE
+                or self.voltage > self.hardware_max_voltage
+            ):
                 raise ValueError(
-                    f"Voltage must be between {HARDWARE_MIN_VOLTAGE} and {self.hardware_max_voltage} V"
+                    f"Voltage must be between {HARDWARE_MIN_VOLTAGE} and "
+                    f"{self.hardware_max_voltage} V"
                 )
 
             self.preferences.last_voltage = int(self.voltage)
 
-            if not hasattr(self, 'proxy') or self.proxy is None:
+            if not hasattr(self, "proxy") or self.proxy is None:
                 logger.error("Proxy not available for voltage setting")
                 return
 
             if self.realtime_mode:
                 with self.proxy.transaction_lock:
-                        self.proxy.update_state(voltage=self.voltage)
-                        logger.info(f"Set voltage to {self.voltage} V")
+                    self.proxy.update_state(voltage=self.voltage)
+                    logger.info(f"Set voltage to {self.voltage} V")
 
         except (TimeoutError, RuntimeError) as e:
             logger.error(f"Proxy error setting voltage: {e}")
@@ -123,21 +134,25 @@ class DropbotStatesSettingMixinService(HasTraits):
         """
         try:
             self.frequency = float(message)
-            if self.frequency < HARDWARE_MIN_FREQUENCY or self.frequency > self.hardware_max_frequency:
+            if (
+                self.frequency < HARDWARE_MIN_FREQUENCY
+                or self.frequency > self.hardware_max_frequency
+            ):
                 raise ValueError(
-                    f"Frequency must be between {HARDWARE_MIN_FREQUENCY} and {self.hardware_max_frequency} Hz"
+                    f"Frequency must be between {HARDWARE_MIN_FREQUENCY} and "
+                    f"{self.hardware_max_frequency} Hz"
                 )
 
             self.preferences.last_frequency = int(self.frequency)
 
-            if not hasattr(self, 'proxy') or self.proxy is None:
+            if not hasattr(self, "proxy") or self.proxy is None:
                 logger.error("Proxy not available for frequency setting")
                 return
 
             if self.realtime_mode:
                 with self.proxy.transaction_lock:
-                        self.proxy.update_state(frequency=self.frequency)
-                        logger.info(f"Set frequency to {self.frequency} Hz")
+                    self.proxy.update_state(frequency=self.frequency)
+                    logger.info(f"Set frequency to {self.frequency} Hz")
 
         except (TimeoutError, RuntimeError) as e:
             logger.error(f"Proxy error setting frequency: {e}")
@@ -170,16 +185,17 @@ class DropbotStatesSettingMixinService(HasTraits):
         Method to set the realtime mode on the dropbot device.
         """
         try:
-            if not hasattr(self, 'proxy') or self.proxy is None:
+            if not hasattr(self, "proxy") or self.proxy is None:
                 logger.error("Proxy not available for realtime mode setting")
                 return
 
             with self.proxy.transaction_lock:
                 if message == "True":
                     self.realtime_mode = True
-                    self.proxy.update_state(hv_output_selected=True,
-                                            hv_output_enabled=True,
-                                            )
+                    self.proxy.update_state(
+                        hv_output_selected=True,
+                        hv_output_enabled=True,
+                    )
                     publish_message(topic=REALTIME_MODE_UPDATED, message="True")
                 else:
                     self.realtime_mode = False
