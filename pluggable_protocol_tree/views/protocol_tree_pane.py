@@ -568,7 +568,7 @@ class ProtocolTreePane(QWidget):
         it)."""
         error_dialog(parent=None, title="Protocol error", message=str(message))
 
-    def _navigable_steps(self):
+    def navigable_steps(self):
         """Distinct steps in execution order for the step cursor.
 
         iter_execution_steps() expands repetitions — a Reps=N step (or a

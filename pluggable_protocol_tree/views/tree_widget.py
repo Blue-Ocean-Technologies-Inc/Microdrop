@@ -171,7 +171,7 @@ class _ProtocolTreeView(QTreeView):
 
         return super().selectionCommand(index, event)
 
-    def _clear_to_free_mode(self):
+    def clear_to_free_mode(self):
         """Drop the selection AND the current index. The invalid current
         index flows through currentChanged -> the DV sync controller's
         _publish_for_row(None), returning the device viewer to free mode."""
@@ -187,7 +187,7 @@ class _ProtocolTreeView(QTreeView):
         # when open, has focus and consumes Escape itself (cancels the edit),
         # so the view only sees it once no cell is being edited.
         if event.key() == Qt.Key_Escape and self.currentIndex().isValid():
-            self._clear_to_free_mode()
+            self.clear_to_free_mode()
             event.accept()
             return
         super().keyPressEvent(event)
@@ -196,7 +196,7 @@ class _ProtocolTreeView(QTreeView):
         if event.button() == Qt.LeftButton:
             idx = self.indexAt(event.position().toPoint())
             if not idx.isValid():
-                self._clear_to_free_mode()
+                self.clear_to_free_mode()
                 event.accept()
                 return
 
