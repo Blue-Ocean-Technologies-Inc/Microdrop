@@ -1,3 +1,9 @@
+## [v1.56.1](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.56.1) (2026-11-27)
+
+### Fix
+
+- **device-viewer**: save area scale when SVG lacks metadata ([`7c74e04`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7c74e04df337d253b5ed752db415ebf9001b1210))
+
 ## [v1.56.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.56.0) (2026-11-27)
 
 ### Feat
