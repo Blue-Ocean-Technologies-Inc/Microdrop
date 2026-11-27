@@ -44,6 +44,7 @@ from ..consts import (
     LOG_IGNORE_RULES,
     LOG_MIN_LEVEL,
     LOG_RECORDED_ATTR,
+    LOG_TRAITS_LOGGER_NAME,
     MAX_ENTRIES,
     PKG,
     SEVERITY_ERROR,
@@ -92,8 +93,26 @@ def snapshot_record(record):
     if record.stack_info:
         traceback_text = f"{traceback_text}\n{record.stack_info}".strip()
 
+    exception = record.exc_info[1] if record.exc_info else None
+
     # The exception's own line tells apart errors logged from one call site.
-    exception_line = traceback_text.strip().rsplit("\n", 1)[-1]
+    # Read off the exception itself where there is one: a traceback can end
+    # in a multi-line message's last line, in notes or in the stack.
+    if exception is None:
+        exception_line = traceback_text.strip().rsplit("\n", 1)[-1]
+
+    else:
+        exception_line = type(exception).__name__
+
+        # A broken __str__ must not lose the card: fall back to the type name.
+        try:
+            first_line = str(exception).strip().partition("\n")[0]
+
+        except Exception:
+            first_line = ""
+
+        if first_line:
+            exception_line = f"{exception_line}: {first_line}"
 
     return {
         "name": name,
@@ -101,6 +120,7 @@ def snapshot_record(record):
         "message": message,
         "traceback": traceback_text,
         "created": record.created,
+        "exception_line": exception_line,
         "key": (CATEGORY_LOG, name, record.levelno, str(record.msg), exception_line),
     }
 
@@ -135,7 +155,13 @@ def collapse_snapshots(snapshots, collapsed=None):
 def post_arguments(item):
     """``NotificationCenter.post`` keywords for a collapsed item."""
     snapshot = item["snapshot"]
-    title, detail = title_and_detail(snapshot["message"], snapshot["traceback"])
+    text, detail = snapshot["message"], snapshot["traceback"]
+
+    # The event description traits logs says nothing of what went wrong.
+    if snapshot["name"] == LOG_TRAITS_LOGGER_NAME and snapshot["exception_line"]:
+        text, detail = snapshot["exception_line"], f"{text}\n\n{detail}"
+
+    title, detail = title_and_detail(text, detail)
     severity = (
         SEVERITY_ERROR if snapshot["levelno"] >= logging.ERROR else SEVERITY_WARNING
     )

@@ -110,7 +110,7 @@ class OpenDropControllerBase(RealtimeModeMixin):
             else:
                 logger.warning(
                     f"Request for '{specific_sub_topic}' denied: "
-                    f"OpenDrop is disconnected."
+                    "OpenDrop is disconnected."
                 )
 
         if requested_method:
@@ -120,9 +120,9 @@ class OpenDropControllerBase(RealtimeModeMixin):
             ):
                 return
             self.timestamps[topic] = timestamped_message.timestamp_dt
-            err_msg = invoke_class_method(self, requested_method, timestamped_message)
-            if err_msg:
-                logger.error(f"Error handling topic {topic}: {err_msg}")
+            invoke_class_method(
+                self, requested_method, timestamped_message, topic=topic
+            )
 
     def traits_init(self):
         logger.info("Starting OpenDropController listener")

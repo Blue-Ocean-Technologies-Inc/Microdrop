@@ -133,19 +133,22 @@ def prunable_experiments():
 
 def prune_experiments(directories):
     """Move each of ``directories`` (prunable_experiments folders) to the
-    platform's Recycle Bin / Trash; return the moved folders. Raises
-    TrashUnavailableError, before moving any, without send2trash. An
+    platform's Recycle Bin / Trash, yielding each once it has moved. A
+    folder already gone — trashed from the viewer meanwhile — is skipped.
+    Raises TrashUnavailableError, before moving any, without send2trash. An
     OSError stops the pruning and propagates, leaving the folders before it
     trashed — never falls back to a permanent delete."""
     send2trash = _send2trash()
-    removed = []
 
     for directory in directories:
+        if not directory.exists():
+            logger.info(f"Experiment folder {directory} is already gone")
+            continue
+
         send2trash(str(directory))
         logger.info(f"Moved experiment folder {directory} to the trash")
-        removed.append(directory)
 
-    return removed
+        yield directory
 
 
 def _send2trash():

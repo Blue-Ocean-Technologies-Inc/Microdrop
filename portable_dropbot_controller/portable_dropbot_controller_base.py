@@ -212,10 +212,7 @@ class PortableDropbotControllerBase(RealtimeModeMixin):
             self.timestamps[topic] = timestamped_message.timestamp_dt
 
         logger.debug(f"Handling {topic} --> {requested_method}")
-        err_msg = invoke_class_method(self, requested_method, timestamped_message)
-
-        if err_msg:
-            logger.error(f"Error handling topic {topic}: {err_msg}")
+        invoke_class_method(self, requested_method, timestamped_message, topic=topic)
 
     def _exclusive_owner_reason(self, topic):
         """Why a routine that owns the board exclusively refuses the request

@@ -26,6 +26,7 @@ from traits.api import Instance, List
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.consts import FILE_MENU_SUBMENUS_GROUP_ID
 from microdrop_application.consts import PKG as microdrop_application_PKG
+from notifications.consts import NOTIFICATION_CATEGORIES
 from user_help_plugin.consts import TUTORIAL_ORDER_ANALYSIS, TUTORIALS, TutorialEntry
 
 # Local imports.
@@ -34,6 +35,7 @@ from .consts import (
     ANALYSIS_HELP_HTML_PATH,
     DOCK_PANE_ID,
     IMAGE_FILTERS,
+    IMAGE_VIEWER_CATEGORIES,
     IMAGE_VIEWER_TUTORIAL_HTML_PATH,
     PKG,
     PKG_name,
@@ -62,6 +64,9 @@ class ImageViewerPlugin(Plugin):
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
     preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
+    notification_categories = List(
+        IMAGE_VIEWER_CATEGORIES, contributes_to=NOTIFICATION_CATEGORIES
+    )
 
     #: Help > Tutorials entries for this plugin's panes.
     tutorials = List(contributes_to=TUTORIALS)

@@ -130,6 +130,9 @@ Receiving: (Via handlers, image_viewer/message_handler.py)
 - PROTOCOL_RUNNING "microdrop/protocol_running" — sets the ROI analysis model's `protocol_running` on the GUI thread: Calculate/Export/AI Detect/Track ask before starting, the ROI batch computes at most 2 images at once, and a draw/edit holds the view (no auto-follow, no refit)
 - SHOW_IMAGE "ui/image_viewer/show_image" — show the image file at `path` (`ShowImageRequest`, via `show_image_publisher`; the photo cards' Show button) in its Capture Session, the Image Viewer pane brought forward (`microdrop_utils.dock_pane_presenting`); see the camera captures flow below
 
+Sending: (Via publish_method)
+- NOTIFICATION_POST "ui/notifications/post" — File › Prune Experiments' outcome from its background job (`image_viewer/prune_job.py`): "Moved N experiment folder(s) to the trash", or "Pruning experiments stopped" with how many had moved (category `image_viewer.prune_experiments`)
+
 ### notifications
 
 Receiving: (Via handlers, notifications/controllers/message_handler.py)

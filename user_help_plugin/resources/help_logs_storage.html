@@ -1072,7 +1072,8 @@ say when each matters and whether it is safe to delete.</p>
   </dd>
   <dt>Typical value</dt><dd><p>Many folders hold only <code>logs</code>: MicroDrop was started and nothing was run.
   <span class="ui">File ▸ Experiments ▸ Prune Experiments…</span> moves every such folder, never the current one, to the
-  Recycle Bin (Trash on macOS and Linux), after asking.</p></dd>
+  Recycle Bin (Trash on macOS and Linux), after asking. It runs in the background and reports the result in a
+  notification card.</p></dd>
 </dl></article>
 
 <article class="term" id="store-devices">
@@ -1246,7 +1247,7 @@ say when each matters and whether it is safe to delete.</p>
           <details open data-rp="chart" tabindex="0"><summary>Capacitance (pF)</summary><svg class="rp-bars" data-col="0" viewBox="0 0 300 118" role="img" aria-label="Mean capacitance per step"></svg></details>
           <div class="rp-folded" data-rp="folded" tabindex="0">
             <details><summary>Voltage (V)</summary></details>
-            <details><summary>Force Over Unit Area (mN/mm^2)</summary></details>
+            <details><summary>Force (mN/m)</summary></details>
             <details><summary>Actuated Area (mm^2)</summary></details>
             <details><summary>Capacitance Over Area (pF/mm^2)</summary></details>
           </div>
@@ -2658,7 +2659,7 @@ Tutorial.demo("report", function (figure, T) {
   var STATS = [
     ["col-cap", "Capacitance (pF)", ["49.63", "1.912", "38.24", "61.71"], ["49.67", "1.341", "46.12", "52.93"]],
     ["col-v", "Voltage (V)", ["119.8", "1.874", "112", "121"], ["120", "0.6124", "118", "121"]],
-    ["col-force", "Force Over Unit Area (mN/mm^2)", ["4.227e+04", "1338", "3.694e+04", "4.312e+04"], ["4.24e+04", "424.1", "4.101e+04", "4.312e+04"]],
+    ["col-force", "Force (mN/m)", ["42.27", "1.338", "36.94", "43.12"], ["42.4", "0.4241", "41.01", "43.12"]],
     ["col-area", "Actuated Area (mm^2)", ["8.693", "1.905e-06", "8.693", "8.693"], ["8.693", "1.905e-06", "8.693", "8.693"]],
     ["col-cpa", "Capacitance Over Area (pF/mm^2)", ["5.709", "0.22", "4.399", "7.099"], ["5.714", "0.1543", "5.305", "6.089"]],
     ["col-thick", "Dielectric Thickness (um)", ["5.384", "0.2794", "4.23", "7.244"], ["5.36", "0.1661", "5.01", "5.846"]]
@@ -2713,7 +2714,7 @@ Tutorial.demo("report", function (figure, T) {
     "col-v": ["Voltage (V)", "The actuation voltage the DropBot measured back.",
       "Every capacitance reading carries the voltage measured with it.",
       "Should sit close to each step's Voltage setting."],
-    "col-force": ["Force Over Unit Area", "An estimate of the force driving the droplet.",
+    "col-force": ["Force (mN/m)", "An estimate of the force driving the droplet, per unit length of its edge.",
       "0.5 × (liquid − filler calibration) × voltage², for each sample.",
       "Grows with the square of the voltage. Missing when no capacitance calibration was received during the run."],
     "col-area": ["Actuated Area (mm^2)", "The total area of the electrodes that were on.",

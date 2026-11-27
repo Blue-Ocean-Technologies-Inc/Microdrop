@@ -192,9 +192,9 @@ class MockDropbotController(RealtimeModeMixin):
                 return
             self.timestamps[topic] = timestamped_message.timestamp_dt
 
-            err_msg = invoke_class_method(self, requested_method, timestamped_message)
-            if err_msg:
-                logger.error(f"Mock handler error: {err_msg}")
+            invoke_class_method(
+                self, requested_method, timestamped_message, topic=topic
+            )
 
     # ---- Request handlers ----
 

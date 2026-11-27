@@ -14,12 +14,19 @@ These handlers exist alongside the UI-driven on_set_voltage_request /
 on_set_frequency_request but bypass the realtime-mode gate and skip
 prefs persistence — protocol writes are unconditional and transient.
 """
+
+# Standard library imports.
+import logging
 from unittest.mock import MagicMock, patch
 
+# Microdrop package imports.
 from dropbot_controller.consts import FREQUENCY_APPLIED, VOLTAGE_APPLIED
 from dropbot_controller.services.dropbot_states_setting_mixin_service import (
     DropbotStatesSettingMixinService,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_controller_base import invoke_class_method
 
 
 def _make_service():
@@ -43,7 +50,8 @@ def test_on_protocol_set_voltage_request_calls_proxy_and_publishes_ack():
 
 
 def test_on_protocol_set_voltage_request_bypasses_realtime_mode():
-    """Unlike on_set_voltage_request, this handler runs even when realtime_mode is False."""
+    """Unlike on_set_voltage_request, this handler runs even when realtime_mode is
+    False."""
     svc = _make_service()
     svc.realtime_mode = False
     with patch(
@@ -108,3 +116,18 @@ def test_on_protocol_set_frequency_request_does_not_persist_prefs():
         "Handler must not write to preferences.last_frequency; "
         f"sentinel 99999 was overwritten with {svc.preferences.last_frequency}"
     )
+
+
+def test_a_failing_set_voltage_request_is_logged_once(caplog):
+    """The handler lets the error propagate; invoke_class_method alone logs it."""
+    svc = _make_service()
+
+    with caplog.at_level(logging.DEBUG):
+        invoke_class_method(
+            svc, "on_set_voltage_request", "abc", topic="dropbot/requests/set_voltage"
+        )
+
+    errors = [record for record in caplog.records if record.levelno >= logging.ERROR]
+
+    assert len(errors) == 1
+    assert isinstance(errors[0].exc_info[1], ValueError)

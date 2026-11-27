@@ -34,8 +34,8 @@ logger = get_logger(__name__)
 @provides(IDropbotControlMixinService)
 class DropbotStatesSettingMixinService(RealtimeModeMixin):
     """
-    A mixin Class that adds methods to set states for a dropbot connection and
-    get some dropbot information.
+    A mixin Class that adds methods to set states for a dropbot connection and get
+    some dropbot information.
     """
 
     id = Str("dropbot_states_setting_mixin_service")
@@ -45,7 +45,7 @@ class DropbotStatesSettingMixinService(RealtimeModeMixin):
     voltage = Float(30)
     frequency = Float(1000)
 
-    ############################ Methods to Expose ############################
+    ############################## Methods to Expose ##############################
 
     @property
     def hardware_max_voltage(self):
@@ -101,9 +101,6 @@ class DropbotStatesSettingMixinService(RealtimeModeMixin):
 
         except (TimeoutError, RuntimeError) as e:
             logger.error(f"Proxy error setting voltage: {e}")
-        except Exception as e:
-            logger.error(f"Error setting voltage: {e}")
-            raise
 
     def on_protocol_set_voltage_request(self, message):
         """Set voltage on the dropbot for protocol-driven writes.
@@ -122,9 +119,6 @@ class DropbotStatesSettingMixinService(RealtimeModeMixin):
             publish_message(topic=VOLTAGE_APPLIED, message=str(v))
         except (TimeoutError, RuntimeError) as e:
             logger.error(f"Proxy error setting protocol voltage: {e}")
-        except Exception as e:
-            logger.error(f"Error setting protocol voltage: {e}")
-            raise
 
     def on_set_frequency_request(self, message):
         """Set frequency on the dropbot device.
@@ -156,9 +150,6 @@ class DropbotStatesSettingMixinService(RealtimeModeMixin):
 
         except (TimeoutError, RuntimeError) as e:
             logger.error(f"Proxy error setting frequency: {e}")
-        except Exception as e:
-            logger.error(f"Error setting frequency: {e}")
-            raise
 
     def on_protocol_set_frequency_request(self, message):
         """Set frequency on the dropbot for protocol-driven writes.
@@ -176,9 +167,6 @@ class DropbotStatesSettingMixinService(RealtimeModeMixin):
             publish_message(topic=FREQUENCY_APPLIED, message=str(v))
         except (TimeoutError, RuntimeError) as e:
             logger.error(f"Proxy error setting protocol frequency: {e}")
-        except Exception as e:
-            logger.error(f"Error setting protocol frequency: {e}")
-            raise
 
     def on_set_realtime_mode_request(self, message):
         """

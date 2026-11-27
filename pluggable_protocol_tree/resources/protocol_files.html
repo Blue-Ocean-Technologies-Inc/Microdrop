@@ -1174,7 +1174,7 @@ map and a <em>Where is my …?</em> lookup; this part is about how experiments a
         <th><button type="button" data-col="step_id">step_id</button></th>
         <th><button type="button" data-col="cap">Capacitance (pF)</button></th>
         <th><button type="button" data-col="volt">Voltage (V)</button></th>
-        <th><button type="button" data-col="force">Force Over Unit Area (mN/mm^2)</button></th>
+        <th><button type="button" data-col="force">Force (mN/m)</button></th>
         <th><button type="button" data-col="area">Actuated Area (mm^2)</button></th>
         <th><button type="button" data-col="cpa">Capacitance Over Area (pF/mm^2)</button></th>
         <th><button type="button" data-col="thick">Dielectric Thickness (um)</button></th>
@@ -1290,7 +1290,8 @@ map and a <em>Where is my …?</em> lookup; this part is about how experiments a
   <p>Clears away experiment folders in which nothing happened.</p>
   <dl class="facts"><dt>What it is</dt><dd><p>Finds every experiment folder that holds only <code>logs</code> (and empty folders), never the active
   one, and asks <em>Delete … experiment folder(s) that hold only logs?</em>, with the names in the details. Yes moves them
-  to the Recycle Bin (Trash on macOS and Linux), where you can restore them.</p></dd>
+  to the Recycle Bin (Trash on macOS and Linux), where you can restore them. It runs in the background and reports
+  the result in a notification card.</p></dd>
   <dt>How to read it</dt><dd><p><em>No experiments to prune</em> means every folder holds data. If the computer's MicroDrop is
   missing the package that moves files to the Recycle Bin, it offers to update the environment first.</p></dd>
   <dt>When to use it</dt><dd><p>Now and then, to keep <code>Experiments</code> readable.</p></dd>
@@ -2796,7 +2797,7 @@ Tutorial.demo("csv", function (figure, T) {
     step_id: "The step's permanent id. It matches the step's uuid in the run's protocol copy.",
     cap: "The capacitance the DropBot measured, in picofarads. It rises when liquid covers the switched-on electrodes.",
     volt: "The voltage the DropBot measured across the chip.",
-    force: "Force per unit area on the liquid. Empty when no calibration was available during the run.",
+    force: "Electrostatic force on the liquid per unit length of the droplet edge, in mN/m, as the DropBot status pane shows it. Empty when no calibration was available during the run.",
     area: "The total area of the electrodes switched on at that moment.",
     cpa: "Capacitance divided by the switched-on area. Empty when nothing was on.",
     thick: "An estimate of the dielectric layer's thickness. Empty when no dielectric was picked in the DropBot pane.",

@@ -23,8 +23,12 @@ from traits.api import Any, Bool, Dict, Float, HasTraits, Int, List, Str
 # Microdrop package imports.
 from pluggable_protocol_tree.services.logging.consts import (
     DIELECTRIC_THICKNESS_COLUMN,
+    FORCE_COLUMN,
     VACUUM_PERMITTIVITY_PF_UM_PER_MM2,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.force_math_helpers import force_for_step
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -166,7 +170,7 @@ class LoggingIngestion(HasTraits):
                 "step_id": self._step_id,
                 "Capacitance (pF)": cap,
                 "Voltage (V)": volt,
-                "Force Over Unit Area (mN/mm^2)": force,
+                FORCE_COLUMN: force,
                 "Actuated Area (mm^2)": self._actuated_area,
                 "Capacitance Over Area (pF/mm^2)": capacitance_over_area,
                 DIELECTRIC_THICKNESS_COLUMN: self._calculate_dielectric_thickness(
@@ -178,14 +182,19 @@ class LoggingIngestion(HasTraits):
         return True
 
     # --- force ---
-    def _calculate_force(self, voltage: float):
-        if self._cpa is None or voltage <= 0:
+    def _calculate_force(self, voltage):
+        """Force in mN/m from the shared helper the status pane uses, or None
+        without a calibration or for a non-positive voltage."""
+        if self._cpa is None:
             return None
+
         try:
-            return round(0.5 * self._cpa * (voltage**2), 6)
+            force = force_for_step(voltage, self._cpa)
         except Exception as e:  # pragma: no cover - defensive
             logger.error(f"force calc failed: {e}")
             return None
+
+        return round(force, 6) if force is not None else None
 
     # --- dielectric ---
     def _calculate_dielectric_thickness(self, capacitance_over_area):

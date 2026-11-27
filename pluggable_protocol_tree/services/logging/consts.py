@@ -30,3 +30,6 @@ VACUUM_PERMITTIVITY_PF_UM_PER_MM2 = 8.8541878128
 
 # Data column the ingestion writes and the report footnotes.
 DIELECTRIC_THICKNESS_COLUMN = "Dielectric Thickness (um)"
+
+# Data column for 0.5 * C/A * V^2, in the DropBot status pane's force unit.
+FORCE_COLUMN = "Force (mN/m)"

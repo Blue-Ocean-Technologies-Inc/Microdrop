@@ -170,7 +170,7 @@ def test_handler_error_is_logged_not_raised(controller_and_actor_factory):
     with patch("microdrop_utils.dramatiq_controller_base.logger") as dispatch_logger:
         _dispatch(controller, DISABLED_CHANNELS_CHANGED, "not json")
 
-    dispatch_logger.error.assert_called()
+    dispatch_logger.exception.assert_called_once()
 
 
 # --------------------------------------------------------------------------- #

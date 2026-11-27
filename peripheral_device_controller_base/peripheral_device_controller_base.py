@@ -8,29 +8,48 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 from datetime import datetime
 
+# Third-party imports.
 import dramatiq
-from traits.api import HasTraits, Any, Bool, Str, Dict, List, Instance, observe, Property
 
-from microdrop_utils.dramatiq_controller_base import (
-    generate_class_method_dramatiq_listener_actor,
-    invoke_class_method,
-    TimestampedMessage,
+# Enthought library imports.
+from traits.api import (
+    Any,
+    Bool,
+    Dict,
+    HasTraits,
+    Instance,
+    List,
+    Property,
+    Str,
+    observe,
 )
 
+# Microdrop package imports.
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_controller_base import (
+    TimestampedMessage,
+    generate_class_method_dramatiq_listener_actor,
+    invoke_class_method,
+)
+
+# Local imports.
 from .consts import (
     DEFAULT_ALWAYS_ALLOWED_SUBTOPICS,
     connected_topic,
+    connection_state_key,
     disconnected_topic,
     searching_topic,
-    connection_state_key,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
-logger = get_logger(__name__, level="INFO")
 
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
+logger = get_logger(__name__, level="INFO")
 app_globals = get_microdrop_redis_globals_manager()
 
 
@@ -69,14 +88,11 @@ class PeripheralDeviceControllerBase(HasTraits):
     def _get_connected_topic(self):
         return connected_topic(self._device_name)
 
-
     def _get_disconnected_topic(self):
         return disconnected_topic(self._device_name)
 
-
     def _get_searching_topic(self):
         return searching_topic(self._device_name)
-
 
     def _get_connection_state_key(self):
         return connection_state_key(self._device_name)
@@ -113,15 +129,20 @@ class PeripheralDeviceControllerBase(HasTraits):
     # Dramatiq listener
     ##########################################################
 
-    def listener_actor_routine(self, timestamped_message: TimestampedMessage, topic: str):
+    def listener_actor_routine(
+        self, timestamped_message: TimestampedMessage, topic: str
+    ):
         """A Dramatiq actor that listens to messages and dispatches them to the
         matching ``on_<sub>_request`` / ``on_<sub>_signal`` handler."""
 
         logger.debug(
             f"{self._device_name.upper()} BACKEND LISTENER: Received message: "
-            f"'{timestamped_message}' from topic: {topic} at {timestamped_message.timestamp}")
+            f"'{timestamped_message}' from topic: {topic} "
+            f"at {timestamped_message.timestamp}"
+        )
 
-        # find the topics hierarchy: first element is the head topic, last is the specific topic
+        # find the topics hierarchy: first element is the head topic, last is
+        # the specific topic
         topics_tree = topic.split("/")
         head_topic = topics_tree[0]
         primary_sub_topic = topics_tree[1] if len(topics_tree) > 1 else ""
@@ -131,10 +152,9 @@ class PeripheralDeviceControllerBase(HasTraits):
 
         # 1. Check if topic for this device
         if head_topic == self._device_name:
-
             # Handle the connected / disconnected signals
             if topic in (self.connected_topic, self.disconnected_topic):
-                self.connection_active = (topic == self.connected_topic)
+                self.connection_active = topic == self.connected_topic
                 requested_method = f"on_{specific_sub_topic}_signal"
 
             # Connection-management requests are allowed even while disconnected
@@ -142,35 +162,42 @@ class PeripheralDeviceControllerBase(HasTraits):
                 requested_method = f"on_{specific_sub_topic}_request"
 
             # All other requests only run if connected
-            elif primary_sub_topic == 'requests':
+            elif primary_sub_topic == "requests":
                 if self.connection_active:
                     requested_method = f"on_{specific_sub_topic}_request"
                 else:
                     logger.warning(
-                        f"Request for {specific_sub_topic} denied: {self._device_name} is disconnected.")
+                        f"Request for {specific_sub_topic} denied: "
+                        f"{self._device_name} is disconnected."
+                    )
 
         else:
-            logger.debug(f"Ignored request from topic '{topic}': Not a {self._device_name}-related request.")
+            logger.debug(
+                f"Ignored request from topic '{topic}': "
+                f"Not a {self._device_name}-related request."
+            )
 
         if requested_method:
-            if self.timestamps.get(topic, datetime.min) > timestamped_message.timestamp_dt:
+            if (
+                self.timestamps.get(topic, datetime.min)
+                > timestamped_message.timestamp_dt
+            ):
                 logger.debug(
-                    f"{self._device_name.title()} Controller: Ignoring older message from topic: "
-                    f"{topic} received at {timestamped_message.timestamp_dt}")
+                    f"{self._device_name.title()} Controller: Ignoring older "
+                    f"message from topic: {topic} "
+                    f"received at {timestamped_message.timestamp_dt}"
+                )
                 return
 
             self.timestamps[topic] = timestamped_message.timestamp_dt
 
-            err_msg = invoke_class_method(self, requested_method, timestamped_message)
-
-            if err_msg:
-                logger.error(
-                    f" {self.listener_name}; Received message: {timestamped_message} from topic: "
-                    f"{topic} Failed to execute due to error: {err_msg}")
+            invoke_class_method(
+                self, requested_method, timestamped_message, topic=topic
+            )
 
     def traits_init(self):
         """Equivalent to ``__init__`` calling ``super().__init__(**traits)``."""
         logger.info(f"Starting {self._device_name.title()} Controller listener")
         self.dramatiq_listener_actor = generate_class_method_dramatiq_listener_actor(
-            listener_name=self.listener_name,
-            class_method=self.listener_actor_routine)
+            listener_name=self.listener_name, class_method=self.listener_actor_routine
+        )
