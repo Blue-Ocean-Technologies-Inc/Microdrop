@@ -41,7 +41,15 @@ from microdrop_style.panel_theme import theme_palette
 # Local imports.
 from ..consts import CATEGORIES, run_mute_key
 from ..models import PreflightReport, RunInfo
-from .panel_parts import fade_in, footer, header, quiet_line, run_info_rows, scrolling
+from .panel_parts import (
+    fade_in,
+    footer,
+    header,
+    quiet_line,
+    run_info_rows,
+    run_info_values,
+    scrolling,
+)
 from .panel_placement import PanelPlacement
 from .rows import CheckRow, group_label
 from .settings_face import settings_face
@@ -63,9 +71,13 @@ class _PanelBinding(HasTraits):
 
     @observe("report:run_mutes:items, report:always_mutes:items")
     @observe("report:checks")
-    @observe("run_info:[active, step, step_total, elapsed_s]")
+    @observe("run_info:active")
     def _refresh(self, event):
         self.panel.schedule_refresh()
+
+    @observe("run_info:[step, step_total, elapsed_s]")
+    def _update_run_values(self, event):
+        self.panel.update_run_values()
 
     @observe("run_info:active")
     def _leave_settings_face(self, event):
@@ -124,6 +136,10 @@ class PreflightPanel(QtWidgets.QWidget):
         #: header, the footer and the gap above it).
         self._scroll = None
         self._fixed_height = 0
+
+        #: The run's rows while the run face shows, updated in place each
+        #: tick so the card is not rebuilt under the pointer.
+        self._run_rows = []
 
         # A child has no window opacity: the fade goes through an effect,
         # off once the panel is opaque.
@@ -280,6 +296,7 @@ class PreflightPanel(QtWidgets.QWidget):
             self._content.deleteLater()
 
         self._dispose_settings()
+        self._run_rows = []
 
         self._content = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(self._content)
@@ -302,7 +319,9 @@ class PreflightPanel(QtWidgets.QWidget):
             self._scroll = None
 
         elif self.run_info.active:
-            for row in run_info_rows(self.run_info, palette):
+            self._run_rows = run_info_rows(self.run_info, palette)
+
+            for row in self._run_rows:
                 body_layout.addWidget(row)
 
             self._scroll = scrolling(body)
@@ -317,6 +336,13 @@ class PreflightPanel(QtWidgets.QWidget):
 
         if self._scroll is not None:
             self._scroll.verticalScrollBar().setValue(scrolled)
+
+    def update_run_values(self):
+        """Show the run's step and elapsed time in the rows already built."""
+        values = run_info_values(self.run_info)
+
+        for row, (_, value) in zip(self._run_rows, values):
+            row.value_label.setText(value)
 
     def _build_checks(self, layout, body, body_layout, palette):
         """The header, the scrolling rows, and the footer below them."""
