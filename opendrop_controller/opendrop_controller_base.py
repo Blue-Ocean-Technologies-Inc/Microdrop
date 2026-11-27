@@ -8,14 +8,20 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 from datetime import datetime
 
+# Third-party imports.
 import dramatiq
+
+# Enthought library imports.
 from traits.api import Bool, HasTraits, Instance, Int, List, Str, provides
 
+# Microdrop package imports.
 from dropbot_controller.consts import START_DEVICE_MONITORING
-from logger.logger_service import get_logger
+
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
     TimestampedMessage,
     generate_class_method_dramatiq_listener_actor,
@@ -23,6 +29,7 @@ from microdrop_utils.dramatiq_controller_base import (
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Local imports.
 from .consts import (
     CHANGE_SETTINGS,
     OPENDROP_BOARD_INFO,
@@ -38,6 +45,9 @@ from .interfaces.i_opendrop_controller_base import IOpenDropControllerBase
 from .opendrop_serial_proxy import OpenDropSerialProxy
 from .preferences import OpenDropPreferences
 
+# Logger import.
+from logger.logger_service import get_logger
+
 try:
     import serial
 except ImportError:
@@ -52,7 +62,9 @@ class OpenDropControllerBase(HasTraits):
     opendrop_connection_active = Bool(False)
     preferences = Instance(OpenDropPreferences)
     board_id = Int(-1)
-    realtime_mode = Bool(False)  # Match frontend default; no electrode push until user enables realtime
+    realtime_mode = Bool(
+        False
+    )  # Match frontend default; no electrode push until user enables realtime
     feedback_enabled = Bool(False)
     set_temperatures = List(Int, value=[25, 25, 25], minlen=3, maxlen=3)
 
@@ -72,7 +84,9 @@ class OpenDropControllerBase(HasTraits):
         self.proxy = None
         self.opendrop_connection_active = False
 
-    def listener_actor_routine(self, timestamped_message: TimestampedMessage, topic: str):
+    def listener_actor_routine(
+        self, timestamped_message: TimestampedMessage, topic: str
+    ):
         topics_tree = topic.split("/")
         if len(topics_tree) < 3:
             return
@@ -89,11 +103,7 @@ class OpenDropControllerBase(HasTraits):
             self.opendrop_connection_active = False
             requested_method = f"on_{specific_sub_topic}_signal"
 
-        elif topic in {
-            START_DEVICE_MONITORING,
-            RETRY_CONNECTION,
-            CHANGE_SETTINGS
-        }:
+        elif topic in {START_DEVICE_MONITORING, RETRY_CONNECTION, CHANGE_SETTINGS}:
             requested_method = f"on_{specific_sub_topic}_request"
 
         elif primary_sub_topic == "requests":
@@ -101,11 +111,15 @@ class OpenDropControllerBase(HasTraits):
                 requested_method = f"on_{specific_sub_topic}_request"
             else:
                 logger.warning(
-                    f"Request for '{specific_sub_topic}' denied: OpenDrop is disconnected."
+                    f"Request for '{specific_sub_topic}' denied: "
+                    "OpenDrop is disconnected."
                 )
 
         if requested_method:
-            if self.timestamps.get(topic, datetime.min) > timestamped_message.timestamp_dt:
+            if (
+                self.timestamps.get(topic, datetime.min)
+                > timestamped_message.timestamp_dt
+            ):
                 return
             self.timestamps[topic] = timestamped_message.timestamp_dt
             err_msg = invoke_class_method(self, requested_method, timestamped_message)
@@ -118,7 +132,9 @@ class OpenDropControllerBase(HasTraits):
             listener_name=self.listener_name,
             class_method=self.listener_actor_routine,
         )
-        self.feedback_enabled = bool(self.preferences.feedback_enabled) if self.preferences else False
+        self.feedback_enabled = (
+            bool(self.preferences.feedback_enabled) if self.preferences else False
+        )
         if self.preferences:
             self.set_temperatures = [
                 int(self.preferences.temperature_1),
@@ -142,9 +158,15 @@ class OpenDropControllerBase(HasTraits):
             "t2": telemetry.get("temperature_2"),
             "t3": telemetry.get("temperature_3"),
         }
-        publish_message(topic=OPENDROP_TEMPERATURES_UPDATED, message=json.dumps(temperatures))
+        publish_message(
+            topic=OPENDROP_TEMPERATURES_UPDATED, message=json.dumps(temperatures)
+        )
 
-        feedback_active = int(telemetry.get("feedback_mask", []).sum()) if telemetry.get("feedback_mask") is not None else 0
+        feedback_active = (
+            int(telemetry.get("feedback_mask", []).sum())
+            if telemetry.get("feedback_mask") is not None
+            else 0
+        )
         publish_message(
             topic=OPENDROP_FEEDBACK_UPDATED,
             message=json.dumps({"active_channels": feedback_active}),
@@ -179,9 +201,7 @@ class OpenDropControllerBase(HasTraits):
             return None
         except Exception as e:
             if serial is not None and isinstance(e, serial.SerialException):
-                logger.warning(
-                    "OpenDrop device disconnected (SerialException: %s).", e
-                )
+                logger.warning("OpenDrop device disconnected (SerialException: %s).", e)
                 self.on_disconnected_signal("")
                 return None
             raise
