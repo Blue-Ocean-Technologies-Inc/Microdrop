@@ -148,11 +148,20 @@ def main(plugins, contexts, application, persist, splash_screen=None):
         if deferred_plugins:
             app.deferred_plugins = deferred_plugins
 
-        app.run()
+        if not persist:
+            app.run()
 
-        if persist:
-            while True:
-                time.sleep(0.001)
+            return
+
+        # A headless Application's run() stops it the moment it starts; keep
+        # its plugins running until a signal reaches stop_app.
+        if not app.start():
+            logger.error("The backend application did not start.")
+
+            sys.exit(1)
+
+        while True:
+            time.sleep(0.001)
 
 
 def cli():
