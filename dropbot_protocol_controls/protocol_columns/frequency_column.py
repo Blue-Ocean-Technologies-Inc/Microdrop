@@ -16,9 +16,6 @@ FREQUENCY_APPLIED ack from dropbot_controller. Priority 20 — runs in
 parallel with VoltageHandler in the same bucket.
 """
 
-# Enthought library imports.
-from traits.api import TraitError
-
 # Microdrop package imports.
 from dropbot_controller.consts import (
     DEFAULT_PROTOCOL_FREQUENCY_RANGE,
@@ -39,13 +36,8 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 # Local imports.
 from ..consts import PREFLIGHT_FREQUENCY_LIMITS_CHECK
 from ..services.preflight_checks import hardware_limit_check
-from .device_range_model import DeviceRangeIntColumnModel
+from .device_range_model import DeviceRangeIntColumnModel, remember_last_setpoint
 from .device_range_spinbox_view import DeviceRangeIntSpinBoxColumnView
-
-# Logger import.
-from logger.logger_service import get_logger
-
-logger = get_logger(__name__)
 
 
 class FrequencyColumnModel(DeviceRangeIntColumnModel):
@@ -75,18 +67,9 @@ class FrequencyHandler(BaseColumnHandler):
         Must return the super's return value so the delegate fires
         dataChanged and the manager fires rows_changed — without it the
         protocol state tracker never sees frequency edits.
-
-        The preference is a DropBot Range (from 100 Hz), narrower than some
-        devices' (the portable's 50 Hz floor), so a value outside it is
-        applied to the cell but not remembered.
         """
         result = super().on_interact(row, model, value)
-
-        try:
-            DropbotPreferences().last_frequency = int(value)
-
-        except TraitError:
-            logger.info(f"Not saving {value} Hz as the last frequency: out of range")
+        remember_last_setpoint(DropbotPreferences(), "last_frequency", value, "Hz")
 
         return result
 

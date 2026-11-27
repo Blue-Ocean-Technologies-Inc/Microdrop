@@ -8,7 +8,8 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Int column model bounded by the active device's range.
+"""Int column model bounded by the active device's range, and the helper its
+handlers share to remember the last setpoint.
 
 The column is built once and shared by every device, so the range is read
 from app_globals on each use instead of fixed at construction: it follows
@@ -16,12 +17,16 @@ whichever backend last wrote it.
 """
 
 # Enthought library imports.
-from traits.api import DefaultValue, Int, Str, Tuple
+from traits.api import DefaultValue, Int, Str, TraitError, Tuple
 
 # Microdrop package imports.
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from pluggable_protocol_tree.models.column import BaseColumnModel
 
+# Logger import.
+from logger.logger_service import get_logger
+
+logger = get_logger(__name__)
 app_globals = get_microdrop_redis_globals_manager()
 
 
@@ -58,3 +63,18 @@ class DeviceRangeIntColumnModel(BaseColumnModel):
         low, high = self.device_range()
 
         return min(max(int(self.default_value), low), high)
+
+
+def remember_last_setpoint(preferences, name, value, unit):
+    """Save ``value`` as the DropbotPreferences ``name`` if its Range takes it.
+
+    The preference Ranges are the DropBot's (from 30 V and 100 Hz). A cell
+    can hold a value outside them: a portable frequency from 50 Hz, or a
+    value loaded from a protocol file and committed unedited. Such a value
+    is applied to the cell but not remembered.
+    """
+    try:
+        setattr(preferences, name, int(value))
+
+    except TraitError:
+        logger.info(f"Not saving {value} {unit} as {name}: out of range")

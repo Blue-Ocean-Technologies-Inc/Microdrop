@@ -16,9 +16,6 @@ dropbot_controller. Priority 20 — runs before RoutesHandler at
 priority 30 so the voltage is applied before any electrode actuation.
 """
 
-# Enthought library imports.
-from traits.api import TraitError
-
 # Microdrop package imports.
 from dropbot_controller.consts import (
     DEFAULT_PROTOCOL_VOLTAGE_RANGE,
@@ -43,13 +40,8 @@ from ..services.preflight_checks import (
     dropbot_connection_check,
     hardware_limit_check,
 )
-from .device_range_model import DeviceRangeIntColumnModel
+from .device_range_model import DeviceRangeIntColumnModel, remember_last_setpoint
 from .device_range_spinbox_view import DeviceRangeIntSpinBoxColumnView
-
-# Logger import.
-from logger.logger_service import get_logger
-
-logger = get_logger(__name__)
 
 
 class VoltageColumnModel(DeviceRangeIntColumnModel):
@@ -86,18 +78,9 @@ class VoltageHandler(BaseColumnHandler):
         Must return the super's return value so QtTreeModel.setData
         signals dataChanged and the manager fires rows_changed — without
         it the protocol state tracker never sees voltage edits.
-
-        The preference is a DropBot Range, narrower than some devices'
-        (the portable's), so a value outside it is applied to the cell but
-        not remembered.
         """
         result = super().on_interact(row, model, value)
-
-        try:
-            DropbotPreferences().last_voltage = int(value)
-
-        except TraitError:
-            logger.info(f"Not saving {value} V as the last voltage: out of range")
+        remember_last_setpoint(DropbotPreferences(), "last_voltage", value, "V")
 
         return result
 
