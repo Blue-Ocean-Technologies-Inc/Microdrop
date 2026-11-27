@@ -31,16 +31,25 @@ ATOMIC_WRITE_RETRY_DELAY_S = 0.05
 
 
 def open_html_in_browser(file_path):
-    """Open an HTML file in the default web browser using pathlib."""
-    # Convert file_path to a Path object
+    """Open an HTML file in the default web browser, from any thread.
+
+    On Windows the browser is launched out of process: ``webbrowser`` there
+    is ``os.startfile`` (ShellExecute), which loads shell extensions into
+    this process, and called from a Dramatiq worker thread it crashed the
+    app with an access violation right after the self-test report opened.
+    """
     path = Path(file_path)
 
-    # Check if the file exists
-    if path.exists() and path.is_file():
-        # Open the file in the default web browser
-        webbrowser.open_new_tab(path.resolve().as_uri())
-    else:
+    if not (path.exists() and path.is_file()):
         logger.error(f"File not found: {path}")
+
+        return
+
+    if platform.system() == "Windows":
+        subprocess.Popen(("explorer", str(path.resolve())))
+
+    else:
+        webbrowser.open_new_tab(path.resolve().as_uri())
 
 
 def next_free_numbered_path(path: Union[Path, str]) -> Path:
