@@ -9,7 +9,7 @@
 # Thanks for using Microdrop open source!
 
 """Corner detection on a captured camera frame — the snap targets
-for the Select Device Outline picker.
+for the Device Outline marked in Align Camera.
 
 The SVG side gets its snap corners for free from the electrode path
 vertices; a photographed device has no such geometry, so corners are
@@ -19,6 +19,7 @@ grid intersections — and cornerSubPix refines each to sub-pixel
 accuracy so a snapped dot lands exactly on the physical corner.
 """
 
+# Third-party imports.
 import numpy as np
 from PySide6.QtGui import QImage
 
@@ -59,8 +60,7 @@ def detect_corner_points(image: QImage) -> list:
     is unavailable."""
     if cv2 is None:
         logger.warning(
-            "OpenCV not available — corner snapping in "
-            "the outline picker is disabled"
+            "OpenCV not available — corner snapping in the outline picker is disabled"
         )
         return []
     if image.isNull():
@@ -86,7 +86,7 @@ def detect_corner_points(image: QImage) -> list:
         # Snapping is an assist — a detection failure must never
         # keep the picker from opening.
         logger.warning(
-            f"corner detection failed; snapping disabled " f"for this frame: {exc}"
+            f"corner detection failed; snapping disabled for this frame: {exc}"
         )
         return []
     return [[float(x), float(y)] for x, y in corners.reshape(-1, 2)]
