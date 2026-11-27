@@ -31,21 +31,11 @@ Design notes:
 # Enthought library imports.
 from traits.api import Bool, HasTraits, Str, observe, provides
 
-# Microdrop package imports.
-from dropbot_controller.consts import REALTIME_MODE_KEY
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
-
 # Microdrop style imports.
 from microdrop_style.colors import ERROR_COLOR, GREY, SUCCESS_COLOR, WARNING_COLOR
 
 # Local imports.
 from .interfaces import IStatusModel
-
-# Logger import.
-from logger.logger_service import get_logger
-
-logger = get_logger(__name__)
-app_globals = get_microdrop_redis_globals_manager()
 
 
 @provides(IStatusModel)
@@ -121,16 +111,6 @@ class BaseStatusModel(HasTraits):
     # ------------------------------------------------------------------ #
     # Observers
     # ------------------------------------------------------------------ #
-
-    # Mirror only real changes, which follow the backend's realtime-mode
-    # signal: a pane built mid-session must not reset the shared key (#1073).
-    @observe("realtime_mode")
-    def _realtime_mode_updated(self, event):
-        logger.info(
-            f"Realtime mode status has changed to {event.new}; "
-            f"updated in the app globals"
-        )
-        app_globals[REALTIME_MODE_KEY] = event.new
 
     @observe("halted")
     def _on_halted_changed(self, event):
