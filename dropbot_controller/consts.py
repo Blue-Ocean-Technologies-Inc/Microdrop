@@ -8,6 +8,9 @@
 #
 # Thanks for using Microdrop open source!
 
+# Third-party imports.
+from pydantic import BaseModel
+
 # Microdrop package imports.
 from dropbot_controller.models.self_tests import SelfTestResultsPublisher
 from dropbot_controller.models.self_tests import (
@@ -20,6 +23,9 @@ from dropbot_controller.models.shorts import ShortsDetectedPublisher
 from dropbot_controller.models.shorts import (
     ShortsDetectedSignal as ShortsDetectedSignal,
 )
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
 
 # This module's package.
 
@@ -50,6 +56,13 @@ DROPBOT_CONNECTED = "hardware/signals/connected"
 DROPBOT_DISCONNECTED = "hardware/signals/disconnected"
 DROPLETS_DETECTED = "dropbot/signals/drops_detected"
 DISABLED_CHANNELS_CHANGED = "hardware/signals/disabled_channels_changed"
+# The connected DropBot's maxima have just been written to app_globals
+# (HARDWARE_MAX_VOLTAGE_KEY / HARDWARE_MAX_FREQUENCY_KEY), about a second
+# after it connects.
+HARDWARE_LIMITS_UPDATED = "dropbot/signals/hardware_limits_updated"
+# The DropBot's connection, chip or power key in app_globals has just been
+# written; the payload repeats all three as they now stand.
+DROPBOT_STATE_UPDATED = "dropbot/signals/state_updated"
 
 # Dropbot Services Topics -- Offered by default from the dropbot monitor
 # mixin in this package
@@ -77,6 +90,20 @@ REALTIME_MODE_KEY = "microdrop.realtime_mode"
 # writes it whenever dropbot_connection_active changes); consumers read it
 # instead of tracking the connected/disconnected signals themselves.
 DROPBOT_CONNECTION_STATE_KEY = f"{PKG}.connection_active"
+# app_globals key: the DropBot answered on USB but has no power (True from
+# the NoPower failure until the next connection attempt).
+DROPBOT_NO_POWER_KEY = f"{PKG}.no_power"
+# app_globals key: whether the connected DropBot has a chip inserted, from
+# its output-enable pin; None while no DropBot is connected or its chip is
+# not read yet.
+DROPBOT_CHIP_INSERTED_KEY = f"{PKG}.chip_inserted"
+# The DropBot backend's state keys above: deleted on a clean stop, so a
+# reader finds no backend rather than a stale one.
+DROPBOT_STATE_KEYS = [
+    DROPBOT_CONNECTION_STATE_KEY,
+    DROPBOT_CHIP_INSERTED_KEY,
+    DROPBOT_NO_POWER_KEY,
+]
 
 # app_globals keys DropbotPreferences seeds via preferences_name_map
 # (owner-publishes pattern; trait name doubles as the hash key, matching
@@ -89,6 +116,8 @@ HARDWARE_MAX_FREQUENCY_KEY = "_hardware_max_frequency"
 APP_GLOBALS_KEYS = [
     REALTIME_MODE_KEY,
     DROPBOT_CONNECTION_STATE_KEY,
+    DROPBOT_NO_POWER_KEY,
+    DROPBOT_CHIP_INSERTED_KEY,
     DROPLET_DETECTION_CAPACITANCE_KEY,
     CAPACITANCE_UPDATE_INTERVAL_KEY,
     HARDWARE_MAX_VOLTAGE_KEY,
@@ -145,3 +174,28 @@ shorts_detected_publisher = ShortsDetectedPublisher(topic=SHORTS_DETECTED)
 #   self_test_results_publisher.publish(test_name=..., title=...,
 #       results_path=..., failed_channels=[...])
 self_test_results_publisher = SelfTestResultsPublisher(topic=SELF_TESTS_RESULTS)
+
+
+class HardwareLimitsUpdatedMessage(BaseModel):
+    """Payload of ``HARDWARE_LIMITS_UPDATED``: the maxima just written."""
+
+    max_voltage: float
+    max_frequency: float
+
+
+hardware_limits_updated_publisher = ValidatedTopicPublisher(
+    topic=HARDWARE_LIMITS_UPDATED, validator_class=HardwareLimitsUpdatedMessage
+)
+
+
+class DropbotStateUpdatedMessage(BaseModel):
+    """Payload of ``DROPBOT_STATE_UPDATED``: the state keys as they stand."""
+
+    connected: bool
+    chip_inserted: bool | None
+    no_power: bool
+
+
+dropbot_state_updated_publisher = ValidatedTopicPublisher(
+    topic=DROPBOT_STATE_UPDATED, validator_class=DropbotStateUpdatedMessage
+)

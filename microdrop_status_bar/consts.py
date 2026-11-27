@@ -15,7 +15,7 @@ PKG_name = PKG.title().replace("_", " ")
 #: Extension-point id: QWidget instances to show in the app status bar.
 STATUS_BAR_ICONS = "status_bar_icons"
 
-#: Uniform gap (px) between adjacent contributed status-bar icons.
+#: Uniform gap (px) between adjacent contributed status-bar icons, left or right.
 ICON_SPACING = 10
 
 #: Status-bar message shown from startup until something replaces it.
@@ -31,3 +31,9 @@ ICON_PRIORITY_DEFAULT = 0
 ICON_PRIORITY_LEFT = -1
 ICON_PRIORITY_LEFTMOST = -2
 ICON_PRIORITY_RIGHTMOST = 2
+
+#: Contributors may set ``widget.status_bar_side = STATUS_BAR_SIDE_LEFT``
+#: (plain str attribute) to place a widget on the bar's left, before the
+#: mode/step label, in arrival order, instead of in the right-hand icon
+#: container. Unset means the right.
+STATUS_BAR_SIDE_LEFT = "left"

@@ -60,6 +60,17 @@ class PreferencesDialog(_PreferencesDialog):
                     self._selected = tab
                     return
 
+    def open_on_pane(self, pane_id, parent=None):
+        """Open the dialog, modal over ``parent``, on the tab holding pane
+        ``pane_id``; return whether it closed on OK."""
+        # The tabs exist only once the loaded plugins' panes are followed.
+        self._follow_contributions()
+        self.select_pane(pane_id)
+
+        ui = self.edit_traits(parent=parent, kind="livemodal")
+
+        return ui.result
+
     def get_tabs(self):
         if is_advanced_mode():
             _tabs = self._tabs

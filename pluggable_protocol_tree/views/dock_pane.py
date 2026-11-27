@@ -59,12 +59,10 @@ from pluggable_protocol_tree.execution.lifecycle.logging import LoggingHandler
 from pluggable_protocol_tree.execution.lifecycle.realtime_mode import (
     RealtimeModeHandler,
 )
-from pluggable_protocol_tree.execution.lifecycle.unused_columns_notice import (
-    UnusedColumnsNoticeHandler,
-)
 from pluggable_protocol_tree.execution.signals import ExecutorSignals
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.preflight.host import PreflightHost
 from pluggable_protocol_tree.services.device_viewer_sync import (
     DeviceViewerSyncController,
 )
@@ -177,6 +175,9 @@ class PluggableProtocolDockPane(TraitsDockPane):
     #: pane mounts in an app.
     _autosave_status_icon = Instance(AutosaveStatusIcon)
 
+    #: The pre-flight check: its pill, its card and the run gate.
+    preflight = Instance(PreflightHost)
+
     def _executor_default(self):
         return ProtocolExecutor(
             row_manager=self.manager,
@@ -282,14 +283,11 @@ class PluggableProtocolDockPane(TraitsDockPane):
             actions=list(self.quick_actions),
         )
 
-        # Execution lifecycle policy lives in handlers, not the view. These run
+        # Execution lifecycle policy lives in handlers, not the view. Each runs
         # once per run (on_pre_protocol_start / on_post_protocol_end) at high
-        # priority so they trail every column's start hooks: the operator is
-        # told which unused columns' hooks the run skips (800), realtime mode
-        # is enabled + settled (900), then logging starts (1000) right before
-        # the first step.
+        # priority, trailing every column's start hooks: realtime mode is
+        # enabled + settled (900), then logging starts (1000) before step one.
         self.executor.lifecycle_handlers = [
-            UnusedColumnsNoticeHandler(preferences=self.preferences),
             RealtimeModeHandler(preferences=self.preferences),
             LoggingHandler(
                 controller=self.logging_controller,
@@ -326,6 +324,17 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # pane only auto-reveals the phase field when a phase_ack_topic is set
         # (demo path), so make it explicit here.
         pane.status_bar.lbl_phase_time.setVisible(True)
+
+        # Every run start is gated on the pre-flight check (_start_protocol_run).
+        self.preflight = PreflightHost(
+            manager=self.manager,
+            sync=self.sync,
+            preferences=self.preferences,
+            status_model=self.status_controller.model,
+            window=self.task.window,
+            start_run=self._start_protocol_run,
+            preview_mode=pane.navigation_bar.is_preview_mode(),
+        )
 
         # initial values for status bar
         self._on_counts_changed()
@@ -367,6 +376,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         nb.btn_next_phase.clicked.connect(self._on_next_phase)
         nb.btn_first.clicked.connect(self.navigate_to_first_step)
         nb.btn_last.clicked.connect(self.navigate_to_last_step)
+        nb.action_preview.toggled.connect(self.preflight.on_preview_toggled)
 
         # Timeline seek bar: clicks redirect through the status controller; the
         # model observers below push the playhead position back. Also follow
@@ -415,35 +425,38 @@ class PluggableProtocolDockPane(TraitsDockPane):
         return pane
 
     def _contribute_autosave_switch(self):
-        """Put the AutoSave glyph in the app status bar (#966).
+        """Put the AutoSave glyph (#966) and the pre-flight pill in the bar.
 
         The microdrop_status_bar plugin owns placement, spacing and removal;
         a contribution made before its bar exists is placed once it does."""
         plugin = self.task.window.application.get_plugin(f"{PKG}.plugin")
 
         if plugin is None:
-            logger.warning(f"{PKG}: plugin not found; AutoSave glyph not shown")
+            logger.warning(f"{PKG}: plugin not found; status-bar glyphs not shown")
             return
 
         self._autosave_status_icon = AutosaveStatusIcon(
             model=self._pane.autosave_controller.model
         )
         plugin.status_bar_icons.append(self._autosave_status_icon.control)
+        self.preflight.contribute(plugin.status_bar_icons)
 
     def _withdraw_autosave_switch(self):
-        """Take the AutoSave glyph out of the status bar (which deletes it)
-        and stop it observing the model."""
+        """Take the AutoSave glyph and the pre-flight pill out of the status
+        bar (which deletes them), stopping what drives them first."""
+        plugin = self.task.window.application.get_plugin(f"{PKG}.plugin")
+        icons = plugin.status_bar_icons if plugin is not None else []
         icon = self._autosave_status_icon
 
-        if icon is None:
-            return
+        if self.preflight is not None:
+            self.preflight.withdraw(icons)
 
-        plugin = self.task.window.application.get_plugin(f"{PKG}.plugin")
+        if icon is not None:
+            if icon.control in icons:
+                icons.remove(icon.control)
 
-        if plugin is not None and icon.control in plugin.status_bar_icons:
-            plugin.status_bar_icons.remove(icon.control)
+            icon.model = None
 
-        icon.model = None
         self._autosave_status_icon = None
 
     def destroy(self):
@@ -1005,14 +1018,19 @@ class PluggableProtocolDockPane(TraitsDockPane):
             run_paths=[tuple(p) for p in paths],
         )
 
-    def _start_protocol_run(self, preview_mode, run_paths=None):
+    def _start_protocol_run(self, preview_mode, run_paths=None, anyway=False):
+        # Play-from-selected and Run Selected read one selection exclusively:
+        # a scoped run starts at its first frame, so it skips to no step.
+        start_path = None if run_paths else self._pane.selected_step_path()
+        # Rechecked for the pre-flight card's Run, which starts on its own.
+        busy = self._start_pending or self._is_protocol_active()
+
+        if busy or not self.preflight.gate(preview_mode, run_paths, start_path, anyway):
+            return
+
         repeats = self._pane.status_bar.edit_repeat_protocol.value()
         self._current_run_preview_mode = preview_mode
         advanced_mode = is_advanced_mode()
-        # "Play from the selected step" and "run only the selected rows" are
-        # mutually exclusive readings of the same selection: a scoped run
-        # already starts at its first frame, so no skip-until target applies.
-        start_path = None if run_paths else self._pane.selected_step_path()
         logger.info(
             f"Protocol run starting: {repeats} rep(s), "
             f"preview={preview_mode}, advanced={advanced_mode}, "
@@ -1398,6 +1416,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # mounted; the view reads the current experiment when it is built.
         if self._pane is not None:
             self._pane._on_experiment_changed()
+            self.preflight.invalidate()
 
     @observe("task.window.closing", dispatch="ui")
     def _on_window_closing(self, event):
@@ -1632,6 +1651,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # event.new is the tick's monotonic timestamp; direct calls (initial
         # paint, freeze-frame on stop) pass no event and read the clock here.`
         now = event.new if event is not None else time.monotonic()
+        self.preflight.run_info.elapsed_s = int(model.protocol_clock.elapsed(now))
 
         status_view.update_total_time(
             elapsed=model.protocol_clock.elapsed(now),

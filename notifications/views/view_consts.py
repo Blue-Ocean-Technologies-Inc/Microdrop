@@ -9,7 +9,9 @@
 # Thanks for using Microdrop open source!
 
 """The look and timing of the drawer, its sections and cards, the toasts and
-the bell. View tuning only: nothing another plugin needs."""
+the bell. View tuning only: nothing another plugin needs. The surface
+metrics shared with the pre-flight card live in
+``microdrop_style.panel_metrics``."""
 
 # Local imports.
 from ..consts import PKG
@@ -23,9 +25,6 @@ from ..consts import PKG
 DRAWER_OBJECT_NAME = f"{PKG}Drawer"
 TOAST_OBJECT_NAME = f"{PKG}Toast"
 SETTINGS_OBJECT_NAME = f"{PKG}Settings"
-
-#: Space (px) between the drawer's edges and its contents.
-DRAWER_PADDING_PX = 6
 
 #: Opacity (0-1) of the drawer's background behind the cards, which lets
 #: what lies beneath show faintly; 1.0 makes it opaque. The header, the
@@ -42,9 +41,6 @@ DRAWER_BACKDROP_PAINTS_PER_S = 4
 #: except on a drawer the app opened and the user has not used yet, where
 #: it also reaches what was clicked (``outside_press_passes_through``).
 DRAWER_CLOSES_ON_CLICK_OUTSIDE = True
-
-#: Duration (ms) of the drawer's slide in from the right; 0 opens it at once.
-DRAWER_SLIDE_MS = 160
 
 #: How often (ms) the open drawer repaints its relative times ("2 min ago").
 TIME_REFRESH_MS = 30_000
@@ -87,9 +83,8 @@ WINDOW_LEFT_IN_VIEW = 160
 DRAWER_GRIP_WIDTH = 6
 
 #: The drawer floats: inset (px) from the window's right edge, the status
-#: bar and the top, with rounded corners of this radius (px).
+#: bar and the top, with rounded corners of DRAWER_RADIUS.
 DRAWER_INSET = 8
-DRAWER_RADIUS = 10
 
 #: The drawer's height follows its contents, never below this (px).
 DRAWER_MIN_HEIGHT = 140
@@ -111,9 +106,6 @@ SECTION_LOGO_HEIGHT = 30
 
 #: Lines of a card's text shown before "Show more".
 CARD_BODY_LINES = 2
-
-#: Corner radius (px) of cards and toasts.
-CARD_RADIUS = 8
 
 #: A card's thumbnail box (width, height px), 4:3, in the drawer and in a
 #: toast; the picture is cover-cropped to it, never scaled up.

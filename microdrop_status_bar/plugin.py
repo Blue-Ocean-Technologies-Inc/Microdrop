@@ -14,29 +14,38 @@ StatusBarPlugin — the one home for the application status bar.
 Creates the window's StatusBarManager and owns the ``status_bar_icons``
 extension point: other plugins contribute QWidget instances (typically at
 runtime, from their dock panes) and this plugin places them in a single
-icon container whose QHBoxLayout gives every icon the same gap. Removing
-a widget from the extension point removes it from the bar and deletes it.
+icon container whose QHBoxLayout gives every icon the same gap, or, for a
+widget marked ``status_bar_side = STATUS_BAR_SIDE_LEFT``, on the bar's
+left, before the mode/step label. Removing a widget from the extension point
+removes it from the bar and deletes it.
 
 Dynamic contribution handling mirrors MessageRouterPlugin: apply the
 current extensions once the container exists, then react to
 ``<name>_items`` delta events for runtime (hot load/unload) changes.
 """
+
+# Enthought library imports.
 from envisage.api import ExtensionPoint, Plugin
 from pyface.qt.QtGui import QHBoxLayout, QWidget
 from traits.api import Any, List, observe, on_trait_change
 
-from logger.logger_service import get_logger
+# Microdrop utils imports.
 from microdrop_utils.pyface_helpers import StatusBarManager
 
+# Local imports.
 from .consts import (
     DEFAULT_STATUS_MESSAGE,
     ICON_PRIORITY_DEFAULT,
     ICON_SPACING,
     PKG,
-    PKG_name,
     STATUS_BAR_CONTENTS_MARGINS,
     STATUS_BAR_ICONS,
+    STATUS_BAR_SIDE_LEFT,
+    PKG_name,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -51,12 +60,21 @@ class StatusBarPlugin(Plugin):
         List(),
         id=STATUS_BAR_ICONS,
         desc="QWidget instances to show in the app status bar; this plugin "
-             "owns their placement, spacing, and removal",
+        "owns their placement, spacing, and removal",
     )
 
     #: Single container appended to the status bar; its HBox layout gives
     #: every contributed icon the same gap.
     _icon_container = Any(None)
+
+    #: The window's status bar, its persistent mode/step label, and the
+    #: contributed widgets on its left, in arrival order before the label.
+    _status_bar = Any(None)
+    _persistent_label = Any(None)
+    #: Container for the left widgets, inserted before the label; its HBox
+    #: layout spaces them like the right-hand icons and trails one gap.
+    _left_container = Any(None)
+    _left_widgets = List()
 
     def start(self):
         # Wire the registry's extension-point listeners to this plugin's
@@ -80,9 +98,7 @@ class StatusBarPlugin(Plugin):
         so both hazards are past.
         """
         windows = self.application.windows
-        window = self.application.active_window or (
-            windows[0] if windows else None
-        )
+        window = self.application.active_window or (windows[0] if windows else None)
         if window is None or self._icon_container is not None:
             return
         if window.status_bar_manager is None:
@@ -100,6 +116,18 @@ class StatusBarPlugin(Plugin):
         # ``status_bar_icon_priority`` attribute (see consts).
         status_bar.addPermanentWidget(container)
         self._icon_container = container
+        self._status_bar = status_bar
+        self._persistent_label = getattr(
+            window.status_bar_manager, "persistent_label", None
+        )
+
+        left_container = QWidget()
+        left_layout = QHBoxLayout(left_container)
+        left_layout.setContentsMargins(0, 0, ICON_SPACING, 0)
+        left_layout.setSpacing(ICON_SPACING)
+        left_container.setVisible(False)
+        status_bar.insertWidget(self._label_index(), left_container)
+        self._left_container = left_container
 
         # Contributions made before the window existed already sit in the
         # extension point — apply them now; the _items handler below keeps
@@ -111,27 +139,55 @@ class StatusBarPlugin(Plugin):
     # ------------------------------------------------------------------ #
 
     def _apply_icon_changes(self, added, removed):
-        """Apply contribution deltas to the icon container."""
+        """Apply contribution deltas to the icon container and the left side."""
         if self._icon_container is None:
             return  # no window yet; current extensions applied at setup
         try:
             layout = self._icon_container.layout()
-        except RuntimeError as e:   # container died with the window (app exit)
+        except RuntimeError as e:  # container died with the window (app exit)
             logger.debug(f"status-bar icon container gone: {e}")
             self._icon_container = None
+            self._status_bar = None
+            self._persistent_label = None
+            self._left_container = None
+            self._left_widgets = []
             return
+
         for widget in removed:
             try:
-                layout.removeWidget(widget)
+                if widget in self._left_widgets:
+                    self._left_widgets.remove(widget)
+                    self._left_container.layout().removeWidget(widget)
+
+                else:
+                    layout.removeWidget(widget)
+
                 widget.deleteLater()
             except RuntimeError as e:
                 logger.debug(f"status-bar icon already deleted: {e}")
+
         for widget in added:
-            layout.insertWidget(self._insert_index(layout, widget), widget)
+            if getattr(widget, "status_bar_side", None) == STATUS_BAR_SIDE_LEFT:
+                self._left_container.layout().addWidget(widget)
+                self._left_widgets.append(widget)
+
+            else:
+                layout.insertWidget(self._insert_index(layout, widget), widget)
+
+        self._left_container.setVisible(bool(self._left_widgets))
+
         logger.info(
             f"status bar icons changed: +{len(added)} -{len(removed)}; "
-            f"{layout.count()} in the bar"
+            f"{layout.count() + len(self._left_widgets)} in the bar"
         )
+
+    def _label_index(self):
+        """Slot of the persistent mode/step label in the status bar (the
+        bar's start if the label is not found)."""
+        widgets = list(_layout_widgets(self._status_bar.layout()))
+        label = self._persistent_label
+
+        return widgets.index(label) if label in widgets else 0
 
     @staticmethod
     def _insert_index(layout, widget):
@@ -139,9 +195,7 @@ class StatusBarPlugin(Plugin):
         first icon with a strictly greater ``status_bar_icon_priority``, so
         equal priorities keep arrival order (lower priority = further left).
         """
-        priority = getattr(
-            widget, "status_bar_icon_priority", ICON_PRIORITY_DEFAULT
-        )
+        priority = getattr(widget, "status_bar_icon_priority", ICON_PRIORITY_DEFAULT)
         for i in range(layout.count()):
             other = layout.itemAt(i).widget()
             if priority < getattr(
@@ -169,3 +223,16 @@ class StatusBarPlugin(Plugin):
         (registry.set_extensions) — never fired for plugin contribution
         changes; covered for completeness."""
         self._apply_icon_changes(added=event.new, removed=event.old)
+
+
+def _layout_widgets(layout):
+    """The widgets of ``layout`` and its nested layouts, in order: a
+    QStatusBar lays its widgets out in its own insertion order."""
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+
+        if item.widget() is not None:
+            yield item.widget()
+
+        elif item.layout() is not None:
+            yield from _layout_widgets(item.layout())

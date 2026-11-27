@@ -19,6 +19,7 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 from microdrop_style import colour_roles
 from microdrop_style.colors import INFO_COLOR
 from microdrop_style.palette_helpers import css, is_dark, rounded_path, with_alpha
+from microdrop_style.panel_metrics import CARD_RADIUS, STRIPE_WIDTH
 from microdrop_style.panel_theme import (
     accent_of,
     card_border,
@@ -40,10 +41,7 @@ from microdrop_utils.clamped_label import ClampedLabel
 
 # Local imports.
 from .formatting import format_exact_time, format_time
-from .view_consts import CARD_RADIUS, DETAIL_MAX_HEIGHT, HIGHLIGHT_MS
-
-#: Width (px) of the severity stripe down a card's left edge.
-STRIPE_WIDTH = 4
+from .view_consts import DETAIL_MAX_HEIGHT, HIGHLIGHT_MS
 
 #: Height (px) of a toast's countdown line along the card's bottom.
 PROGRESS_HEIGHT = 3
