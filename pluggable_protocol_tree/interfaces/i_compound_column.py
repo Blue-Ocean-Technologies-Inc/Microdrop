@@ -17,28 +17,32 @@ instances at runtime; downstream consumers (RowManager, executor,
 persistence, MvcTreeModel) keep speaking Column / IColumnModel.
 """
 
+# Standard library imports.
 from typing import NamedTuple
 
+# Third-party imports.
 from PySide6.QtCore import Signal
 
+# Enthought library imports.
 from traits.api import Bool, Float, Instance, Int, Interface, List, Str
-
-from .i_column import IColumnView
 
 
 class FieldSpec(NamedTuple):
     """One field of a compound column."""
-    field_id: str        # row attribute name AND col_id of the rendered cell
-    col_name: str        # column header label
-    default_value: object   # applied at row construction
+
+    field_id: str  # row attribute name AND col_id of the rendered cell
+    col_name: str  # column header label
+    default_value: object  # applied at row construction
 
 
 class ICompoundColumnModel(Interface):
     """Model owning N coupled fields. Each field becomes a row trait
     AND a visible cell. The handler sees all field values."""
 
-    base_id = Str(desc="Logical name for the compound — appears in JSON "
-                       "as 'compound_id' on each field's column entry.")
+    base_id = Str(
+        desc="Logical name for the compound — appears in JSON "
+        "as 'compound_id' on each field's column entry."
+    )
 
     def field_specs(self):
         """Returns ordered list[FieldSpec] of fields this compound contributes."""
@@ -55,6 +59,7 @@ class ICompoundColumnModel(Interface):
 
 class ICompoundColumnView(Interface):
     """N per-cell views, one per field."""
+
     def cell_view_for_field(self, field_id):
         """Return the IColumnView for the given field."""
 
@@ -64,6 +69,7 @@ class ICompoundColumnHandler(Interface):
     on_interact. The expanded field-cell adapters share this handler's
     ack traits and forward the repaint-signal wiring to it, so the
     IColumnHandler contract holds compound-wide."""
+
     priority = Int(50)
     wait_for_topics = List(Str)
     # Same contract as IColumnHandler.default_ack_time_s; the compound
@@ -73,31 +79,47 @@ class ICompoundColumnHandler(Interface):
     # push reaches this object through the field adapters.
     ack_time_s = Float(0.0)
 
-    model = Instance(ICompoundColumnModel,
-                     desc="Wired by CompoundColumn.traits_init.")
+    model = Instance(ICompoundColumnModel, desc="Wired by CompoundColumn.traits_init.")
 
     column_changed_signal = Instance(
-        Signal, desc="Same contract as IColumnHandler: emit to ask the "
-        "tree model to repaint. Wired through the field-cell adapters."
+        Signal,
+        desc="Same contract as IColumnHandler: emit to ask the "
+        "tree model to repaint. Wired through the field-cell adapters.",
     )
     trigger_column_change_when_wired = Bool(False)
 
     def on_interact(self, row, model, field_id, value):
         """Default: model.set_value(row, field_id, value)."""
 
-    def on_protocol_start(self, ctx): pass
-    def on_pre_step(self, row, ctx): pass
-    def on_step(self, row, ctx): pass
-    def on_post_step(self, row, ctx): pass
-    def on_protocol_end(self, ctx): pass
+    def on_protocol_start(self, ctx):
+        pass
+
+    def on_pre_step(self, row, ctx):
+        pass
+
+    def on_step(self, row, ctx):
+        pass
+
+    def on_post_step(self, row, ctx):
+        pass
+
+    def on_protocol_end(self, ctx):
+        pass
+
+    def preflight_checks(self, context):
+        """Same contract as IColumnHandler.preflight_checks, run once per
+        compound column (not once per field cell)."""
 
 
 class ICompoundColumn(Interface):
     """Composition of model + view + handler."""
+
     model = Instance(ICompoundColumnModel)
     view = Instance(ICompoundColumnView)
     handler = Instance(ICompoundColumnHandler)
 
-    id = Str(desc="Identity of the compound UNIT, mirroring IColumn.id. "
-                  "Defaults to the model's base_id; the expanded field "
-                  "cells report the same value.")
+    id = Str(
+        desc="Identity of the compound UNIT, mirroring IColumn.id. "
+        "Defaults to the model's base_id; the expanded field "
+        "cells report the same value."
+    )

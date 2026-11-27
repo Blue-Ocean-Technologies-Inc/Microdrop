@@ -14,10 +14,13 @@ expansion. Not part of the public API — callers should never construct
 these directly; build a CompoundColumn and let _assemble_columns expand it.
 """
 
+# Enthought library imports.
 from traits.api import Bool, DelegatesTo, Instance, Str, observe
 
+# Local imports.
 from ..interfaces.i_compound_column import (
-    ICompoundColumnHandler, ICompoundColumnModel,
+    ICompoundColumnHandler,
+    ICompoundColumnModel,
 )
 from .column import BaseColumnHandler, BaseColumnModel
 
@@ -31,6 +34,7 @@ class _CompoundFieldAdapter(BaseColumnModel):
     compound_base_id is cached at construction so persistence doesn't
     need to round-trip through compound_model.base_id at serialize time.
     """
+
     compound_model = Instance(ICompoundColumnModel)
     field_id = Str
     is_owner = Bool(False)
@@ -63,6 +67,7 @@ class _CompoundFieldHandlerAdapter(BaseColumnHandler):
     at construction time so the executor's subscription aggregation in
     PluggableProtocolTreePlugin.start() picks up the right topics.
     """
+
     compound_handler = Instance(ICompoundColumnHandler)
     compound_model = Instance(ICompoundColumnModel)
     field_id = Str
@@ -92,7 +97,10 @@ class _CompoundFieldHandlerAdapter(BaseColumnHandler):
         # compound_model to the compound handler so it sees its own model
         # type instead of the adapter wrapper.
         return self.compound_handler.on_interact(
-            row, self.compound_model, self.field_id, value,
+            row,
+            self.compound_model,
+            self.field_id,
+            value,
         )
 
     def on_pre_protocol_start(self, ctx):
@@ -123,9 +131,18 @@ class _CompoundFieldHandlerAdapter(BaseColumnHandler):
         if self.is_owner:
             self.compound_handler.on_post_protocol_end(ctx)
 
+    def preflight_checks(self, context):
+        # Owner-only: the pre-flight controller collects every expanded
+        # cell's handler, so forwarding from each field would repeat the
+        # compound's checks once per field.
+        if self.is_owner:
+            return self.compound_handler.preflight_checks(context)
 
-from .column import Column  # noqa: E402 — after class definitions to avoid circular
+        return []
+
+
 from ..interfaces.i_compound_column import ICompoundColumn  # noqa: E402
+from .column import Column  # noqa: E402 — after class definitions to avoid circular
 
 
 def _expand_compound(c: ICompoundColumn) -> list:
@@ -154,15 +171,18 @@ def _expand_compound(c: ICompoundColumn) -> list:
             # Owner-only so the executor's topic aggregation opens each
             # compound mailbox once. The ack traits are NOT mirrored
             # here — they delegate to the compound handler (see above).
-            wait_for_topics=(list(c.handler.wait_for_topics or [])
-                             if idx == 0 else []),
+            wait_for_topics=(list(c.handler.wait_for_topics or []) if idx == 0 else []),
         )
         view = c.view.cell_view_for_field(spec.field_id)
-        expanded.append(Column(
-            # Every field cell reports the COMPOUND's unit identity, so
-            # unit-level maps (the ack-wait grid) key the compound by
-            # base_id, never by a field id like "magnet_on".
-            id=c.model.base_id,
-            model=model_adapter, view=view, handler=handler_adapter,
-        ))
+        expanded.append(
+            Column(
+                # Every field cell reports the COMPOUND's unit identity, so
+                # unit-level maps (the ack-wait grid) key the compound by
+                # base_id, never by a field id like "magnet_on".
+                id=c.model.base_id,
+                model=model_adapter,
+                view=view,
+                handler=handler_adapter,
+            )
+        )
     return expanded
