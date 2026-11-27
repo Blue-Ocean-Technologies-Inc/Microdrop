@@ -741,7 +741,8 @@ map and a <em>Where is my …?</em> lookup; this part is about how experiments a
   <p>Clears away experiment folders in which nothing happened.</p>
   <div data-what><p>Finds every experiment folder that holds only <code>logs</code> (and empty folders), never the active
   one, and asks <em>Delete … experiment folder(s) that hold only logs?</em>, with the names in the details. Yes moves them
-  to the Recycle Bin (Trash on macOS and Linux), where you can restore them.</p></div>
+  to the Recycle Bin (Trash on macOS and Linux), where you can restore them. It runs in the background and reports
+  the result in a notification card.</p></div>
   <div data-read><p><em>No experiments to prune</em> means every folder holds data. If the computer's MicroDrop is
   missing the package that moves files to the Recycle Bin, it offers to update the environment first.</p></div>
   <div data-when><p>Now and then, to keep <code>Experiments</code> readable.</p></div>
