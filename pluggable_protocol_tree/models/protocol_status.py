@@ -25,10 +25,13 @@ clocks for the continuously-changing time readouts. See
 ProtocolStatusController for the executor-signal -> model wiring.
 """
 
+# Standard library imports.
 import threading
 
-from traits.api import Any, Bool, Float, HasTraits, Instance, Int, Str
+# Enthought library imports.
+from traits.api import Any, Bool, Float, HasTraits, Instance, Int, List, Str
 
+# Microdrop package imports.
 from pluggable_protocol_tree.models.stopwatch import ScopeStopwatch
 
 
@@ -98,6 +101,11 @@ class ProtocolStatusModel(HasTraits):
     # can each be inside a wait_for at the same time, on different worker threads.
     _wait_depth = Int(0)
 
+    # The column acknowledgement waits in flight, oldest first, as
+    # ``(wait, started_at)`` with ``wait`` the executor's
+    # ``(column_name, timeout_s)`` payload. Guarded by ``_freeze_lock``.
+    _ack_waits = List()
+
     def __freeze_lock_default(self):
         return threading.Lock()
 
@@ -155,6 +163,7 @@ class ProtocolStatusModel(HasTraits):
             self.step_clock = ScopeStopwatch()
             self.phase_clock = ScopeStopwatch()
             self._wait_depth = 0
+            self._ack_waits = []
             self.paused = False
         self.current_step_path = None
         self.trait_set(
@@ -308,23 +317,43 @@ class ProtocolStatusModel(HasTraits):
             self.paused = False
             self._apply_freeze(now, was_running, restart_seek_stopped=True)
 
-    def enter_ack_wait(self, now):
+    def enter_ack_wait(self, now, wait=None):
         """A ctx.wait_for started blocking: freeze the active clocks (unless
-        already frozen by pause or another in-flight wait). Balanced by
-        :meth:`exit_ack_wait`."""
+        already frozen by pause or another in-flight wait) and note ``wait``,
+        its ``(column_name, timeout_s)``; None for a settle. Balanced by
+        :meth:`exit_ack_wait` with the same ``wait``."""
         with self._freeze_lock:
             was_running = self._clocks_should_run()
             self._wait_depth += 1
             self._apply_freeze(now, was_running)
 
-    def exit_ack_wait(self, now):
+            if wait is not None:
+                self._ack_waits.append((wait, now))
+
+    def exit_ack_wait(self, now, wait=None):
         """A ctx.wait_for stopped blocking: thaw the active clocks once the last
-        wait ends AND the operator has not paused."""
+        wait ends AND the operator has not paused, and drop ``wait``."""
         with self._freeze_lock:
             was_running = self._clocks_should_run()
             if self._wait_depth > 0:
                 self._wait_depth -= 1
             self._apply_freeze(now, was_running)
+
+            ended = [entry for entry in self._ack_waits if entry[0] == wait]
+
+            if ended:
+                self._ack_waits.remove(ended[0])
+
+    def oldest_ack_wait(self, now):
+        """The oldest column acknowledgement in flight as ``(column_name,
+        timeout_s, waited_s)`` at ``now``, or None."""
+        with self._freeze_lock:
+            if not self._ack_waits:
+                return None
+
+            (column_name, timeout_s), started_at = self._ack_waits[0]
+
+        return column_name, timeout_s, now - started_at
 
     def on_repetition(self, completed, total):
         self.repeats_completed = int(completed)

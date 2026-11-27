@@ -16,9 +16,6 @@ together because they form one cohesive unit — a Mailbox's lifetime is
 bound to a StepContext's lifetime, and wait_for is the public method
 that ties them together. Splitting them across files would scatter
 their tight coupling for no payoff.
-
-ProtocolContext / StepContext land in Task 6 — this task ships only the
-two primitives Mailbox depends on.
 """
 
 # Standard library imports.
@@ -71,10 +68,12 @@ class Mailbox:
 
     One Mailbox per (active step, topic) pair. The dramatiq listener
     deposits payloads; ``drain_one`` blocks until a satisfying item is
-    available, the stop_event fires, or the timeout expires.
+    available, the stop_event fires, or the timeout expires. Its
+    ``column_name`` names the column whose acknowledgement it carries.
     """
 
-    def __init__(self):
+    def __init__(self, column_name=""):
+        self.column_name = column_name
         self._queue = queue.SimpleQueue()
         self._wake = threading.Event()
 
@@ -309,13 +308,13 @@ class ProtocolContext(HasTraits):
         the wait, so Stop aborts the settle immediately.
         """
         if self.signals is not None:
-            self.signals.ack_wait_started = True
+            self.signals.ack_wait_started = None
         try:
             if self.stop_event.wait(max(0.0, float(seconds))):
                 raise AbortError("stop_event fired while settling")
         finally:
             if self.signals is not None:
-                self.signals.ack_wait_finished = True
+                self.signals.ack_wait_finished = None
 
     def prompt_gui(self, gui_callable: Callable, *, timeout: float = float("inf")):
         """Run ``gui_callable`` on the GUI thread, paused, and return its result.
@@ -462,12 +461,12 @@ class StepContext(HasTraits):
         with self._phase_buffer_lock:
             return self._phase_extension_total_s
 
-    def open_mailbox(self, topic: str) -> None:
-        """Pre-register a mailbox for ``topic``. Called by the executor
-        at step start for every topic in the union of all handlers'
-        wait_for_topics. Idempotent."""
+    def open_mailbox(self, topic: str, column_name="") -> None:
+        """Pre-register a mailbox for ``topic``, acknowledging ``column_name``.
+        Called by the executor at step start for every topic in the union of
+        all handlers' wait_for_topics. Idempotent."""
         if topic not in self._mailboxes:
-            self._mailboxes[topic] = Mailbox()
+            self._mailboxes[topic] = Mailbox(column_name)
 
     def deposit(self, topic: str, payload) -> None:
         """Called by the dramatiq listener for any message on a topic
@@ -508,8 +507,9 @@ class StepContext(HasTraits):
         # the status controller synchronously. Skipped headless (signals None).
         # try/finally keeps the freeze balanced across TimeoutError / AbortError.
         signals = self.protocol.signals
+        wait = (box.column_name or topic, timeout)
         if signals is not None:
-            signals.ack_wait_started = True
+            signals.ack_wait_started = wait
         try:
             return box.drain_one(
                 predicate=predicate,
@@ -527,7 +527,7 @@ class StepContext(HasTraits):
             ) from None
         finally:
             if signals is not None:
-                signals.ack_wait_finished = True
+                signals.ack_wait_finished = wait
 
     def wait(self, *args, **kwargs):
         return self.protocol.wait(*args, **kwargs)

@@ -139,13 +139,14 @@ def footer(report, palette, on_run):
 
 
 def run_info_values(run_info):
-    """The run in progress as ``(name, value)`` pairs: its step and elapsed
-    time."""
+    """The run in progress as ``(name, value)`` pairs: its step, elapsed
+    time and the acknowledgement it waits on (empty while none shows)."""
     minutes, seconds = divmod(run_info.elapsed_s, 60)
 
     return (
         ("Step", f"{run_info.step}/{run_info.step_total}"),
         ("Elapsed", f"{minutes:02d}:{seconds:02d}"),
+        ("Waiting on", run_info.wait_line),
     )
 
 

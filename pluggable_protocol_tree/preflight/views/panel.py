@@ -75,7 +75,7 @@ class _PanelBinding(HasTraits):
     def _refresh(self, event):
         self.panel.schedule_refresh()
 
-    @observe("run_info:[step, step_total, elapsed_s]")
+    @observe("run_info:[step, step_total, elapsed_s, wait_line]")
     def _update_run_values(self, event):
         self.panel.update_run_values()
 
@@ -323,6 +323,7 @@ class PreflightPanel(QtWidgets.QWidget):
 
             for row in self._run_rows:
                 body_layout.addWidget(row)
+                row.setVisible(bool(row.value_label.text()))
 
             self._scroll = scrolling(body)
             layout.addWidget(self._scroll)
@@ -338,11 +339,18 @@ class PreflightPanel(QtWidgets.QWidget):
             self._scroll.verticalScrollBar().setValue(scrolled)
 
     def update_run_values(self):
-        """Show the run's step and elapsed time in the rows already built."""
+        """Show the run's values in the rows already built. A row without a
+        value hides, and the card refits when one comes or goes."""
         values = run_info_values(self.run_info)
+        refit = False
 
         for row, (_, value) in zip(self._run_rows, values):
+            refit |= bool(row.value_label.text()) != bool(value)
             row.value_label.setText(value)
+            row.setVisible(bool(value))
+
+        if refit:
+            self._place()
 
     def _build_checks(self, layout, body, body_layout, palette):
         """The header, the scrolling rows, and the footer below them."""

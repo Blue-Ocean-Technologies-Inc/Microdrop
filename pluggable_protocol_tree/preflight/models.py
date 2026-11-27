@@ -24,6 +24,7 @@ from traits.api import (
     Property,
     Str,
     Tuple,
+    Union,
 )
 
 # Local imports.
@@ -99,12 +100,26 @@ class RunInfo(HasTraits):
     #: Time since the run started, s.
     elapsed_s = Int
 
+    #: The column whose acknowledgement the run has waited on a while, and
+    #: the whole seconds left of that wait (None: no limit). Empty while no
+    #: wait shows.
+    waiting_on = Str
+    wait_left_s = Union(None, Int)
+
     #: e.g. "3/8 · 01:24".
     progress_line = Property(observe="step, step_total, elapsed_s")
 
     #: The share of the run's steps completed, 0-1: the steps before the
     #: current one.
     completed_fraction = Property(observe="step, step_total")
+
+    #: e.g. "Magnet · 12s left", or "Magnet" without a limit; empty while no
+    #: wait shows.
+    wait_line = Property(observe="waiting_on, wait_left_s")
+
+    #: The run in a line: e.g. "3/8 · Waiting on Magnet · 12s left" during a
+    #: wait, else the progress line.
+    run_line = Property(observe="progress_line, wait_line")
 
     def _get_progress_line(self):
         minutes, seconds = divmod(self.elapsed_s, 60)
@@ -116,6 +131,18 @@ class RunInfo(HasTraits):
             return 0.0
 
         return min(max(self.step - 1, 0) / self.step_total, 1.0)
+
+    def _get_wait_line(self):
+        if not self.waiting_on or self.wait_left_s is None:
+            return self.waiting_on
+
+        return f"{self.waiting_on} · {self.wait_left_s}s left"
+
+    def _get_run_line(self):
+        if not self.wait_line:
+            return self.progress_line
+
+        return f"{self.step}/{self.step_total} · Waiting on {self.wait_line}"
 
 
 class PreflightCheck(HasTraits):

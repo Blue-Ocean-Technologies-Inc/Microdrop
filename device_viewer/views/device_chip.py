@@ -14,7 +14,7 @@ edits (muted with no device loaded), opening a menu of the device file
 actions.
 
 Unsaved means what tags the pane's title " (modified)": connection,
-channel and area-scale edits. Zone edits are not tracked yet."""
+channel, area-scale and zone region edits."""
 
 # Standard library imports.
 from pathlib import Path
