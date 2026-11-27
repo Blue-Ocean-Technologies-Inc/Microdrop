@@ -129,7 +129,7 @@ showing the file or folder name.
 min and max over **all** rows of the run. Book-keeping columns
 (`step_idx`, `utc_time`, `instrument_time_us`, `step_id`,
 `actuated_channels`) are excluded. A column with no numeric value is
-skipped, so `Force Over Unit Area` disappears when no calibration was
+skipped, so `Force (mN/m)` disappears when no calibration was
 available and `Dielectric Thickness` when no dielectric was picked. A
 column with a single value shows `nan` for std.
 
@@ -259,7 +259,7 @@ Rows produced from DropBot capacitance samples carry:
 | `step_id` | Step uuid |
 | `Capacitance (pF)` | Measured capacitance |
 | `Voltage (V)` | Measured actuation voltage |
-| `Force Over Unit Area (mN/mm^2)` | `0.5 * c * V^2`, where `c` is liquid minus filler capacitance per area (pF/mm^2). Empty when no valid calibration was received during the run (see [Open questions](#open-questions)) |
+| `Force (mN/m)` | `0.5 * c * V^2` via `microdrop_utils.force_math_helpers.force_for_step` (the DropBot status pane's helper), where `c` is liquid minus filler capacitance per area (pF/mm^2). A force per unit length of the droplet edge. Empty when no valid calibration was received during the run (see [Open questions](#open-questions)) |
 | `Actuated Area (mm^2)` | Sum of the electrode areas of the channels on at that moment |
 | `Capacitance Over Area (pF/mm^2)` | `Capacitance (pF)` divided by `Actuated Area (mm^2)`. Empty when nothing is actuated. The chart reads "Mean Capacitance Over Area"; each row is a single sample |
 | `Dielectric Thickness (um)` | Parallel-plate estimate from `Capacitance Over Area` minus the filler calibration (raw when there is none) and the run's `Dielectric Constant` (see above). Empty when either is missing or the corrected `C/A` is not positive |
@@ -737,49 +737,44 @@ Things that look surprising, inconsistent or buggy. Not changed here.
    `capacitance_per_unit_area`, and `LoggingHandler` does not pass it.
    `dropbot_protocol_controls/services/force_math.py:current_full_electrode_capacitance_per_unit_area`
    already reads the calibration from app_globals and could seed it.
-4. **Force unit.** `0.5 * c[pF/mm^2] * V^2` is labelled `mN/mm^2`, and the
-   manual test expects 10000 at 100 V. Dimensionally that product is energy
-   per area (force per length), and the scale factor is not applied. Label
-   and formula are legacy parity; worth a check against the legacy
-   `ForceCalculationService`.
-5. **Heatmap diluted by contributed rows.** `_channel_durations_seconds`
+4. **Heatmap diluted by contributed rows.** `_channel_durations_seconds`
    averages `diff()` over all rows. Contributed rows have no
    `instrument_time_us`, become NaN, and `fillna(0)` turns them into zero
    intervals. Each contributed row lowers the average interval, so PMT rows
    shrink every electrode's estimated actuation time.
-6. **Shared per-run state across a pending flush.** `_flush` reads
+5. **Shared per-run state across a pending flush.** `_flush` reads
    `self._ingestion`, `self._device_context` and `self._generate_report`
    at flush time. If a new run starts during the settling delay (possible
    on the no-report path, which shows no modal dialog), `_flush` writes the
    new run's partial data and sets its ingestion to `None`, losing the
    first run and silently stopping the second.
-7. **`step_idx` override is untyped.** The contract allows any scalar.
+6. **`step_idx` override is untyped.** The contract allows any scalar.
    A string `step_idx` mixed with ints would make `_trends_section` sort
    fail, which fails the whole flush and the report.
-8. **`utc_time` is seconds, truncated.** `reception_time` is a float epoch
+7. **`utc_time` is seconds, truncated.** `reception_time` is a float epoch
    from `datetime.now(UTC).timestamp()`, cast to `int`. Sub-second timing
    lives only in `instrument_time_us`.
-9. **Docstring drift.** `ingestion.py` says step context updates arrive on
+8. **Docstring drift.** `ingestion.py` says step context updates arrive on
    the GUI thread; they arrive on the executor worker thread.
    `_channel_durations_seconds` mentions an on-disk
    `corr_instrument_time_us` column; persistence corrects
    `instrument_time_us` in place and writes no such column.
    `start_logging`'s comment says the drain covers captures "made before
    start_logging", but `start_logging` empties the bucket.
-10. **Failure dialog wording.** `_on_report_failed` says the data files
+9. **Failure dialog wording.** `_on_report_failed` says the data files
     were still saved. `write_data_files` is inside the same `try`, so a
     persistence failure also triggers that dialog with no files saved.
-11. **Dead code.** `LoggingReport._notes_section` is unreachable (`_flush`
+10. **Dead code.** `LoggingReport._notes_section` is unreachable (`_flush`
     always passes `notes=None`; the sticky-note feature does not feed it).
     `ProtocolTreePane._logs_settling_time_s` is unused (the dock pane
     passes its own lambda). `ProtocolLoggingController.update_capacitance_per_unit_area`
     has no caller in application code.
-12. **Media bucket race.** `_cache_media_capture` does a read-modify-write
+11. **Media bucket race.** `_cache_media_capture` does a read-modify-write
     on `app_globals[MEDIA_CAPTURES_KEY]` without a lock, so two concurrent
     captures can lose one entry from the bucket. The live topic still
     delivers it during a run.
-13. **Committed scratch output.** `logging_manual_test_output/` (a CSV and
+12. **Committed scratch output.** `logging_manual_test_output/` (a CSV and
     an HTML report from `run_logging_manual_test.py`) is tracked at the repo
     root.
-14. **`docs/pluggable_protocol.md`** is the original design brief and has
+13. **`docs/pluggable_protocol.md`** is the original design brief and has
     no logging section, so there was nothing there to align with.

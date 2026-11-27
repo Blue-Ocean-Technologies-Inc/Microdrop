@@ -12,15 +12,22 @@
 import json
 from types import SimpleNamespace
 
+# Third-party imports.
+import pytest
+
 # Enthought library imports.
 from traits.api import Event, HasTraits
 
 # Microdrop package imports.
 import pluggable_protocol_tree.services.logging.listener as L
+from pluggable_protocol_tree.services.logging.consts import FORCE_COLUMN
 from pluggable_protocol_tree.services.logging.controller import (
     ProtocolLoggingController,
 )
 from pluggable_protocol_tree.services.logging.models import LoggingDeviceContext
+
+# Microdrop utils imports.
+from microdrop_utils.force_math_helpers import force_for_step
 
 
 class _FakeRow:
@@ -161,9 +168,9 @@ def test_on_calibration_populates_force(tmp_path):
             }
         )
     )
-    # cpa = 5 - 3 = 2.0 ; force = 0.5 * 2 * 100^2
-    assert c._ingestion.entries[-1]["Force Over Unit Area (mN/mm^2)"] == round(
-        0.5 * 2.0 * 100.0**2, 6
+    # cpa = 5 - 3 = 2.0
+    assert c._ingestion.entries[-1][FORCE_COLUMN] == pytest.approx(
+        force_for_step(100.0, 2.0)
     )
     c.stop_logging()
 
@@ -189,7 +196,7 @@ def test_on_calibration_ignores_invalid_liquid_le_filler(tmp_path):
             }
         )
     )
-    assert c._ingestion.entries[-1]["Force Over Unit Area (mN/mm^2)"] is None
+    assert c._ingestion.entries[-1][FORCE_COLUMN] is None
     c.stop_logging()
 
 
