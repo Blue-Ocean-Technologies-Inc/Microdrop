@@ -26,7 +26,7 @@ from traits.api import (
 )
 
 # Microdrop package imports.
-from microdrop_status_bar.consts import STATUS_BAR_SIDE_LEFT
+from microdrop_status_bar.consts import LEFT_PRIORITY_READINESS, STATUS_BAR_SIDE_LEFT
 from pluggable_protocol_tree.models.protocol_status import ProtocolStatusModel
 from pluggable_protocol_tree.models.row_manager import RowManager
 from pluggable_protocol_tree.services.device_viewer_sync import (
@@ -225,11 +225,14 @@ class PreflightHost(HasTraits):
         if self.pill is not None:
             self.pill.setVisible(event.new)
 
-    @observe("status_model:[running, step_index, step_total]", dispatch="ui")
+    @observe("status_model:[running, paused, step_index, step_total]", dispatch="ui")
     def _follow_run(self, event):
         model = self.status_model
         self.run_info.trait_set(
-            active=model.running, step=model.step_index, step_total=model.step_total
+            active=model.running,
+            paused=model.paused,
+            step=model.step_index,
+            step_total=model.step_total,
         )
 
         if event.name != "running":
@@ -261,9 +264,10 @@ class PreflightHost(HasTraits):
             self.panel.show_above(self.pill)
 
     def contribute(self, status_bar_icons):
-        """Put the pill on the status bar's left, after the mode/step label
+        """Put the pill first on the status bar's left
         (``status_bar_icons``: the status-bar plugin's extension point)."""
         self.pill.status_bar_side = STATUS_BAR_SIDE_LEFT
+        self.pill.status_bar_left_priority = LEFT_PRIORITY_READINESS
         status_bar_icons.append(self.pill)
 
     def withdraw(self, status_bar_icons):

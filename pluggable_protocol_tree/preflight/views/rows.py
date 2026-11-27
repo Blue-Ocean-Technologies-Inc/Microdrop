@@ -42,6 +42,51 @@ from .view_consts import (
 
 _ALIGN = QtCore.Qt.AlignmentFlag
 
+#: Words a detail may add to its problem without saying anything new.
+NEGATIONS = ("no", "not")
+
+
+def repeats(detail, problem):
+    """Whether ``detail`` only repeats ``problem``: every word of it, bar a
+    negation, is already in the problem ("Not connected" after "DropBot
+    disconnected")."""
+    words = [word for word in detail.lower().split() if word not in NEGATIONS]
+
+    return bool(words) and all(word in problem.lower() for word in words)
+
+
+class ElidedLabel(QtWidgets.QLabel):
+    """A label that shrinks to any width, eliding its text with "…"; the
+    full text is its tooltip while elided."""
+
+    def __init__(self, text, parent=None):
+        super().__init__(parent)
+
+        self._full_text = text
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        width = self.fontMetrics().horizontalAdvance(self._full_text)
+
+        return QtCore.QSize(width, hint.height())
+
+    def minimumSizeHint(self):
+        return QtCore.QSize(0, super().minimumSizeHint().height())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        text = self.fontMetrics().elidedText(
+            self._full_text, QtCore.Qt.TextElideMode.ElideRight, self.width()
+        )
+
+        self.setText(text)
+        self.setToolTip(self._full_text if text != self._full_text else "")
+
 
 class StatusGlyph(QtWidgets.QWidget):
     """A check's category glyph, with a small shaped status badge on its
@@ -120,14 +165,11 @@ class CheckRow(QtWidgets.QWidget):
         if not self.card:
             label.setStyleSheet(f"color: {css(muted_text(palette))};")
 
-        detail = QtWidgets.QLabel(self._detail_text())
+        # Elided, so a row never grows wider than the card.
+        detail = ElidedLabel(self._detail_text())
         detail.setFont(role_font(META))
         detail.setStyleSheet(f"color: {css(muted_text(palette))};")
         detail.setAlignment(_ALIGN.AlignRight | _ALIGN.AlignVCenter)
-        detail.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding,
-            QtWidgets.QSizePolicy.Policy.Preferred,
-        )
 
         layout.addWidget(label)
         layout.addWidget(detail, 1)
@@ -177,8 +219,15 @@ class CheckRow(QtWidgets.QWidget):
 
             return f"Muted, {scope}"
 
+        detail = self.check.detail
+        problem_shown = self.check.status in ("warn", "fail")
+
+        # Said once: a detail that only repeats the problem is dropped.
+        if problem_shown and repeats(detail, self.check.problem):
+            return ""
+
         # A skip's detail says why it was not checked; its tooltip, in full.
-        return self.check.detail
+        return detail
 
     def _mute_button(self, palette):
         """Unmute on a muted row; a mute on a warning; nothing otherwise

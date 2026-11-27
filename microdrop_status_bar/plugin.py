@@ -16,8 +16,10 @@ extension point: other plugins contribute QWidget instances (typically at
 runtime, from their dock panes) and this plugin places them in a single
 icon container whose QHBoxLayout gives every icon the same gap, or, for a
 widget marked ``status_bar_side = STATUS_BAR_SIDE_LEFT``, on the bar's
-left, before the mode/step label. Removing a widget from the extension point
-removes it from the bar and deletes it.
+left, before the status message, ordered by ``status_bar_left_priority``,
+with the members of one ``status_bar_group`` closer together. Removing a
+widget from the
+extension point removes it from the bar and deletes it.
 
 Dynamic contribution handling mirrors MessageRouterPlugin: apply the
 current extensions once the container exists, then react to
@@ -27,16 +29,18 @@ current extensions once the container exists, then react to
 # Enthought library imports.
 from envisage.api import ExtensionPoint, Plugin
 from pyface.qt.QtGui import QHBoxLayout, QWidget
-from traits.api import Any, List, observe, on_trait_change
+from traits.api import Any, Dict, List, observe, on_trait_change
 
 # Microdrop utils imports.
 from microdrop_utils.pyface_helpers import StatusBarManager
 
 # Local imports.
 from .consts import (
+    CHIP_GAP,
     DEFAULT_STATUS_MESSAGE,
     ICON_PRIORITY_DEFAULT,
     ICON_SPACING,
+    LEFT_PRIORITY_DEFAULT,
     PKG,
     STATUS_BAR_CONTENTS_MARGINS,
     STATUS_BAR_ICONS,
@@ -67,14 +71,20 @@ class StatusBarPlugin(Plugin):
     #: every contributed icon the same gap.
     _icon_container = Any(None)
 
-    #: The window's status bar, its persistent mode/step label, and the
-    #: contributed widgets on its left, in arrival order before the label.
+    #: The window's status bar, its persistent message label, and the
+    #: contributed widgets on its left, in arrival order (laid out by left
+    #: priority before the label).
     _status_bar = Any(None)
     _persistent_label = Any(None)
     #: Container for the left widgets, inserted before the label; its HBox
     #: layout spaces them like the right-hand icons and trails one gap.
     _left_container = Any(None)
     _left_widgets = List()
+
+    #: A row per ``status_bar_group`` on the left, by group: its members sit
+    #: CHIP_GAP apart, and the row takes the slot of its lowest-priority
+    #: member.
+    _left_group_rows = Dict()
 
     def start(self):
         # Wire the registry's extension-point listeners to this plugin's
@@ -144,20 +154,23 @@ class StatusBarPlugin(Plugin):
             return  # no window yet; current extensions applied at setup
         try:
             layout = self._icon_container.layout()
-        except RuntimeError as e:  # container died with the window (app exit)
+            left_layout = self._left_container.layout()
+        except RuntimeError as e:  # containers died with the window (app exit)
             logger.debug(f"status-bar icon container gone: {e}")
             self._icon_container = None
             self._status_bar = None
             self._persistent_label = None
             self._left_container = None
             self._left_widgets = []
+            self._left_group_rows = {}
             return
 
         for widget in removed:
             try:
                 if widget in self._left_widgets:
+                    # Out of every layout once the left side is laid again.
                     self._left_widgets.remove(widget)
-                    self._left_container.layout().removeWidget(widget)
+                    widget.hide()
 
                 else:
                     layout.removeWidget(widget)
@@ -168,21 +181,56 @@ class StatusBarPlugin(Plugin):
 
         for widget in added:
             if getattr(widget, "status_bar_side", None) == STATUS_BAR_SIDE_LEFT:
-                self._left_container.layout().addWidget(widget)
                 self._left_widgets.append(widget)
 
             else:
                 layout.insertWidget(self._insert_index(layout, widget), widget)
 
-        self._left_container.setVisible(bool(self._left_widgets))
+        self._lay_out_left(left_layout)
 
         logger.info(
             f"status bar icons changed: +{len(added)} -{len(removed)}; "
             f"{layout.count() + len(self._left_widgets)} in the bar"
         )
 
+    def _lay_out_left(self, layout):
+        """Lay the left widgets out again in ``layout`` by left priority
+        (ties keep arrival order), each group's members in their own row.
+
+        Widgets are walked in priority order, so a group's row lands in the
+        slot of its lowest-priority member and its members follow in
+        priority order inside it."""
+        rows = self._left_group_rows
+
+        for row_layout in [layout, *(row.layout() for row in rows.values())]:
+            while row_layout.count():
+                row_layout.takeAt(0)
+
+        for widget in sorted(self._left_widgets, key=_left_priority):
+            group = getattr(widget, "status_bar_group", None)
+
+            if group is None:
+                layout.addWidget(widget)
+
+                continue
+
+            if group not in rows:
+                rows[group] = _row(CHIP_GAP)
+
+            if not rows[group].layout().count():
+                layout.addWidget(rows[group])
+
+            rows[group].layout().addWidget(widget)
+
+        for group, row in list(rows.items()):
+            if not row.layout().count():
+                del rows[group]
+                row.deleteLater()
+
+        self._left_container.setVisible(bool(self._left_widgets))
+
     def _label_index(self):
-        """Slot of the persistent mode/step label in the status bar (the
+        """Slot of the persistent message label in the status bar (the
         bar's start if the label is not found)."""
         widgets = list(_layout_widgets(self._status_bar.layout()))
         label = self._persistent_label
@@ -195,12 +243,9 @@ class StatusBarPlugin(Plugin):
         first icon with a strictly greater ``status_bar_icon_priority``, so
         equal priorities keep arrival order (lower priority = further left).
         """
-        priority = getattr(widget, "status_bar_icon_priority", ICON_PRIORITY_DEFAULT)
+        priority = _priority(widget)
         for i in range(layout.count()):
-            other = layout.itemAt(i).widget()
-            if priority < getattr(
-                other, "status_bar_icon_priority", ICON_PRIORITY_DEFAULT
-            ):
+            if priority < _priority(layout.itemAt(i).widget()):
                 return i
         return layout.count()
 
@@ -223,6 +268,26 @@ class StatusBarPlugin(Plugin):
         (registry.set_extensions) — never fired for plugin contribution
         changes; covered for completeness."""
         self._apply_icon_changes(added=event.new, removed=event.old)
+
+
+def _priority(widget):
+    """A right-hand widget's ``status_bar_icon_priority``."""
+    return getattr(widget, "status_bar_icon_priority", ICON_PRIORITY_DEFAULT)
+
+
+def _left_priority(widget):
+    """A left widget's ``status_bar_left_priority``; unset sorts last."""
+    return getattr(widget, "status_bar_left_priority", LEFT_PRIORITY_DEFAULT)
+
+
+def _row(spacing):
+    """A bare widget laying its children out in a row, ``spacing`` apart."""
+    row = QWidget()
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(spacing)
+
+    return row
 
 
 def _layout_widgets(layout):

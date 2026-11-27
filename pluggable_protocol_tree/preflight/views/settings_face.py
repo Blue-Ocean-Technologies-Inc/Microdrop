@@ -9,26 +9,32 @@
 # Thanks for using Microdrop open source!
 
 """The card's settings face: the ack-wait grid of the live protocol
-preferences, edited in place, and a link to every protocol setting.
+preferences, edited in place, a reset to the columns' defaults, and a link
+to every protocol setting.
 
-The grid is the Settings dialog's own section (``ack_times_view``), so
-there is one editor definition and no copy of the values: an edit reaches
-the column handlers at once, through the dock pane's ack-time sync.
+The grid is the Settings dialog's own table (``ack_times_view``, without
+the dialog's group heading), so there is one editor definition and no copy
+of the values: an edit reaches the column handlers at once, through the
+dock pane's ack-time sync.
 """
 
 # Enthought library imports.
 from pyface.qt import QtCore, QtWidgets
 
 # Microdrop package imports.
-from pluggable_protocol_tree.services.preferences import ack_times_view
+from pluggable_protocol_tree.services.preferences import (
+    ACK_TIMES_HINT,
+    ack_times_view,
+)
 
 # Microdrop style imports.
+from microdrop_style.icons.icons import ICON_RESTORE
 from microdrop_style.panel_metrics import DRAWER_PADDING_PX
 from microdrop_style.panel_theme import link_button_style, link_color
 from microdrop_style.typography import CARD_TITLE, META, role_font
 
 # Local imports.
-from .panel_parts import icon_button
+from .panel_parts import icon_button, muted_label
 from .view_consts import ICON_BACK, ROW_HEIGHT
 
 #: The face's title.
@@ -62,15 +68,20 @@ def settings_face(preferences, palette, on_back, on_all_settings):
     link.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
     link.clicked.connect(on_all_settings)
 
-    layout.addWidget(_title_row(palette, on_back))
+    hint = muted_label(ACK_TIMES_HINT, palette)
+    hint.setContentsMargins(6, 0, 6, 0)
+
+    layout.addWidget(_title_row(palette, on_back, preferences.reset_ack_times))
+    layout.addWidget(hint)
     layout.addWidget(ui.control)
     layout.addWidget(link, 0, _ALIGN.AlignLeft)
 
     return face, ui
 
 
-def _title_row(palette, on_back):
-    """The back arrow and the title, as high as the checks' header."""
+def _title_row(palette, on_back, on_reset):
+    """The back arrow, the title and the reset to defaults, as high as the
+    checks' header."""
     widget = QtWidgets.QWidget()
     widget.setFixedHeight(ROW_HEIGHT)
     row = QtWidgets.QHBoxLayout(widget)
@@ -82,6 +93,7 @@ def _title_row(palette, on_back):
 
     row.addWidget(icon_button(ICON_BACK, "Back to the checks", palette, on_back))
     row.addWidget(title, 1)
+    row.addWidget(icon_button(ICON_RESTORE, "Reset to defaults", palette, on_reset))
 
     return widget
 

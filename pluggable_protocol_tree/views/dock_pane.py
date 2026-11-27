@@ -82,7 +82,6 @@ from pluggable_protocol_tree.services.repeat_duration_reconciler import (
     clamp_trail_overlay_for_row,
     reconcile_repeat_duration_for_row,
 )
-from pluggable_protocol_tree.views.autosave_status_icon import AutosaveStatusIcon
 from pluggable_protocol_tree.views.navigation_bar import STATUS_POLL_INTERVAL_MS
 from pluggable_protocol_tree.views.protocol_tree_pane import (
     PREVIEW_COMPLETE_TOAST_MS,
@@ -92,6 +91,7 @@ from pluggable_protocol_tree.views.protocol_tree_pane import (
     ProtocolTreePane,
 )
 from pluggable_protocol_tree.views.quick_action_bar import QuickActionsController
+from pluggable_protocol_tree.views.status_bar_widgets import ProtocolStatusBarWidgets
 from pluggable_protocol_tree.views.timeline_bar import collapse_phase_view
 
 # Microdrop style imports.
@@ -165,15 +165,15 @@ class PluggableProtocolDockPane(TraitsDockPane):
     #: from the status model's current_step_path by the highlight observer.
     _current_row = Any()
     #: True while the active run is a preview (no artifacts/report).
-    _current_run_preview_mode = Bool(False)
+    current_run_preview_mode = Bool(False)
     #: Guards the play button between play-click and protocol_started.
     _start_pending = Bool(False)
     #: True while the pre-protocol wait loading screen is up.
     _wait_active = Bool(False)
 
-    #: The AutoSave glyph contributed to the app status bar; None until the
-    #: pane mounts in an app.
-    _autosave_status_icon = Instance(AutosaveStatusIcon)
+    #: The AutoSave glyph, step navigator and protocol chip contributed to
+    #: the app status bar; None until the pane mounts in an app.
+    _status_bar_widgets = Instance(ProtocolStatusBarWidgets)
 
     #: The pre-flight check: its pill, its card and the run gate.
     preflight = Instance(PreflightHost)
@@ -420,12 +420,13 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # Initial timeline render (structure + position).
         self._rebuild_timeline()
 
-        self._contribute_autosave_switch()
+        self._contribute_status_bar_widgets()
 
         return pane
 
-    def _contribute_autosave_switch(self):
-        """Put the AutoSave glyph (#966) and the pre-flight pill in the bar.
+    def _contribute_status_bar_widgets(self):
+        """Put the AutoSave glyph (#966), the pre-flight pill, the step
+        navigator and the protocol chip in the bar.
 
         The microdrop_status_bar plugin owns placement, spacing and removal;
         a contribution made before its bar exists is placed once it does."""
@@ -435,29 +436,25 @@ class PluggableProtocolDockPane(TraitsDockPane):
             logger.warning(f"{PKG}: plugin not found; status-bar glyphs not shown")
             return
 
-        self._autosave_status_icon = AutosaveStatusIcon(
-            model=self._pane.autosave_controller.model
-        )
-        plugin.status_bar_icons.append(self._autosave_status_icon.control)
         self.preflight.contribute(plugin.status_bar_icons)
+        self._status_bar_widgets = ProtocolStatusBarWidgets(
+            dock_pane=self, tree_pane=self._pane
+        )
+        self._status_bar_widgets.contribute(plugin.status_bar_icons)
 
-    def _withdraw_autosave_switch(self):
-        """Take the AutoSave glyph and the pre-flight pill out of the status
-        bar (which deletes them), stopping what drives them first."""
+    def _withdraw_status_bar_widgets(self):
+        """Take the protocol's widgets out of the status bar (which deletes
+        them), stopping what drives them first."""
         plugin = self.task.window.application.get_plugin(f"{PKG}.plugin")
         icons = plugin.status_bar_icons if plugin is not None else []
-        icon = self._autosave_status_icon
 
         if self.preflight is not None:
             self.preflight.withdraw(icons)
 
-        if icon is not None:
-            if icon.control in icons:
-                icons.remove(icon.control)
+        if self._status_bar_widgets is not None:
+            self._status_bar_widgets.withdraw(icons)
 
-            icon.model = None
-
-        self._autosave_status_icon = None
+        self._status_bar_widgets = None
 
     def destroy(self):
         """Tear down the background poll job before the pane goes away so its
@@ -470,7 +467,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             except Exception as e:
                 logger.warning(f"poll scheduler shutdown failed: {e}")
 
-        self._withdraw_autosave_switch()
+        self._withdraw_status_bar_widgets()
         super().destroy()
 
     # --- runtime column hot load/unload ------------------------------
@@ -522,24 +519,24 @@ class PluggableProtocolDockPane(TraitsDockPane):
     # --- step-cursor navigation -------------------------------------
     @attempt_func_execution_with_error_dialog
     def navigate_to_first_step(self):
-        steps = self._pane._navigable_steps()
+        steps = self._pane.navigable_steps()
         if steps:
             logger.info(f"Nav: first step [{steps[0].dotted_path()}]")
             self._select_step(steps[0])
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_last_step(self):
-        steps = self._pane._navigable_steps()
+        steps = self._pane.navigable_steps()
         if steps:
             logger.info(f"Nav: last step [{steps[-1].dotted_path()}]")
             self._select_step(steps[-1])
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_previous_step(self):
-        steps = self._pane._navigable_steps()
+        steps = self._pane.navigable_steps()
         if not steps:
             return
-        cur = self._current_step_in(steps)
+        cur = self.current_step_in(steps)
         if cur is None:
             logger.info(f"Nav: previous (no current) --> [{steps[0].dotted_path()}]")
             self._select_step(steps[0])
@@ -550,10 +547,10 @@ class PluggableProtocolDockPane(TraitsDockPane):
 
     @attempt_func_execution_with_error_dialog
     def navigate_to_next_step(self):
-        steps = self._pane._navigable_steps()
+        steps = self._pane.navigable_steps()
         if not steps:
             return
-        cur = self._current_step_in(steps)
+        cur = self.current_step_in(steps)
         if cur is None:
             logger.info(f"Nav: next (no current) --> [{steps[0].dotted_path()}]")
             self._select_step(steps[0])
@@ -604,7 +601,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
                 return
         path = tuple(self._current_row.path)
         sc.seek_to(path, target0)
-        sc.preview_phase(path, target0, self._current_run_preview_mode)
+        sc.preview_phase(path, target0, self.current_run_preview_mode)
         self._update_phase_nav_buttons()
 
     def _seek_relative_phase(self, delta):
@@ -617,7 +614,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
     # --- timeline seek bar (view -> controller) ----------------------
 
     def _on_timeline_step_seek(self, step_index):
-        rows = self._timeline_step_rows or self._pane._navigable_steps()
+        rows = self._timeline_step_rows or self._pane.navigable_steps()
         if not (0 <= step_index < len(rows)):
             return
         row = rows[step_index]
@@ -629,7 +626,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             self._current_row = row
             path = tuple(row.path)
             sc.seek_to_frame(path, step_index)
-            sc.preview_phase(path, 0, self._current_run_preview_mode)
+            sc.preview_phase(path, 0, self.current_run_preview_mode)
             self._refresh_timeline_position()
         elif sc is not None and sc.model.running and not sc.model.paused:
             # B1: preview-only while actively running. Move the selection and
@@ -660,15 +657,15 @@ class PluggableProtocolDockPane(TraitsDockPane):
     def _current_step_row(self):
         """The distinct current step (drives phase collapse + the rep combo),
         independent of whether the step track is showing frames."""
-        steps = self._pane._navigable_steps()
-        cur = self._current_step_in(steps)
+        steps = self._pane.navigable_steps()
+        cur = self.current_step_in(steps)
         return steps[cur] if cur is not None else None
 
     def _refresh_timeline_position(self):
         tb = getattr(self._pane, "timeline_bar", None)
         if tb is None:
             return
-        rows = self._timeline_step_rows or self._pane._navigable_steps()
+        rows = self._timeline_step_rows or self._pane.navigable_steps()
         sc = self.status_controller
         model = sc.model if sc else None
         running = bool(model.running) if model else False
@@ -677,7 +674,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         if self._timeline_show_full and running and model and model.frame_index > 0:
             cur = model.frame_index - 1
         else:
-            cur = self._current_step_in(rows)
+            cur = self.current_step_in(rows)
         # Phase collapse + rep combo are driven by the distinct current step.
         current_row = self._current_step_row()
         if self._idle_nav_active():
@@ -862,7 +859,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             # every step), so step repetitions are visible end to end.
             rows = [row for row, _chain in self.manager.iter_execution_frames()]
         else:
-            rows = self._pane._navigable_steps()
+            rows = self._pane.navigable_steps()
         self._timeline_step_rows = rows
         labels = [(row.name or row.dotted_path()) for row in rows]
         group_keys = [self._group_key_for(row) for row in rows]
@@ -907,7 +904,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         path = tuple(row.path)
         sc = self.status_controller
         sc.seek_to(path, 0)
-        sc.preview_phase(path, 0, self._current_run_preview_mode)
+        sc.preview_phase(path, 0, self.current_run_preview_mode)
 
     @attempt_func_execution_with_error_dialog
     def _select_step(self, row):
@@ -924,7 +921,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # observers won't fire — move the timeline playhead to match here.
         self._refresh_timeline_position()
 
-    def _current_step_in(self, steps):
+    def current_step_in(self, steps):
         # During a run the nav cursor follows the model's current step (the
         # paused/executing step, synced into _current_row by the highlight
         # observer) -- NOT the tree's stale selection, which is what made
@@ -1029,7 +1026,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
             return
 
         repeats = self._pane.status_bar.edit_repeat_protocol.value()
-        self._current_run_preview_mode = preview_mode
+        self.current_run_preview_mode = preview_mode
         advanced_mode = is_advanced_mode()
         logger.info(
             f"Protocol run starting: {repeats} rep(s), "
@@ -1191,7 +1188,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         # nothing to clear.
         device_connected = self.sync is None or self.sync.connected
 
-        if self._current_run_preview_mode and not device_connected:
+        if self.current_run_preview_mode and not device_connected:
             logger.info(
                 "Protocol terminated: electrode clear not sent; reasons: "
                 "Preview run; Device not connected;"
@@ -1229,7 +1226,7 @@ class PluggableProtocolDockPane(TraitsDockPane):
         "finished", "aborted", "error". Every dialog is best-effort — failures
         are logged, never raised, so terminal cleanup is unaffected."""
         # Preview runs produce no artifacts; just confirm completion.
-        if self._current_run_preview_mode:
+        if self.current_run_preview_mode:
             try:
                 self.logging_controller.stop_logging()
             except Exception as e:

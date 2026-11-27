@@ -11,23 +11,29 @@
 """The demo window: a mock protocol navigation bar (as
 ``pluggable_protocol_tree/views/navigation_bar.py`` lays it out, plus mock
 "Run selected" and "Preview" buttons), a placeholder for the protocol tree,
-a Demo controls panel, and a mock status bar (as
-``microdrop_utils.pyface_helpers.StatusBarManager`` builds it) with the
-mode/step label, the pill right after it, and the bell on the right."""
+a Demo controls panel, and a mock status bar laid out as the status-bar
+plugin lays its left side: the pill, the step navigator and the protocol
+and device chips, then the message and the bell on the right."""
 
 # Enthought library imports.
 from apptools.preferences.api import Preferences
 from pyface.qt import QtCore, QtWidgets
-from traits.api import Any, Bool, Button, Enum, HasTraits, Instance, observe
+from traits.api import Bool, Button, Enum, HasTraits, Instance, observe
 from traitsui.api import Item, Label, VGroup, View
 
 # Microdrop package imports.
+from microdrop_status_bar.consts import (
+    CHIP_GAP,
+    ICON_SPACING,
+    STATUS_BAR_CONTENTS_MARGINS,
+)
 from pluggable_protocol_tree.preflight.consts import UNUSED_COLUMN_PREFIX
 from pluggable_protocol_tree.preflight.controller import PreflightController
 from pluggable_protocol_tree.preflight.models import RunInfo
 from pluggable_protocol_tree.preflight.views.panel import PreflightPanel
 from pluggable_protocol_tree.preflight.views.pill import (
     PillController,
+    ReadinessPill,
 )
 from pluggable_protocol_tree.services.preferences import ProtocolPreferences
 
@@ -61,13 +67,9 @@ from .mock_context import (
     SnapshotBinding,
     apply_scenario,
 )
-from .status_chips_proto import (
-    ICON_SPACING,
-    ProtocolDeviceChips,
+from .mock_status_bar import (
+    MockStatusBarBinding,
     ProtocolMockState,
-    StatusChipsBinding,
-    StepNavigator,
-    TintedPill,
     protocol_mock_view,
 )
 
@@ -83,24 +85,16 @@ MESSAGE_MS = 3000
 TICK_MS = 1000
 SECONDS_PER_STEP = 4
 
-#: StatusBarManager's margins (microdrop_status_bar/consts.py).
-STATUS_BAR_CONTENTS_MARGINS = (30, 0, 30, 0)
-
-#: The step the editing mode shows.
-EDITING_STEP = 3
-
 
 class DemoControls(HasTraits):
-    """Scenario, live toggles, mode and mutes over the mock state."""
+    """Scenario, live toggles, run and mutes over the mock state."""
 
     #: The canned scenario applied to the rig.
     scenario = Enum(*SCENARIOS)
 
-    #: The status bar's mode when no protocol runs.
-    mode = Enum("Free Mode", "Editing")
-
-    #: Flip the pill and card to a run in progress.
+    #: Flip the pill and card to a run in progress, and pause it.
     simulate_running = Bool(False)
+    simulate_paused = Bool(False)
 
     #: Drop the "this run" mutes.
     reset_mutes = Button("Reset mutes")
@@ -127,6 +121,10 @@ class DemoControls(HasTraits):
 
         info.active = self.simulate_running
 
+    @observe("simulate_paused")
+    def _update_paused(self, event):
+        self.run_info.paused = self.simulate_paused
+
     @observe("reset_mutes")
     def _reset_mutes(self, event):
         self.controller.clear_run_mutes()
@@ -151,35 +149,11 @@ demo_controls_view = View(
         Item("object.rig.toggled_columns_unused", label="Video/Heater unused"),
         Label("Run"),
         Item("simulate_running", label="Simulate running"),
+        Item("simulate_paused", label="Paused"),
         Item("reset_mutes", show_label=False),
         Item("clear_always_allowed", show_label=False),
     ),
 )
-
-
-class _StatusLabelBinding(HasTraits):
-    """Keeps the status bar's mode/step label as the app sets it."""
-
-    #: The mode chosen and the run in progress.
-    controls = Instance(DemoControls)
-    run_info = Instance(RunInfo)
-
-    #: The label (a QLabel).
-    label = Any()
-
-    @observe("controls.mode, run_info.[active, step], label")
-    def _show_mode(self, event):
-        if None in (self.label, self.controls, self.run_info):
-            return
-
-        if self.run_info.active:
-            self.label.setText(f"Running Protocol: Step {self.run_info.step}")
-
-        elif self.controls.mode == "Editing":
-            self.label.setText(f"Editing: Step {EDITING_STEP}")
-
-        else:
-            self.label.setText("Free Mode")
 
 
 class PreflightDemoWindow(QtWidgets.QMainWindow):
@@ -206,7 +180,7 @@ class PreflightDemoWindow(QtWidgets.QMainWindow):
         )
 
         self.protocol_state = ProtocolMockState()
-        self.pill = TintedPill()
+        self.pill = ReadinessPill()
         self.pill.clicked.connect(self.toggle_popover)
         self._pill_controller = PillController(
             report=report,
@@ -231,14 +205,13 @@ class PreflightDemoWindow(QtWidgets.QMainWindow):
         layout.addWidget(self._controls_panel())
         self.setCentralWidget(central)
 
-        self._build_status_bar()
-        self._chips_binding = StatusChipsBinding(
+        self._status_bar_binding = MockStatusBarBinding(
             state=self.protocol_state,
             run_info=self.run_info,
-            chip=self.protocol_chip,
-            navigator=self.navigator,
+            report=report,
+            show_message=self.show_message,
         )
-        self._chips_binding.connect()
+        self._build_status_bar()
 
         self.controller.evaluate(self.snapshots.snapshot())
 
@@ -326,9 +299,9 @@ class PreflightDemoWindow(QtWidgets.QMainWindow):
         return panel
 
     def _build_status_bar(self):
-        """After StatusBarManager.create_status_bar, reshaped by the status
-        chips prototype: pill, step navigator and chips on the left, then
-        the message and the bell on the right."""
+        """As StatusBarManager.create_status_bar and the status-bar plugin
+        build it: pill, step navigator and chips on the left, then the
+        message and the bell on the right."""
         palette = theme_palette()
         theme = "dark" if is_dark(palette) else "light"
         status_bar = self.statusBar()
@@ -345,23 +318,25 @@ class PreflightDemoWindow(QtWidgets.QMainWindow):
         bell.setToolTip("Notifications (mock)")
         bell.setStyleSheet(icon_button_style(palette, 18))
 
-        self.protocol_chip = ProtocolDeviceChips()
-        self.protocol_chip.action_picked.connect(self.show_message)
-        self.navigator = StepNavigator()
-        self.persistent_label = self.navigator.label
+        binding = self._status_bar_binding
 
-        # Prototype row: pill, navigator and chips in one left cluster, then
-        # a stretch, then message and bell on the right. The chips follow
-        # the navigator's width naturally and elide before anything
-        # overflows. The real port mounts the chips in StatusBarManager's
-        # left slot, after the step navigator.
+        # The file chips share a row, CHIP_GAP apart, as one status-bar
+        # group; they follow the navigator's width and elide before
+        # anything overflows.
+        chips = QtWidgets.QWidget()
+        chip_row = QtWidgets.QHBoxLayout(chips)
+        chip_row.setContentsMargins(0, 0, 0, 0)
+        chip_row.setSpacing(CHIP_GAP)
+        chip_row.addWidget(binding.protocol_chip)
+        chip_row.addWidget(binding.device_chip)
+
         row = QtWidgets.QWidget()
         grid = QtWidgets.QHBoxLayout(row)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setSpacing(ICON_SPACING)
         grid.addWidget(self.pill)
-        grid.addWidget(self.navigator)
-        grid.addWidget(self.protocol_chip)
+        grid.addWidget(binding.navigator)
+        grid.addWidget(chips)
         grid.addStretch(1)
         grid.addWidget(self.center_label)
         grid.addWidget(bell)

@@ -138,16 +138,22 @@ def footer(report, palette, on_run):
     return widget
 
 
-def run_info_rows(run_info, palette):
-    """The run in progress: its step and elapsed time, a row each."""
+def run_info_values(run_info):
+    """The run in progress as ``(name, value)`` pairs: its step and elapsed
+    time."""
     minutes, seconds = divmod(run_info.elapsed_s, 60)
 
+    return (
+        ("Step", f"{run_info.step}/{run_info.step_total}"),
+        ("Elapsed", f"{minutes:02d}:{seconds:02d}"),
+    )
+
+
+def run_info_rows(run_info, palette):
+    """The run in progress, a row per value; each row's ``value_label``
+    takes the value's later updates in place."""
     return [
-        _pair_row(name, value, palette)
-        for name, value in (
-            ("Step", f"{run_info.step}/{run_info.step_total}"),
-            ("Elapsed", f"{minutes:02d}:{seconds:02d}"),
-        )
+        _pair_row(name, value, palette) for name, value in run_info_values(run_info)
     ]
 
 
@@ -214,6 +220,7 @@ def _pair_row(name, value, palette):
 
     layout.addWidget(muted_label(name, palette))
     layout.addWidget(value_label, 1)
+    row.value_label = value_label
 
     return row
 

@@ -88,8 +88,9 @@ class PreflightContext(HasTraits):
 class RunInfo(HasTraits):
     """The protocol run in progress, shown in place of the checks."""
 
-    #: Whether a protocol is running.
+    #: Whether a protocol is running, and whether that run is paused.
     active = Bool(False)
+    paused = Bool(False)
 
     #: The current step (1-based) and the step count of the run.
     step = Int

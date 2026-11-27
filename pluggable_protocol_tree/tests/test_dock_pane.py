@@ -540,7 +540,7 @@ def _dock_pane_for_flow(build_dock_pane, *, with_exp):
     # The run executed steps, so the report is offered/generated; has_data()
     # gates that (a run stopped before any step logs nothing -> no report).
     dock_pane.logging_controller.has_data.return_value = True
-    dock_pane._current_run_preview_mode = False
+    dock_pane.current_run_preview_mode = False
 
     return dock_pane
 
@@ -590,7 +590,7 @@ def test_completion_flow_preview_shows_info_no_confirm(build_dock_pane, monkeypa
     import pluggable_protocol_tree.views.dock_pane as dp
 
     dock_pane = _dock_pane_for_flow(build_dock_pane, with_exp=True)
-    dock_pane._current_run_preview_mode = True
+    dock_pane.current_run_preview_mode = True
     counts = {"info": 0, "confirm": 0}
     monkeypatch.setattr(
         dp,

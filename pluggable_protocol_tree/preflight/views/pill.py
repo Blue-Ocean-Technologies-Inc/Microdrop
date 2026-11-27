@@ -16,17 +16,19 @@ from pyface.qt import QtCore, QtGui, QtWidgets
 from traits.api import HasTraits, Instance, observe
 
 # Microdrop style imports.
-from microdrop_style import colour_roles
-from microdrop_style.palette_helpers import css, icon_font, with_alpha
-from microdrop_style.panel_theme import (
-    chip_text,
-    chip_tint,
-    muted_text,
-    readable_accent,
-    role_color,
-    theme_palette,
-)
+from microdrop_style.icons.icons import ICON_PAUSE_CIRCLE
+from microdrop_style.palette_helpers import css, icon_font
+from microdrop_style.panel_theme import chip_text, readable_accent, theme_palette
 from microdrop_style.typography import CHIP, role_font
+
+# Microdrop utils imports.
+from microdrop_utils.status_chip import (
+    CALM_ALPHA,
+    CHIP_HEIGHT,
+    chip_sheet,
+    follow_theme,
+    severity_color,
+)
 
 # Local imports.
 from ..controller import PreflightController
@@ -59,17 +61,17 @@ STATUS_SEVERITY = {
 def status_color(status, palette, on_card=True):
     """The accent for ``status``: severity colours, or muted text."""
     severity = STATUS_SEVERITY.get(status)
+    color = severity_color(severity, palette)
 
-    if severity is None:
-        return muted_text(palette)
-
-    color = role_color(palette, colour_roles.SEVERITY[severity])
-
-    return readable_accent(color, palette) if on_card else color
+    return readable_accent(color, palette) if on_card and severity else color
 
 
 def pill_face(report, run_info):
     """The pill's ``(glyph, text, status)`` for the report or the run."""
+
+    if run_info.active and run_info.paused:
+        return ICON_PAUSE_CIRCLE, f"Paused · {run_info.progress_line}", "running"
+
     if run_info.active:
         return ICON_RUNNING, run_info.progress_line, "running"
 
@@ -114,7 +116,8 @@ class _Ring(QtWidgets.QWidget):
 
 
 class ReadinessPill(QtWidgets.QFrame):
-    """A small rounded chip: a status shape and a count."""
+    """A small rounded chip on a soft status-colour wash, as tall as the
+    status bar's other chips: a status shape and a count."""
 
     #: Pressed.
     clicked = QtCore.Signal()
@@ -124,6 +127,7 @@ class ReadinessPill(QtWidgets.QFrame):
 
         self.setObjectName("preflightPill")
         self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.setFixedHeight(CHIP_HEIGHT)
 
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(8, 1, 10, 1)
@@ -164,6 +168,8 @@ class ReadinessPill(QtWidgets.QFrame):
             self, duration=RING_TURN_MS, startValue=0, endValue=360, loopCount=-1
         )
         self._spin.valueChanged.connect(self._turn_ring)
+
+        follow_theme(self._restyle)
 
     def set_checking(self, checking):
         """Show the re-checking ring (faded in) or let it go (faded out,
@@ -255,10 +261,15 @@ class ReadinessPill(QtWidgets.QFrame):
         self._flashing = False
         self._paint(*self._face)
 
+    def _restyle(self, *_):
+        """Paint the face again in the new theme's colours."""
+        if not self._flashing:
+            self._paint(*self._face)
+
     def _paint(self, glyph, text, status, strong=False):
         palette = theme_palette()
         accent = status_color(status, palette, on_card=False)
-        tint = chip_tint(palette) * (1.8 if strong else 1.0)
+        alpha = CALM_ALPHA * (1.8 if strong else 1.0)
         color = css(chip_text(accent, palette))
 
         self._ring.color = chip_text(accent, palette)
@@ -266,13 +277,7 @@ class ReadinessPill(QtWidgets.QFrame):
         self._text.setText(text)
         self._glyph.setStyleSheet(f"color: {color};")
         self._text.setStyleSheet(f"color: {color};")
-        self.setStyleSheet(
-            "#preflightPill {"
-            f" background: {css(with_alpha(accent, tint))};"
-            " border: none; border-radius: 10px; }"
-            " #preflightPill:hover {"
-            f" background: {css(with_alpha(accent, tint + 0.1))}; }}"
-        )
+        self.setStyleSheet(chip_sheet("#preflightPill", accent, alpha))
 
 
 class PillController(HasTraits):
@@ -299,7 +304,7 @@ class PillController(HasTraits):
 
     @observe(
         "report.[overall, warning_count, blocking_count, summary, scope_line, "
-        "stats_line], run_info.[active, progress_line], pill"
+        "stats_line], run_info.[active, paused, progress_line], pill"
     )
     def _update_pill(self, event):
         if None in (self.pill, self.report, self.run_info):
@@ -308,7 +313,8 @@ class PillController(HasTraits):
         self.pill.show_face(*pill_face(self.report, self.run_info))
 
         if self.run_info.active:
-            self.pill.setToolTip(f"Running · {self.run_info.progress_line}")
+            state = "Paused" if self.run_info.paused else "Running"
+            self.pill.setToolTip(f"{state} · {self.run_info.progress_line}")
 
         else:
             report = self.report
