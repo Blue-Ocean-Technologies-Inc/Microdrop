@@ -11,14 +11,30 @@
 """Base classes + composite for compound columns. Mirrors the structure
 of models/column.py for single-cell columns. See spec section 2."""
 
+# Third-party imports.
 from PySide6.QtCore import Signal
 
-from traits.api import Bool, Dict, Float, HasTraits, Instance, Int, List, Str, observe, provides
+# Enthought library imports.
+from traits.api import (
+    Bool,
+    Dict,
+    Float,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Str,
+    observe,
+    provides,
+)
 
+# Local imports.
 from ..interfaces.i_column import IColumnView
 from ..interfaces.i_compound_column import (
-    ICompoundColumn, ICompoundColumnHandler,
-    ICompoundColumnModel, ICompoundColumnView,
+    ICompoundColumn,
+    ICompoundColumnHandler,
+    ICompoundColumnModel,
+    ICompoundColumnView,
 )
 
 
@@ -59,6 +75,7 @@ class BaseCompoundColumnView(HasTraits):
 
 class DictCompoundColumnView(BaseCompoundColumnView):
     """Cell views indexed by field_id. Raises KeyError for unknown fields."""
+
     cell_views = Dict(Str, Instance(IColumnView))
 
     def cell_view_for_field(self, field_id):
@@ -100,13 +117,31 @@ class BaseCompoundColumnHandler(HasTraits):
     def on_interact(self, row, model, field_id, value):
         return model.set_value(row, field_id, value)
 
-    def on_pre_protocol_start(self, ctx): pass
-    def on_protocol_start(self, ctx): pass
-    def on_pre_step(self, row, ctx): pass
-    def on_step(self, row, ctx): pass
-    def on_post_step(self, row, ctx): pass
-    def on_protocol_end(self, ctx): pass
-    def on_post_protocol_end(self, ctx): pass
+    def on_pre_protocol_start(self, ctx):
+        pass
+
+    def on_protocol_start(self, ctx):
+        pass
+
+    def on_pre_step(self, row, ctx):
+        pass
+
+    def on_step(self, row, ctx):
+        pass
+
+    def on_post_step(self, row, ctx):
+        pass
+
+    def on_protocol_end(self, ctx):
+        pass
+
+    def on_post_protocol_end(self, ctx):
+        pass
+
+    def preflight_checks(self, context):
+        """Same contract as BaseColumnHandler.preflight_checks: this
+        compound column's pre-flight checks. Default: no checks."""
+        return []
 
 
 @provides(ICompoundColumn)
@@ -114,6 +149,7 @@ class CompoundColumn(HasTraits):
     """Composite. Auto-substitutes BaseCompoundColumnHandler if the
     handler kwarg is omitted; auto-wires handler.model = model on
     construction AND on handler reassignment."""
+
     model = Instance(ICompoundColumnModel)
     view = Instance(ICompoundColumnView)
     handler = Instance(ICompoundColumnHandler)

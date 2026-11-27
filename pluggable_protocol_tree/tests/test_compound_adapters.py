@@ -10,24 +10,33 @@
 
 """Tests for the compound-->single-cell adapter shims used by _assemble_columns."""
 
+# Standard library imports.
 from unittest.mock import MagicMock
 
+# Enthought library imports.
 from traits.api import Bool, HasTraits, Int
 
+# Microdrop package imports.
 from pluggable_protocol_tree.interfaces.i_compound_column import FieldSpec
 from pluggable_protocol_tree.models._compound_adapters import (
-    _CompoundFieldAdapter, _CompoundFieldHandlerAdapter,
+    _CompoundFieldAdapter,
+    _CompoundFieldHandlerAdapter,
 )
 from pluggable_protocol_tree.models.compound_column import (
-    BaseCompoundColumnHandler, BaseCompoundColumnModel,
+    BaseCompoundColumnHandler,
+    BaseCompoundColumnModel,
 )
 
 
 class _DemoModel(BaseCompoundColumnModel):
     base_id = "demo"
+
     def field_specs(self):
-        return [FieldSpec("ec_enabled", "Enabled", False),
-                FieldSpec("ec_count",   "Count",   0)]
+        return [
+            FieldSpec("ec_enabled", "Enabled", False),
+            FieldSpec("ec_count", "Count", 0),
+        ]
+
     def trait_for_field(self, field_id):
         return Bool(False) if field_id == "ec_enabled" else Int(0)
 
@@ -35,12 +44,18 @@ class _DemoModel(BaseCompoundColumnModel):
 def test_field_adapter_proxies_to_compound_model():
     m = _DemoModel()
     a = _CompoundFieldAdapter(
-        col_id="ec_count", col_name="Count", default_value=0,
-        compound_model=m, field_id="ec_count",
-        compound_base_id="demo", is_owner=False,
+        col_id="ec_count",
+        col_name="Count",
+        default_value=0,
+        compound_model=m,
+        field_id="ec_count",
+        compound_base_id="demo",
+        is_owner=False,
     )
+
     class Row(HasTraits):
         ec_count = Int(5)
+
     r = Row()
     assert a.get_value(r) == 5
     a.set_value(r, 9)
@@ -52,14 +67,20 @@ def test_field_adapter_proxies_to_compound_model():
 def test_field_adapter_trait_for_row_proxies_to_compound_model():
     m = _DemoModel()
     a = _CompoundFieldAdapter(
-        col_id="ec_enabled", col_name="Enabled", default_value=False,
-        compound_model=m, field_id="ec_enabled",
-        compound_base_id="demo", is_owner=True,
+        col_id="ec_enabled",
+        col_name="Enabled",
+        default_value=False,
+        compound_model=m,
+        field_id="ec_enabled",
+        compound_base_id="demo",
+        is_owner=True,
     )
     trait = a.trait_for_row()
+
     # Trait should be the same shape as compound_model.trait_for_field returns:
     class Row(HasTraits):
         ec_enabled = trait
+
     r = Row()
     assert r.ec_enabled is False
 
@@ -71,13 +92,19 @@ def test_handler_adapter_on_interact_calls_compound_with_field_id():
     h = MagicMock(spec=BaseCompoundColumnHandler)
     h.on_interact.return_value = True
     a = _CompoundFieldHandlerAdapter(
-        compound_handler=h, compound_model=m, field_id="ec_count",
-        is_owner=False, priority=20, wait_for_topics=[],
+        compound_handler=h,
+        compound_model=m,
+        field_id="ec_count",
+        is_owner=False,
+        priority=20,
+        wait_for_topics=[],
     )
+
     class Row(HasTraits):
         ec_count = Int(0)
+
     r = Row()
-    result = a.on_interact(r, None, 11)   # second arg ignored by the adapter
+    result = a.on_interact(r, None, 11)  # second arg ignored by the adapter
     h.on_interact.assert_called_once_with(r, m, "ec_count", 11)
     assert result is True
 
@@ -86,18 +113,53 @@ def test_handler_adapter_owner_field_fires_on_step_once():
     m = _DemoModel()
     h = MagicMock(spec=BaseCompoundColumnHandler)
     owner = _CompoundFieldHandlerAdapter(
-        compound_handler=h, compound_model=m, field_id="ec_enabled",
-        is_owner=True, priority=20, wait_for_topics=[],
+        compound_handler=h,
+        compound_model=m,
+        field_id="ec_enabled",
+        is_owner=True,
+        priority=20,
+        wait_for_topics=[],
     )
     follower = _CompoundFieldHandlerAdapter(
-        compound_handler=h, compound_model=m, field_id="ec_count",
-        is_owner=False, priority=20, wait_for_topics=[],
+        compound_handler=h,
+        compound_model=m,
+        field_id="ec_count",
+        is_owner=False,
+        priority=20,
+        wait_for_topics=[],
     )
     row = object()
     ctx = object()
     owner.on_step(row, ctx)
     follower.on_step(row, ctx)
     h.on_step.assert_called_once_with(row, ctx)
+
+
+def test_handler_adapter_forwards_preflight_checks_from_owner_only():
+    m = _DemoModel()
+    h = MagicMock(spec=BaseCompoundColumnHandler)
+    h.preflight_checks.return_value = ["check"]
+    owner = _CompoundFieldHandlerAdapter(
+        compound_handler=h,
+        compound_model=m,
+        field_id="ec_enabled",
+        is_owner=True,
+        priority=20,
+        wait_for_topics=[],
+    )
+    follower = _CompoundFieldHandlerAdapter(
+        compound_handler=h,
+        compound_model=m,
+        field_id="ec_count",
+        is_owner=False,
+        priority=20,
+        wait_for_topics=[],
+    )
+    context = object()
+
+    assert owner.preflight_checks(context) == ["check"]
+    assert follower.preflight_checks(context) == []
+    h.preflight_checks.assert_called_once_with(context)
 
 
 def test_handler_adapter_mirrors_priority_and_wait_for_topics():
@@ -108,8 +170,12 @@ def test_handler_adapter_mirrors_priority_and_wait_for_topics():
     h.priority = 35
     h.wait_for_topics = ["t/applied"]
     a = _CompoundFieldHandlerAdapter(
-        compound_handler=h, compound_model=m, field_id="ec_count",
-        is_owner=False, priority=35, wait_for_topics=["t/applied"],
+        compound_handler=h,
+        compound_model=m,
+        field_id="ec_count",
+        is_owner=False,
+        priority=35,
+        wait_for_topics=["t/applied"],
     )
     assert a.priority == 35
     assert a.wait_for_topics == ["t/applied"]
