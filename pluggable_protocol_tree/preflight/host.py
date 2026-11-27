@@ -9,7 +9,8 @@
 # Thanks for using Microdrop open source!
 
 """The pre-flight check inside the protocol dock pane: the controller, the
-pill and its card, the run gate, and what makes the report stale."""
+pill and its card, the run gate, what makes the report stale, and the
+run-progress line along the status bar's top edge."""
 
 # Standard library imports.
 import math
@@ -45,6 +46,7 @@ from .models import RunInfo
 from .settings import open_protocol_settings
 from .views.panel import PreflightPanel
 from .views.pill import PillController, ReadinessPill
+from .views.run_progress_line import RunProgressController, RunProgressLine
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -103,6 +105,11 @@ class PreflightHost(HasTraits):
     #: Keeps the pill's face in step with the report and the run.
     _pill_controller = Instance(PillController)
 
+    #: The line along the status bar's top edge filling as the run's steps
+    #: complete, and what keeps it in step; None once withdrawn.
+    progress_line = Instance(RunProgressLine)
+    _progress_controller = Instance(RunProgressController)
+
     def traits_init(self):
         self.controller = PreflightController(
             context_provider=self.current_context,
@@ -118,6 +125,11 @@ class PreflightHost(HasTraits):
             run_info=self.run_info,
             pill=self.pill,
             controller=self.controller,
+        )
+
+        self.progress_line = RunProgressLine()
+        self._progress_controller = RunProgressController(
+            run_info=self.run_info, line=self.progress_line
         )
 
         self.panel = PreflightPanel(
@@ -288,18 +300,21 @@ class PreflightHost(HasTraits):
             self.panel.show_above(self.pill)
 
     def contribute(self, status_bar_icons):
-        """Put the pill first on the status bar's left
-        (``status_bar_icons``: the status-bar plugin's extension point)."""
+        """Put the pill first on the status bar's left, and the progress
+        line along its top edge (``status_bar_icons``: the status-bar
+        plugin's extension point)."""
         self.pill.status_bar_side = STATUS_BAR_SIDE_LEFT
         self.pill.status_bar_left_priority = LEFT_PRIORITY_READINESS
         status_bar_icons.append(self.pill)
+        status_bar_icons.append(self.progress_line)
 
     def withdraw(self, status_bar_icons):
-        """Stop checking, take the pill out of the status bar, which deletes
-        it, once nothing drives it any more, and delete the card once it
-        stops following the report and the window. The host drops both."""
+        """Stop checking, take the pill and the progress line out of the
+        status bar, which deletes them, once nothing drives them any more,
+        and delete the card once it stops following the report and the
+        window. The host drops all three."""
         self.controller.cancel_pending()
-        pill, panel = self.pill, self.panel
+        pill, panel, line = self.pill, self.panel, self.progress_line
 
         if pill is None:
             return
@@ -307,15 +322,23 @@ class PreflightHost(HasTraits):
         self._pill_controller.trait_set(
             pill=None, report=None, run_info=None, controller=None
         )
-        self.trait_set(pill=None, panel=None, _pill_controller=None)
+        self._progress_controller.trait_set(line=None, run_info=None)
+        self.trait_set(
+            pill=None,
+            panel=None,
+            _pill_controller=None,
+            progress_line=None,
+            _progress_controller=None,
+        )
 
         pill.stop_ring()
         panel.detach()
         panel.deleteLater()
 
-        if pill in status_bar_icons:
-            status_bar_icons.remove(pill)
+        for widget in (pill, line):
+            if widget in status_bar_icons:
+                status_bar_icons.remove(widget)
 
-        else:
-            # Never placed on a bar, so nothing else deletes it.
-            pill.deleteLater()
+            else:
+                # Never placed on a bar, so nothing else deletes it.
+                widget.deleteLater()

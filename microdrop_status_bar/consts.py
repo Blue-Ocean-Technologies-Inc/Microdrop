@@ -42,6 +42,12 @@ ICON_PRIORITY_RIGHTMOST = 2
 #: the right.
 STATUS_BAR_SIDE_LEFT = "left"
 
+#: ``widget.status_bar_side = STATUS_BAR_SIDE_TOP_EDGE`` lays the widget
+#: along the bar's top edge instead: full width, as tall as its own height,
+#: over the bar's contents and transparent to the mouse, e.g. a thin
+#: progress line. The widget draws nothing when it has nothing to show.
+STATUS_BAR_SIDE_TOP_EDGE = "top_edge"
+
 #: Left widgets order by their own ``widget.status_bar_left_priority``
 #: (plain int attribute): lower = further left, ties keep arrival order.
 #: Unset sorts last. The slots, left to right: a readiness indicator, step

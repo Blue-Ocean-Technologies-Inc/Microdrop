@@ -17,9 +17,9 @@ runtime, from their dock panes) and this plugin places them in a single
 icon container whose QHBoxLayout gives every icon the same gap, or, for a
 widget marked ``status_bar_side = STATUS_BAR_SIDE_LEFT``, on the bar's
 left, before the status message, ordered by ``status_bar_left_priority``,
-with the members of one ``status_bar_group`` closer together. Removing a
-widget from the
-extension point removes it from the bar and deletes it.
+with the members of one ``status_bar_group`` closer together, or, marked
+``STATUS_BAR_SIDE_TOP_EDGE``, along the bar's top edge. Removing a widget
+from the extension point removes it from the bar and deletes it.
 
 Dynamic contribution handling mirrors MessageRouterPlugin: apply the
 current extensions once the container exists, then react to
@@ -45,8 +45,10 @@ from .consts import (
     STATUS_BAR_CONTENTS_MARGINS,
     STATUS_BAR_ICONS,
     STATUS_BAR_SIDE_LEFT,
+    STATUS_BAR_SIDE_TOP_EDGE,
     PKG_name,
 )
+from .top_edge import TopEdgeOverlay
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -80,6 +82,9 @@ class StatusBarPlugin(Plugin):
     #: layout spaces them like the right-hand icons and trails one gap.
     _left_container = Any(None)
     _left_widgets = List()
+
+    #: Lays the widgets marked for the top edge along it.
+    _top_edge = Any(None)
 
     #: A row per ``status_bar_group`` on the left, by group: its members sit
     #: CHIP_GAP apart, and the row takes the slot of its lowest-priority
@@ -138,6 +143,7 @@ class StatusBarPlugin(Plugin):
         left_container.setVisible(False)
         status_bar.insertWidget(self._label_index(), left_container)
         self._left_container = left_container
+        self._top_edge = TopEdgeOverlay(status_bar)
 
         # Contributions made before the window existed already sit in the
         # extension point — apply them now; the _items handler below keeps
@@ -163,6 +169,7 @@ class StatusBarPlugin(Plugin):
             self._left_container = None
             self._left_widgets = []
             self._left_group_rows = {}
+            self._top_edge = None
             return
 
         for widget in removed:
@@ -172,6 +179,9 @@ class StatusBarPlugin(Plugin):
                     self._left_widgets.remove(widget)
                     widget.hide()
 
+                elif widget in self._top_edge:
+                    self._top_edge.remove(widget)
+
                 else:
                     layout.removeWidget(widget)
 
@@ -180,8 +190,13 @@ class StatusBarPlugin(Plugin):
                 logger.debug(f"status-bar icon already deleted: {e}")
 
         for widget in added:
-            if getattr(widget, "status_bar_side", None) == STATUS_BAR_SIDE_LEFT:
+            side = getattr(widget, "status_bar_side", None)
+
+            if side == STATUS_BAR_SIDE_LEFT:
                 self._left_widgets.append(widget)
+
+            elif side == STATUS_BAR_SIDE_TOP_EDGE:
+                self._top_edge.add(widget)
 
             else:
                 layout.insertWidget(self._insert_index(layout, widget), widget)

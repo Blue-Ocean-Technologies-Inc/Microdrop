@@ -43,8 +43,9 @@ class LayerContext(HasTraits):
     #: The application preferences root, for a layer's own helper.
     preferences = Instance(IPreferences)
 
-    #: The window's status bar; None until the task creates it after the
-    #: pane, so a layer observes this trait rather than reading it once.
+    #: The hint pill over the canvas (``CanvasHints``, #1211), behind the
+    #: status-bar API: ``messages += [hint]`` shows a hint, ``remove(hint)``
+    #: takes it down. The name stays for the layers built against it.
     status_bar_manager = Instance("pyface.action.api.StatusBarManager")
 
     #: The electrode cursor shared by the arrow keys and the layers that

@@ -181,8 +181,8 @@ class CameraAlignmentWorkflowController(HasTraits):
     #: Returns the widget the alignment dialog is parented to.
     get_dialog_parent = Callable()
 
-    #: Shows a message in the application status bar.
-    statusbar_message = Callable()
+    #: Shows a passing note in the hint pill over the device canvas.
+    show_canvas_note = Callable()
 
     #: ``post_notification(payload)``: posts a NotificationMessage payload;
     #: publishes it on NOTIFICATION_POST by default (no listener, no-op).
@@ -521,7 +521,7 @@ class CameraAlignmentWorkflowController(HasTraits):
             )
             return
 
-        self.statusbar_message(f"Saved camera-alignment endpoint for {device_key}")
+        self.show_canvas_note(f"Saved camera-alignment endpoint for {device_key}")
         self._remember_live_alignment()
 
     @observe("_alignment_model:endpoint_pane:endpoint_cleared")
@@ -657,7 +657,7 @@ class CameraAlignmentWorkflowController(HasTraits):
             )
             return
 
-        self.statusbar_message(
+        self.show_canvas_note(
             f"Saved camera-alignment preset '{preset.name}' for {device_key}"
         )
 
@@ -739,7 +739,7 @@ class CameraAlignmentWorkflowController(HasTraits):
         if kept is not None:
             message = f"Saved current alignment as '{kept.name}'. {message}"
 
-        self.statusbar_message(message)
+        self.show_canvas_note(message)
 
         # A glide remembers the result when it lands; without one only the
         # endpoint changed.

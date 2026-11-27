@@ -363,7 +363,7 @@ class PreflightDemoWindow(QtWidgets.QMainWindow):
             self.open_popover()
 
     def show_message(self, text):
-        """A timed centre message, as StatusBarManager.show_center_message."""
+        """A timed centre message: the demo's own feedback line."""
         self.center_label.setText(text)
         self._message_timer.start(MESSAGE_MS)
 

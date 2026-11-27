@@ -131,7 +131,7 @@ def controller(model, tmp_path):
                 path=tmp_path / "alignment_presets.json",
                 endpoint_store=endpoint_store,
             ),
-            statusbar_message=MagicMock(),
+            show_canvas_note=MagicMock(),
             post_notification=MagicMock(),
             get_video_item=StubVideoItem,
         )
