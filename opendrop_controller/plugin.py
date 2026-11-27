@@ -80,6 +80,10 @@ class OpenDropControllerPlugin(Plugin):
             pass
 
         self.opendrop_controller = OpenDropController()
+
+        # Rewrite the realtime-mode key an earlier session left in Redis.
+        self.opendrop_controller.realtime_mode = False
+
         self.opendrop_controller.preferences = OpenDropPreferences(
             preferences=self.application.preferences
         )

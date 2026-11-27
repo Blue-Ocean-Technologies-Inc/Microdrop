@@ -9,10 +9,11 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from traits.api import Bool, Float, HasTraits, Str, provides
+from traits.api import Float, Str, provides
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.realtime_mode_mixin import RealtimeModeMixin
 
 # Local imports.
 from ..consts import (
@@ -31,7 +32,7 @@ logger = get_logger(__name__)
 
 
 @provides(IDropbotControlMixinService)
-class DropbotStatesSettingMixinService(HasTraits):
+class DropbotStatesSettingMixinService(RealtimeModeMixin):
     """
     A mixin Class that adds methods to set states for a dropbot connection and
     get some dropbot information.
@@ -40,7 +41,6 @@ class DropbotStatesSettingMixinService(HasTraits):
     id = Str("dropbot_states_setting_mixin_service")
     name = Str("Dropbot States Setting Mixin")
 
-    realtime_mode = Bool(False)
     # TODO: Get these from a config file
     voltage = Float(30)
     frequency = Float(1000)

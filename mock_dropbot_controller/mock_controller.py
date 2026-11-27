@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 import dramatiq
 
 # Enthought library imports.
-from traits.api import Bool, Dict, Float, HasTraits, Instance, Int, Set, Str
+from traits.api import Bool, Dict, Float, Instance, Int, Set, Str
 
 # Microdrop package imports.
 from device_viewer.consts import user_disabled_channels_mirror
@@ -31,6 +31,7 @@ from microdrop_utils.dramatiq_controller_base import (
     invoke_class_method,
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.realtime_mode_mixin import RealtimeModeMixin
 
 # Local imports.
 from .consts import (
@@ -69,7 +70,7 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__, level="INFO")
 
 
-class MockDropbotController(HasTraits):
+class MockDropbotController(RealtimeModeMixin):
     """
     A mock DropBot controller that emulates all hardware communication.
 
@@ -84,7 +85,6 @@ class MockDropbotController(HasTraits):
 
     # ---- Mock device state ----
     connected = Bool(False)
-    realtime_mode = Bool(False)
     chip_inserted = Bool(False)
     voltage = Float(HARDWARE_DEFAULT_VOLTAGE)
     frequency = Float(HARDWARE_DEFAULT_FREQUENCY)

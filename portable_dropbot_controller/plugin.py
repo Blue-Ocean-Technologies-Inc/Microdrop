@@ -212,6 +212,10 @@ class PortableDropbotControllerPlugin(Plugin):
             pass
 
         self.portable_dropbot_controller = PortableDropbotController()
+
+        # Rewrite the realtime-mode key an earlier session left in Redis.
+        self.portable_dropbot_controller.realtime_mode = False
+
         self.portable_dropbot_controller.preferences = PortableDropbotPreferences(
             preferences=self.application.preferences
         )

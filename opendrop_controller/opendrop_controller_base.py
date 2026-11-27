@@ -16,7 +16,7 @@ from datetime import datetime
 import dramatiq
 
 # Enthought library imports.
-from traits.api import Bool, HasTraits, Instance, Int, List, Str, provides
+from traits.api import Bool, Instance, Int, List, Str, provides
 
 # Microdrop package imports.
 from dropbot_controller.consts import START_DEVICE_MONITORING
@@ -28,6 +28,7 @@ from microdrop_utils.dramatiq_controller_base import (
     invoke_class_method,
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.realtime_mode_mixin import RealtimeModeMixin
 
 # Local imports.
 from .consts import (
@@ -57,14 +58,11 @@ logger = get_logger(__name__, level="INFO")
 
 
 @provides(IOpenDropControllerBase)
-class OpenDropControllerBase(HasTraits):
+class OpenDropControllerBase(RealtimeModeMixin):
     proxy = Instance(OpenDropSerialProxy)
     opendrop_connection_active = Bool(False)
     preferences = Instance(OpenDropPreferences)
     board_id = Int(-1)
-    realtime_mode = Bool(
-        False
-    )  # Match frontend default; no electrode push until user enables realtime
     feedback_enabled = Bool(False)
     set_temperatures = List(Int, value=[25, 25, 25], minlen=3, maxlen=3)
 
