@@ -138,7 +138,8 @@ class DropbotControllerPlugin(Plugin):
 
         # Overwrite, never seed: app_globals outlives the session, so a
         # previous device's range would otherwise bound the protocol columns.
-        # The monitor refines the maxima once the DropBot reports its own.
+        # DropbotPreferences refines the maxima once the DropBot reports its
+        # own on connect.
         app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = DEFAULT_PROTOCOL_VOLTAGE_RANGE
         app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = DEFAULT_PROTOCOL_FREQUENCY_RANGE
 

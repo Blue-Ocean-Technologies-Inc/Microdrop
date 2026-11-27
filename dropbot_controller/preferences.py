@@ -26,6 +26,8 @@ from .consts import (
     HARDWARE_MAX_VOLTAGE_KEY,
     HARDWARE_MIN_FREQUENCY,
     HARDWARE_MIN_VOLTAGE,
+    PROTOCOL_FREQUENCY_RANGE_KEY,
+    PROTOCOL_VOLTAGE_RANGE_KEY,
 )
 
 # Logger import.
@@ -148,3 +150,20 @@ class DropbotPreferences(PreferencesHelper):
         """Sync hardware limits to app_globals so view properties stay current."""
         logger.debug(f"Hardware limit changed: {event.name} = {event.new}")
         app_globals[event.name] = event.new
+
+    # The monitor sets the hardware maxima on connect, in the backend, so
+    # these observers are the sole writers of the DropBot's protocol range
+    # after the plugin's start() writes the default.
+    @observe("_hardware_max_voltage")
+    def _publish_protocol_voltage_range(self, event):
+        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = [
+            HARDWARE_MIN_VOLTAGE,
+            int(event.new),
+        ]
+
+    @observe("_hardware_max_frequency")
+    def _publish_protocol_frequency_range(self, event):
+        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = [
+            HARDWARE_MIN_FREQUENCY,
+            int(event.new),
+        ]

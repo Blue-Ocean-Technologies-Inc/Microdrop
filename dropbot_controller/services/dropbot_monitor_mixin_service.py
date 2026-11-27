@@ -24,7 +24,6 @@ from apscheduler.triggers.interval import IntervalTrigger
 from traits.api import Bool, HasTraits, Instance, Str, observe, provides
 
 # Microdrop package imports.
-from microdrop_application.helpers import get_microdrop_redis_globals_manager
 from notifications.consts import LOG_RECORDED_EXTRA
 
 # Microdrop utils imports.
@@ -42,12 +41,8 @@ from ..consts import (
     DROPBOT_DB3_120_HWID,
     DROPBOT_ERROR,
     DROPBOT_NO_POWER_KEY,
-    HARDWARE_MIN_FREQUENCY,
-    HARDWARE_MIN_VOLTAGE,
     NO_DROPBOT_AVAILABLE,
     NO_POWER,
-    PROTOCOL_FREQUENCY_RANGE_KEY,
-    PROTOCOL_VOLTAGE_RANGE_KEY,
     hardware_limits_updated_publisher,
 )
 from ..dropbot_controller_base import describe_proxy
@@ -58,7 +53,6 @@ from .dropbot_state_mirror import clear_dropbot_state, mirror_dropbot_state
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-app_globals = get_microdrop_redis_globals_manager()
 
 
 def wait_for_proxy(timeout=2, poll_interval=0.1):
@@ -292,15 +286,6 @@ class DropbotMonitorMixinService(HasTraits):
                 self.preferences._hardware_max_frequency = (
                     self.proxy.config.max_frequency
                 )
-
-            app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = [
-                HARDWARE_MIN_VOLTAGE,
-                int(self.preferences._hardware_max_voltage),
-            ]
-            app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = [
-                HARDWARE_MIN_FREQUENCY,
-                int(self.preferences._hardware_max_frequency),
-            ]
 
             cap_interval = self.proxy.state["capacitance_update_interval_ms"]
             logger.info(
