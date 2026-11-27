@@ -231,6 +231,8 @@ class DropbotMonitorMixinService(HasTraits):
         if self.dropbot_connection_active:
             self.dropbot_connection_active = False
 
+        self.realtime_mode = False
+
         # Terminate the proxy monitor and reset it to None to allow new
         # connection to set the monitor.
         logger.info(f"Disconnected signal {describe_proxy(self.proxy)}")

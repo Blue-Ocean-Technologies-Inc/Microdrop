@@ -222,6 +222,8 @@ class OpenDropControllerBase(RealtimeModeMixin):
 
     def on_disconnected_signal(self, message):
         self.opendrop_connection_active = False
+        self.realtime_mode = False
+
         if self.proxy is not None:
             try:
                 self.proxy.close()
