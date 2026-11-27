@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 import dramatiq
 
 # Enthought library imports.
-from traits.api import Any, Bool, HasTraits, Instance, Int, Str, provides
+from traits.api import Any, Bool, Instance, Int, Str, provides
 
 # Microdrop package imports.
 from dropbot_controller.consts import CAPACITANCE_UPDATED
@@ -31,6 +31,7 @@ from microdrop_utils.dramatiq_controller_base import (
     invoke_class_method,
 )
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.realtime_mode_mixin import RealtimeModeMixin
 
 # Local imports.
 from .consts import (
@@ -88,13 +89,12 @@ def chip_seated(contacts, rule):
 
 
 @provides(IPortableDropbotControllerBase)
-class PortableDropbotControllerBase(HasTraits):
+class PortableDropbotControllerBase(RealtimeModeMixin):
     #: The driver's DropletBotSession; Any because portable_dropbot is
     #: an optional dependency (the monitor mixin imports it lazily).
     proxy = Any()
     portable_dropbot_connection_active = Bool(False)
     preferences = Instance(PortableDropbotPreferences)
-    realtime_mode = Bool(False)
     voltage = Int()
     frequency = Int()
     light_intensity = Int()

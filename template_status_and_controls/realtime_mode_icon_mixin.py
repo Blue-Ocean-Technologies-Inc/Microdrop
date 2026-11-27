@@ -17,19 +17,30 @@ class's _create_status_bar_widgets override runs first::
     class MyDevicePane(RealtimeModeIconMixin, BaseStatusDockPane):
         ...
 
-The mixin appends a ClickableToggleIcon after the device status icon. The
-toggle publishes SET_REALTIME_MODE (the pub/sub contract with the DropBot
-backend), greys out while disconnected, and locks while a protocol runs.
+The mixin appends a ClickableToggleIcon after the device status icon. A
+click publishes SET_REALTIME_MODE (the pub/sub contract with the DropBot
+backend) and nothing more: the icon shows the model's realtime mode, which
+only the backend's REALTIME_MODE_UPDATED echo sets, so a refused request
+leaves it off. It greys out while disconnected and locks while a protocol
+runs.
 Never instantiated standalone: its ``model.*`` observers bind against the
 pane's model trait.
 """
+
+# Enthought library imports.
 from traits.api import Any, HasTraits, observe
 
+# Microdrop package imports.
 from dropbot_controller.consts import SET_REALTIME_MODE
+
+# Microdrop style imports.
 from microdrop_style.colors import GREY, SUCCESS_COLOR
+
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import ClickableToggleIcon
 
+# Local imports.
 from .base_dock_pane import status_bar_icon_font
 
 REALTIME_ICON_GLYPH = "live_tv"
@@ -58,6 +69,8 @@ class RealtimeModeIconMixin(HasTraits):
         self.realtime_mode_icon = self._create_realtime_mode_icon()
         # initial check: enable / disable based on the current connection state
         self._enable_realtime_icon_based_on_modes()
+        self._sync_realtime_icon()
+
         return super()._create_status_bar_widgets() + [self.realtime_mode_icon]
 
     def _create_realtime_mode_icon(self):
@@ -68,12 +81,16 @@ class RealtimeModeIconMixin(HasTraits):
             locked_tooltip=REALTIME_ICON_LOCKED_TOOLTIP,
         )
         icon.setFont(status_bar_icon_font())
-        icon.toggled.connect(
-            lambda is_active: publish_message(
-                topic=SET_REALTIME_MODE, message=str(is_active)
-            )
-        )
+        icon.toggled.connect(self._request_realtime_mode)
+
         return icon
+
+    def _request_realtime_mode(self, is_active):
+        publish_message(topic=SET_REALTIME_MODE, message=str(is_active))
+
+        # The icon flipped itself on the click; undo that until the backend
+        # echoes the mode, since a refusal echoes the value the model holds.
+        self._sync_realtime_icon()
 
     @observe("model.connected", dispatch="ui")
     @observe("model.protocol_running", dispatch="ui")
@@ -89,8 +106,9 @@ class RealtimeModeIconMixin(HasTraits):
         )
 
     @observe("model.realtime_mode", dispatch="ui")
-    def _sync_realtime_icon(self, event):
+    def _sync_realtime_icon(self, event=None):
         if self.realtime_mode_icon is None:
             return
-        self.realtime_mode_icon.is_active = event.new
+
+        self.realtime_mode_icon.is_active = self.model.realtime_mode
         self.realtime_mode_icon.update_style()

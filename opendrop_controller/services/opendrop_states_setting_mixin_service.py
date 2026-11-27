@@ -8,13 +8,17 @@
 #
 # Thanks for using Microdrop open source!
 
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from traits.api import HasTraits, Str, provides
 
-from logger.logger_service import get_logger
-
+# Local imports.
 from ..interfaces.i_opendrop_control_mixin_service import IOpenDropControlMixinService
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -26,13 +30,31 @@ class OpenDropStatesSettingMixinService(HasTraits):
 
     def on_set_realtime_mode_request(self, message):
         desired = str(message) == "True"
-        self.realtime_mode = desired
-        self._publish_realtime_mode()
-        if not desired and self.proxy is not None:
-            self.proxy.state_of_channels[:] = False
-            self._push_state_to_device(force=True)
-        elif desired:
-            self._push_state_to_device(force=True)
+
+        # Realtime turns on only once the board has taken the state: a
+        # failed write must not leave the key reading True.
+        if desired:
+            if self._push_state_to_device(force=True) is None:
+                logger.warning("OpenDrop realtime mode stays off: no state reply")
+
+                # Publish off so a pane that flipped its toggle on
+                # optimistically reverts.
+                self.realtime_mode = False
+                self._publish_realtime_mode()
+
+                return
+
+            self.realtime_mode = True
+            self._publish_realtime_mode()
+
+        else:
+            self.realtime_mode = False
+            self._publish_realtime_mode()
+
+            if self.proxy is not None:
+                self.proxy.state_of_channels[:] = False
+                self._push_state_to_device(force=True)
+
         logger.info(f"OpenDrop realtime mode set to {self.realtime_mode}")
 
     def on_set_feedback_request(self, message):

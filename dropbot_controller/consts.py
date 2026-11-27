@@ -91,9 +91,9 @@ PROTOCOL_VOLTAGE_RANGE_KEY = "protocol_voltage_range"
 PROTOCOL_FREQUENCY_RANGE_KEY = "protocol_frequency_range"
 
 SET_REALTIME_MODE = "hardware/requests/set_realtime_mode"
-# app_globals key mirroring the current realtime-mode state (the status
-# panel writes it on every REALTIME_MODE_UPDATED signal); consumers read
-# it instead of tracking the signal themselves.
+# app_globals key mirroring the realtime mode the hardware has. Only the
+# backend writes it (microdrop_utils.realtime_mode_mixin, mixed into every
+# backend controller); consumers read it instead of tracking the signal.
 REALTIME_MODE_KEY = "microdrop.realtime_mode"
 # app_globals key mirroring the dropbot connection state (the controller
 # writes it whenever dropbot_connection_active changes); consumers read it

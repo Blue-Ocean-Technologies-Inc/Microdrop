@@ -128,6 +128,10 @@ class DropbotControllerPlugin(Plugin):
             pass
 
         self.dropbot_controller = DropbotController()
+
+        # Rewrite the realtime-mode key an earlier session left in Redis.
+        self.dropbot_controller.realtime_mode = False
+
         self.dropbot_controller.preferences = DropbotPreferences(
             preferences=self.application.preferences
         )

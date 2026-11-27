@@ -58,9 +58,6 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
             self._leave_realtime_mode()
             return
 
-        self.realtime_mode = True
-        self._publish_realtime_mode()
-
         ok, reply = self._proxy_call(
             "HV enable", lambda: self.proxy.sig.hv_enable(1, 0)
         )
@@ -68,12 +65,16 @@ class PortableDropbotStatesSettingMixinService(HasTraits):
             True, getattr(reply, "status", None)
         )
 
+        # Realtime turns on only once HV is: a refused or failed enable
+        # leaves both off, so the pane never shows realtime over a dead HV.
         if ok and accepted:
+            self.realtime_mode = True
+            self._publish_realtime_mode()
             logger.info(f"Portable Dropbot realtime mode on; HV enable --> {outcome}")
             return
 
-        # A refused or failed enable leaves HV off, and realtime mode with it:
-        # the pane must not show realtime on over a dead HV.
+        # Publish off so a pane that flipped its toggle on optimistically
+        # reverts; True is never written or published.
         self.realtime_mode = False
         self._publish_realtime_mode()
 

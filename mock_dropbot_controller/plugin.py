@@ -46,6 +46,10 @@ class MockDropbotControllerPlugin(Plugin):
         )
 
         self.mock_controller = MockDropbotController()
+
+        # Rewrite the realtime-mode key an earlier session left in Redis.
+        self.mock_controller.realtime_mode = False
+
         self.mock_controller.connected = True
 
         # Overwrite, never seed: app_globals outlives the session, so a
