@@ -40,6 +40,7 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 # Microdrop package imports.
 from pluggable_protocol_tree.services.logging.consts import (
@@ -64,6 +65,12 @@ class _Row:
         self.uuid = uuid
         self.path = (0,)
         self.name = uuid
+
+
+def _step_started(row, step_index, step_total=2):
+    """Wrap a row the way the executor's ``step_started`` Event delivers it:
+    a change event whose ``.new`` is ``(row, step_index, step_total)``."""
+    return SimpleNamespace(new=(row, step_index, step_total))
 
 
 def _cap(cap_pf, volt_v, instr_us, recv_s):
@@ -135,7 +142,7 @@ def main() -> int:
     )
 
     # Step 1 — loop route walked 1 -> 2 -> back to 1 (3 phases).
-    c._on_step_started(_Row("step-walk"))
+    c._on_step_started(_step_started(_Row("step-walk"), 1))
     c.on_actuation(_act([1]))
     c.on_capacitance(_cap(12.0, 100, 1000, 1700000001))
     c.on_actuation(_act([2]))
@@ -144,7 +151,7 @@ def main() -> int:
     c.on_capacitance(_cap(12.5, 100, 3000, 1700000003))
 
     # Step 2 — static hold of channels 5 + 6 at 120 V.
-    c._on_step_started(_Row("step-hold"))
+    c._on_step_started(_step_started(_Row("step-hold"), 2))
     c.on_actuation(_act([5, 6]))
     c.on_capacitance(_cap(20.0, 120, 4000, 1700000004))
 
