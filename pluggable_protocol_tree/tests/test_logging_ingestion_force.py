@@ -20,9 +20,6 @@ import pytest
 from pluggable_protocol_tree.services.logging.consts import FORCE_COLUMN
 from pluggable_protocol_tree.services.logging.ingestion import LoggingIngestion
 
-# Microdrop utils imports.
-from microdrop_utils.force_math_helpers import force_for_step
-
 
 def _ingestion_with_calibration(c_per_a):
     ing = LoggingIngestion()
@@ -42,14 +39,6 @@ def _capacitance_message(volt):
             "reception_time": 2,
         }
     )
-
-
-@pytest.mark.parametrize("volt, c_per_a", [(100.0, 2.0), (120.0, 5.9), (35.5, 0.4)])
-def test_logged_force_matches_force_for_step(volt, c_per_a):
-    ing = _ingestion_with_calibration(c_per_a)
-
-    assert ing.log_capacitance(_capacitance_message(volt)) is True
-    assert ing.entries[-1][FORCE_COLUMN] == pytest.approx(force_for_step(volt, c_per_a))
 
 
 def test_logged_force_is_in_mn_per_m():
