@@ -19,7 +19,6 @@ priority 30 so the voltage is applied before any electrode actuation.
 # Microdrop package imports.
 from dropbot_controller.consts import (
     DEFAULT_PROTOCOL_VOLTAGE_RANGE,
-    HARDWARE_MAX_VOLTAGE_KEY,
     PROTOCOL_SET_VOLTAGE,
     PROTOCOL_VOLTAGE_RANGE_KEY,
     VOLTAGE_APPLIED,
@@ -37,8 +36,8 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ..consts import PREFLIGHT_VOLTAGE_LIMITS_CHECK
 from ..services.preflight_checks import (
     chip_check,
+    device_range_check,
     dropbot_connection_check,
-    hardware_limit_check,
 )
 from .device_range_model import DeviceRangeIntColumnModel, remember_last_setpoint
 from .device_range_spinbox_view import DeviceRangeIntSpinBoxColumnView
@@ -106,16 +105,16 @@ class VoltageHandler(BaseColumnHandler):
 
     def preflight_checks(self, context):
         """The DropBot's connection and chip, and every run step's voltage against
-        its maximum."""
+        the device range its cells are bounded by."""
         return [
             dropbot_connection_check(context),
             chip_check(context),
-            hardware_limit_check(
+            device_range_check(
                 context,
                 PREFLIGHT_VOLTAGE_LIMITS_CHECK,
                 "Voltage",
                 self.model.col_id,
-                HARDWARE_MAX_VOLTAGE_KEY,
+                self.model.device_range(),
                 "V",
             ),
         ]

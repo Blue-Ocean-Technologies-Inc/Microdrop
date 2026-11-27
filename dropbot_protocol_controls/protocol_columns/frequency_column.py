@@ -20,7 +20,6 @@ parallel with VoltageHandler in the same bucket.
 from dropbot_controller.consts import (
     DEFAULT_PROTOCOL_FREQUENCY_RANGE,
     FREQUENCY_APPLIED,
-    HARDWARE_MAX_FREQUENCY_KEY,
     PROTOCOL_FREQUENCY_RANGE_KEY,
     PROTOCOL_SET_FREQUENCY,
 )
@@ -35,7 +34,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
 from ..consts import PREFLIGHT_FREQUENCY_LIMITS_CHECK
-from ..services.preflight_checks import hardware_limit_check
+from ..services.preflight_checks import device_range_check
 from .device_range_model import DeviceRangeIntColumnModel, remember_last_setpoint
 from .device_range_spinbox_view import DeviceRangeIntSpinBoxColumnView
 
@@ -92,14 +91,15 @@ class FrequencyHandler(BaseColumnHandler):
         publish_message(topic=PROTOCOL_SET_FREQUENCY, message=str(int(row.frequency)))
 
     def preflight_checks(self, context):
-        """Every run step's frequency against the DropBot's maximum."""
+        """Every run step's frequency against the device range its cells are
+        bounded by."""
         return [
-            hardware_limit_check(
+            device_range_check(
                 context,
                 PREFLIGHT_FREQUENCY_LIMITS_CHECK,
                 "Frequency",
                 self.model.col_id,
-                HARDWARE_MAX_FREQUENCY_KEY,
+                self.model.device_range(),
                 "Hz",
             ),
         ]
