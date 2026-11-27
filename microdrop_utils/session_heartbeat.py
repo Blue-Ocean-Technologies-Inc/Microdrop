@@ -127,6 +127,43 @@ def is_session_alive(redis_client, listener_queue):
     return bool(redis_client.exists(session_heartbeat_key(listener_queue)))
 
 
+def session_owner(redis_client, listener_queue):
+    """Return ``"<host>:<pid>"`` of the process owning ``listener_queue``.
+
+    ``None`` when its heartbeat has expired, i.e. the session is dead.
+    """
+    owner = redis_client.get(session_heartbeat_key(listener_queue))
+
+    if isinstance(owner, bytes):
+        owner = owner.decode()
+
+    return owner
+
+
+def sibling_queues_sharing_actors(topic_subscriber_map, own_queue, own_actor_names):
+    """Return the other listener queues subscribing any of ``own_actor_names``.
+
+    Every process subscribes its listener actors on its own queue, so the
+    split frontend and backend processes subscribe disjoint actors, while a
+    second instance of the same role subscribes the same ones.
+
+    Returns
+    -------
+    dict of str to set of str
+        Each sibling listener queue mapped to the actor names it shares.
+    """
+    shared = defaultdict(set)
+
+    for pairs in topic_subscriber_map.values():
+        for actor_name, queue in pairs:
+            is_sibling = queue != own_queue and queue.startswith(LISTENER_QUEUE_PREFIX)
+
+            if is_sibling and actor_name in own_actor_names:
+                shared[queue].add(actor_name)
+
+    return dict(shared)
+
+
 def listener_queue_from_dramatiq_key(key, namespace="dramatiq"):
     """Return the listener queue a dramatiq Redis key belongs to, or ``None``.
 
