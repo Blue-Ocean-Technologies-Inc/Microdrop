@@ -242,6 +242,9 @@ class AlignmentPaneBase(HasTraits):
 
     def _orientation_items(self):
         """The lock and rotate glyphs of the header row."""
+        # "rotate moves", but "rotate and flip move".
+        verb = "move" if self.locked_operations else "moves"
+
         return (
             UItem(
                 "image_locked",
@@ -249,7 +252,7 @@ class AlignmentPaneBase(HasTraits):
                     on_glyph=ICON_LOCK,
                     off_glyph=ICON_LOCK_OPEN,
                     tooltip=f"Lock the {self.image_noun}: rotate"
-                    f"{self.locked_operations} move only the reference grid",
+                    f"{self.locked_operations} {verb} only the reference grid",
                 ),
                 enabled_when="is_ready",
             ),

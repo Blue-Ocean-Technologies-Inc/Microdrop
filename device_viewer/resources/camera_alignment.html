@@ -619,7 +619,7 @@ as the device's <a href="#endpoint">endpoint</a>, so every later alignment of th
 <div class="still-wrap"><img data-media src="camera_alignment_media/camera-controls.webp" width="460" height="420" alt="Real screenshot of the Camera Controls section: Camera 48MP USB Camera, Resolution 4K (3840x2160), two rows of four icon buttons with the camera switched on, then Camera Properties, Align Camera and Go To Endpoint"><svg viewBox="0 0 460 420" aria-hidden="true"><circle cx="34" cy="175" r="10" class="ann-n"/><text x="34" y="179" class="ann-nt">1</text><circle cx="141" cy="175" r="10" class="ann-n"/><text x="141" y="179" class="ann-nt">2</text><circle cx="249" cy="175" r="10" class="ann-n"/><text x="249" y="179" class="ann-nt">3</text><circle cx="354" cy="175" r="10" class="ann-n"/><text x="354" y="179" class="ann-nt">4</text><circle cx="34" cy="238" r="10" class="ann-n"/><text x="34" y="242" class="ann-nt">5</text><circle cx="141" cy="238" r="10" class="ann-n"/><text x="141" y="242" class="ann-nt">6</text><circle cx="249" cy="238" r="10" class="ann-n"/><text x="249" y="242" class="ann-nt">7</text><circle cx="354" cy="238" r="10" class="ann-n"/><text x="354" y="242" class="ann-nt">8</text><circle cx="40" cy="320" r="10" class="ann-n"/><text x="40" y="324" class="ann-nt">9</text><circle cx="40" cy="383" r="10" class="ann-n"/><text x="40" y="387" class="ann-nt">10</text><circle cx="252" cy="383" r="10" class="ann-n"/><text x="252" y="387" class="ann-nt">11</text></svg></div>
 <figcaption>The <span class="ui">Camera Controls</span> section, camera on. Below <span class="ui">Camera</span> and
 <span class="ui">Resolution</span>:
-<ol class="legend"><li>Capture Image</li><li>Camera On / Camera Off</li><li>Refresh Camera List</li><li>Rotate Camera</li><li>Start Recording Video</li><li>Align Camera Perspective</li><li>Reset Camera Perspective</li><li>Rotate Device</li><li>Camera Properties</li><li>Align Camera</li><li>Go To Endpoint</li></ol>
+<ol class="legend"><li>Capture Image</li><li>Camera On / Camera Off</li><li>Refresh Camera List</li><li>Rotate Camera</li><li>Start Recording Video / Stop Recording Video</li><li>Align Camera Perspective</li><li>Reset Camera Perspective</li><li>Rotate Device</li><li>Camera Properties</li><li>Align Camera</li><li>Go To Endpoint</li></ol>
 The <a href="#part-icons">icon table</a> explains each one.</figcaption>
 </figure>
 <div>
@@ -739,7 +739,7 @@ chip design takes a few minutes; later ones take seconds.</p>
     <p>Click <span class="tbtn tbtn-inline" role="img" aria-label="Capture Image"><svg class="ic" aria-hidden="true"><use href="#ic-camera"/></svg></span> <em>Capture Image</em> to save the camera picture as
     the Device Viewer shows it, straightened by the alignment (without the electrode outlines), as a PNG.</p>
     <p>Click <span class="tbtn tbtn-inline" role="img" aria-label="Start Recording Video"><svg class="ic" aria-hidden="true"><use href="#ic-album"/></svg></span> <em>Start Recording Video</em> to start a
-    video; the button stays highlighted while it records. Click it again to stop.</p>
+    video; the button stays highlighted while it records. Click it again (now <em>Stop Recording Video</em>) to stop.</p>
     <p>Both work with the camera off too: MicroDrop switches it on for the shot and off again afterwards. The status bar shows
     <span class="ui">Image Captured:</span> or <span class="ui">Video Captured:</span> with a link to the file for a few
     seconds. <a href="#part-files">Where files go</a> lists the folders.</p></div>
@@ -780,7 +780,7 @@ device view by hand, to snap them back, or after staging new camera points with
       after you plug one in or out.</td></tr>
       <tr><td class="icons"><span class="tbtn" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-cameraswitch"/></svg></span></td><td class="lbl">Rotate Camera</td><td>Turns only the camera picture a
       quarter turn about its centre; the outlines stay. Key: <kbd>Shift</kbd>+<kbd>R</kbd>. See <a href="#rotate">Rotate Camera vs Rotate Device</a>.</td></tr>
-      <tr><td class="icons"><span class="tbtn" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-album"/></svg></span><span class="tbtn on" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-album"/></svg></span></td><td class="lbl">Start Recording Video</td><td>Starts
+      <tr><td class="icons"><span class="tbtn" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-album"/></svg></span><span class="tbtn on" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-album"/></svg></span></td><td class="lbl">Start Recording Video / Stop Recording Video</td><td>Starts
       a recording, highlighted while it runs; click again to stop. Saved to the experiment's <code>recordings</code> folder.</td></tr>
       <tr><td class="icons"><span class="tbtn" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-view_3d"/></svg></span></td><td class="lbl">Align Camera Perspective</td><td>Puts four corner
       handles on the Device Viewer to adjust the picture by hand; the button turns green while they are shown. Click again to
@@ -815,7 +815,7 @@ device view by hand, to snap them back, or after staging new camera points with
       the <a href="#snap-corners">snap corners</a> as small cyan marks.</td></tr>
       <tr><td class="icons"><span class="tbtn" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-fit_screen"/></svg></span></td><td class="lbl">Fit the image in the view</td><td>both</td><td>Undoes
       zooming and panning.</td></tr>
-      <tr><td class="icons"><span class="tbtn" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-lock_open"/></svg></span><span class="tbtn on" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-lock"/></svg></span></td><td class="lbl">Lock the camera image: rotate and flip move only the reference grid<br>Lock the device image: rotate move only the reference grid</td><td>both</td><td>The
+      <tr><td class="icons"><span class="tbtn" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-lock_open"/></svg></span><span class="tbtn on" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-lock"/></svg></span></td><td class="lbl">Lock the camera image: rotate and flip move only the reference grid<br>Lock the device image: rotate moves only the reference grid</td><td>both</td><td>The
       <a href="#image-lock">image lock</a>.</td></tr>
       <tr><td class="icons"><span class="tbtn" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-rotate_90_cw"/></svg></span></td><td class="lbl">Rotate a quarter turn clockwise</td><td>both</td><td>Turns
       the picture and its dots (or only the dots, when locked).</td></tr>
@@ -1243,10 +1243,10 @@ aligned.</p>
     is top-left in one and bottom-right in the other). Continue anyway?</em></td><td>The numbered dots pair up different corners,
     which would turn or mirror the picture.</td><td>Usually answer No and fix the order (drag dots, or lock the image and rotate
     the dots). Yes only when the camera really sees the chip mirrored or upside down.</td></tr>
-    <tr><td class="msg"><span class="ui">Go To Endpoint</span>: <em>No saved endpoint for this device — set one in View/Edit
-    Endpoint first.</em></td><td>This device has no endpoint yet.</td><td>Use Align Camera and Confirm Alignment once; that
+    <tr><td class="msg"><span class="ui">Go To Endpoint</span>: <em>No saved endpoint for this device — set one in Align Camera
+    first.</em></td><td>This device has no endpoint yet.</td><td>Use Align Camera and Confirm Alignment once; that
     saves it.</td></tr>
-    <tr><td class="msg"><span class="ui">Go To Endpoint</span>: <em>No start points are marked on the feed — Select Device Outline
+    <tr><td class="msg"><span class="ui">Go To Endpoint</span>: <em>No start points are marked on the feed — mark the Device Outline in Align Camera
     first.</em></td><td>No camera points are marked (for example after Reset Camera Perspective).</td><td>Use Align Camera, or
     the camera side's <span class="tbtn tbtn-inline" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-save"/></svg></span>, to mark them.</td></tr>
     <tr><td class="msg">Outlines line up near the dots but drift elsewhere</td><td>Dots close together, or one on the wrong
