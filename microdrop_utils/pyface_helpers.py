@@ -8,26 +8,32 @@
 #
 # Thanks for using Microdrop open source!
 
+# Enthought library imports.
 from pyface.action.api import StatusBarManager as _StatusBarManager
-from pyface.qt.QtWidgets import QApplication, QStatusBar, QLabel
 from pyface.qt.QtCore import Qt, QTimer
+from pyface.qt.QtWidgets import QApplication, QLabel, QStatusBar
 from pyface.tasks.dock_pane import DockPane
 from traits.api import Str, observe
 
+# Microdrop style imports.
 from microdrop_style.helpers import QT_THEME_NAMES, is_dark_mode
 from microdrop_style.label_style import get_label_style
 from microdrop_style.status_bar_style import get_status_bar_stylesheet
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
+
 
 # The outer layer accepts the decorator arguments
 def app_statusbar_message_from_dock_pane(message: str):
     """
     Display a status message. Use for a class method within a dock pane
     """
+
     def decorator(func):
-        def wrapper(dock_pane: 'DockPane', *args, **kwargs):
+        def wrapper(dock_pane: "DockPane", *args, **kwargs):
             # 1. Access the manager
             _status_bar_manager = dock_pane.task.window.status_bar_manager
 
@@ -57,7 +63,7 @@ def app_statusbar_message_from_dock_pane(message: str):
 
 
 class StatusBarManager(_StatusBarManager):
-    """ A status bar manager realizes itself in a status bar control. """
+    """A status bar manager realizes itself in a status bar control."""
 
     # HTML message shown in the centered label between the left mode/step
     # text and the right-side permanent icons. Set via ``show_center_message``
@@ -69,10 +75,9 @@ class StatusBarManager(_StatusBarManager):
     # ------------------------------------------------------------------------
 
     def create_status_bar(self, parent):
-        """ Creates a status bar. """
+        """Creates a status bar."""
 
         if self.status_bar is None:
-
             self.status_bar = QStatusBar(parent)
             self.status_bar.setSizeGripEnabled(self.size_grip)
             self.status_bar.setVisible(self.visible)
@@ -96,8 +101,8 @@ class StatusBarManager(_StatusBarManager):
         else:
             self.persistent_label.setText(self.message)
 
-        # ---------------------------------- Theme aware styling ----------------------------------#
-        def _apply_theme_style(theme: 'Qt.ColorScheme'):
+        # ------------------- Theme aware styling -------------------#
+        def _apply_theme_style(theme: "Qt.ColorScheme"):
             """Handle theme updates"""
             theme = QT_THEME_NAMES[theme]
 
@@ -107,16 +112,18 @@ class StatusBarManager(_StatusBarManager):
             self.status_bar.setStyleSheet(f"{status_bar_style}\n{label_style}")
 
         # Apply initial theme styling
-        _apply_theme_style(theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light)
+        _apply_theme_style(
+            theme=Qt.ColorScheme.Dark if is_dark_mode() else Qt.ColorScheme.Light
+        )
         # Call theme application method whenever global theme changes occur as well
         QApplication.styleHints().colorSchemeChanged.connect(_apply_theme_style)
 
-        # -----------------------------------------------------------------------------------------#
+        # -----------------------------------------------------------#
 
         return self.status_bar
 
     def remove(self, message):
-        """ Remove a message from the status bar. """
+        """Remove a message from the status bar."""
 
         self.messages = [msg for msg in self.messages if msg != message]
 
@@ -126,7 +133,8 @@ class StatusBarManager(_StatusBarManager):
             self.center_label.setText(self.center_message)
 
     def show_center_message(self, html: str, timeout: int = 5000):
-        """Show ``html`` in the centered status bar label and auto-clear after ``timeout`` ms.
+        """Show ``html`` in the centered status bar label; clear it after
+        ``timeout`` ms.
 
         Reuses a single QTimer per manager so rapid successive calls reset
         the timer instead of stacking clears.
@@ -146,10 +154,11 @@ class StatusBarManager(_StatusBarManager):
     # ------------------------------------------------------------------------
 
     def _show_messages(self):
-        """ Display the list of messages. """
+        """Display the list of messages."""
 
         # FIXME v3: At the moment we just string them together but we may
         # decide to put all but the first message into separate widgets.  We
         # probably also need to extend the API to allow a "message" to be a
         # widget - depends on what wx is capable of.
-        self.persistent_label.setText("\t".join(self.messages))
+        # An empty first message (no mode text) must not lead with a tab.
+        self.persistent_label.setText("\t".join(filter(None, self.messages)))
