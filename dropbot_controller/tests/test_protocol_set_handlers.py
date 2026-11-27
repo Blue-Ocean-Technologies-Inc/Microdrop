@@ -14,8 +14,11 @@ These handlers exist alongside the UI-driven on_set_voltage_request /
 on_set_frequency_request but bypass the realtime-mode gate and skip
 prefs persistence — protocol writes are unconditional and transient.
 """
+
+# Standard library imports.
 from unittest.mock import MagicMock, patch
 
+# Microdrop package imports.
 from dropbot_controller.consts import FREQUENCY_APPLIED, VOLTAGE_APPLIED
 from dropbot_controller.services.dropbot_states_setting_mixin_service import (
     DropbotStatesSettingMixinService,
@@ -43,7 +46,8 @@ def test_on_protocol_set_voltage_request_calls_proxy_and_publishes_ack():
 
 
 def test_on_protocol_set_voltage_request_bypasses_realtime_mode():
-    """Unlike on_set_voltage_request, this handler runs even when realtime_mode is False."""
+    """Unlike on_set_voltage_request, this handler runs even when realtime_mode is
+    False."""
     svc = _make_service()
     svc.realtime_mode = False
     with patch(
