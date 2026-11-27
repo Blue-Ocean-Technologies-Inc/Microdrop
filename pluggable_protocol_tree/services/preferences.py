@@ -240,12 +240,18 @@ class ProtocolPreferences(PreferencesHelper):
         if default_column_names != self.protocol_tree_column_names:
             self.protocol_tree_column_names = default_column_names
 
+    def reset_ack_times(self):
+        """Set every column's ack wait back to its provider's default."""
+        self.protocol_tree_ack_times = dict(self.protocol_tree_default_ack_times)
 
-#: The ack-wait grid: the Settings pane's section, and the pre-flight
-#: card's settings face, which edits the live preferences through
-#: ``ack_times_view``.
-ack_times_grid = Group(
-    Item(
+
+#: What a 0 s ack wait means, under the grid's heading or the card's title.
+ACK_TIMES_HINT = "0 = don't wait"
+
+
+def _ack_times_item():
+    """The ack-wait table: one definition for every view of it."""
+    return Item(
         "protocol_tree_ack_times",
         show_label=False,
         editor=DictFloatTableEditor(
@@ -260,13 +266,20 @@ ack_times_grid = Group(
             infinity_value=ACK_WAIT_FOREVER,
             infinity_text="∞ (wait forever)",
         ),
-    ),
-    label="Column Ack Wait Times (0 = don't wait)",
+    )
+
+
+#: The ack-wait grid: the Settings pane's section.
+ack_times_grid = Group(
+    _ack_times_item(),
+    label=f"Column Ack Wait Times ({ACK_TIMES_HINT})",
     show_border=True,
     style_sheet=preferences_group_style_sheet,
 )
 
-ack_times_view = View(ack_times_grid)
+#: The bare grid, for the pre-flight card's settings face, which edits the
+#: live preferences and shows its own title and hint.
+ack_times_view = View(Group(_ack_times_item(), show_labels=False, show_border=False))
 
 
 protocol_tree_tab = PreferencesCategory(
