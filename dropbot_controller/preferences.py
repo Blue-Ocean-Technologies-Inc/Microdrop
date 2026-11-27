@@ -44,6 +44,12 @@ preferences_names = [
 
 app_globals = get_microdrop_redis_globals_manager()
 
+#: Each hardware maximum's protocol range key, and the floor that range starts at.
+_PROTOCOL_RANGE_OF_HARDWARE_MAX = {
+    HARDWARE_MAX_VOLTAGE_KEY: (PROTOCOL_VOLTAGE_RANGE_KEY, HARDWARE_MIN_VOLTAGE),
+    HARDWARE_MAX_FREQUENCY_KEY: (PROTOCOL_FREQUENCY_RANGE_KEY, HARDWARE_MIN_FREQUENCY),
+}
+
 
 class DropbotPreferences(PreferencesHelper):
     """The preferences helper, inspired by envisage one for the Attractors application.
@@ -147,23 +153,15 @@ class DropbotPreferences(PreferencesHelper):
 
     @observe("[_hardware_max_voltage, _hardware_max_frequency]")
     def _hardware_limit_changed(self, event):
-        """Sync hardware limits to app_globals so view properties stay current."""
+        """Sync a hardware limit, and the protocol range it caps, to app_globals.
+
+        The limit keeps view properties current. The monitor sets the limits
+        on connect, in the backend, so this is the sole writer of the
+        DropBot's protocol range after the plugin's start() writes the
+        default.
+        """
         logger.debug(f"Hardware limit changed: {event.name} = {event.new}")
         app_globals[event.name] = event.new
 
-    # The monitor sets the hardware maxima on connect, in the backend, so
-    # these observers are the sole writers of the DropBot's protocol range
-    # after the plugin's start() writes the default.
-    @observe("_hardware_max_voltage")
-    def _publish_protocol_voltage_range(self, event):
-        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = [
-            HARDWARE_MIN_VOLTAGE,
-            int(event.new),
-        ]
-
-    @observe("_hardware_max_frequency")
-    def _publish_protocol_frequency_range(self, event):
-        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = [
-            HARDWARE_MIN_FREQUENCY,
-            int(event.new),
-        ]
+        range_key, low = _PROTOCOL_RANGE_OF_HARDWARE_MAX[event.name]
+        app_globals[range_key] = [low, int(event.new)]
