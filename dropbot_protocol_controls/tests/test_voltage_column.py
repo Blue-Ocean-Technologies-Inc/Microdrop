@@ -10,18 +10,22 @@
 
 """Tests for the voltage column — model, factory, view, handler."""
 
+# Standard library imports.
 from unittest.mock import MagicMock, patch
 
+# Enthought library imports.
 from traits.api import HasTraits
 
+# Microdrop package imports.
+from dropbot_controller.consts import PROTOCOL_SET_VOLTAGE, VOLTAGE_APPLIED
 from dropbot_protocol_controls.protocol_columns.voltage_column import (
-    VoltageColumnModel, make_voltage_column,
+    VoltageColumnModel,
+    make_voltage_column,
 )
 
 
 def test_voltage_column_model_id_and_name():
-    m = VoltageColumnModel(col_id="voltage", col_name="Voltage (V)",
-                           default_value=100)
+    m = VoltageColumnModel(col_id="voltage", col_name="Voltage (V)", default_value=100)
     assert m.col_id == "voltage"
     assert m.col_name == "Voltage (V)"
     assert m.default_value == 100
@@ -31,8 +35,10 @@ def test_voltage_column_trait_for_row_is_int():
     """Row trait stores Int — never Float."""
     m = VoltageColumnModel(col_id="voltage", col_name="V", default_value=100)
     trait = m.trait_for_row()
+
     class Row(HasTraits):
         voltage = trait
+
     r = Row()
     assert r.voltage == 100
     r.voltage = 75
@@ -68,13 +74,11 @@ def test_make_voltage_column_default_reads_from_prefs():
     assert col.model.default_value == 75
 
 
-from dropbot_controller.consts import PROTOCOL_SET_VOLTAGE, VOLTAGE_APPLIED
-
-
 def test_voltage_handler_priority_20():
     from dropbot_protocol_controls.protocol_columns.voltage_column import (
         VoltageHandler,
     )
+
     handler = VoltageHandler()
     assert handler.priority == 20
 
@@ -83,6 +87,7 @@ def test_voltage_handler_wait_for_topics_includes_voltage_applied():
     from dropbot_protocol_controls.protocol_columns.voltage_column import (
         VoltageHandler,
     )
+
     handler = VoltageHandler()
     assert VOLTAGE_APPLIED in handler.wait_for_topics
 
@@ -91,6 +96,7 @@ def test_voltage_handler_on_step_publishes_and_waits():
     from dropbot_protocol_controls.protocol_columns.voltage_column import (
         VoltageHandler,
     )
+
     handler = VoltageHandler()
     row = MagicMock()
     row.voltage = 120
@@ -114,6 +120,7 @@ def test_voltage_handler_on_step_publishes_int_payload():
     from dropbot_protocol_controls.protocol_columns.voltage_column import (
         VoltageHandler,
     )
+
     handler = VoltageHandler()
     row = MagicMock()
     row.voltage = 99.7  # float — should be coerced to int
@@ -133,14 +140,17 @@ def test_voltage_handler_on_step_publishes_int_payload():
 def test_voltage_handler_on_interact_writes_through_to_row():
     """super().on_interact behavior: model.set_value writes to row."""
     from dropbot_protocol_controls.protocol_columns.voltage_column import (
-        VoltageHandler, VoltageColumnModel,
+        VoltageColumnModel,
+        VoltageHandler,
     )
+
     handler = VoltageHandler()
     model = VoltageColumnModel(col_id="voltage", col_name="V", default_value=100)
     handler.model = model
 
     class FakeRow:
         voltage = 100
+
     row = FakeRow()
 
     with patch(
@@ -154,14 +164,17 @@ def test_voltage_handler_on_interact_writes_through_to_row():
 def test_voltage_handler_on_interact_persists_to_prefs():
     """User cell-edit becomes the new default for next session."""
     from dropbot_protocol_controls.protocol_columns.voltage_column import (
-        VoltageHandler, VoltageColumnModel,
+        VoltageColumnModel,
+        VoltageHandler,
     )
+
     handler = VoltageHandler()
     model = VoltageColumnModel(col_id="voltage", col_name="V", default_value=100)
     handler.model = model
 
     class FakeRow:
         voltage = 100
+
     row = FakeRow()
 
     with patch(

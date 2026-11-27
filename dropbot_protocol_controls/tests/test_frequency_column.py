@@ -10,29 +10,36 @@
 
 """Tests for the frequency column — model, factory, view, handler."""
 
+# Standard library imports.
 from unittest.mock import MagicMock, patch
 
+# Enthought library imports.
 from traits.api import HasTraits
 
+# Microdrop package imports.
+from dropbot_controller.consts import FREQUENCY_APPLIED, PROTOCOL_SET_FREQUENCY
 from dropbot_protocol_controls.protocol_columns.frequency_column import (
-    FrequencyColumnModel, make_frequency_column,
+    FrequencyColumnModel,
+    make_frequency_column,
 )
 
 
 def test_frequency_column_model_id_and_name():
-    m = FrequencyColumnModel(col_id="frequency", col_name="Frequency (Hz)",
-                             default_value=10000)
+    m = FrequencyColumnModel(
+        col_id="frequency", col_name="Frequency (Hz)", default_value=10000
+    )
     assert m.col_id == "frequency"
     assert m.col_name == "Frequency (Hz)"
     assert m.default_value == 10000
 
 
 def test_frequency_column_trait_for_row_is_int():
-    m = FrequencyColumnModel(col_id="frequency", col_name="Hz",
-                             default_value=10000)
+    m = FrequencyColumnModel(col_id="frequency", col_name="Hz", default_value=10000)
     trait = m.trait_for_row()
+
     class Row(HasTraits):
         frequency = trait
+
     r = Row()
     assert r.frequency == 10000
     r.frequency = 5000
@@ -41,8 +48,7 @@ def test_frequency_column_trait_for_row_is_int():
 
 
 def test_frequency_column_serialize_identity():
-    m = FrequencyColumnModel(col_id="frequency", col_name="Hz",
-                             default_value=10000)
+    m = FrequencyColumnModel(col_id="frequency", col_name="Hz", default_value=10000)
     assert m.serialize(10000) == 10000
     assert m.deserialize(10000) == 10000
 
@@ -65,13 +71,11 @@ def test_make_frequency_column_default_reads_from_prefs():
     assert col.model.default_value == 5000
 
 
-from dropbot_controller.consts import PROTOCOL_SET_FREQUENCY, FREQUENCY_APPLIED
-
-
 def test_frequency_handler_priority_20():
     from dropbot_protocol_controls.protocol_columns.frequency_column import (
         FrequencyHandler,
     )
+
     handler = FrequencyHandler()
     assert handler.priority == 20
 
@@ -80,6 +84,7 @@ def test_frequency_handler_wait_for_topics_includes_frequency_applied():
     from dropbot_protocol_controls.protocol_columns.frequency_column import (
         FrequencyHandler,
     )
+
     handler = FrequencyHandler()
     assert FREQUENCY_APPLIED in handler.wait_for_topics
 
@@ -88,6 +93,7 @@ def test_frequency_handler_on_step_publishes_and_waits():
     from dropbot_protocol_controls.protocol_columns.frequency_column import (
         FrequencyHandler,
     )
+
     handler = FrequencyHandler()
     row = MagicMock()
     row.frequency = 8000
@@ -109,6 +115,7 @@ def test_frequency_handler_on_step_publishes_int_payload():
     from dropbot_protocol_controls.protocol_columns.frequency_column import (
         FrequencyHandler,
     )
+
     handler = FrequencyHandler()
     row = MagicMock()
     row.frequency = 5000.9  # float — should be coerced
@@ -127,15 +134,17 @@ def test_frequency_handler_on_step_publishes_int_payload():
 
 def test_frequency_handler_on_interact_writes_through_to_row():
     from dropbot_protocol_controls.protocol_columns.frequency_column import (
-        FrequencyHandler, FrequencyColumnModel,
+        FrequencyColumnModel,
+        FrequencyHandler,
     )
+
     handler = FrequencyHandler()
-    model = FrequencyColumnModel(col_id="frequency", col_name="Hz",
-                                  default_value=10000)
+    model = FrequencyColumnModel(col_id="frequency", col_name="Hz", default_value=10000)
     handler.model = model
 
     class FakeRow:
         frequency = 10000
+
     row = FakeRow()
 
     with patch(
@@ -148,15 +157,17 @@ def test_frequency_handler_on_interact_writes_through_to_row():
 
 def test_frequency_handler_on_interact_persists_to_prefs():
     from dropbot_protocol_controls.protocol_columns.frequency_column import (
-        FrequencyHandler, FrequencyColumnModel,
+        FrequencyColumnModel,
+        FrequencyHandler,
     )
+
     handler = FrequencyHandler()
-    model = FrequencyColumnModel(col_id="frequency", col_name="Hz",
-                                  default_value=10000)
+    model = FrequencyColumnModel(col_id="frequency", col_name="Hz", default_value=10000)
     handler.model = model
 
     class FakeRow:
         frequency = 10000
+
     row = FakeRow()
 
     with patch(
