@@ -1,3 +1,26 @@
+## [v1.55.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.55.0) (2026-11-27)
+
+### Feat
+
+- **message_router**: warn when another instance shares Redis ([`cc6042b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/cc6042b06f3959a708d5f1583fd8abb97aa1d9bd))
+- **preflight**: show the ack a run waits on, with a countdown ([`4d1076f`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4d1076fb2b870e47fe7cebb32744f7831bd6087a))
+- **execution**: carry the column and timeout of ack waits ([`4fc557b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4fc557b7e7d77d829aa4daea4b2adc6eb7168e93))
+- **device_viewer**: count zone edits as unsaved device changes ([`7cf84c7`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/7cf84c713c7578129297b505f61f0790e87e66d9))
+- **status-bar**: add a run-progress line along the top edge ([`204a7c9`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/204a7c94ee238b129edf453558e63ca2a34f4702))
+- **device-viewer**: show canvas hints in a pill over the canvas ([`88c6f7d`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/88c6f7d937255d124e58e48a746150d083801b05))
+- **self-tests**: warn of a disconnected DropBot in the drawer ([`910623c`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/910623ca732f99490c963f8f3229ecb7ac54882c))
+
+### Fix
+
+- **self-tests**: end cleanly when no DropBot is connected ([`529bdeb`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/529bdeb79813b11236413fe4c9fb0859388adad6))
+- **self-tests**: honour a cancel in the report and the dialog ([`d6422c0`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/d6422c0da4d50763036c6de01323e908d913895f))
+- **self-tests**: open the report browser out of process on Windows ([`07cc010`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/07cc010d4e808a2f6caf5490f3e897e06454e0c3))
+- **pluggable_protocol_tree**: forward compound pre-flight checks ([`aef1bec`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/aef1bec69eb3c159c542f1f6c51645002480b017))
+
+### Refactor
+
+- **status-bar**: drop the unused centre message API ([`4e3b09b`](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/commit/4e3b09b943ae9b62fc5416103689d2a2e5d28f3a))
+
 ## [v1.54.0](https://github.com/Blue-Ocean-Technologies-Inc/Microdrop/releases/tag/v1.54.0) (2026-11-27)
 
 ### Feat
