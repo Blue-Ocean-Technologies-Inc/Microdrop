@@ -102,8 +102,14 @@ def snapshot_record(record):
         exception_line = traceback_text.strip().rsplit("\n", 1)[-1]
 
     else:
-        first_line = str(exception).strip().partition("\n")[0]
         exception_line = type(exception).__name__
+
+        # A broken __str__ must not lose the card: fall back to the type name.
+        try:
+            first_line = str(exception).strip().partition("\n")[0]
+
+        except Exception:
+            first_line = ""
 
         if first_line:
             exception_line = f"{exception_line}: {first_line}"

@@ -220,6 +220,19 @@ def test_a_multi_line_exception_is_titled_by_its_first_line(forwarding):
     assert center.entries[0].title == "ValueError: 1 validation error for StepModel"
 
 
+def test_an_exception_whose_str_raises_is_titled_by_its_type(forwarding):
+    center, source, timer = forwarding
+
+    class BrokenStr(Exception):
+        def __str__(self):
+            raise RuntimeError("str failed")
+
+    log_traits_handler_failure(source, BrokenStr("unprintable"))
+    timer.run_all()
+
+    assert center.entries[0].title == "BrokenStr"
+
+
 def test_an_exception_note_does_not_become_the_title(forwarding):
     center, source, timer = forwarding
     error = TypeError("unsupported operand")
