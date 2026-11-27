@@ -102,10 +102,20 @@ class RunInfo(HasTraits):
     #: e.g. "3/8 · 01:24".
     progress_line = Property(observe="step, step_total, elapsed_s")
 
+    #: The share of the run's steps completed, 0-1: the steps before the
+    #: current one.
+    completed_fraction = Property(observe="step, step_total")
+
     def _get_progress_line(self):
         minutes, seconds = divmod(self.elapsed_s, 60)
 
         return f"{self.step}/{self.step_total} · {minutes:02d}:{seconds:02d}"
+
+    def _get_completed_fraction(self):
+        if self.step_total <= 0:
+            return 0.0
+
+        return min(max(self.step - 1, 0) / self.step_total, 1.0)
 
 
 class PreflightCheck(HasTraits):

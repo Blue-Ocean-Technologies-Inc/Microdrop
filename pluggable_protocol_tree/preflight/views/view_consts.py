@@ -15,6 +15,9 @@ through ``microdrop_style.panel_metrics``."""
 #: How far the panel slides up as it opens, px.
 SLIDE_PX = 10
 
+#: Height of the run-progress line along the status bar's top edge, px.
+RUN_PROGRESS_LINE_PX = 2
+
 #: The panel's width, px.
 PANEL_WIDTH = 320
 
