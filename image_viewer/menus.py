@@ -17,7 +17,8 @@ from pyface.action.schema.api import SGroup
 from traits.api import Instance, Str, observe
 
 # Microdrop package imports.
-from microdrop_application.dialogs.pyface_wrapper import YES, confirm, information
+from microdrop_application.dialogs.pyface_wrapper import YES, confirm
+from notifications.consts import notification_publisher
 
 # Microdrop utils imports.
 from microdrop_utils.environment_update_dialog import (
@@ -31,7 +32,11 @@ from .analysis.roi_model import roi_analysis_model
 from .analysis.sam_detect import sam_available
 from .consts import PRUNE_EXPERIMENTS_DESCRIPTION, TRASH_FEATURE, TRASH_PACKAGE
 from .discovery import prunable_experiments
-from .prune_job import PruneExperimentsJob, prune_experiments_job
+from .prune_job import (
+    PruneExperimentsJob,
+    nothing_to_prune_card,
+    prune_experiments_job,
+)
 from .view import show_image_viewer_shortcuts
 
 # Logger import.
@@ -80,13 +85,7 @@ class PruneExperimentsAction(Action):
         targets = prunable_experiments()
 
         if not targets:
-            information(
-                None,
-                "No experiments to prune: every experiment folder holds "
-                "captures or other data.",
-                title="Prune Experiments",
-                cancel=False,
-            )
+            notification_publisher.publish(nothing_to_prune_card())
 
             return
 

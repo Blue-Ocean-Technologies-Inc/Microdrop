@@ -25,11 +25,12 @@ from device_viewer.consts import CAPTURES_DIR_NAME
 from image_viewer import discovery, menus, prune_job
 from image_viewer.consts import (
     EXPERIMENT_LOGS_DIR_NAME,
+    PRUNE_EXPERIMENTS_CATEGORY_ID,
     TRASH_FEATURE,
     TRASH_PACKAGE,
 )
 from microdrop_application.dialogs.pyface_wrapper import CANCEL, YES
-from notifications.consts import SEVERITY_ERROR, SEVERITY_SUCCESS
+from notifications.consts import SEVERITY_ERROR, SEVERITY_INFO, SEVERITY_SUCCESS
 
 # Microdrop utils imports.
 from microdrop_utils import environment_update_dialog
@@ -177,11 +178,6 @@ def test_prune_action_without_send2trash_offers_an_update(tmp_path, monkeypatch)
         "warning",
         lambda parent, message, **kwargs: offers.append(message) or CANCEL,
     )
-    monkeypatch.setattr(
-        menus,
-        "information",
-        lambda *args, **kwargs: pytest.fail("nothing was pruned"),
-    )
 
     action, cards = _inline_prune_action(monkeypatch)
     action.perform(None)
@@ -192,6 +188,27 @@ def test_prune_action_without_send2trash_offers_an_update(tmp_path, monkeypatch)
         environment_update_dialog.missing_package_message(TRASH_FEATURE, TRASH_PACKAGE)
     ]
     assert (logs_only / EXPERIMENT_LOGS_DIR_NAME / "app.log").is_file()
+
+
+def test_prune_action_reports_nothing_to_prune_in_a_card(tmp_path, monkeypatch):
+    current = _logs_only_experiment(tmp_path, "current")
+
+    monkeypatch.setattr(discovery, "get_current_experiment_directory", lambda: current)
+    monkeypatch.setattr(
+        menus, "confirm", lambda **kwargs: pytest.fail("nothing to confirm")
+    )
+
+    action, cards = _inline_prune_action(monkeypatch)
+    menus_cards = []
+    monkeypatch.setattr(
+        menus, "notification_publisher", SimpleNamespace(publish=menus_cards.append)
+    )
+    action.perform(None)
+
+    assert cards == []
+    assert [card["title"] for card in menus_cards] == ["No experiments to prune"]
+    assert menus_cards[0]["severity"] == SEVERITY_INFO
+    assert menus_cards[0]["category_id"] == PRUNE_EXPERIMENTS_CATEGORY_ID
 
 
 def _prune_action(monkeypatch, tmp_path, ready):

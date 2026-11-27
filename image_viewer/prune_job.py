@@ -28,6 +28,7 @@ from traits.api import Bool, HasTraits
 from notifications.consts import (
     LOG_RECORDED_EXTRA,
     SEVERITY_ERROR,
+    SEVERITY_INFO,
     SEVERITY_SUCCESS,
     notification_publisher,
 )
@@ -107,6 +108,18 @@ def pruned_card(removed):
         "title": f"Moved {len(removed)} experiment folder(s) to the trash",
         "detail": f"They can be restored from the Recycle Bin / Trash.\n{names}",
         "severity": SEVERITY_SUCCESS,
+        "source": PKG,
+        "category_id": PRUNE_EXPERIMENTS_CATEGORY_ID,
+    }
+
+
+def nothing_to_prune_card():
+    """The notification for a prune that found no experiment folder to
+    remove."""
+    return {
+        "title": "No experiments to prune",
+        "detail": "Every experiment folder holds captures or other data.",
+        "severity": SEVERITY_INFO,
         "source": PKG,
         "category_id": PRUNE_EXPERIMENTS_CATEGORY_ID,
     }
