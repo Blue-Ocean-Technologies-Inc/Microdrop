@@ -13,7 +13,12 @@ from envisage.plugin import Plugin
 from traits.api import List
 
 # Microdrop package imports.
+from dropbot_controller.consts import (
+    PROTOCOL_FREQUENCY_RANGE_KEY,
+    PROTOCOL_VOLTAGE_RANGE_KEY,
+)
 from message_router.consts import ACTOR_TOPIC_ROUTES
+from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -34,7 +39,11 @@ class MockDropbotControllerPlugin(Plugin):
     actor_topic_routing = List([ACTOR_TOPIC_DICT], contributes_to=ACTOR_TOPIC_ROUTES)
 
     def start(self):
-        from .mock_controller import MockDropbotController
+        from .mock_controller import (
+            MOCK_FREQUENCY_RANGE,
+            MOCK_VOLTAGE_RANGE,
+            MockDropbotController,
+        )
 
         self.mock_controller = MockDropbotController()
 
@@ -42,6 +51,12 @@ class MockDropbotControllerPlugin(Plugin):
         self.mock_controller.realtime_mode = False
 
         self.mock_controller.connected = True
+
+        # Overwrite, never seed: app_globals outlives the session, so a
+        # previous device's range would otherwise bound the protocol columns.
+        app_globals = get_microdrop_redis_globals_manager()
+        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = list(MOCK_VOLTAGE_RANGE)
+        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = list(MOCK_FREQUENCY_RANGE)
 
         # Publish connected signal so the UI picks it up
         publish_message(topic=DROPBOT_CONNECTED, message="mock_dropbot")

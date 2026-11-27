@@ -10,10 +10,15 @@
 
 """Portable DropBot controller constants, topics and message contracts.
 
-Split into topical submodules and re-exported here: sibling plugins import
-# Microdrop package imports.
-from this package root only (.importlinter allows ``*.consts``, not its
-submodules), and submodules never import from this package root."""
+Split into topical submodules and re-exported here: sibling plugins
+import from this package root only (.importlinter allows ``*.consts``, not
+its submodules), and submodules never import from this package root.
+
+The ``dropbot_controller.consts`` re-exports are shared DropBot contracts
+this backend also serves: droplet detection's request and reply topics,
+and the protocol Voltage / Frequency columns' requests (``PROTOCOL_SET_*``),
+acks (``*_APPLIED``) and the device-range keys it writes
+(``PROTOCOL_*_RANGE_KEY``)."""
 
 # Microdrop package imports.
 from device_viewer.consts import (
@@ -23,18 +28,18 @@ from device_viewer.consts import (
     DEVICE_VIEWER_MEDIA_CAPTURED as DEVICE_VIEWER_MEDIA_CAPTURED,
 )
 from dropbot_controller.consts import DETECT_DROPLETS as DETECT_DROPLETS
+from dropbot_controller.consts import DROPLETS_DETECTED as DROPLETS_DETECTED
+from dropbot_controller.consts import FREQUENCY_APPLIED as FREQUENCY_APPLIED
 from dropbot_controller.consts import (
-    # The shared reply topic, re-exported for this plugin's services.
-    DROPLETS_DETECTED as DROPLETS_DETECTED,
-)
-from dropbot_controller.consts import (
-    # The protocol Voltage / Frequency columns' requests and acks.
-    FREQUENCY_APPLIED as FREQUENCY_APPLIED,
+    PROTOCOL_FREQUENCY_RANGE_KEY as PROTOCOL_FREQUENCY_RANGE_KEY,
 )
 from dropbot_controller.consts import (
     PROTOCOL_SET_FREQUENCY as PROTOCOL_SET_FREQUENCY,
 )
 from dropbot_controller.consts import PROTOCOL_SET_VOLTAGE as PROTOCOL_SET_VOLTAGE
+from dropbot_controller.consts import (
+    PROTOCOL_VOLTAGE_RANGE_KEY as PROTOCOL_VOLTAGE_RANGE_KEY,
+)
 from dropbot_controller.consts import VOLTAGE_APPLIED as VOLTAGE_APPLIED
 
 # Local imports.

@@ -19,7 +19,15 @@ from message_router.consts import ACTOR_TOPIC_ROUTES
 from microdrop_application.helpers import get_microdrop_redis_globals_manager
 
 # Local imports.
-from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
+from .consts import (
+    ACTOR_TOPIC_DICT,
+    DEFAULT_PROTOCOL_FREQUENCY_RANGE,
+    DEFAULT_PROTOCOL_VOLTAGE_RANGE,
+    PKG,
+    PROTOCOL_FREQUENCY_RANGE_KEY,
+    PROTOCOL_VOLTAGE_RANGE_KEY,
+    PKG_name,
+)
 from .dropbot_controller_base import DropbotControllerBase
 from .interfaces.i_dropbot_control_mixin_service import IDropbotControlMixinService
 from .services.dropbot_monitor_mixin_service import DropbotMonitorMixinService
@@ -82,9 +90,8 @@ class DropbotControllerPlugin(Plugin):
 
     def _create_self_test_service(self, *args, **kwargs):
         """
-        Returns a dropbot self test mixin service providing the ability to run
-        all the dorpbot QC methods
-        and generate a report.
+        Returns a dropbot self test mixin service providing the ability to run all
+        the dropbot QC methods and generate a report.
         """
         return DropbotSelfTestsMixinService
 
@@ -132,6 +139,15 @@ class DropbotControllerPlugin(Plugin):
         # push all preferences to globals
         app_globals = get_microdrop_redis_globals_manager()
         app_globals.update(self.dropbot_controller.preferences.preferences_name_map)
+
+        # Overwrite, never seed: app_globals outlives the session, so a
+        # previous device's range would otherwise bound the protocol columns.
+        # DropbotPreferences refines the maxima once the DropBot reports its
+        # own on connect.
+        app_globals[PROTOCOL_VOLTAGE_RANGE_KEY] = list(DEFAULT_PROTOCOL_VOLTAGE_RANGE)
+        app_globals[PROTOCOL_FREQUENCY_RANGE_KEY] = list(
+            DEFAULT_PROTOCOL_FREQUENCY_RANGE
+        )
 
     def stop(self):
         """Cleanup when the plugin is stopped."""

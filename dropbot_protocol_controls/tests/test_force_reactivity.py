@@ -19,16 +19,14 @@ RowManager, then exercises both reactive paths end-to-end:
   handler's column_changed_signal).
 """
 
+# Standard library imports.
 from unittest.mock import patch
 
+# Third-party imports.
 import pytest
 
-from pluggable_protocol_tree.builtins.id_column import make_id_column
-from pluggable_protocol_tree.builtins.name_column import make_name_column
-from pluggable_protocol_tree.builtins.type_column import make_type_column
-from pluggable_protocol_tree.models.row_manager import RowManager
-from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
-
+# Microdrop package imports.
+from dropbot_protocol_controls.protocol_columns import device_range_model
 from dropbot_protocol_controls.protocol_columns.force_column import (
     make_force_column,
 )
@@ -36,6 +34,11 @@ from dropbot_protocol_controls.protocol_columns.voltage_column import (
     make_voltage_column,
 )
 from dropbot_protocol_controls.services import force_math
+from pluggable_protocol_tree.builtins.id_column import make_id_column
+from pluggable_protocol_tree.builtins.name_column import make_name_column
+from pluggable_protocol_tree.builtins.type_column import make_type_column
+from pluggable_protocol_tree.models.row_manager import RowManager
+from pluggable_protocol_tree.views.qt_tree_model import MvcTreeModel
 
 
 class _FakeGlobals:
@@ -54,6 +57,7 @@ class _FakeGlobals:
 def fake_app_globals(monkeypatch):
     fake = _FakeGlobals()
     monkeypatch.setattr(force_math, "app_globals", fake)
+    monkeypatch.setattr(device_range_model, "app_globals", fake)
     return fake
 
 
@@ -63,8 +67,11 @@ def _build_columns():
     ) as MockV:
         MockV.return_value.last_voltage = 100
         return [
-            make_type_column(), make_id_column(), make_name_column(),
-            make_voltage_column(), make_force_column(),
+            make_type_column(),
+            make_id_column(),
+            make_name_column(),
+            make_voltage_column(),
+            make_force_column(),
         ]
 
 
@@ -86,8 +93,7 @@ def test_voltage_change_repaints_force_cell_on_that_row(fake_app_globals):
     row.voltage = 120
 
     assert (0, force_idx) in received, (
-        f"Expected force-cell dataChanged at (row=0, col={force_idx}); "
-        f"got {received}"
+        f"Expected force-cell dataChanged at (row=0, col={force_idx}); got {received}"
     )
 
 

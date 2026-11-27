@@ -79,6 +79,11 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__, level="INFO")
 app_globals = get_microdrop_redis_globals_manager()
 
+#: Setpoint ranges (V / Hz) the mock accepts, published to the protocol
+#: columns at plugin start.
+MOCK_VOLTAGE_RANGE = (30, 150)
+MOCK_FREQUENCY_RANGE = (100, 20_000)
+
 
 class MockDropbotController(RealtimeModeMixin):
     """
@@ -221,11 +226,13 @@ class MockDropbotController(RealtimeModeMixin):
     def on_set_voltage_request(self, message):
         try:
             v = float(message)
-            if 30 <= v <= 150:
+            low, high = MOCK_VOLTAGE_RANGE
+
+            if low <= v <= high:
                 self.voltage = v
                 logger.info(f"Mock: Voltage set to {v} V")
             else:
-                logger.error("Mock: Voltage must be between 30 and 150 V")
+                logger.error(f"Mock: Voltage must be between {low} and {high} V")
         except (ValueError, TypeError) as e:
             logger.error(f"Mock: Invalid voltage: {e}")
 
@@ -245,11 +252,13 @@ class MockDropbotController(RealtimeModeMixin):
     def on_set_frequency_request(self, message):
         try:
             f = float(message)
-            if 100 <= f <= 20000:
+            low, high = MOCK_FREQUENCY_RANGE
+
+            if low <= f <= high:
                 self.frequency = f
                 logger.info(f"Mock: Frequency set to {f} Hz")
             else:
-                logger.error("Mock: Frequency must be between 100 and 20000 Hz")
+                logger.error(f"Mock: Frequency must be between {low} and {high} Hz")
         except (ValueError, TypeError) as e:
             logger.error(f"Mock: Invalid frequency: {e}")
 

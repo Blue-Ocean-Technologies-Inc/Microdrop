@@ -9,15 +9,17 @@
 # Thanks for using Microdrop open source!
 
 """Pre-flight checks of the voltage and frequency columns: the DropBot's
-connection and power, its chip, and the run's setpoints against the
-hardware's maxima.
+connection and power, its chip, and the run's setpoints against the active
+device's range.
 
-Each reads app_globals once. This plugin loads with every backend, and
-only the DropBot's (or its mock) writes these keys (the connection state as
-it starts, deleted on a clean stop), so a missing value means no DropBot
-backend and skips its check. None blocks a run: a hard kill can leave a
-stale key, so a disconnected DropBot, a missing chip or a setpoint over its
-maximum only warns.
+The connection and chip checks read app_globals once. This plugin loads
+with every backend, and only the DropBot's (or its mock) writes those keys
+(the connection state as it starts, deleted on a clean stop), so a missing
+value means no DropBot backend and skips its check. The range check takes
+the same device range the column's cells are bounded by, which every
+backend writes, so it judges any device. None blocks a run: a hard kill can
+leave a stale key, so a disconnected DropBot, a missing chip or a setpoint
+outside the range only warns.
 """
 
 # Microdrop package imports.
@@ -42,7 +44,7 @@ PREVIEW_SKIP = Result(
     status="skip", detail="Preview", tooltip="Preview drives no hardware."
 )
 
-#: The chip and limit checks need a connected DropBot.
+#: The chip check needs a connected DropBot.
 NEEDS_DROPBOT = Result(
     status="skip", detail="No DropBot", tooltip="Needs a connected DropBot."
 )
@@ -92,34 +94,17 @@ def chip_check(context):
     )
 
 
-def hardware_limit_check(context, check_id, label, column_id, maximum_key, unit):
-    """Whether every run step's ``column_id`` setpoint is within the
-    connected DropBot's maximum, app_globals ``maximum_key``."""
+def device_range_check(context, check_id, label, column_id, device_range, unit):
+    """Whether every run step's ``column_id`` setpoint is within
+    ``device_range``, the active device's ``(low, high)`` that also bounds
+    the column's cells."""
     if context.preview_mode:
         result = PREVIEW_SKIP
 
     else:
-        result = _hardware_limit_result(context, column_id, maximum_key, unit, label)
+        result = _range_result(context, column_id, device_range, unit, label)
 
     return ColumnCheck(id=check_id, label=label, result=result, category="Hardware")
-
-
-def _hardware_limit_result(context, column_id, maximum_key, unit, label):
-    app_globals = get_microdrop_redis_globals_manager()
-
-    if not app_globals.get(DROPBOT_CONNECTION_STATE_KEY):
-        return NEEDS_DROPBOT
-
-    maximum = app_globals.get(maximum_key)
-
-    if maximum is None:
-        return Result(
-            status="skip",
-            detail="Not reported",
-            tooltip=f"The DropBot has not reported its maximum {label.lower()} yet.",
-        )
-
-    return _limit_result(context, column_id, float(maximum), unit, label)
 
 
 def _connection_result(connected, no_power):
@@ -178,19 +163,25 @@ def _chip_result(app_globals):
     return Result(status="pass")
 
 
-def _limit_result(context, column_id, maximum, unit, label):
-    """A warning on the first run step over ``maximum``, else a pass."""
+def _range_result(context, column_id, device_range, unit, label):
+    """A warning on the first run step outside ``device_range``, else a pass."""
+    low, high = device_range
+
     for step in context.run_steps():
         value = step.get(column_id)
 
-        if value is not None and value > maximum:
+        if value is not None and not low <= value <= high:
             name = step_name(step)
             tooltip = (
-                f"{name}: {value} {unit} exceeds the DropBot's {maximum:g} {unit}."
+                f"{name}: {value} {unit} is outside the device's "
+                f"{low}-{high} {unit} range."
             )
 
             return Result(
-                status="warn", detail=name, tooltip=tooltip, problem=f"{label} too high"
+                status="warn",
+                detail=name,
+                tooltip=tooltip,
+                problem=f"{label} out of range",
             )
 
     return Result(status="pass")
