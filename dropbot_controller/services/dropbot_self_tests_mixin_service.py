@@ -162,6 +162,21 @@ class DropbotSelfTestsMixinService(HasTraits):
             # name see dropbot.hardware_test
             test_name = "_".join(func.__name__.split("_")[1:-1])
 
+            # The connected flag also follows other hardware's connected
+            # signal (the topic is shared), so it can be set with no proxy.
+            if self.proxy is None:
+                logger.warning(
+                    f"Request for {test_name} denied: Dropbot is disconnected."
+                )
+                publish_message(
+                    topic=SELF_TESTS_PROGRESS,
+                    message=create_test_progress_message(
+                        TestEvent.SESSION_END, status="cancelled"
+                    ),
+                )
+
+                return
+
             # set the report file name in the needed dir based on tests run
             report_path = get_timestamped_results_path(
                 test_name, report_generation_directory
